@@ -2273,12 +2273,9 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
 }
 
 /// Report the source files that changed while the run was in progress, and
-/// whether any did.
-///
-/// A run that read two different versions of a file describes neither tree, so
-/// its verdict — green most dangerously — cannot be trusted. Generators are
-/// pinned per run, so an edit to one does not split the run halfway; without
-/// this report it would instead pass silently against the pre-edit build.
+/// whether any did. A run that read two versions of a file describes neither
+/// tree; green is the dangerous outcome, since the pinned generator would
+/// otherwise let a mid-run edit pass silently against the pre-edit build.
 fn report_changed_inputs(run_cache: &RunCache) -> bool {
     let changed = run_cache.inputs().changed();
     if changed.is_empty() {
@@ -2339,9 +2336,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
         TestFormat::Tap => Arc::new(TapReporter::new(overall_start, total_files)),
     };
 
-    // One view of the source tree for the whole run: every package resolves a
-    // generator once, and the watch below can say whether the tree moved while
-    // the run was in flight.
+    // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {

@@ -857,11 +857,11 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
 /// all. A `language = Java` lexer qualifies because codegen stages its bodies
 /// into Wado before emit (`rewrite_lexer_java_bodies`), which carves out a
 /// `superClass` grammar. Such a grammar still qualifies when every action body
-/// is nothing but `this.<method>()` base calls: the superClass rewrite turns
-/// those into Wado on its own, so no host translator is involved.
+/// is nothing but `this.<method>()` base calls: the rewrite turns those into
+/// Wado on its own, with no host translator involved.
 pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
     // A refused base leaves every `this.` call in place, and no translator has
-    // a receiver to give it, so nothing this grammar's lexer carries can run.
+    // a receiver for it.
     if superclass_is_refused(grammar) {
         return false;
     }
@@ -876,9 +876,9 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
 
 /// Whether this rule's top-level actions run, given `grammar_executes` from
 /// `lexer_grammar_executes_actions`: a real (non-fragment, non-virtual) rule of
-/// an executing grammar. The grammar-level answer is a parameter because
-/// answering it walks every action body in the grammar, and every caller here
-/// asks once per rule. Both single-alt and multi-alt rules run their
+/// an executing grammar. That answer is a parameter because computing it walks
+/// every action body, and every caller here asks once per rule. Both
+/// single-alt and multi-alt rules run their
 /// alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches to
 /// find the winning alternative in `apply_<rule>_actions`). Fragments and
 /// actions nested inside an element still warn. (A single-literal rule folded
@@ -1057,10 +1057,9 @@ fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool,
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
         let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
-        // A base op reached from the replayed match (an action op, or a
-        // predicate the arm re-selection evaluates) carries the effect and
-        // stores the char-stream ref in its `LexerView`, exactly as in `try_`.
-        // The arm re-selection matches only, so it carries the predicate half.
+        // A base op reached from the replayed match carries the effect and
+        // stores the char-stream ref in its `LexerView`, as in `try_`. The arm
+        // re-selection matches only, so it carries the predicate half.
         let replay_super = !sc_name.is_empty() && lexer_rule_replay_calls_super(rule, &grammar.lexer_rules, sc_name);
         let match_super = !sc_name.is_empty() && lexer_rule_match_calls_super(rule, &grammar.lexer_rules, sc_name);
         if !replays && rule.body.len() > 1 {

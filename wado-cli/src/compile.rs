@@ -543,9 +543,8 @@ pub async fn try_compile(
 }
 
 /// `try_compile` with an optional [`RunCache`]. `wado test` passes one shared
-/// across every fixture, so a generator is resolved and AOT-compiled once per
-/// run and every fixture reads one view of the tree; `None` keeps the per-host
-/// cache for single-file builds.
+/// across every fixture, so the run resolves each generator once and reads one
+/// view of the tree; `None` keeps the per-host cache for single-file builds.
 pub async fn try_compile_with_run_cache(
     filename: &str,
     flags: &CompileFlags,
@@ -577,8 +576,8 @@ pub async fn try_compile_with_run_cache(
         Some(cache) => base_host.with_shared_run_cache(cache),
         None => base_host,
     };
-    // The entry file never goes through `load_source`, so the watch would miss
-    // the one file the caller named.
+    // The entry file never goes through `load_source`, so the watch would
+    // otherwise miss the one file the caller named.
     base_host
         .run_cache()
         .inputs()
@@ -863,10 +862,9 @@ pub(crate) async fn maybe_run_pipeline(
     let mut inline = inline;
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
-    // Everything a generator writes is a product of this run, so the watch must
-    // not read a regenerated output as the tree moving under it. Declared
-    // before the pipeline runs, but applied when the watch is asked, so the
-    // order fixtures compile in does not matter.
+    // A generator's outputs are products of this run, not a tree moving under
+    // it. Declared here but applied when the watch is asked, so the order
+    // fixtures compile in does not matter.
     for invocation in &inline {
         host.run_cache()
             .inputs()

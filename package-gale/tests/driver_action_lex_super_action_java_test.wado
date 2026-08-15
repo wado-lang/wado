@@ -1,9 +1,8 @@
 //! SuperClass action ops in a `language = Java` grammar — the TypeScriptLexer /
 //! ANTLRv4Lexer shape. java2wado does not translate a superClass grammar's
-//! bodies, so `{this.processOpen();}` executes only through the base-call
-//! rewrite: the body is nothing but base calls, which is already Wado once the
-//! rewrite has run. The handler's brace depth is the observable proof that the
-//! actions ran, in match order, once per winning token.
+//! bodies, so `{this.processOpen();}` runs only through the base-call rewrite,
+//! which leaves a body of nothing but base calls as Wado. The handler's brace
+//! depth is what proves the actions ran, in match order, once per token.
 
 use js from "./grammars/java_lex_super_action.g4"
     with {

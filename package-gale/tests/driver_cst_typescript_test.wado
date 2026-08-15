@@ -15,17 +15,15 @@ use { normalize_tree } from "./support/tree_compare.wado";
 use { TK_BackTick, TK_BackTickInside, TK_WhiteSpaces, TK_Let, TK_Divide, TK_RegularExpressionLiteral } from "./grammars/TypeScriptLexer.g4";
 use { TypeScriptLexerBase, LexerView } from "./grammars/TypeScriptLexer.g4";
 
-// A hand-written TypeScriptLexerBase port. The grammar's `{this.m()}` sites are
-// base-effect operations, so every recognizer call installs this handler; the
-// action ops carry the brace / template state the predicate ops read.
+// A hand-written TypeScriptLexerBase port, installed around every recognizer
+// call: the action ops carry the brace / template state the predicate ops read.
 //
-// Two upstream behaviours need recognizer state Gale does not hand a base yet
-// (see TODO.md, Stage C): `IsRegexPossible` is written against the last emitted
-// token, which needs the `nextToken` lifecycle hook — the port below decides on
-// the character before the candidate instead, which agrees with the token rule
-// wherever the preceding token ends in an identifier char, `)`, `]` or `}`;
-// and `IsStrictMode` tracks only the `'use strict'` literal the lexer itself
-// sees, not the parser's notion of scope.
+// Two upstream behaviours need recognizer state a base cannot reach yet (see
+// TODO.md, Stage C). `IsRegexPossible` is written against the last emitted
+// token, which needs the `nextToken` hook; this port decides on the character
+// before the candidate, which agrees wherever the preceding token ends in an
+// identifier char, `)`, `]` or `}`. `IsStrictMode` sees only the `'use strict'`
+// literal the lexer passes, not the parser's notion of scope.
 struct TsBase {
     // One entry per `${` interpolation still open: how many plain `{` are open
     // inside it. A `}` ends the interpolation only at count 0.

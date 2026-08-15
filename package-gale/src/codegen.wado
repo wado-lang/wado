@@ -168,10 +168,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         let ops = collect_lexer_super_ops(grammar);
         let with_args = super_ops_with_args(&ops);
         if !with_args.is_empty() {
-            // The call rewrite drops a call's arguments and the interface has
-            // no type to declare them with, so wiring the base would execute
-            // the operation with the argument silently lost. Refuse the base
-            // and say which operation forced it.
+            // Wiring the base would run the operation with its argument lost,
+            // so refuse it and name what forced that.
             ctx.warn(
                 &DiagnosticOwner::host(&"superClass"),
                 DiagnosticKind::UnsupportedAction,
@@ -319,9 +317,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 /// a `mode` grammar, and fragment actions. Predicates never warn (they run at
 /// every position). Without this a dropped lexer action vanished with no
 /// diagnostic — silent, against the "loud, never silent" contract. Gated on
-/// `emit_actions`, so a `language = Java` grammar warns nothing — except under a
-/// `superClass`, where the base-call rewrite runs the actions the host
-/// translator never sees, and the rest must still be reported. Lives here
+/// `emit_actions`, so a `language = Java` grammar warns nothing — except under
+/// a `superClass`, whose base-call rewrite runs actions the host translator
+/// never sees, leaving the rest to report. Lives here
 /// rather than in `lexer_gen` to keep that module free of a `GenContext`
 /// dependency (which would cycle through `gen_context`'s `LitToken` import).
 fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
@@ -360,10 +358,9 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     }
 }
 
-/// Why an unexecuted action in `rule` is unexecuted. A grammar whose lexer
-/// actions do not run at all (a `superClass` grammar carrying a host-language
-/// body the base-call rewrite cannot turn into Wado) is a different failure from
-/// an action codegen places nowhere, so they read differently.
+/// Why an unexecuted action in `rule` is unexecuted: a grammar whose lexer
+/// actions do not run at all is a different failure from an action codegen
+/// places nowhere.
 fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> String {
     if !grammar_executes {
         return "this grammar's lexer actions do not run at all: a superClass grammar runs one only when the base is wired and the body is nothing but base calls";

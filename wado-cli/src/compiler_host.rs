@@ -112,8 +112,7 @@ pub struct FilesystemCompilerHost {
     log_level: LogLevel,
     start_time: Instant,
     /// Per-host by default; a `wado test` run shares one across all
-    /// fixtures via [`Self::with_shared_run_cache`], which is what makes the
-    /// run resolve each generator once and notice a source moving under it.
+    /// fixtures via [`Self::with_shared_run_cache`].
     run: Arc<RunCache>,
     /// Precomputed `[dependencies]` index. When set, `dependency_index`
     /// returns it instead of having the inner host re-read the manifest —
@@ -166,17 +165,16 @@ impl FilesystemCompilerHost {
         self
     }
 
-    /// Share one [`RunCache`] across hosts so a generator is resolved and
-    /// AOT-compiled once per `wado test` run instead of once per fixture, and
-    /// every fixture is read against one view of the source tree.
+    /// Share one [`RunCache`] across hosts, so a `wado test` run resolves and
+    /// AOT-compiles each generator once instead of once per fixture, and reads
+    /// one view of the source tree.
     #[must_use]
     pub fn with_shared_run_cache(mut self, cache: Arc<RunCache>) -> Self {
         self.run = cache;
         self
     }
 
-    /// The run-scoped state this host shares: resolved generators, AOT
-    /// components, and the watch over what the run has read.
+    /// The run-scoped state this host shares.
     #[must_use]
     pub fn run_cache(&self) -> Arc<RunCache> {
         Arc::clone(&self.run)
@@ -273,8 +271,8 @@ impl FilesystemCompilerHost {
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         let bytes = self.inner.load_source(path).await?;
-        // Every module and asset the compile reads passes here, so this is
-        // where the run learns what tree it is describing.
+        // Every module and asset a compile reads passes here, which is how the
+        // run learns what tree it is describing.
         self.run
             .inputs()
             .observe(&self.inner.base_path().join(path), &bytes);

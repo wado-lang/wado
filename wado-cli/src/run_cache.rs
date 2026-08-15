@@ -1,17 +1,15 @@
-//! Per-run shared state: what a single CLI invocation resolves once and then
-//! holds fixed for its whole duration.
+//! Per-run shared state: what one CLI invocation resolves once and then holds
+//! fixed for its whole duration.
 //!
-//! A `wado test` run compiles thousands of files over minutes. Without a
-//! run-scoped view, every fixture re-resolves the same generator from disk, so
-//! editing a generator source mid-run silently splits the run: fixtures
-//! compiled before the edit used one generator, fixtures after it another, and
-//! the summary describes a tree that never existed. [`GeneratorCache`] pins the
-//! resolution for the run, and [`SourceWatch`] records what the run read so it
-//! can say afterwards whether the tree moved under it.
+//! A `wado test` run compiles thousands of files over minutes, and each fixture
+//! used to re-resolve its generator from disk — so an edit mid-run split the
+//! run between two generators, and the summary described a tree that never
+//! existed. [`GeneratorCache`] pins the resolution; [`SourceWatch`] records
+//! what the run read, so the run can say afterwards whether the tree moved.
 //!
-//! Attached explicitly by the run (`with_shared_run_cache`); a bare host or
+//! Attached by the run (`with_shared_run_cache`); without one a host or
 //! provider keeps per-call semantics, which is what a single-file `wado
-//! compile` and the unit tests want.
+//! compile` wants.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -22,7 +20,7 @@ use wado_compiler::hashmap::IndexMap;
 use crate::compiler_host::KilnComponentCache;
 use crate::kiln_driver::ResolvedGenerator;
 
-/// A slot map is structurally valid whatever a panicking holder was doing, so
+/// A map is structurally valid whatever a panicking holder was doing, so
 /// recovering the guard is correct, not a fallback.
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex
@@ -39,8 +37,7 @@ pub struct RunCache {
 }
 
 impl std::fmt::Debug for RunCache {
-    /// The contents are caches keyed by content hashes; naming them says
-    /// nothing a reader of a `{:?}` dump can use.
+    /// Hash-keyed caches; dumping their contents helps no reader.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("RunCache")
     }
@@ -68,12 +65,9 @@ impl RunCache {
     }
 }
 
-/// Generators resolved by this run, keyed by manifest root + module.
-///
-/// The first resolution wins for the rest of the run: a generator edited while
-/// the run is in flight cannot take effect halfway through it, which is what
-/// makes a run's results describe one tree. [`SourceWatch`] is what tells the
-/// user the edit happened.
+/// Generators resolved by this run, keyed by manifest root + module. The first
+/// resolution wins for the rest of it, so an edit in flight cannot take effect
+/// halfway through; [`SourceWatch`] is what reports that the edit happened.
 #[derive(Default)]
 pub struct GeneratorCache {
     resolved: Mutex<IndexMap<String, ResolvedGenerator>>,
@@ -85,9 +79,8 @@ impl GeneratorCache {
         lock(&self.resolved).get(key).cloned()
     }
 
-    /// Store `resolved` under `key` unless the run already pinned one, and
-    /// return whatever is pinned afterwards — so racing resolutions of the same
-    /// generator all observe the same answer.
+    /// Store `resolved` unless the run already pinned one, and return what is
+    /// pinned — so racing resolutions all observe the same answer.
     pub fn pin(&self, key: String, resolved: ResolvedGenerator) -> ResolvedGenerator {
         lock(&self.resolved).entry(key).or_insert(resolved).clone()
     }
@@ -98,39 +91,32 @@ impl GeneratorCache {
 struct Stamp {
     len: u64,
     hash: [u8; 32],
-    /// A later read in the same run returned different bytes. Sticky, because
-    /// an edit reverted before the run ends still means two fixtures compiled
-    /// two different files — which the end-of-run comparison cannot see.
+    /// A later read returned different bytes. Sticky: an edit reverted before
+    /// the run ends still means two fixtures compiled two different files,
+    /// which the end-of-run comparison cannot see.
     diverged: bool,
 }
 
 /// The source files a run read, with what they contained at first read.
-///
-/// [`Self::changed`] answers "did anything move under us": a file whose content
-/// differs from the first read means the run mixed two trees, so its verdict is
-/// about neither. Content, not timestamps — a save that rewrites identical
-/// bytes, and the run's own repeated writes of a deterministic artefact, are
-/// not changes.
+/// [`Self::changed`] answers "did anything move under us" by content, not
+/// timestamp: a save rewriting identical bytes, and the run rewriting its own
+/// deterministic output, are not changes.
 #[derive(Default)]
 pub struct SourceWatch {
     seen: Mutex<IndexMap<PathBuf, Stamp>>,
-    /// Kiln output directories. Everything under one is a product of this run,
-    /// not an input to it, so a regenerated file is not a moving tree. Applied
-    /// at [`Self::changed`] too, since a directory is declared by the file that
-    /// invokes the generator, which may compile after one that reads its
-    /// output.
+    /// Kiln output directories, whose files this run produces rather than
+    /// reads. Applied at [`Self::changed`], not at [`Self::observe`]: the file
+    /// declaring a directory may compile after one that read its output.
     generated_dirs: Mutex<Vec<PathBuf>>,
 }
 
 impl SourceWatch {
-    /// Record `bytes` as what `path` held when the run first read it. Later
-    /// reads are ignored: the question is whether the file still matches the
-    /// run's first view of it, not its most recent one.
+    /// Record `bytes` as what `path` held when the run first read it; a later
+    /// read is compared against that, never replaces it.
     pub fn observe(&self, path: &Path, bytes: &[u8]) {
-        // Hash outside the lock: `wado test` reads files from every compile
-        // worker at once. The insert-or-compare below then happens under one
-        // lock hold, so two workers reading the same path concurrently cannot
-        // each decide they are the first and drop the loser's hash.
+        // Hash outside the lock — every compile worker reads at once — then
+        // insert-or-compare under one hold, so two workers reaching the same
+        // path cannot each decide they are the first and drop the loser's hash.
         let hash: [u8; 32] = Sha256::digest(bytes).into();
         let mut seen = lock(&self.seen);
         match seen.get_mut(path) {
@@ -157,9 +143,8 @@ impl SourceWatch {
     }
 
     /// Watched files whose content no longer matches the run's first read of
-    /// them — either at some read during the run, or on disk now. Sorted for a
-    /// stable report. A file that vanished counts: the run compiled something
-    /// that is no longer there.
+    /// them, at a later read or on disk now, sorted for a stable report. A file
+    /// that vanished counts: the run compiled something no longer there.
     #[must_use]
     pub fn changed(&self) -> Vec<PathBuf> {
         let generated = lock(&self.generated_dirs).clone();
@@ -175,12 +160,10 @@ impl SourceWatch {
     }
 }
 
-/// Whether `path` differs from `stamp`. Length is the one cheap filter that
-/// cannot be wrong; a timestamp can, because the bytes reach [`SourceWatch`]
-/// already read, so a write between the read and the stat would pair the old
-/// content with the new mtime and hide the change for the rest of the run.
-/// Everything else is decided by re-reading, so a rewrite of identical bytes
-/// reports nothing.
+/// Whether `path` differs from `stamp`. Length is the only cheap filter used:
+/// the bytes reach [`SourceWatch`] already read, so a write between that read
+/// and a stat would pair the old content with a new timestamp and hide the
+/// change for the rest of the run. Everything else re-reads.
 fn moved(path: &Path, stamp: &Stamp) -> bool {
     match std::fs::metadata(path) {
         Ok(meta) if meta.len() != stamp.len => return true,

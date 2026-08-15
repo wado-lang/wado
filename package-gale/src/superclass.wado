@@ -29,9 +29,9 @@ use { to_snake_case } from "./ident.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
-/// `has_args` records a call site that passes arguments: the rewrite drops
-/// them and the interface has no source for their types, so a base with one is
-/// refused rather than wired to a signature that silently loses an argument.
+/// `has_args` marks a call site that passes arguments: the rewrite drops them
+/// and the interface has no type to declare them with, so a base carrying one
+/// is refused rather than wired to a signature that loses an argument.
 pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
@@ -92,8 +92,8 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
 }
 
 /// Whether the call spanning `[start, close)` passes anything between its
-/// parentheses. Everything before the `(` is the receiver and the method name,
-/// so the last `(` in the span opens the argument list.
+/// parentheses. Only the receiver and the method name precede the first `(`,
+/// so that one opens the argument list.
 fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
     let mut open = start;
     for let mut i = start; i < close; i += 1 {
@@ -118,9 +118,8 @@ fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32]> {
     return call_at(chars, i, n, &THIS_WORD, &DOT_SEP);
 }
 
-/// The rewritten form of the same call: `Foo::<method>(...)`. Recognizing it
-/// too keeps `body_is_base_calls_only` answering the same before and after
-/// `rewrite_superclass_calls`.
+/// The rewritten form: `Foo::<method>(...)`. Recognizing it too keeps
+/// `body_is_base_calls_only` answering the same across the rewrite.
 fn base_call_at(chars: &List<char>, i: i32, n: i32, base: &List<char>) -> Option<[String, i32]> {
     return call_at(chars, i, n, base, &PATH_SEP);
 }
@@ -203,8 +202,8 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
 /// role (predicate vs action). A later occurrence still contributes its
-/// `has_args`, since one call site passing arguments is enough to make the
-/// operation unrepresentable.
+/// `has_args`: one call site passing arguments makes the operation
+/// unrepresentable.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
     for let mut i = 0; i < ops.len(); i += 1 {
         if ops[i].name == call.name {
@@ -220,9 +219,7 @@ pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind
 }
 
 /// Operations called with arguments anywhere in the grammar. A base is wired
-/// only when this is empty: `rewrite_this_calls` drops a call's arguments and
-/// the generated interface has no type to give them, so executing one would
-/// silently lose it (`action.md`, "SuperClass — an effect interface").
+/// only when this is empty (`action.md`, "SuperClass — an effect interface").
 pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
     for let op of ops {
@@ -249,9 +246,9 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
 /// Whether `body` is nothing but base-method calls and separators — the source
 /// form `this.m(...)` or the `Foo::m(...)` the rewrite leaves behind. Such a
 /// body is plain Wado once `rewrite_superclass_calls` has run, so it runs
-/// without the host-language translator a `superClass` grammar carves out; one
-/// carrying host code around the call needs that translator. Both call forms
-/// are accepted so the answer does not change across the rewrite.
+/// without the host translator a `superClass` grammar carves out; one carrying
+/// host code around the call needs that translator. Both forms are accepted so
+/// the answer does not move across the rewrite.
 pub fn body_is_base_calls_only(body: &String, base_name: &String) -> bool {
     let chars: List<char> = body.chars().collect();
     let base: List<char> = base_name.chars().collect();
@@ -284,11 +281,10 @@ pub fn body_is_base_calls_only(body: &String, base_name: &String) -> bool {
     return true;
 }
 
-/// Whether every `{ ... }` action body in the grammar's lexer is base-calls-only,
-/// so the base's action ops run for a grammar whose action language Gale does
-/// not translate (`language = Java` under a `superClass`). All-or-nothing per
-/// grammar: one body carrying host code leaves every lexer action unexecuted
-/// (each is reported), rather than running some and dropping others.
+/// Whether every `{ ... }` action body in the grammar's lexer is
+/// base-calls-only, which is what lets a `language = Java` `superClass`
+/// grammar run its actions at all. All-or-nothing per grammar: one body
+/// carrying host code leaves every lexer action unexecuted, each reported.
 pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
     for let rule of &grammar.lexer_rules {
         for let alt of &rule.body {
@@ -319,10 +315,10 @@ fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool 
 }
 
 /// Whether the grammar declares a `superClass` Gale refuses to wire, because an
-/// operation is called with arguments (`super_ops_with_args`). Nothing that
-/// reaches the base can then be emitted: no interface, and no body naming
-/// `this`, which the rewrite would otherwise have replaced. The grammar's lexer
-/// actions and predicates therefore stay unexecuted, each reported.
+/// operation is called with arguments. Nothing reaching the base can then be
+/// emitted — not the interface, and not a body still naming `this`, which the
+/// rewrite would have replaced — so the lexer's actions and predicates stay
+/// unexecuted, each reported.
 pub fn superclass_is_refused(grammar: &Grammar) -> bool {
     return match superclass_base_name(grammar) {
         Some(_) => !super_ops_with_args(&collect_lexer_super_ops(grammar)).is_empty(),
@@ -341,8 +337,8 @@ pub fn lexer_rule_match_calls_super(rule: &LexerRule, all_rules: &List<LexerRule
     return rule_calls_super_with(rule, all_rules, base_name, false);
 }
 
-/// The same for a rule's `apply_<rule>_actions` replay, which additionally runs
-/// the alternatives' actions.
+/// The same for a rule's `apply_<rule>_actions` replay, which also runs the
+/// alternatives' actions.
 pub fn lexer_rule_replay_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
     return rule_calls_super_with(rule, all_rules, base_name, true);
 }

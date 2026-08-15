@@ -16,14 +16,13 @@ use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.
 use { LexerAdaptor, LexerView } from "./grammars/ANTLRv4Lexer.g4";
 
 // A hand-written stand-in for ANTLR's LexerAdaptor. The real adaptor drives the
-// lexer from these two ops — `handleBeginArgument` pushes the Argument (or
-// LexerCharSet) mode and calls `more()`, `handleEndArgument` pops the mode and
-// retypes the token — and a Gale base reaches none of that: an operation is
-// handed a read-only `LexerView`, not the lexer's command surface, and the
-// "which rule are we in" state it branches on needs the `emit` / `nextToken`
-// lifecycle hooks (both open Stage C items, see TODO.md). This port therefore
-// only counts the ops, which is what the argument brackets did before the base
-// was wired; `[ ... ]` bodies stay ordinary DEFAULT-mode tokens.
+// lexer from these two ops — `handleBeginArgument` pushes the Argument mode and
+// calls `more()`, `handleEndArgument` pops it and retypes the token — and a
+// Gale base reaches none of that: an operation gets a read-only `LexerView`,
+// not the lexer's command surface, and the rule-type state it branches on needs
+// the `emit` / `nextToken` hooks (both open Stage C items, see TODO.md). This
+// port therefore only counts the ops, leaving `[ ... ]` bodies as the ordinary
+// DEFAULT-mode tokens they were before the base was wired.
 struct Antlr4Base {
     begins: i32,
     ends: i32,
