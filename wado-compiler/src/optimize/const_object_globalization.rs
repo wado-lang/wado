@@ -1274,9 +1274,55 @@ impl Gate<'_> {
     }
 }
 
-/// True when every use of local `idx` in `body` keeps it immutable.
+/// True when every use of local `idx` in `body` — and of every local its
+/// storage reaches — keeps it immutable.
+///
+/// A reference-typed projection bound out of the aggregate aliases it: `let s =
+/// writer.buf;` hands `writer`'s array handle to `s`, and a write through `s`
+/// is a write to `writer` that no use of `writer` shows. [`param_storage_escapes`]
+/// reads the callee side through the same [`projection_alias_roots`].
 fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    block_readonly(body, body.root, idx, gate)
+    if !block_readonly(body, body.root, idx, gate) {
+        return false;
+    }
+    // The aliases answer a narrower question. `block_readonly` also rejects a
+    // bare whole-value read, which is a consuming use of the constant but
+    // ordinary for a local that merely names part of it.
+    projection_alias_roots(body, idx, gate)
+        .into_iter()
+        .filter(|&root| root != idx)
+        .all(|root| !written_through(body, root, gate))
+}
+
+/// Whether a write reaches local `idx`: an assignment rooted at it, a `&mut` of
+/// it or of one of its projections, or a call that mutates it as a receiver.
+fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
+    reachable_nodes(body).into_iter().any(|node| {
+        let NodeRef::Expr(e) = node else {
+            return false;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => projection_roots_at(body, *target, idx),
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => inner
+                .as_expr()
+                .is_some_and(|i| projection_roots_at(body, i, idx)),
+            ExprKind::Call {
+                func_id,
+                args,
+                has_receiver: true,
+                ..
+            } => args.first().is_some_and(|recv| {
+                recv.expr
+                    .as_expr()
+                    .is_some_and(|r| projection_roots_at(body, strip_refs(body, r), idx))
+                    && gate.callee_mutates_self(*func_id) != Some(false)
+            }),
+            _ => false,
+        }
+    })
 }
 
 /// Whether the callee hands the *storage* of by-value parameter `idx` back out,
