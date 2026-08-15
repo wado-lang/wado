@@ -1,7 +1,6 @@
-//! Post-processing for Wasm modules
-//!
-//! This module provides utilities to transform Wasm modules, such as
-//! converting memory definitions to imports and dead code elimination.
+//! Post-processing over finished core modules: rewriting an embedded wasm
+//! asset's memory definition into an import, and pruning it to its used
+//! exports.
 
 use crate::hashmap::IndexSet;
 
@@ -11,17 +10,12 @@ use wasm_encoder::{
 };
 use wasmparser::{Parser, Payload};
 
-/// Perform dead code elimination on a Wasm module, keeping only the specified exports.
-///
-/// This uses walrus to remove unused functions and other items from the module.
-/// The `keep_exports` set contains the names of exports that should be preserved.
-/// The gc pass automatically treats exports as roots, so we remove unwanted exports first.
+/// Drop everything not reachable from `keep_exports`. The gc pass roots at the
+/// exports, so the unwanted ones go first.
 pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -> Vec<u8> {
     let mut module =
         walrus::Module::from_buffer(wasm_bytes).expect("bundled module should be valid");
 
-    // Remove exports that are not in the keep set
-    // The gc pass will treat remaining exports as roots
     let exports_to_remove: Vec<_> = module
         .exports
         .iter()
@@ -33,8 +27,6 @@ pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -
         module.exports.delete(id);
     }
 
-    // Run garbage collection to remove unreferenced items
-    // (exports are automatically treated as roots)
     passes::gc::run(&mut module);
 
     module.emit_wasm()
@@ -45,19 +37,16 @@ const IMPORT_SECTION_ID: u8 = 2;
 /// Rewrite a wasm asset so it takes the component's memory as an import rather
 /// than defining its own, letting it share memory with the other core modules.
 ///
-/// Handles all three shapes `loader.rs` accepts (see [`MemorySource`]). Every
-/// section other than the memory definition, the memory export, and the import
-/// section is carried over byte-for-byte, in its original order. That leaves
-/// every index space unchanged: the memory import takes slot 0, exactly where
-/// the dropped definition sat, and the memory space is disjoint from the
-/// function, global, and table spaces.
+/// Every section but the memory definition, the memory export and the import
+/// section is copied through byte-for-byte, in order. Index spaces are
+/// therefore unchanged: the memory import takes slot 0, where the dropped
+/// definition sat.
 pub fn convert_memory_to_import(
     wasm_bytes: &[u8],
     import_module: &str,
     import_name: &str,
 ) -> Result<Vec<u8>, String> {
-    // `None` once the module already imports its memory: it needs no new one,
-    // and adding a second would be a duplicate.
+    // `None` when the module already imports its memory.
     let to_import: Option<MemoryType> = match find_memory_source(wasm_bytes)? {
         MemorySource::AlreadyImported => None,
         MemorySource::Defined(mem) => Some(mem),
@@ -81,9 +70,8 @@ pub fn convert_memory_to_import(
     for payload in Parser::new(0).parse_all(wasm_bytes) {
         let payload = payload.map_err(|e| format!("Parse error: {e}"))?;
 
-        // The import section must precede every section that can reference an
-        // import. When the module has none of its own, open one right before
-        // the first such section (any id above the import section's own 2).
+        // The import section must precede anything that can reference an
+        // import, so a module with none of its own gets one opened here.
         if !memory_import_written
             && to_import.is_some()
             && let Some((id, _)) = payload.as_section()
@@ -132,11 +120,10 @@ pub fn convert_memory_to_import(
                 }
                 module.section(&exports);
             }
-            // Individual bodies arrive after `CodeSectionStart`, which already
-            // copied the whole section verbatim.
+            // `CodeSectionStart` already copied the whole section.
             Payload::CodeSectionEntry(_) => {}
-            // Everything else — including sections this rewrite knows nothing
-            // about — is copied through rather than dropped.
+            // Everything else, including sections unknown here, is copied
+            // through rather than dropped.
             other => {
                 if let Some((id, range)) = other.as_section() {
                     module.section(&RawSection {
@@ -155,16 +142,15 @@ pub fn convert_memory_to_import(
     Ok(module.finish())
 }
 
-/// Where a wasm asset's memory comes from. These are the shapes `loader.rs`
-/// admits: it rejects more than one memory, and `env.memory` is the only import
-/// it allows — so all three arms are ordinary inputs, not error cases.
+/// Where a wasm asset's memory comes from. All three are shapes `loader.rs`
+/// admits, so none is an error case.
 enum MemorySource {
     /// Defines exactly one. The rewrite drops it and imports the same shape.
     Defined(MemoryType),
     /// Already written against the component's memory; nothing to convert.
     AlreadyImported,
-    /// Neither defines nor imports one, so it cannot touch linear memory. It
-    /// still gets a minimal import, keeping every embedded module one shape.
+    /// Cannot touch linear memory. Still gets a minimal import, so every
+    /// embedded module has one shape.
     Absent,
 }
 
@@ -242,7 +228,6 @@ mod tests {
             .into_owned()
     }
 
-    /// The imported memory type, if the module imports one.
     fn memory_import_of(wasm: &[u8]) -> Option<wasmparser::MemoryType> {
         for payload in Parser::new(0).parse_all(wasm) {
             if let Ok(Payload::ImportSection(imports)) = payload {
@@ -317,10 +302,8 @@ mod tests {
         validate(&converted).expect("converted libm must validate");
     }
 
-    /// The rewrite touches three sections; everything else must survive
-    /// byte-for-byte. It used to rebuild the module from a fixed list of
-    /// section kinds, so a table, element, start, or custom section was
-    /// silently dropped and the memory's `maximum` thrown away.
+    /// The rewrite touches three sections; every other one — table, element,
+    /// start, custom — and the memory's `maximum` must survive it.
     #[test]
     fn convert_memory_to_import_preserves_other_sections() {
         let source = r#"
@@ -391,9 +374,8 @@ mod tests {
         assert!(memory_import_of(&converted).is_some());
     }
 
-    /// `loader.rs` accepts a wasm asset with no memory at all (it only rejects
-    /// more than one), so the rewrite must still hand it the component's
-    /// memory rather than refusing the module.
+    /// `loader.rs` accepts an asset with no memory, so the rewrite must hand it
+    /// the component's rather than refuse the module.
     #[test]
     fn convert_memory_to_import_accepts_a_module_with_no_memory() {
         let bytes = wat::parse_str(r#"(module (func (export "add_one")))"#).expect("fixture");
@@ -402,9 +384,8 @@ mod tests {
         assert!(memory_import_of(&converted).is_some(), "memory import");
     }
 
-    /// `env.memory` is the one import `loader.rs` permits in a wasm asset, so a
-    /// module already written against it is a normal input, not an error — and
-    /// it must not come back with the import duplicated.
+    /// `env.memory` is the one import `loader.rs` permits, so an asset already
+    /// written against it is a normal input and must not gain a duplicate.
     #[test]
     fn convert_memory_to_import_passes_through_an_existing_memory_import() {
         let source = r#"

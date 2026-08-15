@@ -163,11 +163,8 @@ pub fn build_component(
                 ),
                 CmStreamPayload::Value(_) => unreachable!("handled above"),
                 CmStreamPayload::Record(name) => {
-                    // Alias the record type from the WASI interface that defines it.
-                    // WASI imports are already generated (generate_cm_imports runs first),
-                    // so we can alias the exported type from the interface instance.
-                    // No defining interface means the stream would silently become
-                    // `stream<u8>` — a different type at the component boundary.
+                    // WASI imports are generated first, so the defining
+                    // interface's instance is already available to alias from.
                     let interface_name = project
                         .cm_interface_registry
                         .find_interface_for_struct_cm_name(name)
@@ -425,10 +422,9 @@ pub fn build_component(
     )
 }
 
-/// Whether codegen emits `func` at all: the registry supports its signature and
-/// the program actually calls it. The two halves belong together — a supported
-/// but unused function drags resource types into the instance type that the
-/// world never imports.
+/// Whether codegen emits `func`: the registry supports its signature and the
+/// program calls it. Emitting a supported but unused function would drag
+/// resource types into the instance type that the world never imports.
 fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
     project.cm_interface_registry.is_function_supported(func)
         && project.used_wasi_functions.contains(&func.used_key())
@@ -935,9 +931,7 @@ fn build_transmission_future_type_for(
     source: &str,
 ) -> u32 {
     // `cli` is the shared `wasi:cli/types` error-code, aliased under the bare
-    // key by `generate_cm_imports`. Every other source must have aliased its own
-    // — substituting the CLI one, as this used to, gives the future a different
-    // error type than the host's.
+    // key by `generate_cm_imports`; every other source aliases its own.
     let key = if source == "cli" {
         "error-code".to_string()
     } else {
@@ -2857,23 +2851,20 @@ fn generate_cm_imports(
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 }
 
-/// The outer-component-scope type key holding a resource type aliased out of
-/// the interface that defines it.
+/// Outer-scope type key for a resource aliased out of its defining interface.
 fn resource_type_key(cm_name: &str) -> String {
     format!("resource:{cm_name}")
 }
 
-/// The outer-component-scope type key holding a package's own `error-code`.
-/// `wasi:cli`'s is aliased under the bare `"error-code"` instead, as the shared
-/// fallback every interface without its own resolves to.
+/// Outer-scope type key for a package's own `error-code`. `wasi:cli`'s uses the
+/// bare `"error-code"` instead, being the shared one others resolve to.
 fn error_code_key(package: &str) -> String {
     format!("{package}-error-code")
 }
 
 /// Alias an interface's own `error-code` into the outer component scope, where
 /// transmission futures and composite results look it up. Idempotent: two
-/// interfaces of one package (`wasi:http/types` and `wasi:http/handler`) share
-/// the single alias.
+/// interfaces of one package share the single alias.
 fn alias_package_error_code(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -3552,9 +3543,6 @@ fn import_resource_source(
                 .filter(|(name, _, _)| *name == "ErrorCode")
                 .collect();
             if let Some((_, cm_name, cases)) = interface_variants.first() {
-                // Each case carries its declared payload type. Encoding them
-                // all as `option<string>`, as this used to, gives the host a
-                // variant whose arms have the wrong types.
                 let mut type_gen = CmTypeGen::with_interface_hint(source_path);
                 let no_resources: IndexMap<&str, u32> = IndexMap::default();
                 let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases

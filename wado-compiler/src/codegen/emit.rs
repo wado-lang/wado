@@ -21,23 +21,21 @@ use wasm_encoder::{
 /// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
 mod wide_arith_downlevel;
 
-/// Name of a scratch slot for the `-f no-array-copy` loop. Keyed by the
-/// (dest, src) type pair, so sites of the same shape share slots. The single
-/// spelling shared by the declaring walker and the emitter — building the name
-/// twice lets the two drift, and a mismatch is an "unresolved local" ICE.
+/// Scratch slot for the `-f no-array-copy` loop, keyed by the (dest, src) type
+/// pair so sites of the same shape share slots. The declaring walker and the
+/// emitter must spell these identically, so both come through here.
 fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
     format!("__array_copy_{role}_{dest_type_idx}_{src_type_idx}")
 }
 
-/// Name of a scratch slot for the `ArrayClone` loop, keyed by array type.
-/// Shared by the declaring walker and the emitter, as [`array_copy_slot`].
+/// Scratch slot for the `ArrayClone` loop, keyed by array type. As
+/// [`array_copy_slot`].
 fn array_clone_slot(role: &str, type_idx: u32) -> String {
     format!("__copy_arr_{role}_{type_idx}")
 }
 
-/// Whether a Wasm GC packed storage type reads back signed (`Some(true)`),
-/// unsigned (`Some(false)`), or is not packed at all (`None`) — the choice
-/// between `*.get_s`, `*.get_u` and plain `*.get`.
+/// Whether a packed storage type reads back signed (`Some(true)`), unsigned
+/// (`Some(false)`), or is not packed (`None`).
 fn packed_signedness(ty: &WirType) -> Option<bool> {
     match ty {
         WirType::I8 | WirType::I16 => Some(true),
@@ -238,8 +236,8 @@ impl<'a> WirEmitter<'a> {
         // forward references (e.g., array<Pair> referencing a Pair struct
         // that hasn't been emitted yet).
         // Func types referenced from struct fields must join the rec group.
-        // Computed once and threaded into the pre-pass: the two walks assign
-        // and emit the same indices, so they must classify identically.
+        // The assigning and emitting walks below must classify identically, so
+        // they share one set.
         let gc_func_types = self.find_gc_referenced_func_types();
         self.pre_assign_type_indices(&gc_func_types);
 
@@ -611,8 +609,6 @@ impl<'a> WirEmitter<'a> {
                         },
                     );
                 }
-                // No pass builds these; dropping one silently would leave the
-                // module's import index space out of step with the accesses.
                 WirImportDesc::Global { .. } => panic!(
                     "[WIR emit] global import '{}::{}' is not implemented",
                     import.module, import.field
@@ -634,7 +630,6 @@ impl<'a> WirEmitter<'a> {
             .any(|i| matches!(&i.desc, WirImportDesc::Memory { .. }))
     }
 
-    /// Memories in the module's index space: imported ones first, then defined.
     fn memory_count(&self) -> usize {
         self.wir
             .imports
@@ -670,11 +665,9 @@ impl<'a> WirEmitter<'a> {
         memories
     }
 
-    /// The `WirFuncId` of the `i`-th defined function. The base is the
-    /// package's own — `DEFINED_FUNC_BASE` for the GC module, `0` for the
-    /// import-less memory module — not a hard-coded constant, so both kinds of
-    /// package resolve. `defined_func_base` must clear the imports for the two
-    /// id spaces to stay disjoint.
+    /// The `WirFuncId` of the `i`-th defined function, over the package's own
+    /// base: `DEFINED_FUNC_BASE` for the GC module, `0` for the import-less
+    /// memory module.
     fn defined_func_id(&self, i: usize) -> u32 {
         debug_assert!(self.wir.defined_func_base >= self.func_index_offset);
         self.wir.defined_func_base + u32::try_from(i).unwrap()
@@ -685,7 +678,6 @@ impl<'a> WirEmitter<'a> {
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
-        // Defined functions map onto Wasm indices starting after the imports.
         for (wasm_idx, (i, func)) in
             (self.func_index_offset..).zip(self.wir.functions.iter().enumerate())
         {
@@ -722,8 +714,6 @@ impl<'a> WirEmitter<'a> {
         })
     }
 
-    /// Whether the global's declared slot type admits null. Resolved through
-    /// the name map rather than a scan: this runs once per `GlobalGet`.
     fn global_slot_is_nullable(&self, name: &str) -> bool {
         !self.wir.globals[self.resolve_global(name) as usize]
             .ty
@@ -929,8 +919,6 @@ impl<'a> WirEmitter<'a> {
                     .scratch_local_names
                     .insert(array_clone_slot("src", idx))
                 {
-                    // The clone loop's per-element nullability branch needs an
-                    // element-typed temp alongside the cursor slots.
                     let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
                         panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
                     });
@@ -2581,11 +2569,8 @@ impl<'a> WirEmitter<'a> {
             .unwrap_or_else(|| panic!("unresolved local: {name}"))
     }
 
-    /// The Wasm type index of a WIR type. An unmapped id is a bug upstream, not
-    /// a case to recover from: index 0 is some other type, so falling back to it
-    /// silently retargets the instruction — a `struct.new` builds the wrong
-    /// shape, a `ref.cast` tests the wrong class — and the module still
-    /// validates whenever the two shapes happen to agree.
+    /// The Wasm type index of a WIR type. Panics rather than substituting a
+    /// plausible index, which would retarget the instruction at another type.
     fn resolve_type_index(&self, wir_idx: u32) -> u32 {
         self.type_index_map
             .get(&wir_idx)
@@ -2600,8 +2585,6 @@ impl<'a> WirEmitter<'a> {
             })
     }
 
-    /// The field index of `field_name` within a WIR struct. Falling back to 0
-    /// would read or write a *different* field of the same struct.
     fn resolve_field_index(&self, wir_type_idx: u32, field_name: &str) -> u32 {
         self.struct_field_map
             .get(&wir_type_idx)
@@ -2656,9 +2639,7 @@ impl<'a> WirEmitter<'a> {
         packed_signedness(&field.ty)
     }
 
-    /// Emit the `array.get` flavour the element storage type calls for: the
-    /// signed or unsigned widening read for a packed element, the plain read
-    /// otherwise.
+    /// Emit the `array.get` flavour the element storage type calls for.
     fn emit_array_get(&self, f: &mut Function, wir_type_idx: u32) {
         let wasm_idx = self.resolve_type_index(wir_type_idx);
         match self.is_array_packed(wir_type_idx) {
@@ -2669,10 +2650,7 @@ impl<'a> WirEmitter<'a> {
     }
 
     /// The Wasm index of a WIR function id. `build_func_index_map` maps every
-    /// import (identity) and every defined function, so a miss means a pass
-    /// dropped the callee while leaving the call behind. Passing the WIR id
-    /// through unchanged, as this used to, would call whatever function happens
-    /// to sit at that Wasm index.
+    /// import and every defined function, so a miss is a dangling reference.
     fn resolve_func_index(&self, wir_func_idx: u32) -> u32 {
         self.func_index_map
             .get(&wir_func_idx)
@@ -2860,7 +2838,6 @@ mod tests {
         v.validate_all(bytes).map(|_| ()).map_err(|e| e.to_string())
     }
 
-    /// A two-`i32`-field struct named `test//P`.
     fn point_struct() -> WirStructType {
         WirStructType {
             name: WirName {
@@ -2917,10 +2894,9 @@ mod tests {
         validate(&bytes).expect("const struct global init should validate as Wasm");
     }
 
-    /// An instruction naming a WIR type with no Wasm type index must ICE. The
-    /// emitter used to substitute index 0, which is a *different* type: here
-    /// `struct.new` would silently build a `test//P` instead of the missing
-    /// type, and the module still validates whenever the shapes agree.
+    /// An instruction naming a WIR type with no Wasm type index must ICE, not
+    /// fall back to index 0 — a different type, whose `struct.new` still
+    /// validates whenever the two shapes agree.
     #[test]
     #[should_panic(expected = "has no Wasm type index")]
     fn unmapped_type_index_is_an_ice() {
@@ -2949,9 +2925,8 @@ mod tests {
         emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
     }
 
-    /// Likewise for a function id with no Wasm index: exporting it used to fall
-    /// back to the raw WIR id, which names whatever function sits at that Wasm
-    /// index.
+    /// Likewise for a function id with no Wasm index, where the raw WIR id
+    /// names whatever function sits at that Wasm index.
     #[test]
     #[should_panic(expected = "has no Wasm index")]
     fn unmapped_func_index_is_an_ice() {

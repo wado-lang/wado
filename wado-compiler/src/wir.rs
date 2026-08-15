@@ -1393,12 +1393,9 @@ pub enum WirInstr {
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
-        /// The canonical mangle of the element type needing a per-element deep
-        /// copy. Codegen and DCE resolve this to the `$value_copy$` helper by
-        /// matching each helper's `value_copy_mangle` metadata — no name
-        /// lookup, and robust to the same type being interned more than once.
-        /// A primitive element, for which a plain `array.set` already copies,
-        /// never reaches here: `wir_build` emits a bulk clone instead.
+        /// The element type's canonical mangle. Codegen and DCE resolve it to
+        /// the `$value_copy$` helper through each helper's `value_copy_mangle`,
+        /// so the same type interned twice still matches.
         element_copy_mangle: String,
         /// Number of leading elements to copy — the destination's exact
         /// length. `None` clones the whole array (`array.len(src)`). Must

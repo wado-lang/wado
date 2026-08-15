@@ -577,9 +577,8 @@ impl CmFunctionInfo {
         build_local_alias_name(&self.package, &self.interface_name, &self.method_name)
     }
 
-    /// The `"{interface}::{method}"` key that `NirPackage::used_wasi_functions`
-    /// is keyed by (e.g. `"Stdout::write_via_stream"`). The single spelling of
-    /// that format, so a lookup cannot drift from the recording side.
+    /// This function's key in `NirPackage::used_wasi_functions` (e.g.
+    /// `"Stdout::write_via_stream"`).
     #[must_use]
     pub fn used_key(&self) -> String {
         format!("{}::{}", self.interface_name, self.method_name)
@@ -741,11 +740,10 @@ pub struct CmInterfaceInfo {
 }
 
 /// The codegen component-instance key `"{package}-{interface}"` (e.g.
-/// `"http-types"`). The single source of truth for this format: a bare
-/// interface name would collide across packages (`wasi:cli/types` vs
-/// `wasi:http/types`), so every register/lookup pair builds the key here — from
-/// a [`CmInterfaceInfo`] or from a parsed [`crate::ast::CmImport`], which name
-/// the same instance and must agree.
+/// `"http-types"`). Package-qualified because a bare interface name collides
+/// across packages (`wasi:cli/types` vs `wasi:http/types`). Both
+/// [`CmInterfaceInfo`] and [`crate::ast::CmImport`] name the same instance, so
+/// both build the key here.
 #[must_use]
 pub fn cm_instance_key(package: &str, interface: &str) -> String {
     format!("{package}-{interface}")
@@ -2712,11 +2710,10 @@ impl CmInterfaceRegistry {
             .contains_key(&(interface_path.to_string(), name.to_string()))
     }
 
-    /// Whether `interface_path` declares its own `ErrorCode`, as either shape:
-    /// an enum in `wasi:cli/types`, a variant in `wasi:filesystem/types` and
-    /// `wasi:sockets/types`. Codegen asks this to decide between the
-    /// interface-local error type and an outer alias to the shared CLI one, so
-    /// both shapes must be checked together everywhere.
+    /// Whether `interface_path` declares its own `ErrorCode`, in either shape:
+    /// an enum (`wasi:cli/types`) or a variant (`wasi:filesystem/types`,
+    /// `wasi:sockets/types`). Codegen picks the interface-local error type over
+    /// an alias to the shared CLI one on this, so both shapes count.
     pub fn declares_own_error_code(&self, interface_path: &str) -> bool {
         self.has_enum_in_interface(interface_path, "ErrorCode")
             || self
