@@ -10118,17 +10118,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::Struct {
-                type_name,
-                fields,
-                has_rest,
-                ..
-            } => self.reify_struct_pattern(
-                type_name.as_deref(),
-                fields,
-                *has_rest,
-                scrutinee_type,
-                ctx,
-            ),
+                fields, has_rest, ..
+            } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, ctx),
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Pattern::Error(_) => {
@@ -10137,16 +10128,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify a struct destructuring pattern `Point { x, y }` or
-    /// `{ x, y }` (anonymous). The struct's field-name → index map
-    /// comes from `tysys.all_struct_fields`; sub-patterns recurse
-    /// against the declared field type. Mirrors
-    /// `Elaborator::resolve_struct_pattern`'s shape; shorthand
-    /// `{ x }` (== `{ x: x }`) is encoded by the AST having the
-    /// sub-pattern be an `Ident { name: x }` either way.
+    /// Reify a struct destructuring pattern `Point { x, y }` or `{ x, y }`
+    /// (anonymous). The field-name → index map comes from the scrutinee's own
+    /// head; sub-patterns recurse against the declared field type. Mirrors
+    /// `Elaborator::resolve_struct_pattern`'s shape; shorthand `{ x }`
+    /// (== `{ x: x }`) is encoded by the AST having the sub-pattern be an
+    /// `Ident { name: x }` either way.
     fn reify_struct_pattern(
         &mut self,
-        type_name: Option<&str>,
         fields: &[ast::StructPatternField],
         has_rest: bool,
         scrutinee_type: TypeId,
@@ -10161,12 +10150,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // struct decl resolves (fields inherit the reference kind below).
         let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
 
-        // Struct info for the field-name → (index, type) lookup. A written
-        // qualifier is a reference site and answers for itself; with none, the
-        // scrutinee's own head does — which is the only thing that answers for
-        // an anonymous shape, since no spelling names one. Falls back to
-        // UNKNOWN-typed sub-patterns for an unresolved scrutinee (matching
-        // annotate's recovery shape).
+        // Struct info for the field-name → (index, type) lookup, asked of the
+        // scrutinee's own head. A field index is a fact about the value being
+        // destructured, so the pattern's qualifier — checked against this same
+        // head by annotate — has no say in it: resolving one by spelling picks
+        // whichever same-named struct the module sees first, and picks nothing
+        // at all for an anonymous shape or a function-local `struct`. Falls
+        // back to UNKNOWN-typed sub-patterns for an unresolved scrutinee,
+        // matching annotate's recovery shape.
         let scrutinee_head = match self.tysys.type_table.borrow().get(peeled_scrutinee) {
             ResolvedType::Struct { def, .. } => Some(*def),
             ResolvedType::GenericInstance { .. } => self
@@ -10177,10 +10168,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let field_info: crate::hashmap::IndexMap<String, (u32, TypeId)> = {
             let lookup = self.type_lookup();
-            match type_name {
-                Some(name) => lookup.struct_fields(name),
-                None => scrutinee_head.and_then(|head| lookup.struct_fields_of_head(head)),
-            }
+            scrutinee_head
+                .and_then(|head| lookup.struct_fields_of_head(head))
                 .map(|info| {
                     info.fields
                         .iter()

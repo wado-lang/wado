@@ -952,6 +952,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_let_pattern_inner(pattern, peeled_type, is_mut, span, ctx, ref_binding);
     }
 
+    /// Whether a struct pattern's qualifier names the scrutinee's own head.
+    ///
+    /// Declaration against declaration: the two spellings differ whenever an
+    /// import alias, a namespace prefix or a function-local item's `@AstId`
+    /// mangle is in play, and they agree for two modules' unrelated structs of
+    /// the same name. A shape names no declaration, so no qualifier matches
+    /// one. A qualifier the walk could not place is left to the diagnostics
+    /// the unresolved name earns elsewhere.
+    fn pattern_qualifier_matches(
+        &self,
+        site: Option<crate::ast::AstId>,
+        head: crate::tir::StructDef,
+    ) -> bool {
+        let Some(written) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
+        else {
+            return true;
+        };
+        head.decl() == Some(written)
+    }
+
     fn resolve_let_pattern_inner(
         &mut self,
         pattern: &ast::Pattern,
@@ -1034,48 +1054,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ast::Pattern::Struct {
                 type_name,
+                type_name_id,
                 fields,
                 has_rest,
                 span: pat_span,
             } => {
-                // The scrutinee's head, plus the spelling it renders to for
-                // the diagnostics below. The head is what the field lookup
-                // asks: an anonymous shape renders a name that names nothing.
-                let (struct_head, struct_name) = {
-                    let type_table = self.tysys.type_table.borrow();
-                    match type_table.get(type_id) {
-                        ResolvedType::Struct { def, type_args } => (
-                            Some(*def),
-                            Some(type_table.struct_rendered_name(*def, type_args)),
-                        ),
-                        _ => (None, None),
-                    }
+                // The scrutinee's head is what every lookup below asks: an
+                // anonymous shape renders a name that names nothing, and a
+                // function-local `struct` renders a mangled one that names
+                // nothing either.
+                let struct_head = match self.tysys.type_table.borrow().get(type_id) {
+                    ResolvedType::Struct { def, .. } => Some(*def),
+                    _ => None,
                 };
 
-                // If named pattern, verify the type matches
-                let type_name_matches = if let Some(expected_name) = type_name
-                    && let Some(actual_name) = &struct_name
-                {
-                    // Compare the short name (strip module prefix if needed,
-                    // and any `<ns>::` namespace-import prefix the user wrote).
-                    let expected_short = self
-                        .strip_ns_prefix(expected_name)
-                        .unwrap_or(expected_name.as_str());
-                    let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
-                    let matches = actual_short == expected_short;
-                    if !matches {
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: expected_name.clone(),
-                            found: self.tysys.type_table.borrow().type_name(type_id),
-                            span: *pat_span,
-                        });
+                // A named pattern must name the scrutinee's own declaration.
+                let type_name_matches = match (type_name, struct_head) {
+                    (Some(written), Some(head)) => {
+                        let matches = self.pattern_qualifier_matches(*type_name_id, head);
+                        if !matches {
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
+                                expected: written.clone(),
+                                found: self.tysys.type_table.borrow().type_name(type_id),
+                                span: *pat_span,
+                            });
+                        }
+                        matches
                     }
-                    matches
-                } else {
-                    true
+                    _ => true,
                 };
 
-                if struct_name.is_none() {
+                if struct_head.is_none() {
                     let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: "struct type".to_string(),
                         found: self.tysys.type_table.borrow().type_name(type_id),
@@ -1704,28 +1713,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Pattern::Struct {
                 type_name,
+                type_name_id,
                 fields,
                 has_rest,
                 span: pat_span,
             } => {
-                // Verify type if named
+                // A named pattern must name the scrutinee's own declaration.
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct { def, .. } = resolved {
-                        let name = &self.tysys.type_table.borrow().struct_head_name(def);
-                        let expected_short = self
-                            .strip_ns_prefix(expected_name)
-                            .unwrap_or(expected_name.as_str());
-                        let actual_short = name.rsplit("::").next().unwrap_or(name);
-                        if actual_short != expected_short {
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected: expected_name.clone(),
-                                found: self.tysys.type_table.borrow().type_name(scrutinee_type),
-                                span: *pat_span,
-                            });
-                            type_name_matches = false;
-                        }
+                    if let ResolvedType::Struct { def, .. } = resolved
+                        && !self.pattern_qualifier_matches(*type_name_id, def)
+                    {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: expected_name.clone(),
+                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                            span: *pat_span,
+                        });
+                        type_name_matches = false;
                     }
                 }
 
@@ -2967,11 +2972,13 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
         }
         Pattern::Struct {
             type_name,
+            type_name_id,
             fields,
             has_rest,
             span,
         } => Pattern::Struct {
             type_name: type_name.clone(),
+            type_name_id: *type_name_id,
             fields: fields
                 .iter()
                 .map(|f| crate::ast::StructPatternField {

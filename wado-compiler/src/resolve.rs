@@ -502,6 +502,22 @@ impl AstVisitor for Resolver<'_> {
         self.locals.pop();
     }
 
+    /// A struct pattern's qualifier names a type, so it resolves like one —
+    /// through the `ns$Type` alias when it arrived through a namespace import,
+    /// the same spelling a struct *literal*'s name uses.
+    fn visit_pattern(&mut self, pat: &ast::Pattern) {
+        if let ast::Pattern::Struct {
+            type_name: Some(name),
+            type_name_id: Some(id),
+            ..
+        } = pat
+        {
+            let answer = self.resolve_name(&name.replace("::", "$"));
+            self.record(*id, answer);
+        }
+        ast::walk_pattern(self, pat);
+    }
+
     fn visit_generic_params(&mut self, params: &[GenericParam]) {
         for p in params {
             self.visit_trait_bounds(&p.bounds);

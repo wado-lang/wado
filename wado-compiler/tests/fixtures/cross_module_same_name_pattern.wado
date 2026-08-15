@@ -1,0 +1,21 @@
+// A struct pattern's qualifier names a declaration, so it is checked against
+// the scrutinee's own head rather than by spelling. This module declares its
+// own `Pair` with the fields reversed; naming it in a pattern whose scrutinee
+// is the *imported* `Pair` is a mismatch, not a silent rebinding of `a` and `b`
+// onto the local declaration's field order.
+
+use { make } from "./sub/cross_module_same_name_pattern_dep.wado";
+
+struct Pair {
+    b: i32,
+    a: i32,
+}
+
+test "a same-named local struct does not answer for an imported scrutinee" {
+    let Pair { a, b } = make();
+    assert a == 1;
+    assert b == 2;
+}
+
+__DATA__
+{ "test": {}, "compile_error": "Pattern type mismatch" }
