@@ -339,15 +339,22 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
         let NodeRef::Expr(e) = node else {
             return false;
         };
-        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return false;
-        };
-        args.iter().enumerate().any(|(pos, arg)| {
-            arg.expr
-                .as_expr()
-                .is_some_and(|a| borrows_local(body, a, idx))
-                && gate.callee_ref_param_leaks(*func_id, pos)
-        })
+        match &body.exprs[e].kind {
+            ExprKind::Call { func_id, args, .. } => args.iter().enumerate().any(|(pos, arg)| {
+                arg.expr
+                    .as_expr()
+                    .is_some_and(|a| borrows_local(body, a, idx))
+                    && gate.callee_ref_param_leaks(*func_id, pos)
+            }),
+            // No callee body to ask, so the borrow is assumed to escape.
+            ExprKind::IndirectCall { args, .. } => args
+                .iter()
+                .any(|&a| a.as_expr().is_some_and(|e| borrows_local(body, e, idx))),
+            ExprKind::CmRawCall { args, .. } => args
+                .iter()
+                .any(|a| a.as_expr().is_some_and(|e| borrows_local(body, e, idx))),
+            _ => false,
+        }
     })
 }
 
@@ -375,29 +382,50 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32) -> bool {
 /// `core:zlib`'s `build_huffman_tree` did to its `sym_list` across calls.
 fn ref_args_the_callee_leaks(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
-    for node in reachable_nodes(body) {
-        let NodeRef::Expr(e) = node else {
-            continue;
-        };
-        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            continue;
-        };
-        for (pos, arg) in args.iter().enumerate() {
-            let Some(arg_expr) = arg.expr.as_expr() else {
-                continue;
-            };
-            if !matches!(
+    let note = |body: &Body, arg_expr: ExprId, leaks: bool, out: &mut IndexSet<ExprId>| {
+        if leaks
+            && matches!(
                 body.exprs[arg_expr].kind,
                 ExprKind::Unary {
                     op: NirUnaryOp::Ref,
                     ..
                 }
-            ) {
-                continue;
+            )
+        {
+            out.insert(arg_expr);
+        }
+    };
+    for node in reachable_nodes(body) {
+        let NodeRef::Expr(e) = node else {
+            continue;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::Call { func_id, args, .. } => {
+                for (pos, arg) in args.iter().enumerate() {
+                    if let Some(arg_expr) = arg.expr.as_expr() {
+                        let leaks = gate.callee_ref_param_leaks(*func_id, pos);
+                        note(body, arg_expr, leaks, &mut out);
+                    }
+                }
             }
-            if gate.callee_ref_param_leaks(*func_id, pos) {
-                out.insert(arg_expr);
+            // No callee body to ask, so every borrow handed over is assumed to
+            // escape — the same verdict `callee_ref_param_leaks` gives an
+            // unknown callee.
+            ExprKind::IndirectCall { args, .. } => {
+                for &arg in args {
+                    if let Some(arg_expr) = arg.as_expr() {
+                        note(body, arg_expr, true, &mut out);
+                    }
+                }
             }
+            ExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    if let Some(arg_expr) = arg.as_expr() {
+                        note(body, arg_expr, true, &mut out);
+                    }
+                }
+            }
+            _ => {}
         }
     }
     out

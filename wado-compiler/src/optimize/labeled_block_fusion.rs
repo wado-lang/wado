@@ -2516,6 +2516,14 @@ fn plan_slot_temp_sroa(
     };
     let (label, lb_block) = (label.clone(), *lb_block);
 
+    // One `let` for the temp, or the rewrite is unsound: `clone_block` (fusion's
+    // own duplication) copies `local_index` verbatim, and a second copy's
+    // `temp.k` reads would be rewritten to slot locals that only the first
+    // copy's exits declare and assign.
+    if declaration_count(body, temp_local) != 1 {
+        return None;
+    }
+
     // The block's value must arrive through `break L:` exits the transform can
     // reach, so the tail has to terminate rather than fall through with one.
     // Checked before the read census below, which walks the whole body.
@@ -2676,6 +2684,26 @@ fn perform_slot_temp_sroa(
     kept.extend_from_slice(&stmts[i + 1..]);
     engine.set_block_stmts(outer_block, kept);
     engine.note_elided_local(plan.temp_local);
+}
+
+/// How many `let` statements declare `idx`, capped at two — the callers only
+/// need to tell "exactly one" from "more".
+fn declaration_count(body: &Body, idx: u32) -> usize {
+    let mut count = 0;
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && *local_index == idx
+        {
+            count += 1;
+            if count > 1 {
+                return count;
+            }
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    count
 }
 
 /// Replace each `break L: [e0, …]` with the slot assignments the projections

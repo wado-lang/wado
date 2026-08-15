@@ -34,22 +34,12 @@ impl Counter {
     }
 }
 
-// `#[inline(never)]` keeps the asserts in a function of their own. Spliced into
-// the test world's export wrapper instead, they lose store-to-load forwarding:
-// `store_load_forward` only grows a `ValueGraph` that already exists, and a CM
-// export wrapper never gets one — no earlier pass runs a value query on it. A
-// separate gap, and not the one this fixture is about.
-#[inline(never)]
-fn snapshot_holds() {
+test {
     let mut c = Counter { value: 0 };
     let snapshot = c;
     c.increment();
     assert snapshot.get() == 0;
     assert c.get() == 1;
-}
-
-test {
-    snapshot_holds();
 }
 
 __DATA__

@@ -219,8 +219,10 @@ impl CostWalk<'_> {
             ExprKind::Local { .. }
             | ExprKind::GlobalVarGet { .. }
             | ExprKind::EnumConstruct { .. }
-            | ExprKind::PackedArray(_)
             | ExprKind::Dead => 0,
+
+            // An allocation of its own, not a leaf the consumer takes in place.
+            ExprKind::PackedArray(_) => weight::OP,
 
             // One instruction over its operands.
             ExprKind::Binary { left, right, .. } => {
@@ -243,9 +245,23 @@ impl CostWalk<'_> {
                 self.expr(*target, seen) + self.operand(*value, seen)
             }
 
-            // One allocation instruction; the initialisers cost their own.
+            // One allocation instruction, the initialisers' own cost, and one
+            // push per initialiser past the arity the model already treats as
+            // free.
+            //
+            // A leaf operand costs nothing anywhere else because the consumer
+            // takes it in place, and at the fixed arity of a unary, a binary or
+            // an index that understates by a bounded amount. An aggregate's
+            // arity is its type's, so the same rule priced a 26-field
+            // constructor of constants as one instruction — `core:zlib`'s
+            // `InflateState::new` came to 13 and sat inside the `-O2` budget.
+            // Charging only the excess keeps the small aggregates the rest of
+            // the model is calibrated against where they were: pricing every
+            // field cost `ArraySlice::slice` and `JsonSerializer::serialize_i32`
+            // their inlining, and json-twitter ser 13.8%.
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 weight::OP
+                    + arity_excess(elements.len())
                     + elements
                         .iter()
                         .map(|e| self.operand(*e, seen))
@@ -253,6 +269,7 @@ impl CostWalk<'_> {
             }
             ExprKind::StructLiteral { fields, .. } => {
                 weight::OP
+                    + arity_excess(fields.len())
                     + fields
                         .iter()
                         .map(|f| self.operand(f.value, seen))
@@ -332,6 +349,16 @@ impl CostWalk<'_> {
         }
     }
 }
+
+/// One [`weight::OP`] per initialiser past [`FREE_ARITY`].
+fn arity_excess(len: usize) -> usize {
+    len.saturating_sub(FREE_ARITY) * weight::OP
+}
+
+/// How many operand leaves a node carries before the model starts charging for
+/// them. Two is what a binary — the widest node whose arity is fixed — already
+/// takes for free.
+const FREE_ARITY: usize = 2;
 
 /// The inline cost of a function body, in the unit [`weight`] defines.
 fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {

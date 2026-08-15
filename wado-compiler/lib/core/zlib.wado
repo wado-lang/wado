@@ -718,11 +718,6 @@ struct InflateState {
 }
 
 impl InflateState {
-    // Called once per `inflate`, from `inflate_raw_ex` — which is the decompress
-    // hot loop and already ~200 locals. Splicing a whole-struct constructor into
-    // it buys nothing and costs register pressure where it hurts most (measured
-    // -5% decompress).
-    #[inline(never)]
     fn new(raw: bool) -> InflateState {
         return InflateState {
             mode: if raw { InflateMode::TypeDo } else { InflateMode::Head },

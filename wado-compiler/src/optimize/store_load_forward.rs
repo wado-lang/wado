@@ -50,6 +50,17 @@ fn forward_one(
     if func.body.is_none() {
         return false;
     }
+    // A CM export wrapper is the one body nothing else ever queries a value in,
+    // so it reaches this pass without a `ValueGraph` and `scoped_const_reads` —
+    // which only grows one that exists — forwards nothing into it. Since the
+    // cost model splices real work into these wrappers, that lost every
+    // forward there: `let mut a = 0; let b = a;` stayed symbolic and the
+    // asserts reading it kept their panic paths. Built here rather than for
+    // every body because the alias sets below are the real ones, the
+    // precondition `scoped_const_reads` names, and because building it
+    // everywhere costs the serde hot paths ~10% (the extra forwarding trades
+    // shared locals for duplicated constants).
+    let is_cm_export = func.is_cm_export;
     // `Local`-read forwarding excludes address-taken / `stores`-aliased
     // locals: the canonical sets plus the engine's body scan — the
     // canonical sets are static elaboration records and go stale after
@@ -77,6 +88,9 @@ fn forward_one(
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
+    if is_cm_export {
+        engine.build_value_graph_now();
+    }
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // The complement of the unsafe set: what disqualifies a local is being
     // address-taken or `stores`-aliased, not being an aggregate.
