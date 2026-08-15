@@ -3021,6 +3021,17 @@ impl SynthesisCtx<'_, '_, '_> {
         receiver.head().rendered().to_string()
     }
 
+    /// `true` when this pass already emitted `<trait> for <instance>`, where
+    /// the instance is named by the fused spelling it mangles to (`Fn<1,i32>`).
+    ///
+    /// Only the in-pass record can answer: an instantiation is not a
+    /// declaration, so the impl indexes — which hold declarations — have no
+    /// entry that could match it, whatever key one built.
+    pub(crate) fn instance_has_impl(&self, mangled: &str, trait_key: &crate::defs::DefId) -> bool {
+        self.pending
+            .contains(&(mangled.to_string(), self.module.clone(), *trait_key))
+    }
+
     /// `true` when some `T: <trait_name>` bound (or an explicit marker) in
     /// the project actually demanded `impl <trait_name> for <type_name>` in
     /// the current module — see [`Self::requested`]. Only consulted for the
@@ -3794,9 +3805,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
     let span = synth_span();
     for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let instantiated = tt.fq_type_name(type_id);
-        let _mangled = instantiated.to_mangled();
-        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_fq.canonical().expect(KEYED)) {
+        let mangled = tt.fq_type_name(type_id).to_mangled();
+        if ctx.instance_has_impl(&mangled, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -3873,9 +3883,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let instantiated = sig.receiver();
-        let _mangled = instantiated.to_mangled();
-        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_fq.canonical().expect(KEYED)) {
+        let mangled = sig.receiver().to_mangled();
+        if ctx.instance_has_impl(&mangled, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
@@ -4295,8 +4304,11 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         ) {
             return true;
         }
+        // The receiver is spelled as written — an instantiation (`Fn<1,i32>`)
+        // has no declaration whose head could carry it — so the probe is a
+        // rendering against the emitted function names, not an identity.
         let mangled = MethodName::format_local(
-            &tt.fq_base_type_name(type_id),
+            &FqTypeName::shape(&module_source, type_name),
             Some(&inspect_fq),
             &inspect_method,
         );
@@ -4525,9 +4537,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // in `core:prelude/tuple.wado`. Opaque resource types delegate to their
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let instantiated = tt.fq_type_name(type_id);
-        let mangled = instantiated.to_mangled();
-        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_alt_fq.canonical().expect(KEYED))
+        let mangled = tt.fq_type_name(type_id).to_mangled();
+        if ctx.instance_has_impl(&mangled, &inspect_alt_fq.canonical().expect(KEYED))
             || !has_inspect(&mangled, type_id, ctx, &mut tt)
         {
             continue;
@@ -4572,9 +4583,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // delegate would let the optimizer collapse InspectAlt to Inspect
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let instantiated = sig.receiver();
-        let mangled = instantiated.to_mangled();
-        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_alt_fq.canonical().expect(KEYED))
+        let mangled = sig.receiver().to_mangled();
+        if ctx.instance_has_impl(&mangled, &inspect_alt_fq.canonical().expect(KEYED))
             || !has_inspect(&mangled, sig.repr_type_id, ctx, &mut tt)
         {
             continue;
@@ -5449,9 +5459,8 @@ fn generate_fallback_impls(
         if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
-        let instantiated = tt.fq_type_name(type_id);
-        let mangled = instantiated.to_mangled();
-        if ctx.has_methodful_impl_anywhere(&instantiated, &pair.target_trait.canonical().expect(KEYED)) {
+        let mangled = tt.fq_type_name(type_id).to_mangled();
+        if ctx.instance_has_impl(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
         let delegate_present = ctx.has_impl(
@@ -5491,9 +5500,8 @@ fn generate_fallback_impls(
 
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let instantiated = sig.receiver();
-        let mangled = instantiated.to_mangled();
-        if ctx.has_methodful_impl_anywhere(&instantiated, &pair.target_trait.canonical().expect(KEYED)) {
+        let mangled = sig.receiver().to_mangled();
+        if ctx.instance_has_impl(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
         let delegate_present = ctx.has_impl(

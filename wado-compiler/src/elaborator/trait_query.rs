@@ -1053,13 +1053,9 @@ impl TypeSystem {
             && tr.is_field_recursive()
             && let Some((name, module_source)) = nominal
         {
-            let serde_blocked = tr.is_serde()
-                && self.has_real_trait_impl_for_type(
-                    ctx,
-                    scope,
-                    &self.type_table.borrow().impl_receiver_key(type_id),
-                    trait_,
-                );
+            let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+            let serde_blocked =
+                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, &receiver, trait_);
             if !serde_blocked
                 && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
                     self.type_implements_trait(ctx, scope, member, trait_)
@@ -1216,18 +1212,9 @@ impl TypeSystem {
                 return bounds.iter().any(|b| b.base_name() == trait_name);
             }
             ResolvedType::Newtype { base_type, .. } => {
-                let (_name, _module_source) = self
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a newtype names a declaration");
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
-                if self.find_trait_impl_for_type(
-                    ctx,
-                    scope,
-                    &self.type_table.borrow().impl_receiver_key(type_id),
-                    trait_,
-                ) {
+                let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+                if self.find_trait_impl_for_type(ctx, scope, &receiver, trait_) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
@@ -1238,12 +1225,8 @@ impl TypeSystem {
             // indexed under the builtin spelling the unit type mangles as.
             ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags { .. } => {
-                if self.find_trait_impl_for_type(
-                    ctx,
-                    scope,
-                    &self.type_table.borrow().impl_receiver_key(type_id),
-                    trait_,
-                ) {
+                let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+                if self.find_trait_impl_for_type(ctx, scope, &receiver, trait_) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_);
