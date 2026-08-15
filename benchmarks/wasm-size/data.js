@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786788551929,
+  "lastUpdate": 1786791205222,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48237,6 +48237,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e4f937b62fb6facbbe42d2be59b10d9c1d29fa4"
         },
         "date": 1786788551374,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "82655730551dfafe764f8849288ab0dc9865525e",
+          "message": "Merge pull request #1818 from wado-lang/claude/package-gale-stage-c-wubexa\n\nfeat(gale): run superClass action ops from the lexer winner replay",
+          "timestamp": "2026-08-15T19:41:30+09:00",
+          "tree_id": "1f85ef332c62c7d3926ec6615553b4c0144308e6",
+          "url": "https://github.com/wado-lang/wado/commit/82655730551dfafe764f8849288ab0dc9865525e"
+        },
+        "date": 1786791204577,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
