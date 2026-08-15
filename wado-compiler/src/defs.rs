@@ -766,11 +766,6 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
          pattern position",
     ),
     (
-        "declared_in",
-        "asks a module about its own declarations rather than what a spelling \
-         means from a vantage; goes when its callers carry identities",
-    ),
-    (
         "imported_as",
         "answers the import tier alone, for a caller to whom the *aliasing* is \
          the question — the one import fact that is not a scope lookup",

@@ -247,21 +247,6 @@ impl Resolutions {
         self.scopes.resolve_value(module, name)
     }
 
-    /// The declaration `module` itself declares under `name`.
-    ///
-    /// Not a scope lookup: `module` is the *declaring* module, so this asks a
-    /// module about its own declarations rather than asking what a spelling
-    /// means from some vantage. For the passes that still key on
-    /// `(module, name)` pairs; it goes when they carry identities.
-    #[must_use]
-    pub fn declared_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        self.scopes
-            .own
-            .get(module)
-            .and_then(|m| m.get(name))
-            .copied()
-    }
-
     /// Every declaration `module` explicitly `use`d, by the local name it
     /// wrote — an alias where it wrote one, and the `ns$member` name a
     /// namespace import registers.
@@ -812,7 +797,16 @@ mod tests {
         "#;
         let (r, entry, _, modules) = resolve_with_ast(source, "");
         let defs = r.defs();
-        let module_level = r.declared_in(&entry, "Widget").unwrap();
+        // The module-level `Widget` is the one `outer`'s parameter names — the
+        // walk answers for that site from outside the shadowing body.
+        let module_level = modules[&entry]
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Struct(d) if d.name == "Widget" => defs.of_ast_id(d.id),
+                _ => None,
+            })
+            .unwrap();
 
         let mut sites = Vec::new();
         for item in &modules[&entry].items {

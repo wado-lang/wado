@@ -1224,6 +1224,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.associated_constant_of(owner, name)
     }
 
+    /// The declaration a qualified path's *owner* segment names — `Color` in
+    /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
+    /// resolve walk answered for. `None` for a bare name, which qualifies
+    /// nothing, and for an owner that reaches no declaration.
+    pub(crate) fn qualified_owner_decl(
+        &self,
+        ident: &ast::IdentExpr,
+    ) -> Option<crate::defs::DefId> {
+        let owner = ident.segments.len().checked_sub(2)?;
+        self.tysys.resolutions.declared(ident.segments[owner].id)
+    }
+
     /// Field info for the declaration a *written* struct name resolved to.
     ///
     /// `None` where the name reached nothing, or reached something that is no

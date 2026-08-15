@@ -1016,11 +1016,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
 
-                    // Check if this is a variant construction in the namespace
+                    // Check if this is a variant construction in the namespace.
+                    // `ns::Type::Case` names `Type` with its middle segment,
+                    // which the resolve walk answered for under the `ns$Type`
+                    // alias — so the declaration comes from the site rather
+                    // than from asking the namespace module about a spelling.
                     let ns_variant = self
-                        .tysys
-                        .resolutions
-                        .declared_in(&ns_source, type_name)
+                        .qualified_owner_decl(ident)
                         .and_then(|def| self.tysys.all_variant_cases.get(&def))
                         .cloned();
                     if let Some(variant_info) = ns_variant {

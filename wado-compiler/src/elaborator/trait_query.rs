@@ -558,6 +558,13 @@ impl TypeSystem {
     /// holding a type has an identity without reading the `(name, module)` pair
     /// off it and resolving that again. This is what the pair stops being a key
     /// for.
+    /// The declaration `type_id` was *registered* under.
+    ///
+    /// This asks `decl_of_type`, which answers from the registration table, so
+    /// it declines for a type whose head carries a declaration that was never
+    /// registered under a node — a `GenericResource` instantiation is the case
+    /// that bites. A caller that wants the head's declaration regardless wants
+    /// [`crate::tir::TypeTable::nominal_def`].
     pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
         let decl = self.type_table.borrow().decl_of_type(type_id)?;
         self.resolutions.defs().of_ast_id(decl)

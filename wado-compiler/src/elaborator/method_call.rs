@@ -2180,8 +2180,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
         // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
-        method_info.cm_name =
-            self.lookup_resource_static_cm(&struct_name, &struct_module, &static_call.method);
+        let cm_owner = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_def(target_type_id);
+        method_info.cm_name = self.lookup_resource_static_cm(cm_owner, &static_call.method);
 
         // The selection covers trait impls only; an inherent static has none
         // and reaches the index instead.
@@ -2488,18 +2492,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(trait_name, param, module, _)| (trait_name, param, module))
     }
 
-    /// Look up `#[cm("...")]` for a static (no-self) method on a resource type in a module.
+    /// Look up `#[cm("...")]` for a static (no-self) method on the resource
+    /// `def` declares.
     fn lookup_resource_static_cm(
         &self,
-        struct_name: &str,
-        struct_module: &ModuleSource,
+        def: Option<crate::defs::DefId>,
         method_name: &str,
     ) -> Option<String> {
         let key = crate::elaborator::trait_env::ImplTargetKey::of_decl(
             self.tysys.resolutions.defs(),
-            self.tysys
-                .resolutions
-                .declared_in(struct_module, struct_name)?,
+            def?,
         );
         let (_, _, decl_id, _) = self
             .tysys
@@ -3614,8 +3616,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_static_method_param_defaults_keyed(&actual_struct_name, method_name, None);
 
         // Propagate #[cm("...")] from resource static methods
-        let cm_name =
-            self.lookup_resource_static_cm(&actual_struct_name, &method_ref.module, method_name);
+        // The selected method's own declaration knows its owner, so the
+        // resource is reached through it rather than through its spelling.
+        let cm_owner = method_ref
+            .method_id
+            .and_then(|id| self.tysys.resolutions.defs().of_ast_id(id))
+            .and_then(|method| self.tysys.resolutions.defs().parent(method))
+            .or_else(|| self.canonical_decl_key(&actual_struct_name));
+        let cm_name = self.lookup_resource_static_cm(cm_owner, method_name);
 
         let StaticMethodRef {
             module: struct_module,

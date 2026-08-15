@@ -832,13 +832,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // directly — no global scan. `None`-module receivers (primitives,
         // `Array`, `()`, tuples) are never resources, so nothing falls through
         // to a scan (issue #1416).
-        if let Some(ref module_source) = struct_module_source
-            && let Some(info) = self.find_resource_method_info(
-                &struct_name,
-                module_source,
-                method_name,
-                receiver_type_args.as_deref(),
-            )
+        let receiver_decl = self.tysys.type_table.borrow().nominal_def(base_type_id);
+        if let Some(def) = receiver_decl
+            && let Some(info) =
+                self.find_resource_method_info(def, method_name, receiver_type_args.as_deref())
         {
             return Some(info);
         }
@@ -931,20 +928,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The signature of `method_name` as an instance method on the resource
-    /// `struct_name` declared in `resource_module`.
+    /// `def` declares.
+    ///
+    /// The receiver's `ResolvedType` carries the declaration, so the method is
+    /// found on it directly — no name, no module, and so no scan (issue #1416).
     fn find_resource_method_info(
         &mut self,
-        struct_name: &str,
-        resource_module: &ModuleSource,
+        def: crate::defs::DefId,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        // `resource_module` is the declaring module, so this asks it about its
-        // own declarations rather than asking what the name means from here.
-        let def = self
-            .tysys
-            .resolutions
-            .declared_in(resource_module, struct_name)?;
         let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
         let sig = self
             .tysys

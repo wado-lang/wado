@@ -280,6 +280,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
+    /// The declaration a qualified path's *owner* segment names — see
+    /// `Elaborator::qualified_owner_decl`, which answers the same way from the
+    /// same table.
+    fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<crate::defs::DefId> {
+        let owner = ident.segments.len().checked_sub(2)?;
+        self.tysys.resolutions.declared(ident.segments[owner].id)
+    }
+
     /// The impl-associated constant `owner` declares as `name` — the same
     /// answer `Elaborator::associated_constant_of` gives, from the same table,
     /// so annotate and reify cannot disagree about which constant a use site
@@ -7571,9 +7579,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let type_name = &suffix[..inner];
                 let case_name = &suffix[inner + 2..];
                 if let Some(variant_info) = self
-                    .tysys
-                    .resolutions
-                    .declared_in(&ns_source, type_name)
+                    .qualified_owner_decl(ident)
                     .and_then(|def| self.tysys.all_variant_cases.get(&def))
                     .cloned()
                     && let Some((case_index, case_data)) = variant_info
@@ -8456,7 +8462,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // resolve their fields against the right decl. A name-only lookup
         // finds whichever the current module sees first, mapping
         // `remote.y` onto the wrong field index.
-        let (struct_name, module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
+        let (struct_name, _module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
             match resolved {
                 ResolvedType::Struct { .. } => {
                     let (n, m) = self
@@ -8514,9 +8520,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .find(|(_, (n, _, _))| n == field_name)
                 .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
         };
-        let found = if let Some(info) = module_source
-            .as_ref()
-            .and_then(|ms| self.tysys.resolutions.declared_in(ms, &struct_name))
+        let found = if let Some(info) = self
+            .tysys
+            .type_def(receiver_type)
             .and_then(|def| self.tysys.all_struct_fields.get(&def))
         {
             resolve_in(info)
