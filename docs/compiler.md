@@ -242,7 +242,7 @@ without knowing which module it stands in. `FqTypeName` and `FqTraitName` carry
 one too, in a `DeclaredHead` whose equality and hashing read the `DefId` alone,
 and neither has a constructor that takes a spelling. A head that names no
 declaration — a closure environment, an anonymous literal's shape — is
-`TypeHead::Shape`, whose rendering *is* its identity.
+`TypeHead::Shape`, whose rendering _is_ its identity.
 
 A handful of functions still turn a name into a declaration; `defs.rs`'s
 `NAME_TO_IDENTITY` lists them with the reason each survives, and

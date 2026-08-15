@@ -79,7 +79,7 @@ A head that reaches no declaration is not given one: `ImplTargetKey` carries an
 anonymous struct shapes no declaration names. It holds a spelling because there
 is no identity to hold, and no query can mistake it for one.
 
-A rendering may be *stored* beside an identity; it may never be read back into
+A rendering may be _stored_ beside an identity; it may never be read back into
 one. `FqTraitName`'s head is a `DeclaredHead` — the `DefId`, plus the declaring
 module and the declared name its one constructor reads off the table — so a
 mangle needs no table at hand, while equality and hashing compare the `DefId`
@@ -433,11 +433,11 @@ resolution, the struct literal, the WIR lookup key, template admission, template
 lookup, the registration name, and the instantiation scan. Each was a distinct
 caller of the same first-wins index. A removed mechanism takes one fix.
 
-- [x] A *type* head carries a `DefId`, not a `(module, name)` pair.
+- [x] A _type_ head carries a `DefId`, not a `(module, name)` pair.
       `name::TypeHead::Declared` carries a `DeclaredHead` — the declaration,
       plus the module and the two spellings its one constructor reads off the
       table — and equality compares the `DefId`. A head that names no
-      declaration is `TypeHead::Shape`, whose rendering *is* its identity.
+      declaration is `TypeHead::Shape`, whose rendering _is_ its identity.
 - [x] `TypeTable::decl_named_in` deleted. Every stdlib type it was reached for
       — `Future`, `Stream`, `AsyncCall`, `ByteList`, `ByteSlice`, `ArraySlice`
       — is a `compiler_item.rs` registry entry, and the registry now records a
