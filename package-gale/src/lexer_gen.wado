@@ -32,7 +32,15 @@ use {
     lit_name,
     str_lit,
 } from "./wadopoet.wado";
-use { SuperOp, gen_super_interface, lexer_rule_calls_super } from "./superclass.wado";
+use {
+    SuperOp,
+    gen_super_interface,
+    lexer_rule_match_calls_super,
+    lexer_rule_replay_calls_super,
+    superclass_base_name,
+    superclass_is_refused,
+    lexer_action_bodies_are_base_calls,
+} from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
 use { TreeMap, TreeSet } from "core:collections";
@@ -323,7 +331,7 @@ pub fn gen_lexer(
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
         }
-        gen_lexer_apply_fns(w, grammar, has_members);
+        gen_lexer_apply_fns(w, grammar, has_members, sc_name);
     }
     gen_lexer_match_fns(
         w,
@@ -783,7 +791,7 @@ fn gen_lexer_match_fn(
     // The `Foo::op(LexerView { chars, .. })` call carries the effect and the
     // view literal stores the char-stream ref, so declare both `with Foo` and
     // `stores` for that ref.
-    if !sc_name.is_empty() && lexer_rule_calls_super(rule, all_rules, sc_name) {
+    if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
         if hm {
             f.add_stores(&"lx");
@@ -848,20 +856,36 @@ fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, befo
 /// Whether codegen runs `{ ... }` action bodies for this grammar's lexer at
 /// all. A `language = Java` lexer qualifies because codegen stages its bodies
 /// into Wado before emit (`rewrite_lexer_java_bodies`), which carves out a
-/// `superClass` grammar.
+/// `superClass` grammar. Such a grammar still qualifies when every action body
+/// is nothing but `this.<method>()` base calls: the rewrite turns those into
+/// Wado on its own, with no host translator involved.
 pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
-    return grammar.action_language matches { Wado } || action_language_is_emittable(grammar);
+    // A refused base leaves every `this.` call in place, and no translator has
+    // a receiver for it.
+    if superclass_is_refused(grammar) {
+        return false;
+    }
+    if grammar.action_language matches { Wado } || action_language_is_emittable(grammar) {
+        return true;
+    }
+    return match superclass_base_name(grammar) {
+        Some(base) => lexer_action_bodies_are_base_calls(grammar, &base),
+        None => false,
+    };
 }
 
-/// Whether this rule's top-level actions run: an executing grammar, a real
-/// (non-fragment, non-virtual) rule. Both single-alt and multi-alt rules run
-/// their alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches
-/// to find the winning alternative in `apply_<rule>_actions`). Fragments and
+/// Whether this rule's top-level actions run, given `grammar_executes` from
+/// `lexer_grammar_executes_actions`: a real (non-fragment, non-virtual) rule of
+/// an executing grammar. That answer is a parameter because computing it walks
+/// every action body, and every caller here asks once per rule. Both
+/// single-alt and multi-alt rules run their
+/// alternatives' top-level `{ ... }` actions (a multi-alt rule re-matches to
+/// find the winning alternative in `apply_<rule>_actions`). Fragments and
 /// actions nested inside an element still warn. (A single-literal rule folded
 /// into the keyword classifier does not set `best_act`, so its action does not
 /// run — see the known limitations in `action.md`.)
-pub fn lexer_rule_executes_actions(grammar: &Grammar, rule: &LexerRule) -> bool {
-    return lexer_grammar_executes_actions(grammar) && !rule.is_fragment && !rule.is_virtual;
+pub fn lexer_rule_executes_actions(grammar_executes: bool, rule: &LexerRule) -> bool {
+    return grammar_executes && !rule.is_fragment && !rule.is_virtual;
 }
 
 /// Whether the action replay can interleave `alt`'s actions with its match, so
@@ -922,8 +946,8 @@ pub fn lexer_rule_replayable(rule: &LexerRule, all_rules: &List<LexerRule>) -> b
 /// `Group`, which the replay reaches. Single source of truth shared by the
 /// apply-fn emit and `warn_unhandled_lexer_actions`, so a run action and a
 /// warned-unhandled action cannot disagree.
-fn lexer_rule_executed_action_ids(grammar: &Grammar, rule: &LexerRule, out: &mut List<i32>) {
-    if !lexer_rule_executes_actions(grammar, rule) {
+fn lexer_rule_executed_action_ids(grammar: &Grammar, grammar_executes: bool, rule: &LexerRule, out: &mut List<i32>) {
+    if !lexer_rule_executes_actions(grammar_executes, rule) {
         return;
     }
     let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
@@ -974,9 +998,10 @@ fn inlined_alts_of(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<Lex
 /// actions run through the rules that inline it, not through the fragment's own
 /// entry, so the warn pass has to ask the whole grammar rather than one rule.
 pub fn lexer_grammar_run_action_ids(grammar: &Grammar) -> List<i32> {
+    let executes = lexer_grammar_executes_actions(grammar);
     let mut out: List<i32> = [];
     for let rule of &grammar.lexer_rules {
-        lexer_rule_executed_action_ids(grammar, rule, &mut out);
+        lexer_rule_executed_action_ids(grammar, executes, rule, &mut out);
     }
     return out;
 }
@@ -987,10 +1012,11 @@ pub fn lexer_grammar_run_action_ids(grammar: &Grammar) -> List<i32> {
 /// Empty keeps every actionless / predicate-only grammar byte-identical (no
 /// action-effect surface on `Lexer`, no `apply_*` fn, no `best_act` wiring).
 pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
+    let executes = lexer_grammar_executes_actions(grammar);
     let mut names: List<String> = [];
     for let rule of &grammar.lexer_rules {
         let mut ids: List<i32> = [];
-        lexer_rule_executed_action_ids(grammar, rule, &mut ids);
+        lexer_rule_executed_action_ids(grammar, executes, rule, &mut ids);
         if ids.len() > 0 {
             names.push(rule.name);
         }
@@ -1016,22 +1042,32 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 /// actions dropped in at their cursors. One the replay cannot follow keeps the
 /// flat emit: every alternative's top-level actions at the end of the match,
 /// selected by a match-only `winning_alt_<rule>` helper.
-fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool) {
+fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool, sc_name: &String) {
+    let executes = lexer_grammar_executes_actions(grammar);
     for let rule of &grammar.lexer_rules {
         let mut ids: List<i32> = [];
-        lexer_rule_executed_action_ids(grammar, rule, &mut ids);
+        lexer_rule_executed_action_ids(grammar, executes, rule, &mut ids);
         if ids.is_empty() {
             continue;
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
         let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+        // A base op reached from the replayed match carries the effect and
+        // stores the char-stream ref in its `LexerView`, as in `try_`. The arm
+        // re-selection matches only, so it carries the predicate half.
+        let replay_super = !sc_name.is_empty() && lexer_rule_replay_calls_super(rule, &grammar.lexer_rules, sc_name);
+        let match_super = !sc_name.is_empty() && lexer_rule_match_calls_super(rule, &grammar.lexer_rules, sc_name);
         if !replays && rule.body.len() > 1 {
-            gen_lexer_winning_alt_fn(w, rule, &grammar.lexer_rules, ci, has_members);
+            gen_lexer_winning_alt_fn(w, rule, &grammar.lexer_rules, ci, has_members, match_super, sc_name);
         }
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
         f.add_param(&"lx", &"&mut Lexer");
         f.add_param(&"start", &"i32");
         f.add_param(&"end", &"i32");
+        if replay_super {
+            f.add_effect(sc_name);
+            f.add_stores(&"lx");
+        }
         f.emit_begin(w);
         if replays {
             gen_lexer_apply_replay_body(w, rule, &grammar.lexer_rules, ci, has_members);
@@ -1153,6 +1189,8 @@ fn gen_lexer_winning_alt_fn(
     all_rules: &List<LexerRule>,
     ci: bool,
     has_members: bool,
+    calls_super: bool,
+    sc_name: &String,
 ) {
     let mut f = FnSpec::new(&`winning_alt_${rule.name}`);
     if has_members {
@@ -1162,6 +1200,14 @@ fn gen_lexer_winning_alt_fn(
     }
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
+    if calls_super {
+        f.add_effect(sc_name);
+        if has_members {
+            f.add_stores(&"lx");
+        } else {
+            f.add_stores(&"chars");
+        }
+    }
     f.emit_begin(w);
     if has_members {
         w.line(&"let chars = &lx.chars;");

@@ -567,7 +567,7 @@ impl FunctionTranslator<'_, '_> {
                     Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
-                        element_copy_mangle: Some(element_copy_mangle),
+                        element_copy_mangle,
                         len: None,
                     }),
                     None => Some(self.build_bulk_array_clone(type_id, src, None)),
@@ -580,7 +580,7 @@ impl FunctionTranslator<'_, '_> {
                     Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
-                        element_copy_mangle: Some(element_copy_mangle),
+                        element_copy_mangle,
                         len: Some(Box::new(len)),
                     }),
                     None => Some(self.build_bulk_array_clone(type_id, src, Some(len))),

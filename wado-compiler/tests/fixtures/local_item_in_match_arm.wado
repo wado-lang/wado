@@ -1,9 +1,6 @@
-// A local item declared inside a `match` arm's block body must still be
-// visible for the rest of the enclosing function (function-scoped, not
-// block-scoped). Regression test for a bug where the fast pre-check pass's
-// name collector recursed into `if`/`while`/`for`/`loop`/labeled blocks but
-// had no arm for `Stmt::Match`, so it missed local items declared inside a
-// match arm and false-positived "unknown type" on a legal later reference.
+// A local item declared inside a `match` arm's block body is scoped to that
+// arm. Each arm is its own block, so two arms may declare the same name with
+// different fields without colliding.
 
 fn f(x: i32) -> i32 {
     match x {
@@ -14,13 +11,18 @@ fn f(x: i32) -> i32 {
             let p = Point { v: 10 };
             return p.v;
         }
-        _ => {}
+        _ => {
+            struct Point {
+                v: i32,
+                w: i32,
+            }
+            let p = Point { v: 20, w: 2 };
+            return p.v + p.w;
+        }
     }
-    let q: Point = Point { v: 20 };
-    return q.v;
 }
 
-test "local item declared inside a match arm is visible later in the function" {
+test "a local item declared inside a match arm is scoped to that arm" {
     assert f(1) == 10;
-    assert f(0) == 20;
+    assert f(0) == 22;
 }

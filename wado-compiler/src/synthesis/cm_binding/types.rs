@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
-use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -42,6 +42,12 @@ pub struct CmStdlibNames {
     /// `Result::Err` case name + zero-based index.
     pub err_name: String,
     pub err_index: u32,
+    /// The `IndexValue` trait the list adapters call through, as the
+    /// declaration the registry records — never a spelling a user trait could
+    /// share.
+    pub index_value: crate::name::FqTraitName,
+    /// `List`'s head, likewise the declaration the registry records.
+    pub array_fq: crate::name::FqTypeName,
 }
 
 impl CmStdlibNames {
@@ -51,7 +57,8 @@ impl CmStdlibNames {
     /// it through [`LowerContext`] — mirroring the `from_compiler_items`
     /// constructor shape used by the other synthesis passes
     /// (`SerdeStdlibNames`, `FormatStdlibNames`, `TraitsStdlibNames`).
-    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+    pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+        let items = type_table.compiler_items();
         let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
         let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
         let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
@@ -69,28 +76,8 @@ impl CmStdlibNames {
             ok_index,
             err_name: err_name.to_string(),
             err_index,
-        }
-    }
-
-    /// Canonical-name snapshot for unit tests that do not bootstrap a
-    /// full `TypeTable` with the stdlib registered. The names are the
-    /// production stdlib defaults; tests that want to exercise rename
-    /// behaviour must construct a [`Self`] explicitly.
-    #[cfg(test)]
-    pub fn for_tests() -> Self {
-        Self {
-            string: "String".to_string(),
-            array: "List".to_string(),
-            option: "Option".to_string(),
-            result: "Result".to_string(),
-            some_name: "Some".to_string(),
-            some_index: 0,
-            none_name: "None".to_string(),
-            none_index: 1,
-            ok_name: "Ok".to_string(),
-            ok_index: 0,
-            err_name: "Err".to_string(),
-            err_index: 1,
+            index_value: items.trait_fq(CompilerItem::IndexValue),
+            array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
         }
     }
 }
@@ -140,6 +127,17 @@ impl LiftContext<'_> {
         module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
     }
 
+    /// The declaration behind a CM named type — see
+    /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
+    /// a name rather than following a reference site.
+    pub(super) fn cm_decl(&self, source: &str, name: &str) -> crate::defs::DefId {
+        let module_source = self.module_source_for(source);
+        self.type_table
+            .borrow()
+            .cm_decl_in(name, &module_source)
+            .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
+    }
+
     /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware:
     /// unlike [`cm_type_to_type_id`], a lib-local named type resolves through its
     /// recorded entry `ModuleSource` and yields the concrete GC id rather than
@@ -160,12 +158,10 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return {
-                            let def = tt
-                                .decl_named_in(&n.name, &ms)
-                                .expect("the declaration this type names exists");
-                            tt.make_struct(crate::tir::StructDef::Decl(def))
-                        };
+                        let def = tt
+                            .cm_decl_in(&n.name, &ms)
+                            .expect("the declaration this type names exists");
+                        return tt.make_struct(crate::tir::StructDef::Decl(def));
                     }
                     if self
                         .cm_interface_registry
@@ -173,12 +169,10 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return {
-                            let def = tt
-                                .decl_named_in(&n.name, &ms)
-                                .expect("the declaration this type names exists");
-                            tt.make_variant(def)
-                        };
+                        let def = tt
+                            .cm_decl_in(&n.name, &ms)
+                            .expect("the declaration this type names exists");
+                        return tt.make_variant(def);
                     }
                 }
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
@@ -538,7 +532,7 @@ pub(super) fn check_cm_boundary_representable(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    let names = CmStdlibNames::from_type_table(type_table);
     check_cm_boundary_representable_inner(type_id, type_table, tir_modules, &names, visited)
 }
 
@@ -945,7 +939,7 @@ pub(super) fn flatten_export_type(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    let names = CmStdlibNames::from_type_table(type_table);
     flatten_export_type_inner(ty, out, tir_modules, type_table, &names);
 }
 
@@ -1077,7 +1071,7 @@ pub(super) fn flat_types_from_type_id_into(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    let names = CmStdlibNames::from_type_table(type_table);
     flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, &names);
 }
 

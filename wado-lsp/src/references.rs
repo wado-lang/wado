@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::location::{module_uri, symbol_uri};
 use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,7 +86,7 @@ pub(crate) fn declaration_location(
     };
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, ctx.source_for_id(def_id), ctx.encoding),
+        range: ctx.range_of(&span, def_id),
     })
 }
 
@@ -98,7 +98,7 @@ pub(crate) fn use_site_location(
     let uri = module_uri(ctx.entry(), ctx.sem.module_of_id(use_id)?, ctx.uri)?;
     Some(ReferenceLocation {
         uri,
-        range: span_to_range(&span, ctx.source_for_id(use_id), ctx.encoding),
+        range: ctx.range_of(&span, use_id),
     })
 }
 
@@ -118,12 +118,7 @@ mod tests {
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
         let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext {
-            sem: &sem,
-            source,
-            uri: &uri,
-            encoding: PositionEncoding::Utf16,
-        };
+        let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf16);
         find_references(&ctx, Position { line, character }, include_declaration)
     }
 

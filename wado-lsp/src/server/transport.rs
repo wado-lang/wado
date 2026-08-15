@@ -22,11 +22,22 @@ use crate::uri::Uri;
 
 const JSONRPC_VERSION: &str = "2.0";
 
+/// Largest message body accepted from the client, in bytes.
+///
+/// The body buffer is allocated eagerly at the declared length, and a buggy
+/// client or a desynchronised stream can name any. 64 MiB sits far above a
+/// real message and far below an allocation failure.
+const MAX_CONTENT_LENGTH: usize = 64 * 1024 * 1024;
+
 /// Failure mode of [`read_message`].
 ///
-/// `Parse` errors are recoverable: per LSP 3.18 (JSON-RPC 2.0 §5.1), the
-/// server should respond with `-32700 ParseError` and keep processing. `Io`
-/// errors are unrecoverable — the transport is broken.
+/// `Parse` is recoverable: the frame was consumed whole and only its contents
+/// were bad, so per LSP 3.18 (JSON-RPC 2.0 §5.1) the server answers
+/// `-32700 ParseError` and keeps going.
+///
+/// `Io` is not: the transport is broken, or the frame boundary is lost. A
+/// `Content-Length` we cannot parse or refuse to honour leaves a body we
+/// never consumed, so answering and looping would read that body as headers.
 #[derive(Debug)]
 pub enum ReadError {
     Parse(String),
@@ -35,8 +46,9 @@ pub enum ReadError {
 
 /// Read one JSON-RPC message (Content-Length framed).
 ///
-/// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for malformed
-/// framing or JSON bodies, and `Err(ReadError::Io)` for transport failures.
+/// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for a body that
+/// was read but is not valid JSON, and `Err(ReadError::Io)` for transport
+/// failures and for framing we cannot recover from.
 pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>, ReadError> {
     let mut content_length: Option<usize> = None;
     loop {
@@ -51,17 +63,30 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>
         if trimmed.is_empty() {
             break;
         }
-        if let Some(len_str) = trimmed.strip_prefix("Content-Length: ") {
+        // Header names are case-insensitive and the space after the colon is
+        // optional (LSP 3.18 §baseProtocol defers to the HTTP header grammar).
+        if let Some((name, value)) = trimmed.split_once(':')
+            && name.eq_ignore_ascii_case("Content-Length")
+        {
+            let value = value.trim();
+            // Fatal: without a length we cannot say where this body ends,
+            // so every later read starts at an unrecoverable offset.
             content_length = Some(
-                len_str
+                value
                     .parse()
-                    .map_err(|_| ReadError::Parse(format!("invalid Content-Length: {len_str}")))?,
+                    .map_err(|_| ReadError::Io(format!("invalid Content-Length: {value}")))?,
             );
         }
     }
 
     let length = content_length
         .ok_or_else(|| ReadError::Parse("missing Content-Length header".to_string()))?;
+    if length > MAX_CONTENT_LENGTH {
+        // Fatal for the same reason: the declared body is never consumed.
+        return Err(ReadError::Io(format!(
+            "Content-Length {length} exceeds the {MAX_CONTENT_LENGTH}-byte limit",
+        )));
+    }
     let mut body = vec![0u8; length];
     reader
         .read_exact(&mut body)
@@ -157,8 +182,7 @@ where
 ///
 /// Skips the body when `id` is `None` (notification-shaped envelope on
 /// a request method), and bails after sending an `InvalidParams` error
-/// when the params don't deserialize. This shell is what every
-/// query-style handler in `dispatch.rs` used to inline by hand.
+/// when the params don't deserialize.
 pub async fn typed_request<P, R, W, F, Fut>(
     writer: &mut W,
     id: Option<&Value>,
@@ -211,4 +235,70 @@ pub async fn publish_diagnostics<W: Write>(
         diagnostics,
     };
     send_notification(writer, "textDocument/publishDiagnostics", params)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(input: &[u8]) -> Result<Option<JsonRpcRequest>, ReadError> {
+        read_message(&mut std::io::BufReader::new(input))
+    }
+
+    fn frame(body: &str) -> Vec<u8> {
+        format!("Content-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+    }
+
+    #[test]
+    fn reads_a_well_formed_frame() {
+        let msg = read(&frame(r#"{"jsonrpc":"2.0","id":1,"method":"shutdown"}"#))
+            .expect("read")
+            .expect("message");
+        assert_eq!(msg.method, "shutdown");
+    }
+
+    #[test]
+    fn content_length_header_is_case_insensitive_and_space_optional() {
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"shutdown"}"#;
+        let raw = format!("content-length:{}\r\n\r\n{body}", body.len());
+        let msg = read(raw.as_bytes()).expect("read").expect("message");
+        assert_eq!(msg.method, "shutdown");
+    }
+
+    #[test]
+    fn oversized_content_length_is_refused_without_allocating() {
+        // The buffer is allocated eagerly at the declared size.
+        let raw = format!("Content-Length: {}\r\n\r\n", MAX_CONTENT_LENGTH + 1);
+        let err = read(raw.as_bytes()).expect_err("oversized length must be refused");
+        assert!(
+            matches!(&err, ReadError::Io(m) if m.contains("exceeds")),
+            "expected a fatal transport error, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn unparseable_content_length_is_fatal_not_recoverable() {
+        // Recovering here would read the unconsumed body as headers.
+        let raw = "Content-Length: not-a-number\r\n\r\n{}";
+        let err = read(raw.as_bytes()).expect_err("an unparseable length must be refused");
+        assert!(
+            matches!(&err, ReadError::Io(m) if m.contains("invalid Content-Length")),
+            "expected a fatal transport error, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn malformed_json_body_stays_recoverable() {
+        // The counter-case: the body was consumed, so the stream stays framed.
+        let err = read(&frame("not json")).expect_err("malformed JSON must be reported");
+        assert!(
+            matches!(&err, ReadError::Parse(m) if m.contains("invalid JSON")),
+            "expected a recoverable parse error, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn clean_eof_is_not_an_error() {
+        assert!(read(b"").expect("read").is_none());
+    }
 }

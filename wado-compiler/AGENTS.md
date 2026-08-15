@@ -9,8 +9,7 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 - Name mangling and monomorphization go through `name.rs`. No other component knows a name format.
 - Walk IR through the visitor utilities, not by hand.
 - Escalate the test scope as the work matures: `cargo check` while iterating,
-  `mise run test` during development, `mise run test-wado` when wrapping up, and
-  the `on-task-done` skill only when finishing a task.
+  `mise run test` during development, `mise run test-wado` when wrapping up.
 - This crate must compile for `wasm32-unknown-unknown` (a CI build check). Keep
   OS-dependent `std` modules out of production code.
 
@@ -29,3 +28,5 @@ section whose fields are the `serde` structs in `tests/e2e.rs`.
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and
   an incremental `cargo test` will not re-expand on its own.
 - `wado dump [-O0|-O2] file.wado` is how you find `wir_expect:Ox` patterns.
+- `builtin::black_box(value)` returns `value` opaquely, keeping a fixture's input
+  off the constant-folding path.

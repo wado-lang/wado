@@ -178,10 +178,7 @@ fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
 /// impls on a `flags` type are written against the flags name.
 fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::name::FqTypeName> {
     match tt.get_unerased(type_id) {
-        ResolvedType::Flags { def } => Some(crate::name::FqTypeName::declared(
-            tt.def_module(*def),
-            tt.def_name(*def),
-        )),
+        ResolvedType::Flags { def } => Some(crate::name::FqTypeName::declared(tt.defs(), *def)),
         _ => None,
     }
 }
@@ -258,7 +255,6 @@ impl Monomorphizer {
                 let rendered_key = {
                     let tt = type_table.borrow();
                     key.def
-                        .or_else(|| tt.decl_named_in(&key.name, &key.module_source))
                         .map(|def| (tt.decl_render_name(def), key.module_source.clone()))
                         .filter(|k| *k != struct_key)
                 };

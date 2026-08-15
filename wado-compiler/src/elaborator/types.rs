@@ -153,7 +153,9 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    pub(super) module_source: ModuleSource,
+    /// `AstId` of the `type X<T> = …;` declaration, so an instantiation is
+    /// interned against the declaration rather than looked up by spelling.
+    pub(super) defined_at: AstId,
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,
 }
@@ -2164,70 +2166,11 @@ impl<'a> TypeLookup<'a> {
         }
     }
 
-    /// Resolve `(name, module_source)` — an already-known type identity,
-    /// never a name written in source — to its field info. Deliberately
-    /// does *not* consult the function-local tier; see `fn_local_first`.
-    pub(super) fn struct_fields_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&'a StructFieldInfo> {
-        if let Some(info) = self
-            .local_item_renders
-            .get(&(name.to_string(), module_source.clone()))
-            .and_then(|def| self.local_item_struct_fields.get(def))
-        {
-            return Some(info);
-        }
-        if let Some(info) = self
-            .local_struct_fields
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-        {
-            return Some(info);
-        }
-        self.all_struct_fields
-            .get(&self.resolutions.declared_in(module_source, name)?)
-    }
-
-    /// Resolve a source-written struct-literal name against `module_source`,
-    /// including the current function's own local structs. The one caller
-    /// that needs function-local precedence for an `_in`-style (name,
-    /// module) lookup — determining what a struct literal's bare type name
-    /// currently means — rather than an already-resolved identity.
-    pub(super) fn struct_fields_in_scope(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&'a StructFieldInfo> {
-        self.fn_local_items
-            .get(name)
-            .and_then(|def| self.local_item_struct_fields.get(def))
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| self.struct_fields_in(name, module_source))
-    }
-
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
         if let Some(info) = self.local_variant_cases.get(name) {
             return Some(info);
         }
         self.all_variant_cases.get(&self.declaration(name)?)
-    }
-
-    pub(super) fn variant_case_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&'a VariantInfo> {
-        if let Some(info) = self
-            .local_variant_cases
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-        {
-            return Some(info);
-        }
-        self.all_variant_cases
-            .get(&self.resolutions.declared_in(module_source, name)?)
     }
 
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
@@ -2237,43 +2180,11 @@ impl<'a> TypeLookup<'a> {
         self.all_enum_cases.get(&self.declaration(name)?)
     }
 
-    pub(super) fn enum_case_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&'a EnumInfo> {
-        if let Some(info) = self
-            .local_enum_cases
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-        {
-            return Some(info);
-        }
-        self.all_enum_cases
-            .get(&self.resolutions.declared_in(module_source, name)?)
-    }
-
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
         if let Some(info) = self.local_flags_cases.get(name) {
             return Some(info);
         }
         self.all_flags_cases.get(&self.declaration(name)?)
-    }
-
-    pub(super) fn flags_case_in(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<&'a FlagsInfo> {
-        if let Some(info) = self
-            .local_flags_cases
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-        {
-            return Some(info);
-        }
-        self.all_flags_cases
-            .get(&self.resolutions.declared_in(module_source, name)?)
     }
 
     pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
@@ -2317,6 +2228,16 @@ impl<'a> TypeLookup<'a> {
     /// The cases of the variant `def` declares.
     pub(super) fn variant_cases_of(&self, def: crate::defs::DefId) -> Option<&'a VariantInfo> {
         self.all_variant_cases.get(&def)
+    }
+
+    /// The cases of the enum `def` declares.
+    pub(super) fn enum_cases_of(&self, def: crate::defs::DefId) -> Option<&'a EnumInfo> {
+        self.all_enum_cases.get(&def)
+    }
+
+    /// The members of the flags type `def` declares.
+    pub(super) fn flags_members_of(&self, def: crate::defs::DefId) -> Option<&'a FlagsInfo> {
+        self.all_flags_cases.get(&def)
     }
 
     /// Which declaration `name` reaches from the module this view stands in.

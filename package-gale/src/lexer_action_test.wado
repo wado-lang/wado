@@ -256,3 +256,69 @@ WS : ' ' -> skip ;
     assert out.contains("fn apply_A_actions"), "the referencing rule gets a replay fn";
     assert out.contains("lx.set_type(TK_B);"), "the fragment's action is emitted";
 }
+
+test "a superClass action op runs from the replay, not from the match fn" {
+    // The action op is the only base call, so `try_A` — which never emits an
+    // action — stays effect-free and only the replay carries `with B`.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("fn hit(view: LexerView);"), "an action op returns unit";
+    assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with B, stores[lx]"), "the replay carries the base effect";
+    assert src.contains("B::hit(LexerView { chars, start, pos });"), "the action op is called from the replay";
+    assert src.contains("fn try_A(chars: &List<char>, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
+}
+
+test "a superClass grammar's host-code action body is reported, not emitted" {
+    // java2wado is carved out for a superClass grammar, so a Java body only runs
+    // when the base-call rewrite alone turns it into Wado. This one does not.
+    let src = &"lexer grammar L;
+options { superClass = B; }
+A : 'a' { int n = 1; this.hit(); } ;
+WS : ' ' -> skip ;
+";
+    assert unsupported_count(src) == 1, "an untranslatable superClass action body must be reported";
+    let out = gen_source(src);
+    assert !out.contains("fn apply_A_actions"), "no replay is emitted for an action that cannot run";
+    assert out.contains("pub interface B {"), "the base stays wired for its other ops";
+}
+
+test "a superClass predicate-only grammar keeps its action surface off" {
+    // RustLexer's shape: base calls, but no `{ ... }` action anywhere. Nothing
+    // gains the action machinery.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; }
+A : { this.ok() }? 'a' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("fn apply_"), "a predicate-only base emits no replay fn";
+    assert !src.contains("act_type"), "a predicate-only base emits no action-effect surface";
+}
+
+test "a superClass call with arguments is refused, not silently stripped" {
+    // The call rewrite drops arguments and the generated interface has no type
+    // to declare them with, so wiring the base would run `set_channel` with the
+    // `2` lost. Refuse the base and say so.
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.setChannel(2) } ;
+WS : ' ' -> skip ;
+";
+    // Two reports: the refused base, and the action that can no longer run.
+    assert unsupported_count(src) == 2, "an argument-passing base call must be reported";
+    let out = gen_source(src);
+    assert !out.contains("pub interface B"), "no interface is emitted for a base Gale cannot represent";
+    assert !out.contains("B::set_channel"), "the call must not be emitted with its argument dropped";
+    assert !out.contains("this.setChannel"), "a body naming `this` must not reach the generated module";
+}
+
+test "a zero-argument base call is still wired" {
+    let out = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert out.contains("pub interface B"), "the argument-free base stays wired";
+}

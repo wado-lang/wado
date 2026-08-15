@@ -74,6 +74,17 @@ The properties are in what is absent:
 `Resolutions::declared` hand back, and the head of `FqTypeName` / `FqTraitName`.
 Equality is index equality.
 
+A head that reaches no declaration is not given one: `ImplTargetKey` carries an
+`Undeclared` case for a written name that resolves to nothing and for the
+anonymous struct shapes no declaration names. It holds a spelling because there
+is no identity to hold, and no query can mistake it for one.
+
+A rendering may be _stored_ beside an identity; it may never be read back into
+one. `FqTraitName`'s head is a `DeclaredHead` — the `DefId`, plus the declaring
+module and the declared name its one constructor reads off the table — so a
+mangle needs no table at hand, while equality and hashing compare the `DefId`
+alone.
+
 `AstId` is deliberately not reused as the identity, though the symbol table is
 already keyed by the declaring node's. Two reasons: `AstId` is the id type of
 _every_ node and `AstId::fresh()` is public, so a use-site id type-checks wherever
@@ -144,9 +155,11 @@ incidental fallbacks:
    same name always shadows.
 
 `Scope` is private to `crate::resolve`. `SymbolTable`'s name-keyed accessors,
-`module_import_scope`, `ModuleImports` and `TypeLookup`'s import branch are
-deleted. The facts they carried that are not scope — a module's re-export list, an
-interface's members — stay, keyed by `DefId`.
+`ModuleImports` and `TypeLookup`'s import branch are deleted, and with them the
+name-scope half of `module_import_scope`; what survives it is `namespace_imports_of`,
+answering the one import fact the symbol table does not record — which module a
+namespace alias stands for. The facts they carried that are not scope — a module's
+re-export list, an interface's members — stay, keyed by `DefId`.
 
 What an explicit `use` means is the analyzer's answer and only its answer: it
 resolves aliases and re-export chains once and records them, and every consumer
@@ -204,7 +217,7 @@ fn type_implements_trait(&self, …, trait_name: &str, trait_ref: Option<DeclRef
 fn type_implements_trait(&self, …, trait_: DefId) -> bool;
 ```
 
-Three rules, each of which the current signature breaks:
+Four rules, each of which the current signature breaks:
 
 - An identity parameter is never `Option`. Optional means the caller may decline,
   and the measurement says the caller declines.
@@ -212,6 +225,12 @@ Three rules, each of which the current signature breaks:
   against. A name in the same argument list is a fallback waiting to be written,
   and `same_trait`'s `impl_trait_name == trait_name` is that fallback already
   written.
+- A declaration is compared to a declaration, never to the spelling that reached
+  it. `def_name(def) == written` reads as a check and behaves as a filter: it
+  declines exactly when the two spellings differ, which is exactly when an
+  import alias, a namespace prefix, or a local item's `@AstId` mangle is in
+  play. Backward type-argument inference held four of these, so a generic
+  variant named through an alias inferred nothing at all.
 - A diagnostic reads its spelling at the point of reporting, from the site and the
   AST — never from a name threaded down for the purpose.
 
@@ -366,15 +385,22 @@ Three things, none of them comparable:
   LSP reproduce it.
 - Diagnostics. A message says what the programmer wrote, read off the site.
 - The Component Model boundary. An export name is an ABI fact derived from a
-  `DefId`, never used to look one up.
+  `DefId`. The one direction that runs the other way is a WIT type name inside
+  a generated `wasi:*` / `core:kiln/*` module, which `TypeTable::cm_decl_in`
+  resolves: no Wado resolver walked that namespace, so there is no reference
+  site, and `CmInterfaceRegistry` parses its own copy of those modules once per
+  process, so there is no declaring node this program's `DefTable` saw either.
+  `wado-from-idl` generates one module per interface and each declares a WIT
+  name once, so the `(name, module)` pair names a single declaration by
+  construction. Reachable from `synthesis::cm_binding` alone.
 
 A name is never a map key, never an equality operand, and never a parameter that
 decides which declaration is meant.
 
 ## Enforcement
 
-Each mechanism states what it makes impossible, not what it discourages. Two of
-them are not in place yet — see Remaining work, which says which.
+Each mechanism states what it makes impossible, not what it discourages. One of
+them is a ratchet rather than an absolute, and says so.
 
 - `DefId`'s field and `DefTable::declare` are both private to `crate::defs`. A
   pass cannot mint an identity. Enforced by the module system.
@@ -387,9 +413,14 @@ them are not in place yet — see Remaining work, which says which.
   name comparison.
 - `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
   node without an id, so a new reference position cannot be added silently.
-- One test asserts `wado-compiler/src` contains no function taking a module and a
-  name and returning an identity. That is the shape of the chain this design
-  removes, and the one property the type system cannot state.
+- `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
+  for a reachable function taking a module and a name and handing back a
+  declaration. That is the shape of the chain this design removes, and the one
+  property the type system cannot state. The ones that remain are listed in
+  `NAME_TO_IDENTITY` with the reason each survives, so the class cannot grow
+  while it is being emptied; the test fails on a new one, and equally on a
+  stale entry, so the list shrinks as the work lands. Remaining work says which
+  entries are still to go and which two belong there.
 
 ## Remaining work
 
@@ -408,24 +439,70 @@ resolution, the struct literal, the WIR lookup key, template admission, template
 lookup, the registration name, and the instantiation scan. Each was a distinct
 caller of the same first-wins index. A removed mechanism takes one fix.
 
-- [ ] A nominal head carries a `DefId`, not a `(module, name)` pair.
-      `name::TypeHead::Declared` and `trait_env::DeclKey` are the two, and they
-      make `FqTypeName` equality name equality — which is what the trait impl
-      index is keyed on. This is the step; the rest of this list is what it
-      unblocks.
-- [ ] `TypeTable::decl_named_in` deleted. It answers `(name, module)` with a
-      declaration, `or_insert` so the first declared wins, so it structurally
-      cannot tell two same-named declarations in one module apart. 48 callers.
-      With it go the 22 `(String, ModuleSource)`-keyed maps, one of which is a
-      generic-struct template registry in `monomorphize` — the elaborator's
-      seven are already `DefId`-keyed, this one is not.
-- [ ] `Resolutions::declaration_named` / `declared_in` deleted, and the
-      Enforcement bullet they contradict becomes true: a pass holding only a
-      spelling cannot obtain an identity. `DefTable` itself already has no such
-      lookup; these two and `decl_named_in` are what remain.
-- [ ] The Enforcement test that asserts `wado-compiler/src` contains no function
-      taking a module and a name and returning an identity. Not written — it
-      would fail today on the three above, which is the point of writing it last.
+- [x] A _type_ head carries a `DefId`, not a `(module, name)` pair.
+      `name::TypeHead::Declared` carries a `DeclaredHead` — the declaration,
+      plus the module and the two spellings its one constructor reads off the
+      table — and equality compares the `DefId`. A head that names no
+      declaration is `TypeHead::Shape`, whose rendering _is_ its identity.
+- [x] `TypeTable::decl_named_in` deleted. Every stdlib type it was reached for
+      — `Future`, `Stream`, `AsyncCall`, `ByteList`, `ByteSlice`, `ArraySlice`
+      — is a `compiler_item.rs` registry entry, and the registry now records a
+      declaring node for every kind that names a type of its own (`enum`,
+      `resource`, `type X = Y`, the tuple family, a builtin type), so
+      `TypeTable::compiler_item_def` answers for all of them. The rest carry
+      the identity their site already resolved. What is left of the index is
+      `TypeTable::cm_decl_in`, reachable only from `synthesis::cm_binding` and
+      permanent: see §9's third bullet.
+- [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
+      and the Enforcement bullet they contradict becomes true: a pass holding
+      only a spelling cannot obtain an identity. `DefTable` itself already has
+      no such lookup; these three are what remain.
+      `declared_in` is gone: its callers each held a pair standing in for
+      something they already had, and `TypeLookup`'s whole `*_in(name, module)`
+      family went with it.
+
+      `declaration_named` / `value_named` have six callers left, and they are
+      the hard tail — each is a pass that genuinely has no site, rather than one
+      that mislaid it:
+
+      - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
+        family (9 callers, each with its own). A written name in *type*
+        position has a site; these are reached from resolved types and from
+        synthesis, which do not.
+      - `canonical_decl_key` and `decl_key_or_local` (19 callers) are the frame
+        derivation: a name that reaches no import, no declaration of the
+        writing module and no prelude entry, for which only the declaration
+        indexes can answer.
+
+        A trait reference no longer goes through it. `fq_trait_name_undeclared`
+        existed for a bodiless derive naming a stdlib trait the module never
+        `use`d, and the premise was wrong: naming a trait is what `use` is for,
+        and the prelude — its implementation modules included — is in scope
+        everywhere without one, so a name reaching nothing at a bound's site
+        reaches nothing at all. It is deleted; no program in the repository
+        relied on it.
+      - `symbol_named` (8 callers) reads the symbol row behind a name. The four
+        that held an identifier now read its site through `symbol_at`; what is
+        left is reached from a mangled name or a synthesis target.
+      - `find_struct_module_source` answers which module a spelling means, for
+        a synthesised lookup that never had a site.
+      - `static_receiver_keys` files a static call under two vantages, because
+        a receiver that arrived through a namespace prefix lost its qualifier.
+        The call site's path still names the receiver with its owner segment,
+        which the walk answers for under `ns$Type` — the dispatch chain has to
+        carry that site down to here for it to be read.
+- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Four of the original
+      seven are left: `declaration_named` and `value_named` above, `imported_as`,
+      which answers what a module imported under a local name rather than what a
+      spelling means, and `cm_decl_in`, the Component Model boundary.
+      `decl_named_in`, `canonical_assoc_const_key` and `declare_for_test` are
+      gone. When only the last two are left, the Enforcement bullet above is a
+      statement about production code rather than a ratchet over it.
+
+      `declare_for_test` went with every `#[cfg(test)]` constructor that minted
+      a declaration outside the pass that declares, and with the unit tests
+      resting on them. A feature whose only unit test needs a hole cut in it is
+      covered by `tests/fixtures/` instead, which exercises the real path.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and
@@ -433,6 +510,3 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       arguments stored as text. Blocked by the first item: `written_type_args`
       renders an `ast::Type` by spelling because the arguments' own reference
       sites are not resolved where it stands.
-- [ ] `module_import_scope` deleted. It no longer answers what a name means, but
-      still computes a set of visible spellings for `module_visible_types`,
-      which is a heuristic rather than a resolution and does not belong here.

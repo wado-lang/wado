@@ -288,9 +288,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
     fn is_declared_effect_or_resource(&self, name: &str) -> bool {
-        let key = self.decl_key_or_local(name);
-        self.tysys.trait_env.effect_decl_index.contains_key(&key)
-            || self.tysys.trait_env.resource_decl_index.contains_key(&key)
+        self.decl_key_or_local(name).is_some_and(|key| {
+            self.tysys.trait_env.effect_decl_index.contains(&key)
+                || self.tysys.trait_env.resource_decl_index.contains(&key)
+        })
     }
 
     pub(super) fn resolve_call(
@@ -544,7 +545,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             def: expected_def,
                             type_args: expected_args,
                         } = expected_resolved
-                            && self.tysys.type_table.borrow().def_name(expected_def) == prefix
+                            && Some(expected_def)
+                                == self
+                                    .tysys
+                                    .resolutions
+                                    .defs()
+                                    .of_ast_id(variant_info.defined_at)
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
                             payload_type =
@@ -738,7 +744,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let is_reflexive = if arg_is_generic {
                         arg_type_name == prefix
                     } else if let Some(arg_key) = self.type_decl_key(arg_type) {
-                        arg_key == self.decl_key_or_local(prefix)
+                        Some(arg_key) == self.decl_key_or_local(prefix)
                     } else {
                         arg_type_name == prefix
                     };
@@ -889,7 +895,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             let inferred = self.tysys.infer_variant_type_args(
                                 &self.annotate_ctx,
-                                &prefix_owned,
                                 &variant_info,
                                 &case_data,
                                 payload.as_deref(),
@@ -1015,11 +1020,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
 
-                    // Check if this is a variant construction in the namespace
+                    // Check if this is a variant construction in the namespace.
+                    // `ns::Type::Case` names `Type` with its middle segment,
+                    // which the resolve walk answered for under the `ns$Type`
+                    // alias — so the declaration comes from the site rather
+                    // than from asking the namespace module about a spelling.
                     let ns_variant = self
-                        .tysys
-                        .resolutions
-                        .declared_in(&ns_source, type_name)
+                        .qualified_owner_decl(ident)
                         .and_then(|def| self.tysys.all_variant_cases.get(&def))
                         .cloned();
                     if let Some(variant_info) = ns_variant {
@@ -1054,7 +1061,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 {
                                     let inferred = self.tysys.infer_variant_type_args(
                                         &self.annotate_ctx,
-                                        type_name,
                                         &variant_info,
                                         &case_data,
                                         payload.as_deref(),
@@ -1129,8 +1135,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Qualify by the module the impl was located in:
                     // `helper::Pair` and a local `Pair` are different
                     // declarations.
+                    let receiver = self.namespace_member(prefix, type_name).map_or_else(
+                        || crate::name::FqTypeName::shape(&struct_module, type_name),
+                        |def| crate::name::FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+                    );
                     let final_mangled = MethodName::format_local(
-                        &crate::name::FqTypeName::of_head(&struct_module, type_name),
+                        &receiver,
                         method_ref.trait_name.as_ref(),
                         method_name,
                     );
@@ -1611,17 +1621,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect: &str,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let canonical_key = self.decl_key_or_local(effect);
-        let (_, decl_id) = self
+        let canonical_key = self.decl_key_or_local(effect)?;
+        if !self
             .tysys
             .trait_env
             .effect_decl_index
-            .get(&canonical_key)
-            .or_else(|| self.tysys.trait_env.resource_decl_index.get(&canonical_key))?;
+            .contains(&canonical_key)
+            && !self
+                .tysys
+                .trait_env
+                .resource_decl_index
+                .contains(&canonical_key)
+        {
+            return None;
+        }
+        let decl_id = self.tysys.resolutions.defs().ast_id(canonical_key);
         let sig = self
             .tysys
             .signatures
-            .resource_method_sig(*decl_id, operation)?;
+            .resource_method_sig(decl_id, operation)?;
         Some((sig.decl.param_types.clone(), sig.decl.return_type))
     }
 
@@ -1792,23 +1810,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = callee else {
             return (Vec::new(), None);
         };
-        if ident.name.contains("::") {
-            return (Vec::new(), None);
-        }
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
-        if let Some(sig) = self
-            .tysys
-            .signatures
-            .function_sig(&self.current_module_source, &ident.name)
+        // A qualified name is never a function of the writing module, so only
+        // the site below can answer for one — `ns::f` included.
+        if !ident.name.contains("::")
+            && let Some(sig) = self
+                .tysys
+                .signatures
+                .function_sig(&self.current_module_source, &ident.name)
         {
             return (
                 crate::elaborator::sig::Param::named_defaults(&sig.params),
                 Some(self.current_module_source.clone()),
             );
         }
-        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
+        if let Some(symbol) = self.symbol_at(ident.id) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -1842,7 +1860,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Imported function
-        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
+        if let Some(symbol) = self.symbol_at(ident.id) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -2565,7 +2583,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.decl_key_or_local(struct_name);
+        let key = self.impl_target(struct_name);
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index
@@ -2612,7 +2630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }
-        } else if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
+        } else if let Some(symbol) = self.symbol_at(ident.id) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             match self.tysys.signatures.function_sig(&src, &name) {
@@ -2675,7 +2693,6 @@ impl TypeSystem {
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,
-        variant_name: &str,
         variant_info: &super::types::VariantInfo,
         case_data: &super::types::VariantCaseData,
         payload: Option<&TirExpr>,
@@ -2683,11 +2700,16 @@ impl TypeSystem {
         explicit_args: &[TypeId],
         holes: &[bool],
     ) -> TypeId {
-        // Track the canonical module_source from expected_type if available.
-        // This ensures the created GenericInstance uses the same module_source
-        // as the type annotation (e.g., ModuleSource::prelude() for Option/Result),
-        // which may differ from variant_info.module_source (e.g., prelude/types.wado).
-        let mut canonical_module_source = None;
+        // An expected type pins the declaration the instance is interned
+        // against: a `Result` annotation and the variant reached through the
+        // prelude are one declaration, and the annotation is the one the
+        // caller's frame resolved.
+        let mut canonical_def = None;
+        let variant_def = self
+            .type_table
+            .borrow()
+            .defs()
+            .of_ast_id(variant_info.defined_at);
 
         let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
@@ -2717,10 +2739,10 @@ impl TypeSystem {
                 def,
                 type_args: expected_args,
             } = expected_resolved
-                && self.type_table.borrow().def_name(def) == variant_name
+                && Some(def) == variant_def
                 && expected_args.len() == variant_info.type_param_type_ids.len()
             {
-                canonical_module_source = Some(self.type_table.borrow().def_module(def).clone());
+                canonical_def = Some(def);
                 for (&param_id, &expected_arg) in variant_info
                     .type_param_type_ids
                     .iter()
@@ -2732,9 +2754,6 @@ impl TypeSystem {
         }
 
         let type_args = infer.solve();
-
-        let module_source =
-            canonical_module_source.unwrap_or_else(|| variant_info.module_source.clone());
 
         // If unresolved type params remain in concrete code, fall back to bare Variant
         let has_unresolved = type_args
@@ -2748,11 +2767,13 @@ impl TypeSystem {
                 .type_id_of_decl(variant_info.defined_at);
         }
 
-        let def = self
-            .type_table
-            .borrow()
-            .decl_named_in(&variant_info.name, &module_source)
-            .expect("the variant being instantiated is declared");
+        let def = canonical_def.unwrap_or_else(|| {
+            self.type_table
+                .borrow()
+                .defs()
+                .of_ast_id(variant_info.defined_at)
+                .expect("the variant being instantiated is declared")
+        });
         self.type_table
             .borrow_mut()
             .make_generic_instance(def, type_args)

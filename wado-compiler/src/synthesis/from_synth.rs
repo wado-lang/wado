@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
 };
@@ -48,7 +48,10 @@ pub fn synthesize_from(module: &mut TirModule) {
         let source_name = module.type_table.borrow().type_name(source);
         let from_trait = from_trait_name.clone().with_args(vec![source_name]);
         let key = MethodName::format_local(
-            &FqTypeName::declared(&module.module_source, &req.target_type_name),
+            &module
+                .type_table
+                .borrow()
+                .fq_base_type_name(req.target_type_id),
             Some(&from_trait),
             "from",
         );
@@ -128,7 +131,10 @@ fn generate_variant_from(
     let body = block(vec![return_stmt(Some(variant_construct))]);
     let locals = vec![param_local("value", from_type, false)];
 
-    let target = FqTypeName::declared(&module.module_source, &req.target_type_name);
+    let target = module
+        .type_table
+        .borrow()
+        .fq_base_type_name(req.target_type_id);
     let method_info =
         LocalMethodName::new(target.clone(), Some(from_trait.clone()), "from".to_string());
     let qualified_name = MethodName::format_local(&target, Some(from_trait), "from");

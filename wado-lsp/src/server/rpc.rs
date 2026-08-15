@@ -200,6 +200,9 @@ pub struct TextDocumentSyncOptions {
     pub change: u32,
 }
 
+/// LSP `TextDocumentSyncKind`, mirrored whole so the value the server
+/// advertises reads against its alternatives. Only `FULL` is served today;
+/// `INCREMENTAL` is on the roadmap.
 pub mod text_document_sync_kind {
     pub const NONE: u32 = 0;
     pub const FULL: u32 = 1;

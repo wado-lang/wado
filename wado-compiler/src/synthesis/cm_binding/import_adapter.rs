@@ -11,7 +11,7 @@ use crate::ast::{NamedType, Type};
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
@@ -19,8 +19,8 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cm_raw_call, expr_stmt,
-    generic_method_call, i32_const, if_stmt, index_value_trait, internal_call, let_mut_stmt,
-    let_stmt, local_ref, loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
+    generic_method_call, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
+    loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
@@ -555,7 +555,7 @@ pub(super) fn synthesize_adapter(
         cm_interface_registry,
         type_table,
         wasi_package: &func_info.package,
-        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+        names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     let mut builder = AdapterBuilder {
         func_info,
@@ -1063,7 +1063,7 @@ impl<'a> AdapterBuilder<'a> {
         let len_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         let len_expr = generic_method_call(
             local_ref(param_local, param_name, array_type_id),
-            &self.lower_ctx.names.array,
+            &self.lower_ctx.names.array_fq,
             "len",
             ModuleSource::list(),
             vec![],
@@ -1140,8 +1140,14 @@ impl<'a> AdapterBuilder<'a> {
         // __elem = param[__i] (IndexValue trait method)
         let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
         let iv_info = LocalMethodName::new(
-            FqTypeName::declared(&ModuleSource::list(), &self.lower_ctx.names.array),
-            Some(index_value_trait()),
+            self.lower_ctx.names.array_fq.clone(),
+            Some(
+                self.lower_ctx
+                    .names
+                    .index_value
+                    .clone()
+                    .with_args(vec!["i32".to_string()]),
+            ),
             "index_value".to_string(),
         );
         let iv_mangled = iv_info.to_mangled_name();

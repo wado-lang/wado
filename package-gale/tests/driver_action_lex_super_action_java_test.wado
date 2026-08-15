@@ -1,0 +1,58 @@
+//! SuperClass action ops in a `language = Java` grammar — the TypeScriptLexer /
+//! ANTLRv4Lexer shape. java2wado does not translate a superClass grammar's
+//! bodies, so `{this.processOpen();}` runs only through the base-call rewrite,
+//! which leaves a body of nothing but base calls as Wado. The handler's brace
+//! depth is what proves the actions ran, in match order, once per token.
+
+use js from "./grammars/java_lex_super_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super_action_java" },
+    };
+use { JsBase, LexerView } from "./grammars/java_lex_super_action.g4";
+
+struct JsBaseImpl {
+    depth: i32,
+    max_depth: i32,
+    names: bool,
+}
+
+impl JsBase for JsBaseImpl {
+    fn process_open(&mut self, view: LexerView) {
+        self.depth += 1;
+        if self.depth > self.max_depth {
+            self.max_depth = self.depth;
+        }
+        resume ();
+    }
+
+    fn process_close(&mut self, view: LexerView) {
+        self.depth -= 1;
+        resume ();
+    }
+
+    fn names_enabled(&self, view: LexerView) -> bool {
+        resume self.names;
+    }
+}
+
+test "a Java action body that is nothing but a base call runs" {
+    let mut base = JsBaseImpl { depth: 0, max_depth: 0, names: true };
+    with JsBase => &mut base do {
+        // OPEN OPEN NAME CLOSE CLOSE + EOF.
+        let toks = js::tokenize(&"{ { a } }");
+        assert toks.len() == 6, `expected 6 tokens, got ${toks.len()}`;
+        let name = js::token_kind_name(toks.kinds[2]);
+        assert name == "NAME", `expected NAME, got ${name}`;
+    };
+    assert base.max_depth == 2, `expected max depth 2, got ${base.max_depth}`;
+    assert base.depth == 0, `expected balanced depth, got ${base.depth}`;
+}
+
+test "the predicate op still gates its rule alongside the action ops" {
+    let mut off = JsBaseImpl { depth: 0, max_depth: 0, names: false };
+    with JsBase => &mut off do {
+        let toks = js::tokenize(&"a");
+        let name = js::token_kind_name(toks.kinds[0]);
+        assert name == "ID", `expected ID, got ${name}`;
+    };
+}

@@ -2,20 +2,21 @@
 
 /// Declare a `pub` enum whose LSP wire form is a small `u32` discriminant.
 ///
-/// Generates the same `serde` plumbing (`#[serde(into = "u32", try_from
-/// = "u32")]`), the `From<Self> for u32` cast, and a `TryFrom<u32>`
-/// impl whose `Err` is a human-readable diagnostic. The LSP wire types
-/// `Severity` (1..=4) and `HighlightKind` (1..=3) used to spell these
-/// impls out by hand — identical shape, drifty when one side gets a new
-/// variant.
+/// Generates the `serde` plumbing (`#[serde(into = "u32", try_from =
+/// "u32")]`), the `From<Self> for u32` cast, and a `TryFrom<u32>` impl whose
+/// `Err` is a human-readable diagnostic. Spelled out by hand per enum, the
+/// `TryFrom` arm drifts as soon as one of them gains a variant.
 ///
 /// Usage:
 ///
 /// ```ignore
-/// lsp_repr_u32_enum!(Severity {
-///     Error = 1,
-///     Warning = 2,
-/// });
+/// lsp_repr_u32_enum!(
+///     /// Doc comment, forwarded to the generated enum.
+///     pub enum Severity {
+///         Error = 1,
+///         Warning = 2,
+///     }
+/// );
 /// ```
 macro_rules! lsp_repr_u32_enum {
     (

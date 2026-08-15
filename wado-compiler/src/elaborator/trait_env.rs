@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use crate::ast::{self, AstId, Item, Module, Type};
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -14,68 +15,23 @@ use crate::name;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
-/// A module's type-name import scope, derived once from its `use`
-/// declarations. The single source of truth for how a module resolves a type
-/// name, shared by its body walk and by sites that reconstruct its perspective.
-#[derive(Clone, Default, Debug)]
-pub(crate) struct ModuleImportScope {
-    /// In-scope type name → declaring module, including `ns$Type` aliases for
-    /// each namespace import's public type members.
-    pub(super) sources: IndexMap<String, ModuleSource>,
-    /// Aliased local name → original declaration name (`use { A as B }` and the
-    /// `ns$Type` → `Type` namespace-member aliases).
-    pub(super) original_names: IndexMap<String, String>,
-    /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
-    /// Drives `ns::Type` resolution (issue #1415).
-    pub(super) namespace_imports: IndexMap<String, ModuleSource>,
-}
+/// Namespace-import alias (`use ns from "…"`) → the namespace's module.
+/// Drives `ns::Type` resolution (issue #1415).
+pub(crate) type NamespaceImports = IndexMap<String, ModuleSource>;
 
-/// Compute a module's import scope from its `use` declarations. Pure over
-/// `(module, from_module, entry_module, invocations, symbols)` plus the
-/// (idempotent, loader-warmed) interner; safe to memoize per module. This is
-/// the body behind `Elaborator::build_imported_type_sources`, lifted to a free
-/// function so [`TraitEnv::build`] can pre-compute the per-module scopes
-/// without an `Elaborator`/host in hand. `symbols` is needed to enumerate a
-/// namespace import's public type members.
-pub(super) fn module_import_scope(
+/// Which module each of `module`'s namespace aliases stands for.
+///
+/// The one import fact the symbol table does not record — it registers the
+/// members, not the alias. What a *name* means is [`crate::resolve`]'s answer
+/// and is not asked here.
+pub(super) fn namespace_imports_of(
     interner: &mut ModuleSourceInterner,
     module: &Module,
     from_module: &ModuleSource,
     entry_module: Option<&ModuleSource>,
     invocations: &InvocationIndex,
-    symbols: &SymbolTable,
-) -> ModuleImportScope {
-    let mut scope = ModuleImportScope::default();
-    // Case (variant/enum/flags) names brought in by imported types. Applied
-    // after every type name is in scope, so a type always shadows a same-named
-    // case (e.g. a `FieldKind::List` case must not hide the prelude `List`
-    // type). Collected here, inserted with `or_insert` at the end.
-    let mut pending_cases: Vec<(String, ModuleSource)> = Vec::new();
-
-    // What an explicit `use` means is decided once, by the analyzer, and
-    // recorded in the symbol table: the local name (an alias, or a namespace
-    // import's `ns$member`) paired with the declaration it reaches, re-export
-    // chains already followed (issue #1416). Re-walking the `use` declarations
-    // here answered the same question a second way, with its own module-path
-    // resolution and its own alias handling, and the two could disagree.
-    for (local_name, sym) in symbols.imports_in(from_module) {
-        let def_source = sym.module_source().clone();
-        scope
-            .sources
-            .insert(local_name.to_string(), def_source.clone());
-        if local_name != sym.name {
-            scope
-                .original_names
-                .insert(local_name.to_string(), sym.name.clone());
-        }
-        // Importing a variant/enum/flags type brings its case names into scope
-        // so bare `Some` / `Ok` / enum cases resolve through the import branch.
-        collect_case_names(&mut pending_cases, sym, &def_source);
-    }
-
-    // Which module a namespace alias stands for is the one import fact the
-    // symbol table does not record — it registers the members, not the alias —
-    // so the `use` declarations still answer for it.
+) -> NamespaceImports {
+    let mut out = NamespaceImports::default();
     for item in &module.items {
         if let Item::Use(use_decl) = item {
             let namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
@@ -92,80 +48,14 @@ pub(super) fn module_import_scope(
                     entry_module,
                     invocations,
                 );
-                scope.namespace_imports.insert(ns.clone(), source);
+                out.insert(ns.clone(), source);
             }
         }
     }
-
-    // Auto-import the prelude: inject `core:prelude`'s exported type names into
-    // the scope so prelude types (`String`, `List`, `Option`, …) resolve
-    // through the import branch like any `use`. Modules opting out
-    // (`#![no_prelude]` — the prelude sub-modules and
-    // `core:rt`/`builtin`/`allocator`) import explicitly. Explicit `use`
-    // items above take precedence, so they are not overwritten.
-    if !module.has_no_prelude() {
-        let prelude = ModuleSource::prelude();
-        for name in symbols.reexport_names(&prelude) {
-            if scope.sources.contains_key(&name) {
-                continue;
-            }
-            let Some(sym) = symbols.lookup_in_module(&prelude, &name) else {
-                continue;
-            };
-            if !matches!(
-                sym.kind,
-                crate::symbol::SymbolKind::Struct(_)
-                    | crate::symbol::SymbolKind::Enum(_)
-                    | crate::symbol::SymbolKind::Flags(_)
-                    | crate::symbol::SymbolKind::Variant(_)
-                    | crate::symbol::SymbolKind::Newtype(_)
-                    | crate::symbol::SymbolKind::Resource(_)
-                    | crate::symbol::SymbolKind::BuiltinType
-                    | crate::symbol::SymbolKind::Trait(_)
-            ) {
-                continue;
-            }
-            let def_source = sym.module_source().clone();
-            scope.sources.insert(name.clone(), def_source.clone());
-            if name != *sym.name {
-                scope.original_names.insert(name, sym.name.clone());
-            }
-            collect_case_names(&mut pending_cases, sym, &def_source);
-        }
-    }
-
-    // Apply case names last, never overwriting a type name: a type always wins
-    // a name clash with a case (see `pending_cases`).
-    for (case, src) in pending_cases {
-        scope.sources.entry(case).or_insert(src);
-    }
-
-    scope
-}
-
-/// Collect a variant/enum/flags symbol's case (or member) names so they can
-/// resolve unqualified (`Some`, `Ok`, an enum case used bare), pointing at the
-/// type's defining module. Other symbol kinds are ignored. Cases cannot be
-/// aliased, so each name maps to itself.
-fn collect_case_names(
-    pending: &mut Vec<(String, ModuleSource)>,
-    sym: &crate::symbol::Symbol,
-    def_source: &ModuleSource,
-) {
-    use crate::symbol::SymbolKind;
-    let cases: &[String] = match &sym.kind {
-        SymbolKind::Variant(v) => &v.cases,
-        SymbolKind::Enum(e) => &e.cases,
-        SymbolKind::Flags(f) => &f.members,
-        _ => return,
-    };
-    for case in cases {
-        pending.push((case.clone(), def_source.clone()));
-    }
+    out
 }
 
 use super::types::TypeError;
-use crate::symbol::SymbolTable;
 
 /// Pick a `ModuleSource` from the AST and synthesised candidate lists: a
 /// `prefer` hint wins wherever it appears, else the first AST entry, else the
@@ -189,27 +79,24 @@ fn pick_module_union<'a>(
         .or_else(|| syn.and_then(|l| l.first()))
 }
 
-/// Canonical key for a declaration that lives in some module. Used by every
-/// trait / effect / resource / type index in this file so that two modules
-/// can host declarations with the same bare name (`pub interface Logger`
-/// in both `mod_a` and `mod_b`) without their entries colliding on a
-/// single `String` slot. The defining module is intrinsic to identity for
-/// these kinds — the elaborator canonicalises a use-site bare name through
-/// the symbol table ([`crate::elaborator::Elaborator::canonical_decl_key`])
-/// before consulting the index.
-pub(crate) type DeclKey = (ModuleSource, String);
-
-/// Identity of an impl's target type. A named type keys by its *declaring*
-/// module and canonical name, so two modules' same-named structs — and one
-/// type reached under an alias — are the same key exactly when they are the
-/// same type. A `&T` / `&mut T` target is universal and declares nothing, so
-/// it keys by reference kind alone.
+/// Identity of an impl's target type. A named type keys by the declaration it
+/// names, so two modules' same-named structs — and one type reached under an
+/// alias — are the same key exactly when they are the same declaration. A
+/// `&T` / `&mut T` target is universal and declares nothing, so it keys by
+/// reference kind alone.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum ImplTargetKey {
-    Decl(DeclKey),
+    Decl(DefId),
+    /// A head that reaches no declaration: an anonymous or synthetic struct
+    /// shape, or a written name that resolves to nothing. Its rendering is all
+    /// the identity there is — for a shape that is exactly right, since the
+    /// type table interns it under the same pair and two literals of one shape
+    /// are one type on purpose; for an unresolved name the writing module is
+    /// the only vantage left.
+    Undeclared(ModuleSource, String),
     Ref(name::RefKind),
     /// A blanket impl's bare type parameter (`impl<T> Display for T`). It
-    /// names no declaration, so it gets no `DeclKey`: a lookup starts from a
+    /// names no declaration, so it gets no `DefId`: a lookup starts from a
     /// type and can never reach this variant, which is what keeps a blanket
     /// impl out of the bucket of a type that happens to share the parameter's
     /// name. The module is the impl's own — the parameter is scoped to it.
@@ -223,42 +110,39 @@ pub(crate) enum ImplTargetKey {
 }
 
 impl ImplTargetKey {
-    /// The key for a head written in `module`.
-    ///
-    /// The declaration the head names, from the resolution table. A shape that
-    /// names none drops the module; a name that reaches nothing at all keeps
-    /// it, since the writing module is the only vantage left.
-    pub(crate) fn of_written(
-        name: &str,
-        module: &ModuleSource,
-        resolutions: &crate::resolve::Resolutions,
-    ) -> Self {
-        let (declaring, declared) = resolutions.declaration_named(module, name).map_or_else(
-            || (module.clone(), name.to_string()),
-            |def| resolutions.decl_key(def),
-        );
-        Self::of_decl(&declaring, &declared)
-    }
-
     /// The key for a declaration already identified.
     ///
     /// The one place the builtin decision is made, mirroring
-    /// [`name::FqTypeName::of_head`]: a shape no module declares drops its
-    /// module, so a definition reached through a written head and a lookup
-    /// reached through a resolved type land on the same key.
-    pub(crate) fn of_decl(module: &ModuleSource, name: &str) -> Self {
+    /// [`name::FqTypeName::of_head`]: a shape every mangler spells bare drops
+    /// its declaration, so a definition reached through a written head and a
+    /// lookup reached through a resolved type land on the same key.
+    pub(crate) fn of_decl(defs: &crate::defs::DefTable, def: DefId) -> Self {
+        if name::is_builtin_shape_name(defs.name(def)) {
+            return ImplTargetKey::Builtin(defs.name(def).to_string());
+        }
+        ImplTargetKey::Decl(def)
+    }
+
+    /// The key for a head that reaches no declaration — a shape every mangler
+    /// spells bare, or a name that resolves to nothing.
+    ///
+    /// The one path that produces a key from a spelling, and it is reachable
+    /// only where there is no declaration to produce one from.
+    pub(crate) fn of_undeclared(module: &ModuleSource, name: &str) -> Self {
         if name::is_builtin_shape_name(name) {
             return ImplTargetKey::Builtin(name.to_string());
         }
-        ImplTargetKey::Decl((module.clone(), name.to_string()))
+        ImplTargetKey::Undeclared(module.clone(), name.to_string())
     }
-    /// The receiver this target indexes under. Built from the same
-    /// `(module, name)` pair `TypeTable::impl_receiver_key` reads off a
-    /// resolved type, so a definition and a lookup agree by construction.
-    pub(crate) fn receiver(&self) -> name::Receiver {
+
+    /// The receiver this target indexes under. Built from the same declaration
+    /// `TypeTable::impl_receiver_key` reads off a resolved type, so a
+    /// definition and a lookup agree by construction.
+    pub(crate) fn receiver(&self, defs: &crate::defs::DefTable) -> name::Receiver {
         match self {
-            ImplTargetKey::Decl((module, name)) => {
-                name::Receiver::Type(name::FqTypeName::of_head(module, name))
+            ImplTargetKey::Decl(def) => name::Receiver::Type(name::FqTypeName::of_head(defs, *def)),
+            ImplTargetKey::Undeclared(module, name) => {
+                name::Receiver::Type(name::FqTypeName::shape(module, name))
             }
             // A type parameter names no declaration, so no module qualifies it.
             ImplTargetKey::TypeParam(_, name) => {
@@ -269,9 +153,10 @@ impl ImplTargetKey {
         }
     }
 
-    pub(crate) fn type_name(&self) -> Option<&str> {
+    pub(crate) fn type_name<'a>(&'a self, defs: &'a crate::defs::DefTable) -> Option<&'a str> {
         match self {
-            ImplTargetKey::Decl((_, name))
+            ImplTargetKey::Decl(def) => Some(defs.name(*def)),
+            ImplTargetKey::Undeclared(_, name)
             | ImplTargetKey::TypeParam(_, name)
             | ImplTargetKey::Builtin(name) => Some(name),
             ImplTargetKey::Ref(_) => None,
@@ -280,14 +165,27 @@ impl ImplTargetKey {
 
     /// How to spell this target in a diagnostic — the declaration name, or the
     /// reference prefix for a `&T` / `&mut T` target.
-    pub(crate) fn display_name(&self) -> &str {
+    pub(crate) fn display_name<'a>(&'a self, defs: &'a crate::defs::DefTable) -> &'a str {
         match self {
-            ImplTargetKey::Decl((_, name))
+            ImplTargetKey::Decl(def) => defs.name(*def),
+            ImplTargetKey::Undeclared(_, name)
             | ImplTargetKey::TypeParam(_, name)
             | ImplTargetKey::Builtin(name) => name,
             ImplTargetKey::Ref(kind) => kind.prefix(),
         }
     }
+}
+
+/// The spelling a declaration renders to in a mangled head: its declared name,
+/// with a function-local declaration's disambiguator applied.
+///
+/// [`crate::tir::TypeTable::decl_render_name`] one layer down, for the callers
+/// that hold a [`crate::defs::DefTable`] and no type table.
+pub(crate) fn render_decl_name(defs: &crate::defs::DefTable, def: DefId) -> String {
+    if defs.is_function_local(def) {
+        return name::mangle_local_item_name(defs.name(def), defs.ast_id(def));
+    }
+    defs.name(def).to_string()
 }
 
 /// Target type → the trait impl blocks written for it. Built once from all
@@ -296,10 +194,10 @@ pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<(ModuleSource, AstI
 
 type ReceiverImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
 
-fn index_by_receiver(index: &TraitImplIndex) -> ReceiverImplIndex {
+fn index_by_receiver(index: &TraitImplIndex, defs: &crate::defs::DefTable) -> ReceiverImplIndex {
     let mut out: ReceiverImplIndex = IndexMap::default();
     for (key, entries) in index {
-        out.entry(key.receiver())
+        out.entry(key.receiver(defs))
             .or_default()
             .extend(entries.iter().cloned());
     }
@@ -365,14 +263,16 @@ impl ImplHeader {
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
-    pub(super) fn fq_trait(&self) -> Option<name::FqTraitName> {
+    pub(super) fn fq_trait(&self, defs: &crate::defs::DefTable) -> Option<name::FqTraitName> {
         let trait_type = self.trait_type.as_ref()?;
         match self.trait_key.as_ref()? {
-            ImplTargetKey::Decl((module, name)) => Some(
-                name::FqTraitName::declared(module, name).with_args(written_type_args(trait_type)),
+            ImplTargetKey::Decl(def) => Some(
+                name::FqTraitName::declared(defs, *def).with_args(written_type_args(trait_type)),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
-            ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) => None,
+            ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
+                None
+            }
         }
     }
 }
@@ -387,14 +287,14 @@ fn blanket_pack_assocs(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
-) -> IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>> {
-    let mut out: IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>> = IndexMap::default();
+) -> IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> {
+    let mut out: IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> = IndexMap::default();
     for blanket in blanket_impls.values().flatten() {
         let key = (blanket.module.clone(), blanket.ast_id);
         let Some(header) = impl_headers.get(&key) else {
             continue;
         };
-        let pairs: Vec<(DeclKey, String)> = header
+        let pairs: Vec<(DefId, String)> = header
             .type_params
             .iter()
             .flat_map(|tp| &tp.bounds)
@@ -406,8 +306,7 @@ fn blanket_pack_assocs(
                         .any(|e| matches!(e, ast::Type::TypePackSpread(..))))
             })
             .filter_map(|(bound, assoc)| {
-                let def = resolutions.declared(bound.id)?;
-                Some((resolutions.decl_key(def), assoc.name.clone()))
+                Some((resolutions.declared(bound.id)?, assoc.name.clone()))
             })
             .collect();
         if !pairs.is_empty() {
@@ -424,7 +323,7 @@ pub(crate) enum BlanketParamSource {
     Receiver,
     /// A predicate on another parameter: `..F` in
     /// `impl<S: ReflectStruct<FieldTypes = [..F]>, ..F>`.
-    Projection(DeclKey, String),
+    Projection(DefId, String),
     /// A predicate names it, but the bound's site reaches no declaration.
     /// Its own answer: reading it as [`Self::Receiver`] would fill a pack from
     /// the call site's receiver type.
@@ -471,7 +370,7 @@ fn blanket_param_sources(
                 let Some(def) = resolutions.declared(bound.id) else {
                     return BlanketParamSource::Unresolved;
                 };
-                BlanketParamSource::Projection(resolutions.decl_key(def), assoc.name.clone())
+                BlanketParamSource::Projection(def, assoc.name.clone())
             })
             .collect();
         out.insert(key, sources);
@@ -594,37 +493,32 @@ pub(super) struct TraitDeclHeader {
     pub(super) span: Span,
 }
 
-/// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, `AstId`)
-/// for trait declarations.
-pub(super) type TraitDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
-
-/// A trait declaration's location, the key both [`TraitEnv::trait_decl_headers`]
-/// and [`SupertraitClosureIndex`] use.
-type TraitDeclLoc = (ModuleSource, AstId);
+/// Every `trait` declaration in the program. Membership is the question — is
+/// this declaration a trait? — and the declaration is its own answer, so there
+/// is nothing to store beside it.
+pub(super) type TraitDeclIndex = IndexSet<DefId>;
 
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
-    pub(super) decl: DeclKey,
+    pub(super) decl: DefId,
 }
 
 /// Pre-built index: trait declaration → the transitive closure of its
 /// supertraits, deduplicated by declaration and excluding the trait itself. A
 /// declared bound `T: Sub` expands through this so `T: Ord` alone carries
 /// `Eq`.
-pub(super) type SupertraitClosureIndex = IndexMap<TraitDeclLoc, Vec<InheritedBound>>;
+pub(super) type SupertraitClosureIndex = IndexMap<DefId, Vec<InheritedBound>>;
 
-/// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`,
-/// `AstId`) for effect declarations. Effects are first-class citizens distinct
+/// Every `interface` declaration. Effects are first-class citizens distinct
 /// from traits and have their own impl form (`impl Effect for Type`)
 /// interpreted as installable handlers, so the elaborator and dispatch
 /// synthesis need to distinguish them quickly.
-pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
+pub(super) type EffectDeclIndex = IndexSet<DefId>;
 
-/// Pre-built index: `(declaring module, resource name)` → (`ModuleSource`,
-/// `AstId`) for resource declarations. Resources participate in
+/// Every `resource` declaration. Resources participate in
 /// `with R => h do` / `impl R for Type` exactly like effects (see WEP
 /// 2026-04-11): both kinds of declaration carry a list of operations that
 /// user handler implementations satisfy and that the dispatch-synthesis
@@ -632,10 +526,10 @@ pub(super) type EffectDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
 /// elaborator can keep diagnostics ("not an effect", "not a resource")
 /// truthful and so the dispatch synthesis can know not to declare the
 /// resource on its wrapper's `effects` list (resources are not effects).
-pub(super) type ResourceDeclIndex = IndexMap<DeclKey, (ModuleSource, AstId)>;
+pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 
 /// Pre-built index of static methods (no `self` parameter) from impl blocks.
-/// Key: canonical receiver [`DeclKey`] → list of
+/// Key: canonical receiver [`DefId`] → list of
 /// A static (receiver-less) method reachable by name on a type.
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
@@ -653,17 +547,17 @@ pub(super) struct StaticMethodEntry {
 /// `impl Counter { fn make(...) }` in two modules with same-named
 /// `struct Counter` produces two buckets and `CounterA::make(...)` reaches the
 /// right one.
-pub(super) type StaticMethodIndex = IndexMap<DeclKey, Vec<StaticMethodEntry>>;
+pub(super) type StaticMethodIndex = IndexMap<ImplTargetKey, Vec<StaticMethodEntry>>;
 
 /// Pre-built index of static methods from resource declarations.
-/// Key: canonical receiver [`DeclKey`] → `[(method_name, ModuleSource,
+/// Key: canonical receiver [`DefId`] → `[(method_name, ModuleSource,
 /// item_ast_id, method_index)]`. Same disambiguation rationale as
 /// [`StaticMethodIndex`].
 pub(super) type ResourceStaticMethodIndex =
-    IndexMap<DeclKey, Vec<(String, ModuleSource, AstId, usize)>>;
+    IndexMap<ImplTargetKey, Vec<(String, ModuleSource, AstId, usize)>>;
 
 /// `(type_name, trait_name)` → modules holding that `impl` block. Keyed by bare
-/// names rather than [`DeclKey`]: the multi-value `Vec` plus the caller's
+/// names rather than [`DefId`]: the multi-value `Vec` plus the caller's
 /// `type_module` hint already routes two modules' same-named receivers apart.
 /// Value blanket impls apply structurally, with no concrete receiver name, and
 /// live in `blanket_impls` instead.
@@ -756,6 +650,7 @@ fn push_module(
 /// instance is materialised in the receiver type's.
 fn index_impl_modules(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    defs: &crate::defs::DefTable,
     concrete_only: bool,
 ) -> ImplModuleIndex {
     let mut out = ImplModuleIndex::default();
@@ -775,11 +670,11 @@ fn index_impl_modules(
         if concrete_only && !header.type_params.is_empty() {
             continue;
         }
-        let Some(fq_trait) = header.fq_trait() else {
+        let Some(fq_trait) = header.fq_trait(defs) else {
             continue;
         };
         out.record(
-            &header.target.receiver(),
+            &header.target.receiver(defs),
             fq_trait.base_name(),
             &header.module,
         );
@@ -813,10 +708,10 @@ pub struct TraitEnv {
     all_by_receiver: ReceiverImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
-    /// Every declaration in the program. Held here so a whole-program index
-    /// keyed by a `(module, name)` pair can hand back the identity the impl
-    /// headers compare, without every caller threading the table.
-    pub(super) defs: std::sync::Arc<crate::defs::DefTable>,
+    /// Every declaration in the program. Held here so a query keyed by an
+    /// identity can render one for a diagnostic without every caller threading
+    /// the table.
+    pub(crate) defs: std::sync::Arc<crate::defs::DefTable>,
     /// Effect name → effect declaration location.
     pub(super) effect_decl_index: EffectDeclIndex,
     /// Resource name → resource declaration location. Used alongside
@@ -831,7 +726,7 @@ pub struct TraitEnv {
     /// binding is a type pack. Resolved once at build time from each bound's
     /// own reference site, so the trait is a declaration rather than the
     /// spelling the blanket wrote (WEP 2026-08-12).
-    pub(super) blanket_pack_assocs: IndexMap<(ModuleSource, AstId), Vec<(DeclKey, String)>>,
+    pub(super) blanket_pack_assocs: IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>>,
     /// Per blanket impl, what determines each of its parameters, in
     /// declaration order. Resolved once at build time from each bound's own
     /// reference site.
@@ -840,7 +735,7 @@ pub struct TraitEnv {
     /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
     /// [`TraitDeclHeader`].
-    pub(super) trait_decl_headers: IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    pub(super) trait_decl_headers: IndexMap<DefId, TraitDeclHeader>,
     /// Transitive supertraits per trait declaration. See
     /// [`SupertraitClosureIndex`].
     supertrait_closures: SupertraitClosureIndex,
@@ -857,16 +752,14 @@ pub struct TraitEnv {
     /// `find_struct_module_source` without an AST scan. Newtypes are tracked
     /// separately in [`Self::newtype_decl_modules`] because the query consults
     /// them only as a later fallback.
-    pub(super) struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>>,
+    pub(super) struct_like_decl_modules: IndexMap<String, Vec<DefId>>,
     /// Type name → modules declaring a `newtype` of that name, in build order.
     /// The fallback half of `find_struct_module_source`'s module lookup.
-    pub(super) newtype_decl_modules: IndexMap<String, Vec<ModuleSource>>,
-    /// Per-module import scope (`use`-derived `imported_type_sources` /
-    /// `import_original_names`), pre-computed once. Dispatch-core queries that
-    /// resolve type names in a foreign impl/callee signature read this instead
-    /// of rebuilding it from the module AST in `loaded_modules`. See
-    /// [`module_import_scope`].
-    pub(super) module_import_scopes: IndexMap<ModuleSource, ModuleImportScope>,
+    pub(super) newtype_decl_modules: IndexMap<String, Vec<DefId>>,
+    /// Per-module namespace-import aliases, pre-computed once, so a query
+    /// standing in a foreign module's perspective reads them instead of
+    /// re-walking its `use` declarations. See [`namespace_imports_of`].
+    pub(super) module_namespace_imports: IndexMap<ModuleSource, NamespaceImports>,
     /// Associated-type name → the declaring trait's bounds for it, first
     /// declaration wins (matching the previous whole-program scan order).
     /// Consumed by `find_assoc_type_bounds` without an AST scan.
@@ -957,53 +850,42 @@ impl SynthesisedImpls {
 impl TraitEnv {
     /// Build the trait indices from all loaded modules, once, before per-module
     /// resolution begins, and check the orphan rule on local impl blocks. Every
-    /// receiver-type and trait-name reference in an `impl` header is
-    /// canonicalised through `symbols` against that module's own import context,
-    /// so two modules' same-named traits produce distinct [`DeclKey`]s.
+    /// receiver-type and trait-name reference in an `impl` header is resolved
+    /// from the module that wrote it, so two modules' same-named traits produce
+    /// distinct [`DefId`]s.
     pub(super) fn build(
         modules: &IndexMap<ModuleSource, Module>,
-        symbols: &SymbolTable,
         interner: &mut ModuleSourceInterner,
         entry_module: Option<&ModuleSource>,
         invocations: &InvocationIndex,
         resolutions: &crate::resolve::Resolutions,
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
-        // Pre-compute every module's `use`-derived import scope so dispatch
-        // queries read it instead of rebuilding from the module AST.
-        let mut module_import_scopes: IndexMap<ModuleSource, ModuleImportScope> =
+        let mut module_namespace_imports: IndexMap<ModuleSource, NamespaceImports> =
             IndexMap::default();
         for (module_source, module) in modules {
-            module_import_scopes.insert(
+            module_namespace_imports.insert(
                 module_source.clone(),
-                module_import_scope(
-                    interner,
-                    module,
-                    module_source,
-                    entry_module,
-                    invocations,
-                    symbols,
-                ),
+                namespace_imports_of(interner, module, module_source, entry_module, invocations),
             );
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
-        let mut decl_index: TraitDeclIndex = IndexMap::default();
-        let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
+        let mut decl_index: TraitDeclIndex = IndexSet::default();
+        let mut effect_decl_index: EffectDeclIndex = IndexSet::default();
         let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
             IndexMap::default();
-        let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
+        let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
         let mut blanket_impls: IndexMap<String, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
-        let mut trait_decl_headers: IndexMap<(ModuleSource, AstId), TraitDeclHeader> =
-            IndexMap::default();
+        let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
             IndexMap::default();
-        let mut struct_like_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
-        let mut newtype_decl_modules: IndexMap<String, Vec<ModuleSource>> = IndexMap::default();
-        // (declaring module, type name) → module source, for orphan rule
-        // "is this type local?" checks. Keyed by canonical decl key so
-        // two modules can declare a same-named type without colliding.
-        let mut type_decl_index: IndexMap<DeclKey, ModuleSource> = IndexMap::default();
+        let mut struct_like_decl_modules: IndexMap<String, Vec<DefId>> = IndexMap::default();
+        let mut newtype_decl_modules: IndexMap<String, Vec<DefId>> = IndexMap::default();
+        // Every type declaration, for the orphan rule's "does this package own
+        // it?" check. A declaration, so a user type shadowing a stdlib name
+        // cannot vouch for the stdlib type it shadows.
+        let mut type_decl_index: IndexSet<DefId> = IndexSet::default();
 
         let mut static_method_index: StaticMethodIndex = IndexMap::default();
         let mut resource_static_method_index: ResourceStaticMethodIndex = IndexMap::default();
@@ -1015,18 +897,18 @@ impl TraitEnv {
         // helper falls back to scanning the decl indices when the
         // per-module symbol table misses (typical for prelude-implicit
         // names that no `use` declaration explicitly threads).
+        let defs = resolutions.defs();
         for (module_source, module) in modules {
             for item in &module.items {
                 match item {
                     Item::Trait(trait_decl) => {
-                        // `(module_source, name)` key: two modules can declare
-                        // a same-named trait without colliding. The previous
+                        // Keyed by the declaration, so two modules declaring a
+                        // same-named trait cannot share an entry. The previous
                         // bare-name key first-wrote-wins and silently routed
-                        // both declarations to the same entry.
-                        decl_index.insert(
-                            (module_source.clone(), trait_decl.name.clone()),
-                            (module_source.clone(), trait_decl.id),
-                        );
+                        // both declarations to the same one.
+                        if let Some(def) = defs.of_ast_id(trait_decl.id) {
+                            decl_index.insert(def);
+                        }
                         for assoc in &trait_decl.associated_types {
                             assoc_type_bound_index
                                 .entry(assoc.name.clone())
@@ -1034,19 +916,17 @@ impl TraitEnv {
                         }
                     }
                     Item::Interface(effect_decl) => {
-                        effect_decl_index.insert(
-                            (module_source.clone(), effect_decl.name.clone()),
-                            (module_source.clone(), effect_decl.id),
-                        );
+                        if let Some(def) = defs.of_ast_id(effect_decl.id) {
+                            effect_decl_index.insert(def);
+                        }
                     }
                     Item::Resource(resource) => {
-                        let resource_key = (module_source.clone(), resource.name.clone());
-                        resource_decl_index
-                            .insert(resource_key.clone(), (module_source.clone(), resource.id));
+                        let Some(resource_key) = defs.of_ast_id(resource.id) else {
+                            continue;
+                        };
+                        resource_decl_index.insert(resource_key);
                         // Index static methods from resource declarations.
-                        // The resource declaration itself is the canonical
-                        // receiver, so key by the declaration's own
-                        // `(module, name)` pair.
+                        // The resource declaration itself is the receiver.
                         for (method_idx, method) in resource.methods.iter().enumerate() {
                             let has_self = method.params.iter().any(|p| {
                                 matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
@@ -1055,7 +935,7 @@ impl TraitEnv {
                             });
                             if !has_self {
                                 resource_static_method_index
-                                    .entry(resource_key.clone())
+                                    .entry(ImplTargetKey::Decl(resource_key))
                                     .or_default()
                                     .push((
                                         method.name.clone(),
@@ -1067,49 +947,39 @@ impl TraitEnv {
                         }
                     }
                     Item::Struct(s) => {
-                        type_decl_index.insert(
-                            (module_source.clone(), s.name.clone()),
-                            module_source.clone(),
-                        );
+                        if let Some(def) = defs.of_ast_id(s.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
                     Item::Variant(v) => {
-                        type_decl_index.insert(
-                            (module_source.clone(), v.name.clone()),
-                            module_source.clone(),
-                        );
+                        if let Some(def) = defs.of_ast_id(v.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
                     Item::Enum(e) => {
-                        type_decl_index.insert(
-                            (module_source.clone(), e.name.clone()),
-                            module_source.clone(),
-                        );
+                        if let Some(def) = defs.of_ast_id(e.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
                     Item::Flags(f) => {
-                        type_decl_index.insert(
-                            (module_source.clone(), f.name.clone()),
-                            module_source.clone(),
-                        );
+                        if let Some(def) = defs.of_ast_id(f.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
                     Item::Newtype(n) => {
-                        type_decl_index.insert(
-                            (module_source.clone(), n.name.clone()),
-                            module_source.clone(),
-                        );
+                        if let Some(def) = defs.of_ast_id(n.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
                     Item::BuiltinTypeDecl(d) => {
-                        type_decl_index.insert(
-                            (module_source.clone(), d.name.clone()),
-                            module_source.clone(),
-                        );
+                        if let Some(def) = defs.of_ast_id(d.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
-                    Item::TupleTypeDecl(_) => {
-                        type_decl_index.insert(
-                            (
-                                module_source.clone(),
-                                TypeTable::TUPLE_TYPE_NAME.to_string(),
-                            ),
-                            module_source.clone(),
-                        );
+                    Item::TupleTypeDecl(t) => {
+                        if let Some(def) = defs.of_ast_id(t.id) {
+                            type_decl_index.insert(def);
+                        }
                     }
                     _ => {}
                 }
@@ -1132,35 +1002,62 @@ impl TraitEnv {
                             f.type_params.clone(),
                         );
                     }
-                    Item::Struct(s) => struct_like_decl_modules
-                        .entry(s.name.clone())
-                        .or_default()
-                        .push(module_source.clone()),
-                    Item::Resource(r) => struct_like_decl_modules
-                        .entry(r.name.clone())
-                        .or_default()
-                        .push(module_source.clone()),
-                    Item::Variant(v) => struct_like_decl_modules
-                        .entry(v.name.clone())
-                        .or_default()
-                        .push(module_source.clone()),
-                    Item::Enum(e) => struct_like_decl_modules
-                        .entry(e.name.clone())
-                        .or_default()
-                        .push(module_source.clone()),
-                    Item::BuiltinTypeDecl(d) => struct_like_decl_modules
-                        .entry(d.name.clone())
-                        .or_default()
-                        .push(module_source.clone()),
-                    Item::Newtype(n) => newtype_decl_modules
-                        .entry(n.name.clone())
-                        .or_default()
-                        .push(module_source.clone()),
+                    Item::Struct(s) => {
+                        if let Some(def) = defs.of_ast_id(s.id) {
+                            struct_like_decl_modules
+                                .entry(s.name.clone())
+                                .or_default()
+                                .push(def);
+                        }
+                    }
+                    Item::Resource(r) => {
+                        if let Some(def) = defs.of_ast_id(r.id) {
+                            struct_like_decl_modules
+                                .entry(r.name.clone())
+                                .or_default()
+                                .push(def);
+                        }
+                    }
+                    Item::Variant(v) => {
+                        if let Some(def) = defs.of_ast_id(v.id) {
+                            struct_like_decl_modules
+                                .entry(v.name.clone())
+                                .or_default()
+                                .push(def);
+                        }
+                    }
+                    Item::Enum(e) => {
+                        if let Some(def) = defs.of_ast_id(e.id) {
+                            struct_like_decl_modules
+                                .entry(e.name.clone())
+                                .or_default()
+                                .push(def);
+                        }
+                    }
+                    Item::BuiltinTypeDecl(d) => {
+                        if let Some(def) = defs.of_ast_id(d.id) {
+                            struct_like_decl_modules
+                                .entry(d.name.clone())
+                                .or_default()
+                                .push(def);
+                        }
+                    }
+                    Item::Newtype(n) => {
+                        if let Some(def) = defs.of_ast_id(n.id) {
+                            newtype_decl_modules
+                                .entry(n.name.clone())
+                                .or_default()
+                                .push(def);
+                        }
+                    }
                     _ => {}
                 }
                 if let Item::Trait(trait_decl) = item {
+                    let Some(trait_def) = defs.of_ast_id(trait_decl.id) else {
+                        continue;
+                    };
                     trait_decl_headers.insert(
-                        (module_source.clone(), trait_decl.id),
+                        trait_def,
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
                             type_params: trait_decl.type_params.clone(),
@@ -1190,7 +1087,6 @@ impl TraitEnv {
                 let Item::Impl(impl_block) = item else {
                     continue;
                 };
-                let type_name = get_type_name_static(&impl_block.ty);
                 let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
                 let trait_ref: Option<crate::defs::DefId> = impl_block
                     .trait_type
@@ -1202,27 +1098,23 @@ impl TraitEnv {
                     // resolves through the symbol table, which holds no entry
                     // for a trait, so a module implementing its own `trait Sub`
                     // fell through to `core:prelude`'s arithmetic one.
-                    trait_ref
-                        .map(|def| ImplTargetKey::Decl(resolutions.decl_key(def)))
-                        .unwrap_or_else(|| {
-                            // A trait position whose site names no declaration
-                            // — a bodiless derive naming a stdlib trait the
-                            // module never `use`d. The declaration indexes are
-                            // the only thing that can answer, and they decline
-                            // when several modules declare the name. Same chain
-                            // as `Elaborator::decl_key_or_local`, so the header
-                            // and the elaborator key the trait identically.
-                            unique_declared_trait(
-                                &get_type_name_static(trait_type),
-                                &decl_index,
-                                &effect_decl_index,
-                                &resource_decl_index,
-                            )
-                            .map_or_else(
-                                || impl_target_key_at(trait_type, module_source, resolutions),
-                                ImplTargetKey::Decl,
-                            )
-                        })
+                    trait_ref.map(ImplTargetKey::Decl).unwrap_or_else(|| {
+                        // A trait position whose site names no declaration.
+                        // The declaration indexes are the only thing that can
+                        // answer, and they decline when several modules
+                        // declare the name.
+                        unique_declared_trait(
+                            defs,
+                            &get_type_name_static(trait_type),
+                            &decl_index,
+                            &effect_decl_index,
+                            &resource_decl_index,
+                        )
+                        .map_or_else(
+                            || impl_target_key_at(trait_type, module_source, resolutions),
+                            ImplTargetKey::Decl,
+                        )
+                    })
                 });
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
@@ -1300,9 +1192,7 @@ impl TraitEnv {
                     // parameter) join the same canonical bucket as
                     // inherent statics. `f64::from_bits` and friends in
                     // `core:prelude/int128.wado` flow through this path.
-                    let recv_key = static_receiver_key(&type_key, || {
-                        (module_source.clone(), type_name.clone())
-                    });
+                    let recv_key = type_key.clone();
                     for method in &impl_block.methods {
                         let has_self = method
                             .params
@@ -1321,9 +1211,7 @@ impl TraitEnv {
                 } else {
                     // Inherent impl: already in `all_impl_index`; here only its
                     // static methods need the dedicated index.
-                    let recv_key = static_receiver_key(&type_key, || {
-                        (module_source.clone(), type_name.clone())
-                    });
+                    let recv_key = type_key.clone();
                     for method in &impl_block.methods {
                         let has_self = method
                             .params
@@ -1353,6 +1241,7 @@ impl TraitEnv {
             };
 
         let mut violations = check_all_orphan_rules(
+            defs,
             &impl_headers,
             &decl_index,
             &type_decl_index,
@@ -1362,27 +1251,24 @@ impl TraitEnv {
         // The bound's own site says which trait it names, so an aliased
         // supertrait (`use { Base as B }; trait Extra: B`) keys on `Base`'s
         // declaration without the import scope being consulted a second time.
-        let resolve_trait = |module: &ModuleSource, bound: &ast::TraitBound| {
-            let key = resolutions.declared(bound.id).map_or_else(
-                || (module.clone(), bound.name.clone()),
-                |def| resolutions.decl_key(def),
-            );
-            decl_index.get(&key).cloned()
+        let resolve_trait = |bound: &ast::TraitBound| {
+            let key = resolutions.declared(bound.id)?;
+            decl_index.contains(&key).then_some(key)
         };
-        let trait_impl_modules = index_impl_modules(&impl_headers, false);
-        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, true);
+        let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
+        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
 
-        violations.extend(check_variadic_impl_overlap(&impl_headers));
-        violations.extend(check_inherent_impl_collisions(&impl_headers));
+        violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
+        violations.extend(check_inherent_impl_collisions(defs, &impl_headers));
 
         let (supertrait_closures, cycles) =
-            build_supertrait_closures(&trait_decl_headers, &resolve_trait);
+            build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
         violations.extend(cycles);
 
         (
             Arc::new(Self {
-                by_receiver: index_by_receiver(&impl_index),
-                all_by_receiver: index_by_receiver(&all_impl_index),
+                by_receiver: index_by_receiver(&impl_index, defs),
+                all_by_receiver: index_by_receiver(&all_impl_index, defs),
                 impl_index,
                 all_impl_index,
                 decl_index,
@@ -1409,7 +1295,7 @@ impl TraitEnv {
                 function_type_params,
                 struct_like_decl_modules,
                 newtype_decl_modules,
-                module_import_scopes,
+                module_namespace_imports,
                 assoc_type_bound_index,
                 blanket_impls,
                 static_method_index,
@@ -1422,12 +1308,10 @@ impl TraitEnv {
         )
     }
 
-    /// The pre-computed import scope for `module`, cloned for callers that
-    /// install it via `with_module_perspective_for` (which takes the maps by
-    /// value). Returns empty maps for a module with no recorded scope,
-    /// matching the previous `…unwrap_or_default()` behaviour.
-    pub(super) fn import_scope(&self, module: &ModuleSource) -> ModuleImportScope {
-        self.module_import_scopes
+    /// The pre-computed namespace aliases for `module`. Empty for a module
+    /// with none.
+    pub(super) fn namespace_imports(&self, module: &ModuleSource) -> NamespaceImports {
+        self.module_namespace_imports
             .get(module)
             .cloned()
             .unwrap_or_default()
@@ -1436,11 +1320,11 @@ impl TraitEnv {
     /// The transitive supertraits of the trait `key` names, deduplicated by
     /// declaration and excluding the trait itself. Empty for a trait with no
     /// supertrait clause, and for a name that declares no trait.
-    pub(super) fn supertrait_closure(&self, key: &DeclKey) -> &[InheritedBound] {
-        self.decl_index
-            .get(key)
-            .and_then(|loc| self.supertrait_closures.get(loc))
-            .map_or_else(|| self.supertrait_closure_named(&key.1), Vec::as_slice)
+    pub(super) fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
+        self.supertrait_closures.get(key).map_or_else(
+            || self.supertrait_closure_named(self.defs.name(*key)),
+            Vec::as_slice,
+        )
     }
 
     /// [`Self::supertrait_closure`] for a caller holding a bare name with no
@@ -1490,38 +1374,40 @@ impl TraitEnv {
     /// derive (`impl Deserialize for Point;`) naming a stdlib trait the module
     /// never `use`d. Declines when several modules declare the name: guessing
     /// between them is the mis-identification this design exists to prevent.
-    pub(crate) fn unique_trait_decl_key(&self, name: &str) -> Option<DeclKey> {
-        let mut hits = self.decl_index.keys().filter(|(_, n)| n == name);
-        let first = hits.next()?;
-        hits.next().is_none().then(|| first.clone())
+    pub(crate) fn unique_trait_decl_key(&self, name: &str) -> Option<DefId> {
+        let mut hits = self
+            .decl_index
+            .iter()
+            .filter(|def| self.defs.name(**def) == name);
+        let first = *hits.next()?;
+        hits.next().is_none().then_some(first)
     }
 
     /// The one effect or resource declaration named `name`, when exactly one
     /// module declares it. Declines on ambiguity, like
     /// [`Self::unique_trait_decl_key`].
-    pub(crate) fn unique_effect_or_resource_decl_key(&self, name: &str) -> Option<DeclKey> {
+    pub(crate) fn unique_effect_or_resource_decl_key(&self, name: &str) -> Option<DefId> {
         let mut hits = self
             .effect_decl_index
-            .keys()
-            .chain(self.resource_decl_index.keys())
-            .filter(|(_, n)| n == name);
-        let first = hits.next()?;
-        hits.next().is_none().then(|| first.clone())
+            .iter()
+            .chain(self.resource_decl_index.iter())
+            .filter(|def| self.defs.name(**def) == name);
+        let first = *hits.next()?;
+        hits.next().is_none().then_some(first)
     }
 
     /// Whether `key` names a trait declaration.
-    pub(crate) fn declares_trait(&self, key: &DeclKey) -> bool {
-        self.decl_index.contains_key(key)
+    pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
+        self.decl_index.contains(key)
     }
 
     /// Declaring module of a struct-like type (struct / resource / variant /
     /// enum / builtin) by name, when the name picks out exactly one. Several
     /// modules declaring the name leaves it unresolved rather than guessing:
     /// a wrong module is worse than the caller's existing fallback.
-    pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DeclKey> {
-        let modules = self.struct_like_decl_modules.get(name)?;
-        match modules.as_slice() {
-            [only] => Some((only.clone(), name.to_string())),
+    pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DefId> {
+        match self.struct_like_decl_modules.get(name)?.as_slice() {
+            [only] => Some(*only),
             _ => None,
         }
     }
@@ -1583,23 +1469,20 @@ impl TraitEnv {
             .any(|entry| self.methodful_header_matches(entry, trait_))
     }
 
-    /// Receiver-matched form of [`Self::has_methodful_impl`].
-    /// The trait declaration a `(module, name)` key names.
-    ///
-    /// The index already holds the declaring node, so this is a rendering of
-    /// what the key means rather than a second resolution of the name. For the
-    /// passes that still carry `TraitKey`s.
-    pub(crate) fn trait_def(&self, key: &DeclKey) -> Option<crate::defs::DefId> {
-        let (_, decl) = self.decl_index.get(key)?;
-        self.defs.of_ast_id(*decl)
+    /// `key` itself when it declares a trait, else `None` — the question the
+    /// callers actually ask, phrased as the identity they then compare.
+    pub(crate) fn trait_def(&self, key: &DefId) -> Option<crate::defs::DefId> {
+        self.decl_index.contains(key).then_some(*key)
     }
 
-    /// The trait an [`crate::name::FqTraitName`] names, for the passes that
-    /// carry one rather than an identity.
+    /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
+    /// declaration.
     pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<crate::defs::DefId> {
         self.trait_def(&fq.canonical()?)
     }
 
+    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to the impls
+    /// `module_source` itself writes.
     pub(crate) fn has_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
@@ -1725,7 +1608,7 @@ impl TraitEnv {
     /// one pair, keyed by `Bound`'s declaration. The trait is carried because a bare assoc name
     /// is ambiguous: the reflection kinds all spell their member channel
     /// `Members`.
-    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DeclKey, String)> {
+    pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DefId, String)> {
         self.blanket_pack_assocs
             .get(&(blanket.module.clone(), blanket.ast_id))
             .cloned()
@@ -1760,9 +1643,9 @@ impl TraitEnv {
     /// name is a different declaration, not an exemption to special-case.
     pub(super) fn stdlib_trait_decl_key(&self, name: &str) -> Option<ImplTargetKey> {
         self.decl_index
-            .keys()
-            .find(|(ms, n)| n == name && !is_user_local(ms))
-            .map(|key| ImplTargetKey::Decl(key.clone()))
+            .iter()
+            .find(|def| self.defs.name(**def) == name && !is_user_local(self.defs.module(**def)))
+            .map(|def| ImplTargetKey::Decl(*def))
     }
 
     /// The digested declaration an `impl` header's [`ImplHeader::trait_key`]
@@ -1843,21 +1726,6 @@ impl ReceiverCandidate {
     }
 }
 
-/// The static-method index's bucket for an impl whose target keys as
-/// `type_key`.
-///
-/// A declared target is that declaration, so the two indexes agree by
-/// construction rather than by two derivations happening to match. A blanket
-/// parameter or a reference kind names no declaration, so those still ask.
-fn static_receiver_key(type_key: &ImplTargetKey, otherwise: impl FnOnce() -> DeclKey) -> DeclKey {
-    match type_key {
-        ImplTargetKey::Decl(key) => key.clone(),
-        ImplTargetKey::Ref(_) | ImplTargetKey::TypeParam(..) | ImplTargetKey::Builtin(_) => {
-            otherwise()
-        }
-    }
-}
-
 /// The impl header's target, from the site the header wrote.
 ///
 /// A site behind no declaration — a tuple, a function type, a name that
@@ -1868,9 +1736,8 @@ fn impl_target_key_at(
     module_source: &ModuleSource,
     resolutions: &crate::resolve::Resolutions,
 ) -> ImplTargetKey {
-    sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
-        ImplTargetKey::of_written(&get_type_name_static(ty), module_source, resolutions)
-    })
+    sited_impl_target_key(ty, module_source, resolutions)
+        .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
 
 /// The one trait declaration named `name`, else the one effect or resource —
@@ -1878,22 +1745,26 @@ fn impl_target_key_at(
 /// `interface Encode` is one trait rather than an ambiguity. Declines when a
 /// single family holds two. Differs from `decl_key_or_local`, which consults its
 /// struct-like index first.
-fn unique_declared_trait<L, E, R>(
+fn unique_declared_trait(
+    defs: &crate::defs::DefTable,
     name: &str,
-    decls: &IndexMap<DeclKey, L>,
-    effects: &IndexMap<DeclKey, E>,
-    resources: &IndexMap<DeclKey, R>,
-) -> Option<DeclKey> {
-    let unique = |mut hits: Box<dyn Iterator<Item = &DeclKey> + '_>| {
+    decls: &IndexSet<DefId>,
+    effects: &IndexSet<DefId>,
+    resources: &IndexSet<DefId>,
+) -> Option<DefId> {
+    let unique = |mut hits: Box<dyn Iterator<Item = &DefId> + '_>| {
         let first = hits.next()?;
-        hits.next().is_none().then(|| first.clone())
+        hits.next().is_none().then_some(*first)
     };
-    unique(Box::new(decls.keys().filter(|(_, n)| n == name))).or_else(|| {
+    unique(Box::new(
+        decls.iter().filter(|key| defs.name(**key) == name),
+    ))
+    .or_else(|| {
         unique(Box::new(
             effects
-                .keys()
-                .chain(resources.keys())
-                .filter(|(_, n)| n == name),
+                .iter()
+                .chain(resources.iter())
+                .filter(|key| defs.name(**key) == name),
         ))
     })
 }
@@ -1924,8 +1795,7 @@ fn sited_impl_target_key(
             get_type_name_static(ty),
         )),
         crate::resolve::Resolution::Def(def) => {
-            let defs = resolutions.defs();
-            Some(ImplTargetKey::of_decl(defs.module(def), defs.name(def)))
+            Some(ImplTargetKey::of_decl(resolutions.defs(), def))
         }
         crate::resolve::Resolution::Unresolved => None,
     }
@@ -1948,8 +1818,8 @@ pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
 /// declaration shadowing a stdlib name would otherwise vouch for the stdlib
 /// type it shadows.
 struct LocalDecls {
-    types: IndexSet<DeclKey>,
-    traits: IndexSet<DeclKey>,
+    types: IndexSet<DefId>,
+    traits: IndexSet<DefId>,
     /// Whether a user module declares the tuple type (`pub type [..T];`). The
     /// tuple is one global shape rather than a per-module declaration, so
     /// ownership of it is a yes/no fact about the package.
@@ -2002,7 +1872,8 @@ fn classify_position(
                 ImplTargetKey::Decl(_)
                 | ImplTargetKey::Ref(_)
                 | ImplTargetKey::TypeParam(..)
-                | ImplTargetKey::Builtin(_) => PositionKind::ForeignType,
+                | ImplTargetKey::Builtin(_)
+                | ImplTargetKey::Undeclared(..) => PositionKind::ForeignType,
             }
         }
         // Tuples are local if the current crate owns them (via `pub type [..T];`)
@@ -2061,7 +1932,7 @@ fn check_orphan_rfc2451(
 
 /// Resolves a supertrait name referenced in a trait's own module to that
 /// supertrait's declaration. `None` for a name that declares no trait.
-type ResolveTrait<'a> = &'a dyn Fn(&ModuleSource, &ast::TraitBound) -> Option<TraitDeclLoc>;
+type ResolveTrait<'a> = &'a dyn Fn(&ast::TraitBound) -> Option<DefId>;
 
 /// Resolves a type written in one module — the vantage — to the declaration it
 /// names, shadowed by the surrounding item's own type parameters. The single
@@ -2086,7 +1957,8 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
 /// reporting each trait that reaches itself. A cycle's edge is cut rather than
 /// followed, keeping the closure finite.
 fn build_supertrait_closures(
-    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    defs: &crate::defs::DefTable,
+    headers: &IndexMap<DefId, TraitDeclHeader>,
     resolve: ResolveTrait<'_>,
 ) -> (SupertraitClosureIndex, Vec<(ModuleSource, TypeError)>) {
     let mut closures = SupertraitClosureIndex::default();
@@ -2094,11 +1966,12 @@ fn build_supertrait_closures(
         return (closures, Vec::new());
     }
     let mut cycles = Vec::new();
-    let mut reported: IndexSet<TraitDeclLoc> = IndexSet::default();
+    let mut reported: IndexSet<DefId> = IndexSet::default();
     for loc in headers.keys() {
         let mut stack = Vec::new();
         expand_supertraits(
-            loc,
+            defs,
+            *loc,
             headers,
             resolve,
             &mut closures,
@@ -2111,28 +1984,29 @@ fn build_supertrait_closures(
 }
 
 fn expand_supertraits(
-    loc: &TraitDeclLoc,
-    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    defs: &crate::defs::DefTable,
+    loc: DefId,
+    headers: &IndexMap<DefId, TraitDeclHeader>,
     resolve: ResolveTrait<'_>,
     closures: &mut SupertraitClosureIndex,
-    stack: &mut Vec<TraitDeclLoc>,
-    reported: &mut IndexSet<TraitDeclLoc>,
+    stack: &mut Vec<DefId>,
+    reported: &mut IndexSet<DefId>,
     cycles: &mut Vec<(ModuleSource, TypeError)>,
 ) -> Vec<InheritedBound> {
-    if let Some(done) = closures.get(loc) {
+    if let Some(done) = closures.get(&loc) {
         return done.clone();
     }
-    let Some(header) = headers.get(loc) else {
+    let Some(header) = headers.get(&loc) else {
         return Vec::new();
     };
 
-    stack.push(loc.clone());
+    stack.push(loc);
     let mut closure: Vec<InheritedBound> = Vec::new();
     for direct in &header.supertraits {
-        let Some(super_loc) = resolve(&loc.0, direct) else {
+        let Some(super_loc) = resolve(direct) else {
             // Blame the declaration, not every implementor of it.
             cycles.push((
-                loc.0.clone(),
+                defs.module(loc).clone(),
                 TypeError::UnknownSupertrait {
                     trait_name: header.name.clone(),
                     supertrait: direct.name.clone(),
@@ -2143,38 +2017,32 @@ fn expand_supertraits(
         };
         // Before the push: `trait Loop: Loop` must not land in its own closure.
         if let Some(pos) = stack.iter().position(|s| *s == super_loc) {
-            report_supertrait_cycle(pos, stack, headers, reported, cycles);
+            report_supertrait_cycle(defs, pos, stack, headers, reported, cycles);
             continue;
         }
-        // `direct.name` is meaningful only here; record what `resolve` named.
-        let super_decl = headers
-            .get(&super_loc)
-            .expect("resolve answers with a header's own location")
-            .name
-            .clone();
         push_unique_inherited(
             &mut closure,
             &InheritedBound {
                 bound: direct.clone(),
-                decl: (super_loc.0.clone(), super_decl),
+                decl: super_loc,
             },
         );
         for inherited in expand_supertraits(
-            &super_loc, headers, resolve, closures, stack, reported, cycles,
+            defs, super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
             push_unique_inherited(&mut closure, &inherited);
         }
     }
     stack.pop();
 
-    closures.insert(loc.clone(), closure.clone());
+    closures.insert(loc, closure.clone());
     closure
 }
 
 /// Re-key the closures by bare trait name, dropping any name more than one
 /// module declares — an ambiguous name must not silently pick a closure.
 fn index_closures_by_name(
-    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
+    headers: &IndexMap<DefId, TraitDeclHeader>,
     closures: &SupertraitClosureIndex,
 ) -> IndexMap<String, Vec<InheritedBound>> {
     let mut by_name: IndexMap<String, Option<Vec<InheritedBound>>> = IndexMap::default();
@@ -2194,17 +2062,18 @@ fn index_closures_by_name(
 /// Report the cycle closed by the edge back to `stack[pos]`, attributing it to
 /// that trait — the one that turned out to be its own supertrait.
 fn report_supertrait_cycle(
+    defs: &crate::defs::DefTable,
     pos: usize,
-    stack: &[TraitDeclLoc],
-    headers: &IndexMap<TraitDeclLoc, TraitDeclHeader>,
-    reported: &mut IndexSet<TraitDeclLoc>,
+    stack: &[DefId],
+    headers: &IndexMap<DefId, TraitDeclHeader>,
+    reported: &mut IndexSet<DefId>,
     cycles: &mut Vec<(ModuleSource, TypeError)>,
 ) {
-    let culprit = &stack[pos];
-    if !reported.insert(culprit.clone()) {
+    let culprit = stack[pos];
+    if !reported.insert(culprit) {
         return;
     }
-    let Some(header) = headers.get(culprit) else {
+    let Some(header) = headers.get(&culprit) else {
         return;
     };
     let mut chain: Vec<String> = stack[pos..]
@@ -2213,7 +2082,7 @@ fn report_supertrait_cycle(
         .collect();
     chain.push(header.name.clone());
     cycles.push((
-        culprit.0.clone(),
+        defs.module(culprit).clone(),
         TypeError::CircularSupertrait {
             trait_name: header.name.clone(),
             chain,
@@ -2350,6 +2219,7 @@ impl VariadicImpl<'_> {
 /// written. Grouping is by trait *declaration*, so two modules may each keep
 /// their own. The same walk refuses a target the compiler cannot implement.
 fn check_variadic_impl_overlap(
+    defs: &crate::defs::DefTable,
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
@@ -2377,7 +2247,7 @@ fn check_variadic_impl_overlap(
         groups.entry(trait_key).or_default().push(VariadicImpl {
             module_source: &header.module,
             span: header.span,
-            trait_name: trait_key.display_name().to_string(),
+            trait_name: trait_key.display_name(defs).to_string(),
             trait_args: match header.trait_type.as_ref() {
                 Some(ast::Type::Generic(generic)) => &generic.args,
                 _ => &[],
@@ -2454,6 +2324,7 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
 /// Rejected, as in Rust. Keyed by the resolved [`ImplTargetKey`], never the
 /// written head — two modules' `Box_` are two types, and a spelling cannot say so.
 fn check_inherent_impl_collisions(
+    defs: &crate::defs::DefTable,
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
@@ -2485,7 +2356,7 @@ fn check_inherent_impl_collisions(
                 violations.push((
                     header.module.clone(),
                     TypeError::DuplicateInherentMethod {
-                        self_type_name: header.target.display_name().to_string(),
+                        self_type_name: header.target.display_name(defs).to_string(),
                         method_name: method.name.clone(),
                         span: method.span,
                     },
@@ -2501,28 +2372,22 @@ fn check_inherent_impl_collisions(
 /// Only impl blocks in local (user) modules are checked. Each violation is
 /// paired with the offending impl's [`ModuleSource`] for file attribution.
 fn check_all_orphan_rules(
+    defs: &crate::defs::DefTable,
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
     decl_index: &TraitDeclIndex,
-    type_decl_index: &IndexMap<DeclKey, ModuleSource>,
+    type_decl_index: &IndexSet<DefId>,
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
 
-    let local_key = |(_, ms): (&DeclKey, &ModuleSource)| is_user_local(ms);
+    let owned = |def: &&DefId| is_user_local(defs.module(**def));
     let local = LocalDecls {
-        types: type_decl_index
-            .iter()
-            .filter(|e| local_key((e.0, e.1)))
-            .map(|(key, _)| key.clone())
-            .collect(),
-        traits: decl_index
-            .iter()
-            .filter(|(_, (ms, _))| is_user_local(ms))
-            .map(|(key, _)| key.clone())
-            .collect(),
+        types: type_decl_index.iter().filter(owned).copied().collect(),
+        traits: decl_index.iter().filter(owned).copied().collect(),
         tuple: type_decl_index
             .iter()
-            .any(|((_, name), ms)| name == TypeTable::TUPLE_TYPE_NAME && is_user_local(ms)),
+            .filter(owned)
+            .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
     };
 
     for header in impl_headers.values() {
@@ -2542,7 +2407,7 @@ fn check_all_orphan_rules(
                 violations.push((
                     header.module.clone(),
                     TypeError::InherentImplOnForeignType {
-                        self_type_name: header.target.display_name().to_string(),
+                        self_type_name: header.target.display_name(defs).to_string(),
                         span: header.span,
                     },
                 ));
@@ -2560,8 +2425,8 @@ fn check_all_orphan_rules(
             violations.push((
                 header.module.clone(),
                 TypeError::OrphanViolation {
-                    trait_name: trait_key.display_name().to_string(),
-                    self_type_name: header.target.display_name().to_string(),
+                    trait_name: trait_key.display_name(defs).to_string(),
+                    self_type_name: header.target.display_name(defs).to_string(),
                     span: header.span,
                 },
             ));
@@ -2642,143 +2507,7 @@ pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{GenericParam, GenericType, NamedType};
     use crate::module_source::ModuleSourceInterner;
-    use crate::token::Span;
-
-    fn dummy_span() -> Span {
-        Span {
-            start: 0,
-            end: 0,
-            line: 1,
-            column: 1,
-            end_line: 1,
-            end_column: 1,
-        }
-    }
-
-    fn named(name: &str) -> Type {
-        Type::Named(NamedType {
-            id: crate::ast::AstId::fresh(),
-            name: name.to_string(),
-            span: dummy_span(),
-        })
-    }
-
-    fn generic(name: &str, args: Vec<Type>) -> Type {
-        Type::Generic(GenericType {
-            id: crate::ast::AstId::fresh(),
-            name: name.to_string(),
-            args,
-            span: dummy_span(),
-        })
-    }
-
-    fn ref_type(inner: Type) -> Type {
-        Type::Reference(Box::new(inner))
-    }
-
-    fn mut_ref_type(inner: Type) -> Type {
-        Type::MutReference(Box::new(inner))
-    }
-
-    fn type_param(name: &str) -> GenericParam {
-        GenericParam {
-            id: crate::ast::AstId::fresh(),
-            name: name.to_string(),
-            name_span: dummy_span(),
-            is_effect: false,
-            is_pack: false,
-            bounds: vec![],
-            default: None,
-            span: dummy_span(),
-        }
-    }
-
-    /// The vantage every orphan-rule test writes its impl from. One per
-    /// thread: [`crate::intern::InternedStr`] compares by pointer, so a fresh
-    /// interner per call would mint modules that never compare equal.
-    fn vantage() -> ModuleSource {
-        thread_local! {
-            static VANTAGE: ModuleSource = ModuleSourceInterner::new().local("./test.wado");
-        }
-        VANTAGE.with(Clone::clone)
-    }
-
-    /// Names the test program declares nowhere. The real resolver answers
-    /// `TypeParam` for these — the same variant a binder gets — so the double
-    /// must too, or the tests cannot see the conflation `classify_position`
-    /// must not fall for.
-    const UNDECLARED: &[&str] = &["Undeclared"];
-
-    /// Test double for the build-time resolver: a binder stays a binder, a
-    /// reference keys by kind, an [`UNDECLARED`] name reaches no declaration,
-    /// and every other name is declared by the module that wrote it.
-    /// `make_local_decls` builds the owned set from the same module, so a name
-    /// is local exactly when the test says it is.
-    fn resolve_for_test(
-        module: &ModuleSource,
-        ty: &Type,
-        type_params: &[GenericParam],
-    ) -> ImplTargetKey {
-        if let Some(kind) = name::RefKind::from_ast(ty) {
-            return ImplTargetKey::Ref(kind);
-        }
-        let head = get_type_name_static(ty);
-        if type_params.iter().any(|p| p.name == head) || UNDECLARED.contains(&head.as_str()) {
-            return ImplTargetKey::TypeParam(module.clone(), head);
-        }
-        ImplTargetKey::Decl((module.clone(), head))
-    }
-
-    fn make_local_decls(local_names: &[&str]) -> LocalDecls {
-        LocalDecls {
-            types: local_names
-                .iter()
-                .map(|name| (vantage(), (*name).to_string()))
-                .collect(),
-            traits: IndexSet::default(),
-            tuple: false,
-        }
-    }
-
-    /// A digested header as `TraitEnv::build` would produce it, with the
-    /// identities the test double resolves.
-    fn impl_header(
-        type_params: Vec<GenericParam>,
-        trait_type: Type,
-        self_type: Type,
-    ) -> ImplHeader {
-        let module = vantage();
-        ImplHeader {
-            target: resolve_for_test(&module, &self_type, &type_params),
-            trait_key: Some(resolve_for_test(&module, &trait_type, &type_params)),
-            // The orphan-rule tests decide on `trait_key`; the table is not
-            // consulted here, so no site is recorded for the double's header.
-            trait_ref: None,
-            module,
-            trait_name: Some(get_type_name_static(&trait_type)),
-            trait_type: Some(trait_type),
-            ty: self_type,
-            type_params,
-            methods: vec![],
-            associated_types: vec![],
-            is_synthesize_request: false,
-            span: dummy_span(),
-        }
-    }
-
-    /// A position classified on its own, outside any impl: the orphan rule
-    /// reads the self type and each trait argument through the same call, so
-    /// the tests below exercise it through a header with no type parameters
-    /// unless one is named.
-    fn classify(ty: &Type, type_params: &[&str], local: &LocalDecls) -> PositionKind {
-        let params: Vec<GenericParam> = type_params.iter().map(|n| type_param(n)).collect();
-        let header = impl_header(params, named("ForeignTrait"), ty.clone());
-        classify_position(ty, &header, local, &resolve_for_test)
-    }
-
-    // --- is_user_local ---
 
     #[test]
     fn test_is_user_local_entry_point() {
@@ -2808,240 +2537,5 @@ mod tests {
         assert!(!is_user_local(
             &interner.remote("https://example.com/lib.wado")
         ));
-    }
-
-    // --- classify_position ---
-
-    #[test]
-    fn test_classify_local_named_type() {
-        let tdx = make_local_decls(&["MyError"]);
-        assert!(matches!(
-            classify(&named("MyError"), &[], &tdx),
-            PositionKind::LocalType
-        ));
-    }
-
-    #[test]
-    fn test_classify_foreign_named_type() {
-        let tdx = make_local_decls(&[]);
-        assert!(matches!(
-            classify(&named("String"), &[], &tdx),
-            PositionKind::ForeignType
-        ));
-    }
-
-    #[test]
-    fn test_classify_primitive_is_foreign() {
-        let tdx = make_local_decls(&[]);
-        assert!(matches!(
-            classify(&named("i32"), &[], &tdx),
-            PositionKind::ForeignType
-        ));
-    }
-
-    #[test]
-    fn test_classify_uncovered_type_param() {
-        let tdx = make_local_decls(&[]);
-        assert!(matches!(
-            classify(&named("T"), &["T"], &tdx),
-            PositionKind::UncoveredTypeParam
-        ));
-    }
-
-    #[test]
-    fn test_classify_undeclared_name_is_foreign_not_uncovered() {
-        // A name that reaches no declaration is foreign — the package does not
-        // own it, so an inherent `impl` on it is a coherence violation. Reading
-        // it as an uncovered parameter (both are `ImplTargetKey::TypeParam`)
-        // silently drops that error.
-        let tdx = make_local_decls(&["LocalType"]);
-        assert!(matches!(
-            classify(&named("Undeclared"), &[], &tdx),
-            PositionKind::ForeignType
-        ));
-    }
-
-    #[test]
-    fn test_classify_binder_shadowing_an_undeclared_name_is_uncovered() {
-        // The binder question is about the impl's own parameters, so a name
-        // both declared nowhere and bound here is still uncovered.
-        let tdx = make_local_decls(&[]);
-        assert!(matches!(
-            classify(&named("Undeclared"), &["Undeclared"], &tdx),
-            PositionKind::UncoveredTypeParam
-        ));
-    }
-
-    #[test]
-    fn test_classify_local_generic_head_is_local() {
-        // LocalType<T> — head is local regardless of args
-        let tdx = make_local_decls(&["LocalType"]);
-        let ty = generic("LocalType", vec![named("T")]);
-        assert!(matches!(
-            classify(&ty, &["T"], &tdx),
-            PositionKind::LocalType
-        ));
-    }
-
-    #[test]
-    fn test_classify_foreign_generic_is_foreign() {
-        // List<T> — head List is foreign
-        let tdx = make_local_decls(&[]);
-        let ty = generic("List", vec![named("T")]);
-        assert!(matches!(
-            classify(&ty, &["T"], &tdx),
-            PositionKind::ForeignType
-        ));
-    }
-
-    #[test]
-    fn test_classify_reference_to_local_is_local() {
-        // &LocalType — fundamental: look through &
-        let tdx = make_local_decls(&["MyStruct"]);
-        assert!(matches!(
-            classify(&ref_type(named("MyStruct")), &[], &tdx),
-            PositionKind::LocalType
-        ));
-    }
-
-    #[test]
-    fn test_classify_mut_reference_to_local_is_local() {
-        // &mut LocalType — fundamental: look through &mut
-        let tdx = make_local_decls(&["MyStruct"]);
-        assert!(matches!(
-            classify(&mut_ref_type(named("MyStruct")), &[], &tdx),
-            PositionKind::LocalType
-        ));
-    }
-
-    #[test]
-    fn test_classify_reference_to_foreign_is_foreign() {
-        let tdx = make_local_decls(&[]);
-        assert!(matches!(
-            classify(&ref_type(named("String")), &[], &tdx),
-            PositionKind::ForeignType
-        ));
-    }
-
-    #[test]
-    fn test_classify_tuple_is_foreign() {
-        // Tuple types have no single named head → foreign
-        let tdx = make_local_decls(&["MyStruct"]);
-        let ty = Type::Tuple(vec![named("MyStruct"), named("i32")]);
-        assert!(matches!(
-            classify(&ty, &[], &tdx),
-            PositionKind::ForeignType
-        ));
-    }
-
-    // --- check_orphan_rfc2451 ---
-
-    #[test]
-    fn test_rfc2451_local_self_type_allowed() {
-        // impl ForeignTrait for LocalType → T0 is local → allowed
-        let tdx = make_local_decls(&["MyStruct"]);
-        let ib = impl_header(vec![], named("ForeignTrait"), named("MyStruct"));
-        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_both_foreign_forbidden() {
-        // impl Eq for String → both foreign
-        let tdx = make_local_decls(&[]);
-        let ib = impl_header(vec![], named("Eq"), named("String"));
-        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_local_in_trait_arg_allowed() {
-        // impl From<MyError> for String → T0=String(foreign), T1=MyError(local) → allowed
-        let tdx = make_local_decls(&["MyError"]);
-        let ib = impl_header(
-            vec![],
-            generic("From", vec![named("MyError")]),
-            named("String"),
-        );
-        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_uncovered_type_param_forbidden() {
-        // impl<T> Eq for T → T0=T(uncovered) → forbidden
-        let tdx = make_local_decls(&[]);
-        let ib = impl_header(vec![type_param("T")], named("Eq"), named("T"));
-        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_uncovered_param_before_local_in_trait_arg_forbidden() {
-        // impl<T> From<T> for String → T0=String(foreign), T1=T(uncovered) → forbidden
-        let tdx = make_local_decls(&[]);
-        let ib = impl_header(
-            vec![type_param("T")],
-            generic("From", vec![named("T")]),
-            named("String"),
-        );
-        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_local_type_as_generic_head_in_trait_arg() {
-        // impl<T> From<LocalType<T>> for ForeignType → T0=ForeignType, T1=LocalType<T>(local head) → allowed
-        let tdx = make_local_decls(&["LocalType"]);
-        let trait_ty = generic("From", vec![generic("LocalType", vec![named("T")])]);
-        let ib = impl_header(vec![type_param("T")], trait_ty, named("ForeignType"));
-        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_foreign_generic_head_in_trait_arg_forbidden() {
-        // impl<T> From<List<T>> for ForeignType → T0=ForeignType, T1=List<T>(foreign head) → forbidden
-        let tdx = make_local_decls(&[]);
-        let trait_ty = generic("From", vec![generic("List", vec![named("T")])]);
-        let ib = impl_header(vec![type_param("T")], trait_ty, named("ForeignType"));
-        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_ref_to_local_as_self_type() {
-        // impl ForeignTrait for &LocalType → fundamental, look through & → allowed
-        let tdx = make_local_decls(&["MyStruct"]);
-        let ib = impl_header(vec![], named("ForeignTrait"), ref_type(named("MyStruct")));
-        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_ref_to_foreign_as_self_type_forbidden() {
-        // impl ForeignTrait for &String → &String is foreign → forbidden
-        let tdx = make_local_decls(&[]);
-        let ib = impl_header(vec![], named("ForeignTrait"), ref_type(named("String")));
-        assert!(!check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_local_self_before_uncovered_param_in_trait_arg() {
-        // impl<T> From<T> for LocalType → T0=LocalType(local!) → allowed before reaching T1=T
-        let tdx = make_local_decls(&["LocalType"]);
-        let ib = impl_header(
-            vec![type_param("T")],
-            generic("From", vec![named("T")]),
-            named("LocalType"),
-        );
-        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
-    }
-
-    #[test]
-    fn test_rfc2451_undeclared_self_type_does_not_cover_a_local_trait_arg() {
-        // impl From<LocalType> for Undeclared → T0 is foreign (not uncovered),
-        // so T1=LocalType still covers the impl. Classifying T0 as uncovered
-        // invents an orphan violation for a program whose only real error is
-        // the unknown name.
-        let tdx = make_local_decls(&["LocalType"]);
-        let ib = impl_header(
-            vec![],
-            generic("From", vec![named("LocalType")]),
-            named("Undeclared"),
-        );
-        assert!(check_orphan_rfc2451(&ib, &tdx, &resolve_for_test));
     }
 }

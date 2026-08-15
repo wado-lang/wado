@@ -221,6 +221,7 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
 pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -235,6 +236,74 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Enum {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, module_source, logger);
+    }
+}
+
+/// Register a `resource` declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_resource_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(
+        item,
+        CompilerItemKind::Resource,
+        module_source,
+        span,
+        logger,
+    ) {
+        return;
+    }
+    let resolved = Resolved::Resource {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        decl,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, module_source, logger);
+    }
+}
+
+/// Register a `type X = Y;` declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_newtype_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, CompilerItemKind::Newtype, module_source, span, logger)
+    {
+        return;
+    }
+    let resolved = Resolved::Newtype {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -289,10 +358,16 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
             bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
         })
         .collect();
+    let fq = type_table
+        .borrow()
+        .defs()
+        .of_ast_id(decl)
+        .map(|def| crate::name::FqTraitName::declared(type_table.borrow().defs(), def));
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
         decl,
+        fq,
         method_name,
         assoc_types,
     };
@@ -311,6 +386,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     attrs: &[crate::ast::Attribute],
     method_name: &str,
     owner_type: &str,
+    owner_head: &crate::name::FqTypeName,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -324,6 +400,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Method {
         module_source: module_source.clone(),
         owner_type: owner_type.to_string(),
+        owner_head: Some(owner_head.clone()),
         name: method_name.to_string(),
     };
     if let Err(err) = type_table
@@ -422,6 +499,7 @@ pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
 pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -440,6 +518,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     }
     let resolved = Resolved::TupleFamily {
         module_source: module_source.clone(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -457,6 +536,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
 pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -477,6 +557,7 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     let resolved = Resolved::BuiltinType {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -1230,17 +1311,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
             crate::tir::ResolvedType::Struct { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a struct names a declaration");
                 // Recurse into the struct's field types via the elaborator's
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
                 let field_types: Vec<TypeId> = self
-                    .lookup_struct_fields_in(name, module_source)
+                    .struct_fields_of_type(type_id)
                     .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
                     .unwrap_or_default();
                 field_types
@@ -1248,17 +1323,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
             crate::tir::ResolvedType::Variant { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a variant names a declaration");
                 // The per-case payload types live in `all_variant_cases`; look
                 // them up so a variant case payload containing a closure type
                 // fails the CM boundary check too.
                 let payloads: Vec<TypeId> = self
-                    .lookup_variant_case_in(name, module_source)
+                    .variant_of_type(type_id)
                     .map(|info| info.cases.iter().map(|c| c.payload).collect())
                     .unwrap_or_default();
                 payloads
@@ -1509,7 +1578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_params: &[ast::GenericParam],
         methods: &[ast::InterfaceMethod],
-        resource_self: Option<(&str, ModuleSource)>,
+        resource_self: Option<crate::defs::DefId>,
     ) -> Vec<TirEffectOp> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1520,7 +1589,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reference its own `TypeParam`s (which gap-2 substitution then
         // specialises per impl-block instantiation). For non-generic
         // resources this is just a plain `Resource { def }`.
-        let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
+        let self_type: Option<TypeId> = resource_self.map(|def| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params
                     .iter()
@@ -1535,20 +1604,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                let mut tt = scope.tysys.type_table.borrow_mut();
-                let def = tt
-                    .decl_named_in(name, &module)
-                    .expect("the resource declaring these operations exists");
-                tt.intern(crate::tir::ResolvedType::GenericResource {
-                    def,
-                    type_args: type_arg_ids,
-                })
+                scope.tysys.type_table.borrow_mut().intern(
+                    crate::tir::ResolvedType::GenericResource {
+                        def,
+                        type_args: type_arg_ids,
+                    },
+                )
             } else {
-                let mut tt = scope.tysys.type_table.borrow_mut();
-                let def = tt
-                    .decl_named_in(name, &module)
-                    .expect("the resource declaring these operations exists");
-                tt.make_resource(def)
+                scope.tysys.type_table.borrow_mut().make_resource(def)
             }
         });
 
@@ -2368,18 +2431,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         if let Some(name) = base_trait_name.as_deref() {
             let canonical_key = scope.decl_key_or_local(name);
-            let effect_decl = scope
-                .tysys
-                .trait_env
-                .effect_decl_index
-                .get(&canonical_key)
-                .cloned();
-            let resource_decl = scope
-                .tysys
-                .trait_env
-                .resource_decl_index
-                .get(&canonical_key)
-                .cloned();
+            let declares = |index: &crate::hashmap::IndexSet<crate::defs::DefId>| {
+                canonical_key.filter(|key| index.contains(key))
+            };
+            let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
+            let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
             if effect_decl.is_some() || resource_decl.is_some() {
                 ctx.in_handler_method = true;
             }
@@ -2388,14 +2444,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, Some(d)) => (Some(d), true),
                 (None, None) => (None, false),
             };
-            let async_op = decl_ref.and_then(|(_, decl_id)| {
-                scope
-                    .tysys
-                    .signatures
-                    .resource_method_sig(decl_id, &func.name)
-                    .filter(|op| op.is_async)
-                    .map(|op| op.cm_name.is_some())
-            });
+            let async_op = decl_ref
+                .map(|key| scope.tysys.resolutions.defs().ast_id(key))
+                .and_then(|decl_id| {
+                    scope
+                        .tysys
+                        .signatures
+                        .resource_method_sig(decl_id, &func.name)
+                        .filter(|op| op.is_async)
+                        .map(|op| op.cm_name.is_some())
+                });
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {

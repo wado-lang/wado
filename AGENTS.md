@@ -4,6 +4,11 @@ This document describes how to develop the Wado compiler toolchain.
 
 Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
 
+## Principles
+
+- Succinctly — say and write the least that fully conveys the point.
+- Fix-forward — fix the cause of a defect and move forward; never backtrack.
+
 ## Development
 
 This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks` to discover available tasks.
@@ -23,10 +28,6 @@ mise trust                 # trust the mise.toml config (first time only)
 mise run on-task-started   # install project tools
 ```
 
-### When Completing a Task
-
-When you are completing a task, use the `on-task-done` skill to finish it.
-
 ### Common Development Tasks
 
 ```sh
@@ -42,7 +43,8 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 - Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo $? > run.done`.
 - Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
-- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`, `on-task-done`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
+- Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
+- Don't edit sources while a `wado test` run is in flight. The run pins each Kiln generator at its first resolve and fails at the end naming every source that changed under it; that verdict describes neither tree, so re-run instead of reading it.
 
 ## General Rules
 
@@ -55,7 +57,6 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries, not for the inner dev loop.
-- Cloud sessions run with `CARGO_INCREMENTAL=0`: `target/debug/incremental` does not fit the session's fixed disk allowance. Every rebuild is a full recompile of the touched crates, so scope the inner loop with `cargo check` and `-p <crate>` instead of relying on incremental relinks. Never set `CARGO_INCREMENTAL=1` in a task or script.
 - Add a new integration test to `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.

@@ -260,13 +260,8 @@ pub(super) fn try_lift_wasi_variant_or_enum(
         .get_variant_cases_by_source(source, &named.name)
     {
         let cases = cases.to_vec();
-        let module_source = ctx.module_source_for(source);
         let variant_type = {
-            let def = ctx
-                .type_table
-                .borrow_mut()
-                .decl_named_in(&named.name, &module_source)
-                .expect("the declaration this type names exists");
+            let def = ctx.cm_decl(source, &named.name);
             ctx.type_table.borrow_mut().make_variant(def)
         };
         return Some(synthesize_lift_wasi_variant(
@@ -285,13 +280,8 @@ pub(super) fn try_lift_wasi_variant_or_enum(
         .get_enum_variants_by_source(source, &named.name)
     {
         let case_names = case_names.to_vec();
-        let module_source = ctx.module_source_for(source);
         let enum_type = {
-            let def = ctx
-                .type_table
-                .borrow_mut()
-                .decl_named_in(&named.name, &module_source)
-                .expect("the declaration this type names exists");
+            let def = ctx.cm_decl(source, &named.name);
             ctx.type_table.borrow_mut().make_enum(def)
         };
         return Some(synthesize_lift_wasi_enum(
@@ -342,17 +332,10 @@ fn try_lift_wasi_struct(
     // `List<InputFile>`) hit the same `StructName` that
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
-        let module_source = ctx.module_source_for(source);
-        {
-            let def = ctx
-                .type_table
-                .borrow_mut()
-                .decl_named_in(&named.name, &module_source)
-                .expect("the declaration this type names exists");
-            ctx.type_table
-                .borrow_mut()
-                .make_struct(crate::tir::StructDef::Decl(def))
-        }
+        let def = ctx.cm_decl(source, &named.name);
+        ctx.type_table
+            .borrow_mut()
+            .make_struct(crate::tir::StructDef::Decl(def))
     };
 
     // Lift each field — Wado field names come directly from this interface's
@@ -621,7 +604,7 @@ pub(super) fn synthesize_lift_list(
     // a second `TypeId` for shared stdlib records, producing a mismatched
     // `List<T>`. Otherwise (nested lists) fall back to rebuilding from the
     // element type.
-    let (elem_type_id, array_type_id, list_struct_name) = {
+    let (elem_type_id, array_type_id, list_head) = {
         let mut tt = ctx.type_table.borrow_mut();
         let (list_tid, elem_tid) = if let Some(pair) =
             override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem)))
@@ -632,10 +615,8 @@ pub(super) fn synthesize_lift_list(
             let lt = tt.make_list(elem);
             (lt, elem)
         };
-        let list_name = tt
-            .compiler_struct_name(crate::compiler_item::CompilerItem::List)
-            .to_string();
-        (elem_tid, list_tid, list_name)
+        let list_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::List);
+        (elem_tid, list_tid, list_head)
     };
 
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -664,7 +645,7 @@ pub(super) fn synthesize_lift_list(
         result_local,
         array_type_id,
         generic_static_call(
-            &list_struct_name,
+            &list_head,
             "with_capacity",
             ModuleSource::list(),
             vec![elem_type_id],
@@ -723,7 +704,7 @@ pub(super) fn synthesize_lift_list(
     // __result.push(lifted_elem)
     loop_stmts.push(expr_stmt(generic_method_call(
         local_ref(result_local, "__result", array_type_id),
-        &list_struct_name,
+        &list_head,
         "push",
         ModuleSource::list(),
         vec![lifted_elem],

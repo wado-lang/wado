@@ -29,9 +29,20 @@ use { to_snake_case } from "./ident.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
+/// `has_args` marks a call site that passes arguments: the rewrite drops them
+/// and the interface has no type to declare them with, so a base carrying one
+/// is refused rather than wired to a signature that loses an argument.
 pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
+    pub has_args: bool,
+}
+
+/// One `this.<method>(...)` call site found in a body.
+pub struct SuperCall {
+    pub name: String,
+    /// The call passes something — `this.m(2)`, not `this.m()`.
+    pub has_args: bool,
 }
 
 /// The base name from `options { superClass = Foo }`, or `null` when the
@@ -55,14 +66,13 @@ fn option_value_name(v: &OptionValue) -> String {
     };
 }
 
-/// Method names called as `this.<method>(` in a body, in source order,
-/// skipping string literals and comments so host text never yields a false
-/// hit. Only the `this.` receiver is a superClass call; a bare `m()` or
-/// `other.m()` is not.
-pub fn find_this_calls(body: &String) -> List<String> {
+/// The `this.<method>(` call sites in a body, in source order, skipping string
+/// literals and comments so host text never yields a false hit. Only the
+/// `this.` receiver is a superClass call; a bare `m()` or `other.m()` is not.
+pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
-    let mut out: List<String> = [];
+    let mut out: List<SuperCall> = [];
     let mut i = 0;
     while i < n {
         i = match chars[i] {
@@ -71,7 +81,7 @@ pub fn find_this_calls(body: &String) -> List<String> {
             '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
             _ => match this_call_at(&chars, i, n) {
                 Some([name, close]) => {
-                    out.push(name);
+                    out.push(SuperCall { name, has_args: call_has_args(&chars, i, close) });
                     close;
                 },
                 None => i + 1,
@@ -81,19 +91,52 @@ pub fn find_this_calls(body: &String) -> List<String> {
     return out;
 }
 
+/// Whether the call spanning `[start, close)` passes anything between its
+/// parentheses. Only the receiver and the method name precede the first `(`,
+/// so that one opens the argument list.
+fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
+    let mut open = start;
+    for let mut i = start; i < close; i += 1 {
+        if chars[i] == '(' {
+            open = i;
+            break;
+        }
+    }
+    for let mut i = open + 1; i + 1 < close; i += 1 {
+        if !chars[i].is_ascii_whitespace() {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// If a `this.<method>(` call starts at `i` (whitespace allowed between
 /// tokens), returns `[method, close]`: the method name and the index just past
 /// the matching `)`. Else `null`. Shared by op collection and the call-site
 /// rewrite, so both agree on what a call is and where it ends.
 fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32]> {
-    if !word_boundary_this(chars, i, n) {
+    return call_at(chars, i, n, &THIS_WORD, &DOT_SEP);
+}
+
+/// The rewritten form: `Foo::<method>(...)`. Recognizing it too keeps
+/// `body_is_base_calls_only` answering the same across the rewrite.
+fn base_call_at(chars: &List<char>, i: i32, n: i32, base: &List<char>) -> Option<[String, i32]> {
+    return call_at(chars, i, n, base, &PATH_SEP);
+}
+
+global THIS_WORD: List<char> = ['t', 'h', 'i', 's'];
+global DOT_SEP: List<char> = ['.'];
+global PATH_SEP: List<char> = [':', ':'];
+
+fn call_at(chars: &List<char>, i: i32, n: i32, receiver: &List<char>, sep: &List<char>) -> Option<[String, i32]> {
+    if !word_at(chars, i, n, receiver) {
         return null;
     }
-    let after = skip_ws(chars, i + 4, n);
-    if after >= n || chars[after] != '.' {
+    let after = skip_ws(chars, i + receiver.len(), n);
+    if !text_at(chars, after, n, sep) {
         return null;
     }
-    let name_start = skip_ws(chars, after + 1, n);
+    let name_start = skip_ws(chars, after + sep.len(), n);
     let name_end = scan_ident(chars, name_start, n);
     if name_end == name_start {
         return null;
@@ -106,18 +149,28 @@ fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32]> {
     return Option::Some([name, match_paren(chars, paren, n)]);
 }
 
-/// Whether `this` sits at `i` as a whole word (not part of a longer ident).
-fn word_boundary_this(chars: &List<char>, i: i32, n: i32) -> bool {
-    if i + 4 > n {
-        return false;
-    }
-    if !(chars[i] == 't' && chars[i + 1] == 'h' && chars[i + 2] == 'i' && chars[i + 3] == 's') {
+/// Whether `word` sits at `i` as a whole word (not part of a longer ident).
+fn word_at(chars: &List<char>, i: i32, n: i32, word: &List<char>) -> bool {
+    if !text_at(chars, i, n, word) {
         return false;
     }
     if i > 0 && is_id_continue_char(chars[i - 1]) {
         return false;
     }
-    return !(i + 4 < n && is_id_continue_char(chars[i + 4]));
+    let end = i + word.len();
+    return !(end < n && is_id_continue_char(chars[end]));
+}
+
+fn text_at(chars: &List<char>, i: i32, n: i32, text: &List<char>) -> bool {
+    if i < 0 || i + text.len() > n {
+        return false;
+    }
+    for let mut k = 0; k < text.len(); k += 1 {
+        if chars[i + k] != text[k] {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn scan_ident(chars: &List<char>, start: i32, n: i32) -> i32 {
@@ -148,12 +201,33 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
-/// role (predicate vs action), and later occurrences of that name are ignored.
-pub fn add_super_op(ops: &mut List<SuperOp>, name: &String, kind: &ActionKind) {
-    if ops.iter().any(|o: &SuperOp| o.name == *name) {
-        return;
+/// role (predicate vs action). A later occurrence still contributes its
+/// `has_args`: one call site passing arguments makes the operation
+/// unrepresentable.
+pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
+    for let mut i = 0; i < ops.len(); i += 1 {
+        if ops[i].name == call.name {
+            ops[i].has_args = ops[i].has_args || call.has_args;
+            return;
+        }
     }
-    ops.push(SuperOp { name: *name, is_predicate: kind matches { Predicate } });
+    ops.push(SuperOp {
+        name: call.name,
+        is_predicate: kind matches { Predicate },
+        has_args: call.has_args,
+    });
+}
+
+/// Operations called with arguments anywhere in the grammar. A base is wired
+/// only when this is empty (`action.md`, "SuperClass — an effect interface").
+pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
+    let mut out: List<String> = [];
+    for let op of ops {
+        if op.has_args {
+            out.push(op.name);
+        }
+    }
+    return out;
 }
 
 /// Collect the superClass operations across a grammar's lexer rules: every
@@ -169,10 +243,87 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
     return ops;
 }
 
-/// Whether every op is a predicate. A base with an action op is not wired as an
-/// effect interface — action ops need the (unbuilt) winner-replay path.
-pub fn all_super_ops_predicates(ops: &List<SuperOp>) -> bool {
-    return ops.iter().all(|o: &SuperOp| o.is_predicate);
+/// Whether `body` is nothing but base-method calls and separators — the source
+/// form `this.m(...)` or the `Foo::m(...)` the rewrite leaves behind. Such a
+/// body is plain Wado once `rewrite_superclass_calls` has run, so it runs
+/// without the host translator a `superClass` grammar carves out; one carrying
+/// host code around the call needs that translator. Both forms are accepted so
+/// the answer does not move across the rewrite.
+pub fn body_is_base_calls_only(body: &String, base_name: &String) -> bool {
+    let chars: List<char> = body.chars().collect();
+    let base: List<char> = base_name.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        if chars[i].is_ascii_whitespace() || chars[i] == ';' {
+            i += 1;
+            continue;
+        }
+        // A comment is not host code; the rewrite copies it through verbatim.
+        if chars[i] == '/' && i + 1 < n && chars[i + 1] == '/' {
+            i = scan_line_comment(&chars, i);
+            continue;
+        }
+        if chars[i] == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i = scan_block_comment(&chars, i);
+            continue;
+        }
+        if let Some([_, close]) = this_call_at(&chars, i, n) {
+            i = close;
+            continue;
+        }
+        if let Some([_, close]) = base_call_at(&chars, i, n, &base) {
+            i = close;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+/// Whether every `{ ... }` action body in the grammar's lexer is
+/// base-calls-only, which is what lets a `language = Java` `superClass`
+/// grammar run its actions at all. All-or-nothing per grammar: one body
+/// carrying host code leaves every lexer action unexecuted, each reported.
+pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
+    for let rule of &grammar.lexer_rules {
+        for let alt of &rule.body {
+            if !alt_actions_are_base_calls(alt, base_name) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+fn alt_actions_are_base_calls(alt: &LexerAlternative, base_name: &String) -> bool {
+    for let a of &alt.actions {
+        if a.kind matches { Action } && !body_is_base_calls_only(&a.source.text, base_name) {
+            return false;
+        }
+    }
+    return alt.elements.iter().all(|e| elem_actions_are_base_calls(e, base_name));
+}
+
+fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool {
+    return match elem {
+        Group(alts) => alts.iter().all(|a| alt_actions_are_base_calls(a, base_name)),
+        Repeat(rep) => elem_actions_are_base_calls(&rep.element, base_name),
+        Not(nn) => elem_actions_are_base_calls(&nn.element, base_name),
+        _ => true,
+    };
+}
+
+/// Whether the grammar declares a `superClass` Gale refuses to wire, because an
+/// operation is called with arguments. Nothing reaching the base can then be
+/// emitted — not the interface, and not a body still naming `this`, which the
+/// rewrite would have replaced — so the lexer's actions and predicates stay
+/// unexecuted, each reported.
+pub fn superclass_is_refused(grammar: &Grammar) -> bool {
+    return match superclass_base_name(grammar) {
+        Some(_) => !super_ops_with_args(&collect_lexer_super_ops(grammar)).is_empty(),
+        None => false,
+    };
 }
 
 /// Whether a rule's match fn (transitively, through referenced fragments)
@@ -180,59 +331,81 @@ pub fn all_super_ops_predicates(ops: &List<SuperOp>) -> bool {
 /// fragment is inlined into its caller and a recursive one is called from it, so
 /// either way the caller carries the effect; `RuleRef`s are followed through
 /// `all_rules`, and `visited` breaks cycles. Matched on the rewritten `Foo::`
-/// form, since op collection rewrote the `this.` sites first.
-pub fn lexer_rule_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
-    let needle = `${*base_name}::`;
-    let mut visited: List<String> = [];
-    return rule_calls_super(rule, all_rules, &needle, &mut visited);
+/// form, since op collection rewrote the `this.` sites first. Only predicates
+/// count: a match fn never emits an action, which runs from the replay.
+pub fn lexer_rule_match_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
+    return rule_calls_super_with(rule, all_rules, base_name, false);
 }
 
-fn rule_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, needle: &String, visited: &mut List<String>) -> bool {
+/// The same for a rule's `apply_<rule>_actions` replay, which also runs the
+/// alternatives' actions.
+pub fn lexer_rule_replay_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
+    return rule_calls_super_with(rule, all_rules, base_name, true);
+}
+
+fn rule_calls_super_with(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String, actions: bool) -> bool {
+    let needle = `${*base_name}::`;
+    let mut visited: List<String> = [];
+    return rule_calls_super(rule, all_rules, &needle, actions, &mut visited);
+}
+
+fn rule_calls_super(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    needle: &String,
+    actions: bool,
+    visited: &mut List<String>,
+) -> bool {
     if visited.iter().any(|v: &String| *v == rule.name) {
         return false;
     }
     visited.push(rule.name);
-    return rule.body.iter().any(|alt| alt_calls_super(alt, all_rules, needle, visited));
+    return rule.body.iter().any(|alt| alt_calls_super(alt, all_rules, needle, actions, visited));
 }
 
 fn alt_calls_super(
     alt: &LexerAlternative,
     all_rules: &List<LexerRule>,
     needle: &String,
+    actions: bool,
     visited: &mut List<String>,
 ) -> bool {
     for let a of &alt.actions {
+        if !actions && a.kind matches { Action } {
+            continue;
+        }
         if a.source.text.contains(*needle) {
             return true;
         }
     }
-    return alt.elements.iter().any(|e| elem_calls_super(e, all_rules, needle, visited));
+    return alt.elements.iter().any(|e| elem_calls_super(e, all_rules, needle, actions, visited));
 }
 
 fn elem_calls_super(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     needle: &String,
+    actions: bool,
     visited: &mut List<String>,
 ) -> bool {
     match elem {
         Group(alts) => {
             for let alt of alts {
-                if alt_calls_super(alt, all_rules, needle, visited) {
+                if alt_calls_super(alt, all_rules, needle, actions, visited) {
                     return true;
                 }
             }
         },
         Repeat(rep) => {
-            return elem_calls_super(&rep.element, all_rules, needle, visited);
+            return elem_calls_super(&rep.element, all_rules, needle, actions, visited);
         },
         Not(n) => {
-            return elem_calls_super(&n.element, all_rules, needle, visited);
+            return elem_calls_super(&n.element, all_rules, needle, actions, visited);
         },
         RuleRef(name) => {
             for let r of all_rules {
                 if r.name == *name {
-                    return rule_calls_super(r, all_rules, needle, visited);
+                    return rule_calls_super(r, all_rules, needle, actions, visited);
                 }
             }
         },
@@ -244,8 +417,8 @@ fn elem_calls_super(
 
 fn collect_lexer_alt_ops(alt: &LexerAlternative, ops: &mut List<SuperOp>) {
     for let a of &alt.actions {
-        for let name of &find_this_calls(&a.source.text) {
-            add_super_op(ops, name, &a.kind);
+        for let call of &find_this_calls(&a.source.text) {
+            add_super_op(ops, call, &a.kind);
         }
     }
     for let e of &alt.elements {

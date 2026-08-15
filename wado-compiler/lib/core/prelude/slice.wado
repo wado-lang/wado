@@ -23,6 +23,7 @@ use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
 /// never copies elements.
+#[compiler_item("array_slice")]
 internal struct ArraySlice<T> {
     repr: &Array<T>,
     start: i32,

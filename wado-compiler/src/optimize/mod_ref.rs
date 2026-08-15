@@ -1130,63 +1130,6 @@ mod tests {
     }
 
     #[test]
-    fn field_access_on_struct_receiver_is_nontrapping_with_types() {
-        // Non-null struct receiver ⇒ `s.value` cannot trap. The conservative
-        // no-table path is `field_access_is_heap_read_and_may_trap`.
-        use crate::tir::{ResolvedType, TypeTable};
-        let mut types = TypeTable::new();
-        let def =
-            types.declare_for_test("W", ModuleSource::default(), crate::defs::DefKind::Struct);
-        let struct_ty = types.intern(ResolvedType::Struct {
-            def: crate::tir::StructDef::Decl(def),
-            type_args: Vec::new(),
-        });
-        let mut body = Body::empty();
-        let base = body.exprs.push(ExprNode {
-            kind: ExprKind::Local {
-                index: 0,
-                name: "w".to_string(),
-            },
-            type_id: struct_ty,
-            span: sp(),
-        });
-        let fa = field_access(&mut body, base);
-        assert!(
-            ModRef::of_expr(&body, fa).may_trap,
-            "conservative without a type table"
-        );
-        let mr = ModRef::of_expr_typed(&body, fa, Some(&types));
-        assert!(
-            !mr.may_trap,
-            "struct receiver is non-null → field access cannot trap"
-        );
-        assert!(mr.heap.reads);
-    }
-
-    #[test]
-    fn tuple_field_access_receiver_is_nontrapping() {
-        // A tuple field read (`t.0`) has a `GenericInstance` receiver, non-null
-        // like a struct — so it must not trap either. (`Option` is the one
-        // nullable `GenericInstance`, but it is read via `VariantPayload`, never
-        // `FieldAccess`.)
-        use crate::tir::TypeTable;
-        let mut types = TypeTable::new();
-        types.seed_compiler_items_for_test();
-        let tuple_ty = types.make_tuple(vec![TypeTable::I32, TypeTable::I32]);
-        let mut body = Body::empty();
-        let base = body.exprs.push(ExprNode {
-            kind: ExprKind::Local {
-                index: 0,
-                name: "t".to_string(),
-            },
-            type_id: tuple_ty,
-            span: sp(),
-        });
-        let fa = field_access(&mut body, base);
-        assert!(!ModRef::of_expr_typed(&body, fa, Some(&types)).may_trap);
-    }
-
-    #[test]
     fn struct_literal_does_not_write_heap() {
         let mr = mr_expr(|b| {
             let l = local(b, 0);

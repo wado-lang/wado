@@ -87,6 +87,29 @@ pub enum CompilerItem {
     /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
+    /// `ArraySlice<T>` — the borrowed array view the byte-slice methods and
+    /// the synthesised `FieldSchema::lookup` signature are written against.
+    ArraySlice,
+    /// `AsyncCall<T>` — the subtask handle a `task`-returning call yields.
+    AsyncCall,
+
+    // ── Resources ─────────────────────────────────────────────────────
+    /// `Future<T>` — the CM future handle a `future` type lowers to.
+    Future,
+    /// `FutureWritable<T>` — the write end of a CM future.
+    FutureWritable,
+    /// `Stream<T>` — the CM stream handle a `stream` type lowers to.
+    Stream,
+    /// `StreamWritable<T>` — the write end of a CM stream.
+    StreamWritable,
+
+    // ── Newtypes (`type X = Y;`) ──────────────────────────────────────
+    /// `ByteList` — `type ByteList = List<u8>`, the owned byte buffer the CM
+    /// binding and the digest / encoding modules pass around.
+    ByteList,
+    /// `ByteSlice` — `type ByteSlice = ArraySlice<u8>`, the borrowed byte view
+    /// `FieldSchema::lookup` takes.
+    ByteSlice,
 
     // ── Variants (sum types) ──────────────────────────────────────────
     /// `Option<T>` — `Some(_)` / `None`.
@@ -129,6 +152,10 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexMutRef`.
     RefMut,
+    /// `IndexValue<I>` — the value-copy indexing trait the CM list adapters
+    /// call through. Registered so a synthesis site names the declaration
+    /// rather than spelling `IndexValue`, which a user trait may share.
+    IndexValue,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -475,11 +502,20 @@ impl CompilerItem {
         Self::ReflectStructField,
         Self::ReflectEnumCase,
         Self::ReflectFlagsBit,
+        Self::ArraySlice,
+        Self::AsyncCall,
+        Self::Future,
+        Self::FutureWritable,
+        Self::Stream,
+        Self::StreamWritable,
+        Self::ByteList,
+        Self::ByteSlice,
         Self::ReflectEnum,
         Self::ReflectFlags,
         Self::Member,
         Self::Ref,
         Self::RefMut,
+        Self::IndexValue,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -629,11 +665,20 @@ impl CompilerItem {
             Self::ReflectStructField => "struct_field",
             Self::ReflectEnumCase => "enum_case",
             Self::ReflectFlagsBit => "flags_bit",
+            Self::ArraySlice => "array_slice",
+            Self::AsyncCall => "async_call",
+            Self::Future => "future",
+            Self::FutureWritable => "future_writable",
+            Self::Stream => "stream",
+            Self::StreamWritable => "stream_writable",
+            Self::ByteList => "byte_list",
+            Self::ByteSlice => "byte_slice",
             Self::ReflectEnum => "reflect_enum",
             Self::ReflectFlags => "reflect_flags",
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
+            Self::IndexValue => "index_value",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -787,11 +832,20 @@ impl CompilerItem {
             | Self::ReflectStructField
             | Self::ReflectEnumCase
             | Self::ReflectFlagsBit
+            | Self::ArraySlice
+            | Self::AsyncCall
+            | Self::Future
+            | Self::FutureWritable
+            | Self::Stream
+            | Self::StreamWritable
+            | Self::ByteList
+            | Self::ByteSlice
             | Self::ReflectEnum
             | Self::ReflectFlags
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::IndexValue
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -941,7 +995,13 @@ impl CompilerItem {
             | Self::ReflectVariantCase
             | Self::ReflectStructField
             | Self::ReflectEnumCase
-            | Self::ReflectFlagsBit => CompilerItemKind::Struct,
+            | Self::ReflectFlagsBit
+            | Self::ArraySlice
+            | Self::AsyncCall => CompilerItemKind::Struct,
+            Self::Future | Self::FutureWritable | Self::Stream | Self::StreamWritable => {
+                CompilerItemKind::Resource
+            }
+            Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment | Self::CaseStyle => CompilerItemKind::Enum,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
@@ -955,6 +1015,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::IndexValue
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1089,6 +1150,10 @@ pub enum CompilerItemKind {
     Variant,
     /// An `enum` declaration (`Ordering`).
     Enum,
+    /// A `resource` declaration (`Future`, `Stream`).
+    Resource,
+    /// A `type X = Y;` declaration (`ByteList`, `ByteSlice`).
+    Newtype,
     /// A `trait` declaration.
     Trait,
     /// A method inside an `impl` block.
@@ -1109,6 +1174,8 @@ impl fmt::Display for CompilerItemKind {
             Self::Struct => "struct",
             Self::Variant => "variant",
             Self::Enum => "enum",
+            Self::Resource => "resource",
+            Self::Newtype => "type declaration",
             Self::Trait => "trait",
             Self::Method => "method",
             Self::TupleFamily => "tuple type family",
@@ -1158,6 +1225,23 @@ pub enum Resolved {
     Enum {
         module_source: ModuleSource,
         name: String,
+        /// The declaring node — see [`Self::Variant`]'s.
+        decl: crate::ast::AstId,
+    },
+    /// A `resource` declaration (`Future<T>`, `Stream<T>`, …).
+    Resource {
+        module_source: ModuleSource,
+        name: String,
+        /// The declaring node — see [`Self::Variant`]'s.
+        decl: crate::ast::AstId,
+    },
+    /// A `type X = Y;` declaration. Wado's `type` mints a nominal newtype, so
+    /// this is a declaration like any other, not an alias.
+    Newtype {
+        module_source: ModuleSource,
+        name: String,
+        /// The declaring node — see [`Self::Variant`]'s.
+        decl: crate::ast::AstId,
     },
     Trait {
         module_source: ModuleSource,
@@ -1167,6 +1251,12 @@ pub enum Resolved {
         /// that trait?" compares this rather than the spelling
         /// (WEP 2026-08-12).
         decl: crate::ast::AstId,
+        /// The trait as a mangled name's trait segment names it, rendered once
+        /// at registration from the declaration itself. `None` only where the
+        /// declaration is not in the table — a registry entry minted by a test.
+        /// Every synthesis site reads this rather than spelling the trait, so
+        /// none of them can spell the wrong one.
+        fq: Option<crate::name::FqTraitName>,
         /// Primary method name of a **single-method** trait, captured when the
         /// elaborator registers its annotation; `None` for a multi-method trait
         /// such as `Serializer`. Lets the synthesiser read the name of a format
@@ -1184,18 +1274,28 @@ pub enum Resolved {
         module_source: ModuleSource,
         /// The type the method is defined on (e.g. `"String"`).
         owner_type: String,
+        /// That type's head, as the impl block's own frame resolved it — the
+        /// receiver a synthesised call to this method hangs off. `None` only
+        /// where a registry entry is minted by a test.
+        owner_head: Option<crate::name::FqTypeName>,
         name: String,
     },
     /// The module that owns the tuple type family. Tuples have no
     /// user-visible declared name on the Wado side, only an owning
-    /// module; the [`ModuleSource`] is therefore the only payload.
-    TupleFamily { module_source: ModuleSource },
+    /// module and the declaring node.
+    TupleFamily {
+        module_source: ModuleSource,
+        /// The declaring node — see [`Self::Variant`]'s.
+        decl: crate::ast::AstId,
+    },
     /// A named, definition-less builtin type (`Array<T>`). Carries the
     /// owning module and the user-facing name so the type resolver can
     /// bind the name to its builtin `ResolvedType`.
     BuiltinType {
         module_source: ModuleSource,
         name: String,
+        /// The declaring node — see [`Self::Variant`]'s.
+        decl: crate::ast::AstId,
     },
     /// One case of a `variant` declaration. Carries the owning
     /// variant's name (`Option`, `Result`) so downstream consumers can
@@ -1232,6 +1332,8 @@ impl Resolved {
             Self::Struct { .. } => CompilerItemKind::Struct,
             Self::Variant { .. } => CompilerItemKind::Variant,
             Self::Enum { .. } => CompilerItemKind::Enum,
+            Self::Resource { .. } => CompilerItemKind::Resource,
+            Self::Newtype { .. } => CompilerItemKind::Newtype,
             Self::Trait { .. } => CompilerItemKind::Trait,
             Self::Method { .. } => CompilerItemKind::Method,
             Self::TupleFamily { .. } => CompilerItemKind::TupleFamily,
@@ -1248,12 +1350,31 @@ impl Resolved {
             Self::Struct { module_source, .. }
             | Self::Variant { module_source, .. }
             | Self::Enum { module_source, .. }
+            | Self::Resource { module_source, .. }
+            | Self::Newtype { module_source, .. }
             | Self::Trait { module_source, .. }
             | Self::Method { module_source, .. }
-            | Self::TupleFamily { module_source }
+            | Self::TupleFamily { module_source, .. }
             | Self::BuiltinType { module_source, .. }
             | Self::VariantCase { module_source, .. }
             | Self::EnumCase { module_source, .. } => module_source,
+        }
+    }
+
+    /// The node that declares this item, for the kinds that name a type
+    /// declaration of their own. A case belongs to its parent's declaration
+    /// and a method to its impl block, so neither answers here.
+    pub fn decl(&self) -> Option<crate::ast::AstId> {
+        match self {
+            Self::Struct { decl, .. }
+            | Self::Variant { decl, .. }
+            | Self::Enum { decl, .. }
+            | Self::Resource { decl, .. }
+            | Self::Newtype { decl, .. }
+            | Self::Trait { decl, .. }
+            | Self::TupleFamily { decl, .. }
+            | Self::BuiltinType { decl, .. } => Some(*decl),
+            Self::Method { .. } | Self::VariantCase { .. } | Self::EnumCase { .. } => None,
         }
     }
 }
@@ -1425,6 +1546,7 @@ impl CompilerItems {
             Resolved::Enum {
                 module_source,
                 name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Enum", other),
         }
@@ -1462,8 +1584,8 @@ impl CompilerItems {
     /// the trait and none can spell the wrong one.
     #[must_use]
     pub fn trait_fq(&self, item: CompilerItem) -> crate::name::FqTraitName {
-        let (module, name) = self.require_trait(item);
-        crate::name::FqTraitName::declared(module, name)
+        self.trait_fq_opt(item)
+            .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
     }
 
     /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
@@ -1471,11 +1593,7 @@ impl CompilerItems {
     #[must_use]
     pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<crate::name::FqTraitName> {
         match self.get(item)? {
-            Resolved::Trait {
-                module_source,
-                name,
-                ..
-            } => Some(crate::name::FqTraitName::declared(module_source, name)),
+            Resolved::Trait { fq, .. } => fq.clone(),
             _ => None,
         }
     }
@@ -1517,6 +1635,14 @@ impl CompilerItems {
             Resolved::Struct { decl, .. } => Some(*decl),
             _ => None,
         }
+    }
+
+    /// The node that declares `item`'s type, whatever kind of declaration it
+    /// is. This is how a consumer holding only the item reaches an identity —
+    /// [`crate::tir::TypeTable::compiler_item_def`] resolves it — so no stdlib
+    /// type has to be reached for by spelling its name.
+    pub fn decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+        self.get(item)?.decl()
     }
 
     /// Resolved method name of a **single-method** trait — `"fmt"` for
@@ -1615,7 +1741,20 @@ impl CompilerItems {
                 module_source,
                 owner_type,
                 name,
+                ..
             } => (module_source, owner_type.as_str(), name.as_str()),
+            other => kind_mismatch_ice(item, "Method", other),
+        }
+    }
+
+    /// The head of the type a [`CompilerItemKind::Method`] item is defined on,
+    /// as the impl block's own frame resolved it. This is what a synthesised
+    /// call hangs off, so no synthesis site spells the owner.
+    pub fn require_method_owner(&self, item: CompilerItem) -> &crate::name::FqTypeName {
+        match self.require(item) {
+            Resolved::Method { owner_head, .. } => owner_head
+                .as_ref()
+                .unwrap_or_else(|| panic!("compiler item `{item}` records no owner head")),
             other => kind_mismatch_ice(item, "Method", other),
         }
     }
@@ -1623,7 +1762,7 @@ impl CompilerItems {
     /// Module that owns the tuple type family.
     pub fn tuple_module(&self) -> Option<&ModuleSource> {
         match self.get(CompilerItem::Tuple)? {
-            Resolved::TupleFamily { module_source } => Some(module_source),
+            Resolved::TupleFamily { module_source, .. } => Some(module_source),
             _ => None,
         }
     }
@@ -1820,6 +1959,7 @@ mod tests {
                 CompilerItem::Option,
                 Resolved::Trait {
                     decl: crate::ast::AstId::fresh(),
+                    fq: None,
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
                     method_name: None,
@@ -1868,6 +2008,7 @@ mod tests {
             CompilerItem::Default,
             Resolved::Trait {
                 decl: crate::ast::AstId::fresh(),
+                fq: None,
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
                 method_name: Some("default".into()),
@@ -1907,6 +2048,7 @@ mod tests {
             Resolved::Method {
                 module_source: ModuleSource::string(),
                 owner_type: "String".to_string(),
+                owner_head: None,
                 name: "push_str_v2".to_string(),
             },
         )
@@ -1932,6 +2074,7 @@ mod tests {
             CompilerItem::Serializer,
             Resolved::Trait {
                 decl: crate::ast::AstId::fresh(),
+                fq: None,
                 module_source: ModuleSource::serde(),
                 name: "Serializer".to_string(),
                 method_name: None,

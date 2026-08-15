@@ -187,7 +187,7 @@ fn generate_inline_task_return(
         cm_package,
         interner,
     };
-    let names = CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = CmStdlibNames::from_type_table(&type_table.borrow());
     let shape_ctx = CmShapeContext {
         cm_interface_registry,
         cm_package,

@@ -259,6 +259,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_enum_compiler_item(
                             &type_table,
                             &enum_decl.attrs,
+                            enum_decl.id,
                             &enum_decl.name,
                             module_source,
                             enum_decl.span,
@@ -288,6 +289,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 },
                             );
                         }
+                        super::item::register_resource_compiler_item(
+                            &type_table,
+                            &resource_decl.attrs,
+                            resource_decl.id,
+                            &resource_decl.name,
+                            module_source,
+                            resource_decl.span,
+                            logger,
+                        );
                     }
                     Item::Trait(trait_decl) => {
                         super::item::register_trait_compiler_item(
@@ -306,6 +316,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_tuple_compiler_item(
                             &type_table,
                             &decl.attrs,
+                            decl.id,
                             module_source,
                             decl.span,
                             logger,
@@ -315,6 +326,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_builtin_type_compiler_item(
                             &type_table,
                             &decl.attrs,
+                            decl.id,
+                            &decl.name,
+                            module_source,
+                            decl.span,
+                            logger,
+                        );
+                    }
+                    Item::Newtype(decl) => {
+                        super::item::register_newtype_compiler_item(
+                            &type_table,
+                            &decl.attrs,
+                            decl.id,
                             &decl.name,
                             module_source,
                             decl.span,
@@ -338,15 +361,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if stdlib_set.contains(module_source) {
                     continue;
                 }
-                let import_scope = Self::build_imported_type_sources(
+                let namespace_imports = super::trait_env::namespace_imports_of(
                     &mut interner.borrow_mut(),
                     module,
                     module_source,
                     Some(entry_module_source),
                     &invocations,
-                    symbols,
                 );
-                let namespace_imports = import_scope.namespace_imports;
                 let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
                 let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
                 let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
@@ -419,7 +440,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                module_source: module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
@@ -441,15 +462,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Stdlib fields are already resolved in the seeded maps.
                 continue;
             }
-            let import_scope = Self::build_imported_type_sources(
+            let namespace_imports = super::trait_env::namespace_imports_of(
                 &mut interner.borrow_mut(),
                 module,
                 module_source,
                 Some(entry_module_source),
                 &invocations,
-                symbols,
             );
-            let namespace_imports = import_scope.namespace_imports;
 
             // Helper closure: build a fresh TypeLookup pointed at the
             // current state of the shared tables. Recreated per call site so
@@ -601,7 +620,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .map(|p| p.name.clone())
                                 .collect();
                             let info = GenericNewtypeInfo {
-                                module_source: module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             };
@@ -797,7 +816,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _span = logger.span("elaborate/trait_env");
             super::trait_env::TraitEnv::build(
                 modules,
-                symbols,
                 &mut interner.borrow_mut(),
                 Some(entry_module_source),
                 &invocations,
@@ -992,8 +1010,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
+            let defs = resolutions.defs();
             let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
-            for (ms, module) in modules {
+            for ms in modules.keys() {
                 let mut set: IndexSet<String> = IndexSet::default();
                 for prim in crate::tir::PrimitiveType::all_primitive_names() {
                     set.insert(prim.to_string());
@@ -1002,22 +1021,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     set.extend(own.iter().cloned());
                 }
                 set.extend(prelude_types.iter().cloned());
-                // Types brought in by this module's `use` declarations.
-                let import_scope = Self::build_imported_type_sources(
-                    &mut interner.borrow_mut(),
-                    module,
-                    ms,
-                    Some(entry_module_source),
-                    &invocations,
-                    symbols,
-                );
-                for (local_name, src) in &import_scope.sources {
-                    let original = import_scope
-                        .original_names
-                        .get(local_name)
-                        .unwrap_or(local_name);
-                    if local.get(src).is_some_and(|s| s.contains(original)) {
-                        set.insert(local_name.clone());
+                // The import tier alone: cases ride a tier only value position
+                // consults, so this one holds exactly the names asked for here.
+                for (local_name, def) in resolutions.imports_in(ms) {
+                    if local
+                        .get(defs.module(def))
+                        .is_some_and(|s| s.contains(defs.name(def)))
+                    {
+                        set.insert(local_name.to_string());
                     }
                 }
                 visible.insert(ms.clone(), set);
@@ -1318,17 +1329,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            // Full import scope; namespace *type* members are already expanded
-            // here, namespace *function* members into `imported_functions` below.
-            let import_scope = Self::build_imported_type_sources(
-                &mut state.interner.borrow_mut(),
-                module,
-                module_source,
-                Some(&entry_module_source),
-                &state.invocations,
-                symbols,
-            );
-            let namespace_imports = import_scope.namespace_imports;
+            let namespace_imports = state.tysys.trait_env.namespace_imports(module_source);
             // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
             for item in &module.items {
@@ -1751,29 +1752,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         imported
     }
 
-    /// Build a map of imported names to their source modules from use declarations.
-    /// Build a mapping from local import names to their source modules and original names.
-    ///
-    /// Returns `(local_name -> module_source, local_name -> original_name)`.
-    /// The `original_name` is different from `local_name` when `use { Foo as Bar }` is used.
-    pub(super) fn build_imported_type_sources(
-        interner: &mut ModuleSourceInterner,
-        module: &Module,
-        from_module: &ModuleSource,
-        entry_module: Option<&ModuleSource>,
-        invocations: &crate::kiln::InvocationIndex,
-        symbols: &crate::symbol::SymbolTable,
-    ) -> super::trait_env::ModuleImportScope {
-        super::trait_env::module_import_scope(
-            interner,
-            module,
-            from_module,
-            entry_module,
-            invocations,
-            symbols,
-        )
-    }
-
     /// Topologically sort modules based on struct field type dependencies.
     ///
     /// Recursively collect cross-module struct/variant dependencies from a type.
@@ -2151,12 +2129,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Local item declarations (`Stmt::Item`) are not in `known_type_names`
         // (a module-wide set built before any function body is walked), so a
         // reference to one would otherwise fail this fast pre-check before
-        // the real elaborator (which understands sequential, function-scoped
-        // visibility) ever runs. Widen the set with every local item name
-        // reachable from this block, recursively — a coarse over-approximation
-        // (it does not enforce forward-declaration order; the real elaborator
-        // still does) is fine here: this pass only exists to fail fast on
-        // *genuinely* unknown names.
+        // the real elaborator (which understands block-scoped visibility) ever
+        // runs. Widen the set with every local item name reachable from this
+        // block, recursively — a coarse over-approximation (it does not
+        // enforce block scoping; the real elaborator still does) is fine here:
+        // this pass only exists to fail fast on *genuinely* unknown names.
         let local_item_names = Self::collect_local_item_names(block);
         let widened;
         let known_type_names = if local_item_names.is_empty() {
@@ -3349,8 +3326,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 // `ns::Type` namespace-import alias in type position: resolve
                 // the `ns$Type` alias via the `Named` / `Generic` arms, which
-                // route through `imported_type_sources` to the namespace's own
-                // module. Mirrors the dynamic resolver's namespace-alias branch.
+                // route through the import tier to the namespace's own module.
+                // Mirrors the dynamic resolver's namespace-alias branch.
                 if lookup
                     .namespace_imports
                     .contains_key(namespaced.namespace.as_str())
@@ -3468,7 +3445,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site))
-                    .map(|def| resolutions.decl_key(def))
                 else {
                     continue;
                 };
@@ -3529,7 +3505,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_key.clone(),
+                            trait_key,
                             binding.name.clone(),
                             type_param_id,
                         );

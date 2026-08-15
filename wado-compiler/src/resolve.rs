@@ -247,32 +247,16 @@ impl Resolutions {
         self.scopes.resolve_value(module, name)
     }
 
-    /// The `(module, name)` pair a declaration renders to.
-    ///
-    /// A rendering *out of* an identity, which is the only direction a name is
-    /// allowed to travel — but it exists for the consumers whose keys are still
-    /// spellings, and it goes when `DeclKey` does.
-    #[must_use]
-    pub fn decl_key(&self, def: DefId) -> (ModuleSource, String) {
-        (
-            self.defs.module(def).clone(),
-            self.defs.name(def).to_string(),
-        )
-    }
-
-    /// The declaration `module` itself declares under `name`.
-    ///
-    /// Not a scope lookup: `module` is the *declaring* module, so this asks a
-    /// module about its own declarations rather than asking what a spelling
-    /// means from some vantage. For the passes that still key on
-    /// `(module, name)` pairs; it goes when they carry identities.
-    #[must_use]
-    pub fn declared_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+    /// Every declaration `module` explicitly `use`d, by the local name it
+    /// wrote — an alias where it wrote one, and the `ns$member` name a
+    /// namespace import registers.
+    pub fn imports_in(&self, module: &ModuleSource) -> impl Iterator<Item = (&str, DefId)> {
         self.scopes
-            .own
+            .imports
             .get(module)
-            .and_then(|m| m.get(name))
-            .copied()
+            .into_iter()
+            .flatten()
+            .map(|(name, def)| (name.as_str(), *def))
     }
 
     /// The declaration `module` explicitly `use`d under the local name `name`.
@@ -309,6 +293,16 @@ impl Resolutions {
     #[must_use]
     pub fn declared(&self, site: AstId) -> Option<DefId> {
         match self.get(site) {
+            Resolution::Def(def) => Some(def),
+            Resolution::Binder(_) | Resolution::Unresolved => None,
+        }
+    }
+
+    /// [`Self::declared`] for a consumer that also walks synthesised AST, whose
+    /// nodes carry ids no module wrote and no walk answered for.
+    #[must_use]
+    pub fn declared_if_walked(&self, site: AstId) -> Option<DefId> {
+        match self.refs.get(&site).copied()? {
             Resolution::Def(def) => Some(def),
             Resolution::Binder(_) | Resolution::Unresolved => None,
         }
@@ -379,6 +373,23 @@ impl Resolver<'_> {
     /// module's explicit imports keyed by local name, its own declarations, then
     /// the prelude and its implementation modules. Own declarations outranking
     /// the prelude is what makes a local `trait Left` mean itself (#1298).
+    fn resolve_value_name(&self, name: &str) -> Resolution {
+        if let Some(id) = self.binder(name) {
+            return Resolution::Binder(id);
+        }
+        if let Some(def) = self
+            .locals
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+        {
+            return Resolution::Def(def);
+        }
+        self.scopes
+            .resolve_value(self.module, name)
+            .map_or(Resolution::Unresolved, Resolution::Def)
+    }
+
     fn resolve_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
@@ -464,25 +475,20 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(&func.type_params, None, |s| ast::walk_function(s, func));
     }
 
-    /// A block scopes the items declared in it.
+    /// A block's local items are in scope for the whole of it, wherever they
+    /// are written, and for none of it once it closes.
     fn visit_block(&mut self, block: &ast::Block) {
-        self.locals.push(IndexMap::default());
-        ast::walk_block(self, block);
-        self.locals.pop();
-    }
-
-    /// A local item comes into scope at its own declaration, so it is recorded
-    /// before the rest of the block is walked and after everything before it.
-    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
-        if let ast::Stmt::Item(item) = stmt
-            && let Some(def) = self.defs.of_ast_id(item.id())
-        {
-            let name = self.defs.name(def).to_string();
-            if let Some(scope) = self.locals.last_mut() {
-                scope.insert(name, def);
+        let mut scope = IndexMap::default();
+        for stmt in &block.stmts {
+            if let ast::Stmt::Item(item) = stmt
+                && let Some(def) = self.defs.of_ast_id(item.id())
+            {
+                scope.insert(self.defs.name(def).to_string(), def);
             }
         }
-        ast::walk_stmt(self, stmt);
+        self.locals.push(scope);
+        ast::walk_block(self, block);
+        self.locals.pop();
     }
 
     fn visit_generic_params(&mut self, params: &[GenericParam]) {
@@ -512,17 +518,40 @@ impl AstVisitor for Resolver<'_> {
         }
     }
 
-    /// A qualified path in expression position (`Trait::method`, `Type::CONST`)
-    /// names a declaration with its leading segment, and that segment carries
-    /// its own site. Without this the only trait reference a UFCS call has is
-    /// a substring of the callee's name, which no vantage owns.
+    /// A qualified path names declarations with the segments before its last:
+    /// the head, which `Trait::method` names, and the one just before the final
+    /// name, which `Type::CONST` qualifies its constant with. They coincide for
+    /// a two-segment path.
     fn visit_expr(&mut self, expr: &ast::Expr) {
+        if let ast::Expr::StructLiteral(lit) = expr
+            && let (Some(name), Some(name_id)) = (lit.name.as_deref(), lit.name_id)
+        {
+            let answer = self.resolve_name(&name.replace("::", "$"));
+            self.record(name_id, answer);
+        }
+        // `ns::member` resolves under the `ns$member` alias; a path that is no
+        // such import answers `Unresolved` and its segments below name it.
+        if let ast::Expr::Ident(ident) = expr {
+            let written = ident.name.replace("::", "$");
+            let answer = self.resolve_value_name(&written);
+            self.record(ident.id, answer);
+        }
         if let ast::Expr::Ident(ident) = expr
-            && let [head, _rest @ ..] = ident.segments.as_slice()
-            && ident.segments.len() > 1
+            && let [head, rest @ ..] = ident.segments.as_slice()
+            && !rest.is_empty()
         {
             let answer = self.resolve_name(&head.name);
             self.record(head.id, answer);
+            let owner = ident.segments.len() - 2;
+            if owner > 0 {
+                let qualified = format!(
+                    "{}${}",
+                    ident.segments[owner - 1].name,
+                    ident.segments[owner].name
+                );
+                let answer = self.resolve_name(&qualified);
+                self.record(ident.segments[owner].id, answer);
+            }
         }
         ast::walk_expr(self, expr);
     }
@@ -730,7 +759,36 @@ mod tests {
         assert_eq!(r.defs().module(list), &entry);
     }
 
-    /// An alias names what it aliases, not itself.
+    /// The import tier answers under the name the module wrote, and holds no
+    /// cases — those ride a tier only value position consults.
+    #[test]
+    fn imports_in_answers_under_the_local_name_and_holds_no_cases() {
+        let (r, entry, other) = resolve(
+            r#"use { FieldKind as FK } from "./other.wado";"#,
+            "pub variant FieldKind { List(i32), Leaf }",
+        );
+        let imports: Vec<(&str, DefId)> = r.imports_in(&entry).collect();
+        assert_eq!(imports.len(), 1, "{imports:?}");
+        let (local_name, def) = imports[0];
+        assert_eq!(local_name, "FK");
+        assert_eq!(r.defs().name(def), "FieldKind");
+        assert_eq!(r.defs().module(def), &other);
+        // The variant's cases reach value position without entering this tier.
+        assert!(r.value_named(&entry, "Leaf").is_some());
+    }
+
+    /// A namespace import enters its members under the qualification the
+    /// module can name them by.
+    #[test]
+    fn imports_in_records_a_namespace_member_qualified() {
+        let (r, entry, _) = resolve(
+            r#"use ns from "./other.wado";"#,
+            "pub struct Widget { a: i32 }",
+        );
+        let names: Vec<&str> = r.imports_in(&entry).map(|(name, _)| name).collect();
+        assert!(names.contains(&"ns$Widget"), "{names:?}");
+    }
+
     /// A `struct` declared in a function body shadows a module-level one of
     /// the same name for the rest of that body, and nowhere else.
     #[test]
@@ -746,7 +804,16 @@ mod tests {
         "#;
         let (r, entry, _, modules) = resolve_with_ast(source, "");
         let defs = r.defs();
-        let module_level = r.declared_in(&entry, "Widget").unwrap();
+        // The module-level `Widget` is the one `outer`'s parameter names — the
+        // walk answers for that site from outside the shadowing body.
+        let module_level = modules[&entry]
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Struct(d) if d.name == "Widget" => defs.of_ast_id(d.id),
+                _ => None,
+            })
+            .unwrap();
 
         let mut sites = Vec::new();
         for item in &modules[&entry].items {

@@ -19,8 +19,9 @@ struct CtorRef {
 }
 
 fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> CtorRef {
+    let type_name = type_table.compiler_struct_fq_name(owner);
     let items = type_table.compiler_items();
-    let (owner_module, type_name) = items.require_struct(owner);
+    let (owner_module, _) = items.require_struct(owner);
     let (method_module, _, method_name) = items.require_method(ctor);
     // Production stdlib places i128 / u128 and their constructors in
     // the same module; assert that invariant so a future split is
@@ -29,7 +30,7 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
     debug_assert_eq!(owner_module, method_module);
     CtorRef {
         module_source: owner_module.clone(),
-        type_name: FqTypeName::declared(owner_module, type_name),
+        type_name,
         method_name: method_name.to_string(),
     }
 }

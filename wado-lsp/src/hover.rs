@@ -8,13 +8,12 @@
 //! `wado_compiler::unparse`.
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::ast::{self, AstId, Expr, Item, Module, Stmt};
+use wado_compiler::ast::{self, AstId, AstVisitor, Expr, Item, Stmt};
 use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKind};
 use wado_compiler::unparse;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::span_to_range;
 use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,7 +57,7 @@ pub(crate) fn find_hover_opts(
             kind: MarkupKind::Markdown,
             value: format!("```wado\n{signature}\n```"),
         },
-        range: Some(span_to_range(&cursor_span, Some(ctx.source), ctx.encoding)),
+        range: Some(ctx.range_in_document(&cursor_span)),
     })
 }
 
@@ -137,318 +136,236 @@ fn fenced_hover(signature: String) -> HoverResult {
 }
 
 /// Render a signature for the given item-level symbol.
+///
+/// Matching is by [`AstId`], never by name: a module may declare one name
+/// twice — a struct field beside a free function, an enum case beside a
+/// method — and only `Symbol::defined_at` picks out which one.
 fn render_item_signature(sem: &Semantics, symbol: &Symbol, public_only: bool) -> Option<String> {
     let module = sem.modules.get(symbol.module_source())?;
-    for item in &module.items {
-        if let Some(rendered) = item_info(item, &symbol.name, public_only) {
-            return Some(rendered);
-        }
-    }
-    None
+    let target = symbol.defined_at;
+    module
+        .items
+        .iter()
+        .find_map(|item| item_info(item, target, public_only))
 }
 
 /// Render a hover line for a local binding (`let x: T` / `fn f(x: T)`).
 fn render_local_binding(sem: &Semantics, def_id: AstId, name: &str) -> Option<String> {
     let module = sem.modules.get(sem.module_of_id(def_id)?)?;
-    render_local_in_module(module, def_id, name)
-}
-
-fn render_local_in_module(module: &Module, target: AstId, name: &str) -> Option<String> {
+    let mut renderer = LocalRenderer {
+        target: def_id,
+        name,
+        result: None,
+    };
     for item in &module.items {
-        if let Some(s) = render_local_in_item(item, target, name) {
-            return Some(s);
+        renderer.visit_item(item);
+        if renderer.result.is_some() {
+            break;
         }
     }
-    None
+    renderer.result
 }
 
-fn render_local_in_item(item: &Item, target: AstId, name: &str) -> Option<String> {
-    match item {
-        Item::Function(f) => {
-            for p in &f.params {
-                if p.id == target {
-                    let mut out = String::new();
-                    unparse::unparse_param_into(p, &mut out);
-                    return Some(out);
-                }
-            }
-            if let Some(body) = &f.body {
-                return find_let_in_block(body, target, name);
-            }
-            None
-        }
-        Item::Impl(imp) => {
-            for m in &imp.methods {
-                for p in &m.params {
-                    if p.id == target {
-                        let mut out = String::new();
-                        unparse::unparse_param_into(p, &mut out);
-                        return Some(out);
-                    }
-                }
-                if let Some(body) = &m.body
-                    && let Some(s) = find_let_in_block(body, target, name)
-                {
-                    return Some(s);
-                }
-            }
-            None
-        }
-        Item::Trait(t) => {
-            for m in &t.methods {
-                for p in &m.params {
-                    if p.id == target {
-                        let mut out = String::new();
-                        unparse::unparse_param_into(p, &mut out);
-                        return Some(out);
-                    }
-                }
-                if let Some(body) = &m.body
-                    && let Some(s) = find_let_in_block(body, target, name)
-                {
-                    return Some(s);
-                }
-            }
-            None
-        }
-        Item::Test(t) => find_let_in_block(&t.body, target, name),
-        Item::Global(g) => find_let_in_expr(&g.initializer, target, name),
-        _ => None,
+/// Locates the AST node that binds `target` and renders its declaration.
+///
+/// Traversal is [`AstVisitor`]'s, so every shape that can hold a binding is
+/// reached by construction.
+///
+/// Only the shapes carrying extra syntax are intercepted: `Stmt::Let` (for
+/// `mut` and the type annotation), function and closure parameters. Every
+/// other binding site — match arms, `if let` / `while let`, `for … of` —
+/// reaches [`Self::visit_pattern`] and renders as a bare `let name`.
+struct LocalRenderer<'a> {
+    target: AstId,
+    name: &'a str,
+    result: Option<String>,
+}
+
+impl LocalRenderer<'_> {
+    /// The declaring param of `params`, rendered as `name: T`.
+    fn render_param(&self, params: &[ast::Param]) -> Option<String> {
+        let param = params.iter().find(|p| p.id == self.target)?;
+        let mut out = String::new();
+        unparse::unparse_param_into(param, &mut out);
+        Some(out)
     }
-}
 
-fn find_let_in_block(block: &ast::Block, target: AstId, name: &str) -> Option<String> {
-    for stmt in &block.stmts {
-        if let Some(s) = find_let_in_stmt(stmt, target, name) {
-            return Some(s);
+    /// `let [mut ]name[: T]`. The annotation is shown only for a simple
+    /// binding — for a destructuring pattern the annotation describes the
+    /// whole scrutinee, not the leaf the cursor sits on.
+    fn render_let(&self, l: &ast::LetStmt) -> Option<String> {
+        if !pattern_binds(&l.pattern, self.target) {
+            return None;
         }
+        let mut out = String::new();
+        out.push_str(if l.is_mut { "let mut " } else { "let " });
+        out.push_str(self.name);
+        if let Some(ty) = &l.ty
+            && matches!(
+                &l.pattern,
+                ast::Pattern::Ident { .. } | ast::Pattern::MutIdent { .. }
+            )
+        {
+            out.push_str(": ");
+            unparse::unparse_type_into(ty, &mut out);
+        }
+        Some(out)
     }
-    None
-}
 
-fn format_binding_name(name: &str) -> String {
-    format!("let {name}")
-}
-
-fn find_let_in_condition(cond: &ast::Condition, target: AstId, name: &str) -> Option<String> {
-    use ast::{Condition, ConditionElement};
-    match cond {
-        Condition::Expr(e) => find_let_in_expr(e, target, name),
-        Condition::LetChain { elements, .. } => {
-            for el in elements {
-                match el {
-                    ConditionElement::Let { pattern, expr, .. } => {
-                        if pattern_contains_ident(pattern, target) {
-                            return Some(format_binding_name(name));
-                        }
-                        if let Some(r) = find_let_in_expr(expr, target, name) {
-                            return Some(r);
-                        }
-                    }
-                    ConditionElement::Expr(e) => {
-                        if let Some(r) = find_let_in_expr(e, target, name) {
-                            return Some(r);
-                        }
-                    }
-                }
-            }
-            None
+    /// `|name: T|` for the closure parameter declaring `target`.
+    fn render_closure_param(&self, params: &[ast::ClosureParam]) -> Option<String> {
+        let param = params.iter().find(|p| p.id == self.target)?;
+        let mut out = String::from("|");
+        out.push_str(&param.name);
+        if let Some(ty) = &param.ty {
+            out.push_str(": ");
+            unparse::unparse_type_into(ty, &mut out);
         }
+        out.push('|');
+        Some(out)
     }
 }
 
-fn pattern_contains_ident(pattern: &ast::Pattern, target: AstId) -> bool {
+impl AstVisitor for LocalRenderer<'_> {
+    fn visit_function(&mut self, func: &ast::Function) {
+        if self.result.is_some() {
+            return;
+        }
+        self.result = self.render_param(&func.params);
+        if self.result.is_none() {
+            ast::walk_function(self, func);
+        }
+    }
+
+    fn visit_interface_method(&mut self, method: &ast::InterfaceMethod) {
+        if self.result.is_some() {
+            return;
+        }
+        self.result = self.render_param(&method.params);
+        if self.result.is_none() {
+            // No body to search today; walk anyway so a future one is not
+            // silently missed.
+            ast::walk_interface_method(self, method);
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if self.result.is_some() {
+            return;
+        }
+        // `Stmt::Let` is intercepted before `walk_stmt` would hand its
+        // pattern to `visit_pattern`, which renders the annotation-less form.
+        if let Stmt::Let(l) = stmt
+            && let Some(rendered) = self.render_let(l)
+        {
+            self.result = Some(rendered);
+            return;
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        if self.result.is_some() {
+            return;
+        }
+        if let Expr::Closure(c) = expr
+            && let Some(rendered) = self.render_closure_param(&c.params)
+        {
+            self.result = Some(rendered);
+            return;
+        }
+        ast::walk_expr(self, expr);
+    }
+
+    fn visit_pattern(&mut self, pat: &ast::Pattern) {
+        if self.result.is_some() {
+            return;
+        }
+        if pattern_binds(pat, self.target) {
+            self.result = Some(format!("let {}", self.name));
+            return;
+        }
+        ast::walk_pattern(self, pat);
+    }
+}
+
+/// Whether `pattern` itself is the identifier leaf binding `target`.
+/// Recursion into sub-patterns is [`ast::walk_pattern`]'s job.
+fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
     match pattern {
         ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => *id == target,
-        ast::Pattern::Tuple(ps, _) | ast::Pattern::Or(ps) => {
-            ps.iter().any(|p| pattern_contains_ident(p, target))
-        }
-        ast::Pattern::Struct { fields, .. } => fields
-            .iter()
-            .any(|f| pattern_contains_ident(&f.pattern, target)),
-        ast::Pattern::Variant { bindings, .. } => {
-            bindings.iter().any(|p| pattern_contains_ident(p, target))
-        }
-        _ => false,
+        ast::Pattern::Tuple(..)
+        | ast::Pattern::Or(_)
+        | ast::Pattern::Struct { .. }
+        | ast::Pattern::Variant { .. }
+        | ast::Pattern::Range { .. }
+        | ast::Pattern::Literal(_)
+        | ast::Pattern::Wildcard
+        | ast::Pattern::Error(_) => false,
     }
 }
 
-fn find_let_in_stmt(stmt: &Stmt, target: AstId, name: &str) -> Option<String> {
-    match stmt {
-        Stmt::Let(l) => {
-            if pattern_contains_ident(&l.pattern, target) {
-                let mut out = String::new();
-                out.push_str(if l.is_mut { "let mut " } else { "let " });
-                out.push_str(name);
-                if let Some(ty) = &l.ty
-                    && matches!(
-                        &l.pattern,
-                        ast::Pattern::Ident { .. } | ast::Pattern::MutIdent { .. }
-                    )
-                {
-                    out.push_str(": ");
-                    unparse::unparse_type_into(ty, &mut out);
-                }
-                return Some(out);
-            }
-            l.value
-                .as_ref()
-                .and_then(|v| find_let_in_expr(v, target, name))
-                .or_else(|| {
-                    l.else_block
-                        .as_ref()
-                        .and_then(|b| find_let_in_block(b, target, name))
-                })
-        }
-        Stmt::Expr(s) => find_let_in_expr(&s.expr, target, name),
-        Stmt::Return(s) => s
-            .value
-            .as_ref()
-            .and_then(|v| find_let_in_expr(v, target, name)),
-        Stmt::TaskReturn(s) => find_let_in_expr(&s.value, target, name),
-        Stmt::If(s) => find_let_in_condition(&s.condition, target, name)
-            .or_else(|| find_let_in_block(&s.then_block, target, name))
-            .or_else(|| {
-                s.else_block
-                    .as_ref()
-                    .and_then(|b| find_let_in_block(b, target, name))
-            }),
-        Stmt::While(s) => find_let_in_condition(&s.condition, target, name)
-            .or_else(|| find_let_in_block(&s.body, target, name)),
-        Stmt::For(s) => {
-            if let Some(init) = &s.init
-                && let Some(r) = find_let_in_stmt(init, target, name)
-            {
-                return Some(r);
-            }
-            find_let_in_block(&s.body, target, name)
-        }
-        Stmt::ForOf(s) => {
-            if pattern_contains_ident(&s.binding, target) {
-                return Some(format_binding_name(name));
-            }
-            find_let_in_block(&s.body, target, name)
-        }
-        Stmt::Loop(s) => find_let_in_block(&s.body, target, name),
-        Stmt::Match(m) => {
-            for arm in &m.arms {
-                if pattern_contains_ident(&arm.pattern, target) {
-                    return Some(format_binding_name(name));
-                }
-                if let Some(r) = find_let_in_expr(&arm.body, target, name) {
-                    return Some(r);
-                }
-            }
-            None
-        }
-        Stmt::Break(_) | Stmt::Continue(_) => None,
-        Stmt::Assert(_) => None,
-        Stmt::LabeledBlock(s) => find_let_in_block(&s.block, target, name),
-        // A local item's methods have their own local variables, unrelated
-        // to the enclosing function's — never the source of `target`.
-        Stmt::Item(_) => None,
-        Stmt::Error(_) => None,
-    }
-}
-
-fn find_let_in_expr(expr: &Expr, target: AstId, name: &str) -> Option<String> {
-    match expr {
-        Expr::Block(b) => find_let_in_block(b, target, name),
-        Expr::If(e) => find_let_in_block(&e.then_block, target, name).or_else(|| {
-            e.else_block
-                .as_ref()
-                .and_then(|b| find_let_in_block(b, target, name))
-        }),
-        Expr::Closure(c) => {
-            for p in &c.params {
-                if p.id == target {
-                    let mut out = String::from("|");
-                    out.push_str(&p.name);
-                    if let Some(ty) = &p.ty {
-                        out.push_str(": ");
-                        unparse::unparse_type_into(ty, &mut out);
-                    }
-                    out.push('|');
-                    return Some(out);
-                }
-            }
-            find_let_in_expr(&c.body, target, name)
-        }
-        Expr::LabeledBlock(lb) => find_let_in_block(&lb.block, target, name),
-        Expr::Match(m) => {
-            for arm in &m.arms {
-                if pattern_contains_ident(&arm.pattern, target) {
-                    return Some(format_binding_name(name));
-                }
-                if let Some(r) = find_let_in_expr(&arm.body, target, name) {
-                    return Some(r);
-                }
-            }
-            None
-        }
-        Expr::Matches(m) => {
-            if pattern_contains_ident(&m.pattern, target) {
-                return Some(format_binding_name(name));
-            }
-            if let Some(g) = &m.guard {
-                return find_let_in_expr(g, target, name);
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-fn item_info(item: &Item, name: &str, public_only: bool) -> Option<String> {
+/// Render `item` when it — or one of its members — is the declaration
+/// identified by `target`.
+fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
     match item {
-        Item::Function(f) if f.name == name => Some(unparse::unparse_function_signature(f)),
+        Item::Function(f) => (f.id == target).then(|| unparse::unparse_function_signature(f)),
         // Struct fields follow `public_only` (matching `wado doc`'s `..`
         // elision when set); enum cases are always public.
-        Item::Struct(s) if s.name == name => {
-            Some(unparse::unparse_struct_signature(s, public_only))
-        }
-        Item::Enum(e) if e.name == name => Some(unparse::unparse_enum_signature(e)),
-        Item::Variant(v) if v.name == name => Some(unparse::unparse_variant_header(v)),
-        Item::Flags(fl) if fl.name == name => Some(unparse::unparse_flags_header(fl)),
-        Item::Trait(t) if t.name == name => Some(unparse::unparse_trait_header(t)),
-        Item::Newtype(n) if n.name == name => Some(unparse::unparse_newtype_signature(n)),
-        Item::BuiltinTypeDecl(d) if d.name == name => {
-            Some(unparse::unparse_builtin_type_decl_signature(d))
-        }
-        Item::Interface(e) if e.name == name => Some(format!("interface {name}")),
-        Item::Global(g) if g.name == name => Some(unparse::unparse_global_signature(g)),
-        Item::Impl(imp) => {
-            for method in &imp.methods {
-                if method.name == name {
-                    return Some(unparse::unparse_function_signature(method));
-                }
+        Item::Struct(s) => {
+            if s.id == target {
+                return Some(unparse::unparse_struct_signature(s, public_only));
             }
-            None
+            s.fields
+                .iter()
+                .find(|f| f.id == target)
+                .map(|f| unparse::unparse_struct_field(&s.name, f))
         }
-        Item::Enum(e) => e
-            .cases
-            .iter()
-            .find(|c| c.name == name)
-            .map(|c| unparse::unparse_enum_case(&e.name, c)),
-        Item::Variant(v) => v
-            .cases
-            .iter()
-            .find(|c| c.name == name)
-            .map(|c| unparse::unparse_variant_case(&v.name, c)),
-        Item::Struct(s) => s
-            .fields
-            .iter()
-            .find(|f| f.name == name)
-            .map(|f| unparse::unparse_struct_field(&s.name, f)),
+        Item::Enum(e) => {
+            if e.id == target {
+                return Some(unparse::unparse_enum_signature(e));
+            }
+            e.cases
+                .iter()
+                .find(|c| c.id == target)
+                .map(|c| unparse::unparse_enum_case(&e.name, c))
+        }
+        Item::Variant(v) => {
+            if v.id == target {
+                return Some(unparse::unparse_variant_header(v));
+            }
+            v.cases
+                .iter()
+                .find(|c| c.id == target)
+                .map(|c| unparse::unparse_variant_case(&v.name, c))
+        }
         Item::Trait(t) => {
-            for method in &t.methods {
-                if method.name == name {
-                    return Some(unparse::unparse_function_signature(method));
-                }
+            if t.id == target {
+                return Some(unparse::unparse_trait_header(t));
             }
-            None
+            t.methods
+                .iter()
+                .find(|m| m.id == target)
+                .map(unparse::unparse_function_signature)
         }
-        _ => None,
+        Item::Impl(imp) => imp
+            .methods
+            .iter()
+            .find(|m| m.id == target)
+            .map(unparse::unparse_function_signature),
+        Item::Flags(fl) => (fl.id == target).then(|| unparse::unparse_flags_header(fl)),
+        Item::Newtype(n) => (n.id == target).then(|| unparse::unparse_newtype_signature(n)),
+        Item::BuiltinTypeDecl(d) => {
+            (d.id == target).then(|| unparse::unparse_builtin_type_decl_signature(d))
+        }
+        Item::Interface(e) => (e.id == target).then(|| format!("interface {}", e.name)),
+        Item::Global(g) => (g.id == target).then(|| unparse::unparse_global_signature(g)),
+        Item::Use(_)
+        | Item::Resource(_)
+        | Item::World(_)
+        | Item::Test(_)
+        | Item::TupleTypeDecl(_)
+        | Item::Error(_) => None,
     }
 }
 
@@ -628,12 +545,7 @@ mod tests {
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
         let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext {
-            sem: &sem,
-            source,
-            uri: &uri,
-            encoding,
-        };
+        let ctx = QueryContext::new(&sem, source, &uri, encoding);
         find_hover_opts(&ctx, Position { line, character }, true)
     }
 
@@ -702,6 +614,70 @@ mod tests {
                 "got: {}",
                 result.contents.value,
             );
+        });
+    }
+
+    #[test]
+    fn item_hover_ignores_a_member_sharing_the_name() {
+        // A name scan would answer with the struct field, declared first.
+        futures::executor::block_on(async {
+            let source = concat!(
+                "struct Wrap { helper: i32 }\n",
+                "fn helper() -> i32 { return 1; }\n",
+                "fn run() -> i32 { return helper(); }\n",
+            );
+            let result = hover_at(source, 2, 26).await.expect("hover on helper()");
+            assert_eq!(result.contents.value, "```wado\nfn helper() -> i32\n```");
+        });
+    }
+
+    #[test]
+    fn hover_on_local_inside_a_closure_call_argument() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\n",
+                "fn run() -> i32 {\n",
+                "    return apply(|n: i32| -> i32 { let doubled = n * 2; return doubled; });\n",
+                "}\n",
+            );
+            let line =
+                "    return apply(|n: i32| -> i32 { let doubled = n * 2; return doubled; });";
+            let col = line.rfind("doubled").unwrap() as u32;
+            let result = hover_at(source, 2, col).await.expect("hover on doubled");
+            assert_eq!(result.contents.value, "```wado\nlet doubled\n```");
+        });
+    }
+
+    #[test]
+    fn hover_on_local_inside_a_nested_call_argument_block() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn take(v: i32) -> i32 { return v; }\n",
+                "fn run() -> i32 {\n",
+                "    return take(1 + b: { let inner: i32 = 2; break b: inner; });\n",
+                "}\n",
+            );
+            let line = "    return take(1 + b: { let inner: i32 = 2; break b: inner; });";
+            let col = line.rfind("inner").unwrap() as u32;
+            let result = hover_at(source, 2, col).await.expect("hover on inner");
+            assert_eq!(result.contents.value, "```wado\nlet inner: i32\n```");
+        });
+    }
+
+    #[test]
+    fn hover_on_local_inside_a_test_block_closure() {
+        futures::executor::block_on(async {
+            let source = concat!(
+                "fn apply(f: fn(i32) -> i32) -> i32 { return f(1); }\n",
+                "fn run() {}\n",
+                "test \"t\" {\n",
+                "    let _ = apply(|n: i32| -> i32 { let scaled = n * 3; return scaled; });\n",
+                "}\n",
+            );
+            let line = "    let _ = apply(|n: i32| -> i32 { let scaled = n * 3; return scaled; });";
+            let col = line.rfind("scaled").unwrap() as u32;
+            let result = hover_at(source, 3, col).await.expect("hover on scaled");
+            assert_eq!(result.contents.value, "```wado\nlet scaled\n```");
         });
     }
 

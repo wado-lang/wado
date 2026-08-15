@@ -359,7 +359,6 @@ impl Monomorphizer {
         // not register as one wasm-GC type.
         let head = key
             .def
-            .or_else(|| type_table.decl_named_in(&key.name, &key.module_source))
             .map_or_else(|| key.name.clone(), |def| type_table.decl_render_name(def));
         mangle_generic_name(&head, &args)
     }
@@ -558,10 +557,7 @@ impl Monomorphizer {
                     let base = *base_type;
                     // The head an `impl` header writes: the declaration, with
                     // any arguments left beside it rather than fused in.
-                    let own = FqTypeName::declared(
-                        type_table.def_module(*def),
-                        type_table.def_name(*def),
-                    );
+                    let own = FqTypeName::declared(type_table.defs(), *def);
                     if has_own_impl(&own, tid) {
                         return Some(own);
                     }

@@ -1,0 +1,20 @@
+// A namespace-qualified call takes the callee's parameter defaults, so an
+// omitted trailing argument is padded from the declaration rather than
+// counted as a missing one.
+
+use dep from "./sub/namespace_import_default_arg_dep.wado";
+use { scaled } from "./sub/namespace_import_default_arg_dep.wado";
+
+test "a namespace-qualified call omits a defaulted argument" {
+    assert dep::scaled(5) == 15;
+    assert dep::scaled(5, 4) == 20;
+    assert dep::labelled(7) == "n=7";
+}
+
+test "the same callee under a named import behaves identically" {
+    assert scaled(5) == 15;
+    assert scaled(5, 4) == 20;
+}
+
+__DATA__
+{"test": {}}

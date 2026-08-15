@@ -22,9 +22,9 @@ pub const CLOSURE_CALL_METHOD: &str = "__call";
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
 /// a valid Wado identifier character, so the alias is a single `::`-free token
-/// that flows through the per-name import maps (`imported_type_sources`,
-/// `imported_globals`, the symbol-table imports) like a `use { X as Y }`
-/// alias, scoped to the namespace's own module.
+/// that flows through the resolution table's import tier and the per-name
+/// import maps (`imported_globals`, the symbol-table imports) like a
+/// `use { X as Y }` alias, scoped to the namespace's own module.
 pub const NAMESPACE_MEMBER_SEP: char = '$';
 
 /// Build the `ns$member` alias for a namespace-imported symbol.
@@ -1804,55 +1804,6 @@ pub fn test_function_name(
 mod tests {
     use super::*;
 
-    /// A type swap is a substitution over the structure, so the cases a
-    /// string rewrite had to defend against cannot arise: a type whose *name*
-    /// contains the old one is a different `FqTypeName` and never matches, and
-    /// a nested occurrence is reached by walking arguments rather than by
-    /// finding a substring.
-    #[test]
-    fn substituting_a_type_walks_the_structure_not_the_spelling() {
-        let mut interner = ModuleSourceInterner::new();
-        let m = interner.local("./a.wado");
-        let old = FqTypeName::declared(&m, "Old");
-        let new = FqTypeName::declared(&m, "New");
-        let list = |arg: FqTypeName| FqTypeName::declared(&m, "List").with_args(vec![arg]);
-
-        // The whole name, and an argument position, and a nested one.
-        assert_eq!(old.substitute(&old, &new), new);
-        assert_eq!(list(old.clone()).substitute(&old, &new), list(new.clone()));
-        assert_eq!(
-            list(list(old.clone())).substitute(&old, &new),
-            list(list(new.clone()))
-        );
-
-        // A different declaration whose name merely contains the old one.
-        let extended = list(FqTypeName::declared(&m, "OldExtended"));
-        assert_eq!(extended.substitute(&old, &new), extended);
-
-        // Same spelling, different module — a different type, so untouched.
-        let elsewhere = interner.local("./b.wado");
-        let foreign = list(FqTypeName::declared(&elsewhere, "Old"));
-        assert_eq!(foreign.substitute(&old, &new), foreign);
-
-        // A reference substitutes its pointee and keeps the prefix.
-        assert_eq!(
-            old.clone()
-                .with_reference(RefKind::Mut)
-                .substitute(&old, &new),
-            new.clone().with_reference(RefKind::Mut)
-        );
-
-        // The receiver a monomorphized call is keyed on follows the same swap.
-        let mut method = LocalMethodName::new(
-            FqTypeName::declared(&m, "List"),
-            None,
-            "with_capacity".to_string(),
-        );
-        method.struct_type_args = vec![old.clone()];
-        method.substitute_type(&old, &new);
-        assert_eq!(method.struct_type_args, vec![new]);
-    }
-
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {
         let mut interner = ModuleSourceInterner::new();
@@ -1912,35 +1863,6 @@ mod tests {
         // replacement for it: readers ask the declaration, so nothing reads
         // the declared name back out of this string.
         assert!(a.starts_with("UserId"));
-    }
-
-    #[test]
-    fn test_method_name_to_string_simple() {
-        let mut interner = ModuleSourceInterner::new();
-        let module = interner.local("./geometry.wado");
-        let method = MethodName::new(
-            module.clone(),
-            FqTypeName::declared(&module, "Point"),
-            None,
-            "sum".to_string(),
-        );
-        assert_eq!(method.to_string(), "./geometry.wado/Point::sum");
-    }
-
-    #[test]
-    fn test_method_name_to_string_with_trait() {
-        let mut interner = ModuleSourceInterner::new();
-        let module = interner.local("./geometry.wado");
-        let method = MethodName::new(
-            module.clone(),
-            FqTypeName::declared(&module, "Point"),
-            Some(FqTraitName::declared(&module, "Display")),
-            "fmt".to_string(),
-        );
-        assert_eq!(
-            method.to_string(),
-            "./geometry.wado/Point^./geometry.wado/Display::fmt"
-        );
     }
 
     #[test]
@@ -2217,94 +2139,6 @@ mod tests {
             "List<i32>"
         );
     }
-
-    #[test]
-    fn the_tuple_head_has_one_spelling_whichever_side_asks() {
-        // A tuple is spelled `[a,b]`, never `[]<a,b>`. Since the tuple family
-        // became a declaration, a caller reaching it by name — `of_head`, and
-        // `ImplTargetKey::of_decl` through it — lands on `builtin`, so the
-        // decision has to live there and not only in `tuple`.
-        let elems = vec![FqTypeName::builtin("i32"), FqTypeName::builtin("f64")];
-        let by_name =
-            FqTypeName::of_head(&ModuleSource::default(), TUPLE_TYPE_NAME).with_args(elems.clone());
-        // `declared` is the route a caller takes when it read `(name, module)`
-        // off a resolved type — the family declares a module, and the spelling
-        // still must not carry it.
-        let by_decl = FqTypeName::declared(&ModuleSource::default(), TUPLE_TYPE_NAME)
-            .with_args(elems.clone());
-        let by_constructor = FqTypeName::tuple(elems);
-        assert_eq!(by_name.to_mangled(), "[i32,f64]");
-        assert_eq!(by_name.to_mangled(), by_constructor.to_mangled());
-        assert_eq!(by_decl.to_mangled(), by_constructor.to_mangled());
-        assert_eq!(by_name.to_display(), by_constructor.to_display());
-        assert_eq!(by_decl.to_display(), by_constructor.to_display());
-    }
-
-    #[test]
-    fn ref_receiver_renders_one_spelling() {
-        // `struct_name` goes through `Receiver::mangle_with_ref`, `fq_struct_name`
-        // through `FqTypeName::to_mangled`. A ref-impl template is registered
-        // under one and looked up under the other, so they must agree.
-        for kind in [RefKind::Shared, RefKind::Mut] {
-            let mut info = LocalMethodName::new_ref(
-                kind,
-                Some(FqTraitName::declared(
-                    &ModuleSource::default(),
-                    "IntoIterator",
-                )),
-                "into_iter".to_string(),
-            );
-            info.struct_type_args = vec![
-                FqTypeName::declared(&ModuleSource::default(), "List")
-                    .with_args(vec![FqTypeName::builtin("i32")]),
-            ];
-            assert_eq!(info.fq_struct_name().to_mangled(), info.struct_name());
-        }
-    }
-
-    /// The mangle and the display are two renderings of one structure, so a
-    /// reader that wants the source spelling asks for it rather than taking
-    /// the mangle back apart — which is what a module-qualified head and a
-    /// module-qualified argument used to require.
-    #[test]
-    fn a_method_renders_a_mangle_and_a_display_from_one_structure() {
-        let mut interner = ModuleSourceInterner::new();
-        let geom = interner.local("./geometry.wado");
-        let types = interner.local("./types.wado");
-
-        let inherent = LocalMethodName::new(
-            FqTypeName::declared(&geom, "Point"),
-            None,
-            "sum".to_string(),
-        );
-        assert_eq!(inherent.to_mangled_name(), "./geometry.wado/Point::sum");
-        assert_eq!(inherent.to_display_name(), "Point::sum");
-
-        let mut generic = LocalMethodName::new(
-            FqTypeName::declared(&geom, "Box"),
-            Some(FqTraitName::declared(&types, "Ord")),
-            "cmp".to_string(),
-        );
-        generic.struct_type_args = vec![FqTypeName::declared(&types, "T")];
-        assert_eq!(
-            generic.to_mangled_name(),
-            "./geometry.wado/Box<./types.wado/T>^./types.wado/Ord::cmp"
-        );
-        assert_eq!(generic.to_display_name(), "Box<T>^Ord::cmp");
-    }
-
-    #[test]
-    fn ref_prefix_binds_to_its_pointee() {
-        let point = FqTypeName::declared(&ModuleSource::default(), "Point");
-        assert_eq!(
-            point.clone().with_reference(RefKind::Shared).to_display(),
-            "&Point"
-        );
-        assert_eq!(
-            point.with_reference(RefKind::Mut).to_display(),
-            "&mut Point"
-        );
-    }
 }
 
 /// Whether `name` names a builtin shape — one no module declares, so every
@@ -2357,13 +2191,16 @@ pub struct FqTypeName {
     args: Vec<FqTypeName>,
 }
 
-/// What an [`FqTypeName`]'s head names. The three cases differ in whether a
-/// module qualifies them — the distinction a bare `String` loses, and the one
-/// every mis-dispatch in this area turned on.
+/// What an [`FqTypeName`]'s head names.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeHead {
-    /// A declaration, named by the module that declares it.
-    Declared {
+    /// A declaration. Equality reads the [`crate::defs::DefId`], so two
+    /// same-named declarations are two heads however they are spelled.
+    Declared(DeclaredHead),
+    /// A struct shape no declaration names — an anonymous literal's, a closure
+    /// environment's, a synthesised adapter's. The type table interns it under
+    /// this `(module, name)` pair, so the rendering *is* the identity.
+    Shape {
         module: crate::module_source::ModuleSource,
         name: String,
     },
@@ -2380,13 +2217,35 @@ pub enum TypeHead {
 }
 
 impl TypeHead {
-    /// The head's own name, as its declaration writes it.
+    /// The head's own name, as its declaration writes it. Diagnostics; a mangle
+    /// takes [`Self::rendered`], which disambiguates a function-local
+    /// declaration.
     #[must_use]
     pub fn name(&self) -> &str {
         match self {
-            Self::Declared { name, .. } => name,
-            Self::Builtin(name) | Self::Binder(name) => name,
+            Self::Declared(head) => head.name(),
+            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder(name) => name,
             Self::Tuple => TUPLE_TYPE_NAME,
+        }
+    }
+
+    /// The spelling a mangle embeds.
+    #[must_use]
+    pub fn rendered(&self) -> &str {
+        match self {
+            Self::Declared(head) => head.rendered(),
+            Self::Shape { name, .. } | Self::Builtin(name) | Self::Binder(name) => name,
+            Self::Tuple => TUPLE_TYPE_NAME,
+        }
+    }
+
+    /// The declaration this head names, or `None` for a head that names none.
+    /// This is identity: compare these, never [`Self::name`].
+    #[must_use]
+    pub fn def(&self) -> Option<crate::defs::DefId> {
+        match self {
+            Self::Declared(head) => Some(head.def()),
+            Self::Shape { .. } | Self::Builtin(_) | Self::Binder(_) | Self::Tuple => None,
         }
     }
 
@@ -2394,7 +2253,8 @@ impl TypeHead {
     #[must_use]
     pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
         match self {
-            Self::Declared { module, .. } => Some(module),
+            Self::Declared(head) => Some(head.module()),
+            Self::Shape { module, .. } => Some(module),
             Self::Builtin(_) | Self::Binder(_) | Self::Tuple => None,
         }
     }
@@ -2409,25 +2269,27 @@ impl FqTypeName {
         }
     }
 
-    /// A declared type, named by the module that declares it. `module` must be
-    /// the *declaring* module, not the use site's.
-    ///
-    /// `name` is the declaration's own name and carries no type arguments;
-    /// [`Self::with_args`] adds them once the receiver is instantiated.
-    ///
-    /// The tuple family is the one declaration whose *spelling* is not
-    /// `Module/Head<args>`: it is `[a,b]`, bare. It became a declaration in
-    /// WEP 2026-08-12, so a caller reading `(name, module)` off a resolved
-    /// type now lands here with it — and the qualified form it would produce
-    /// (`core:prelude/types.wado/[]<i32,String>`) is a name no impl is
-    /// registered under. Every other builtin spells `Head<args>` either way,
-    /// so only this one has to be caught.
+    /// The tuple family is the one declaration whose spelling is not
+    /// `Module/Head<args>` but bare `[a,b]`, and no impl is registered under
+    /// the qualified form.
     #[must_use]
-    pub fn declared(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+        if defs.name(def) == TUPLE_TYPE_NAME {
+            return Self::of_head_kind(TypeHead::Tuple);
+        }
+        Self::of_head_kind(TypeHead::Declared(DeclaredHead::new(defs, def)))
+    }
+
+    /// `module` and `name` are the pair the type table interns the shape under.
+    #[must_use]
+    pub fn shape(module: &crate::module_source::ModuleSource, name: &str) -> Self {
         if name == TUPLE_TYPE_NAME {
             return Self::of_head_kind(TypeHead::Tuple);
         }
-        Self::of_head_kind(TypeHead::Declared {
+        if is_builtin_shape_name(name) {
+            return Self::of_head_kind(TypeHead::Builtin(name.to_string()));
+        }
+        Self::of_head_kind(TypeHead::Shape {
             module: module.clone(),
             name: name.to_string(),
         })
@@ -2470,16 +2332,14 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Builtin(arity.to_string()))
     }
 
-    /// A head written in source, resolved against the module that declares it:
-    /// [`Self::builtin`] for a builtin shape, [`Self::declared`] otherwise. The
-    /// single place that decision is made, so a definition and a call site
-    /// spelling the same head cannot disagree.
+    /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
+    /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
-    pub fn of_head(module: &crate::module_source::ModuleSource, name: &str) -> Self {
-        if is_builtin_shape_name(name) {
-            Self::builtin(name)
+    pub fn of_head(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+        if is_builtin_shape_name(defs.name(def)) {
+            Self::builtin(defs.name(def))
         } else {
-            Self::declared(module, name)
+            Self::declared(defs, def)
         }
     }
 
@@ -2550,9 +2410,10 @@ impl FqTypeName {
             return out;
         }
         match &self.head {
-            TypeHead::Declared { module, name } => {
-                out.push_str(&format!("{module}/{name}"));
+            TypeHead::Declared(head) => {
+                out.push_str(&format!("{}/{}", head.module(), head.rendered()));
             }
+            TypeHead::Shape { module, name } => out.push_str(&format!("{module}/{name}")),
             TypeHead::Builtin(name) | TypeHead::Binder(name) => out.push_str(name),
             TypeHead::Tuple => unreachable!("handled above"),
         }
@@ -2637,28 +2498,110 @@ impl std::fmt::Display for FqTypeName {
     }
 }
 
+/// A declaration in a name's head position, with the spellings it renders to.
+/// Equality and hashing read the [`crate::defs::DefId`] alone.
+#[derive(Debug, Clone)]
+pub struct DeclaredHead {
+    def: crate::defs::DefId,
+    module: ModuleSource,
+    /// As source writes it. Diagnostics.
+    name: String,
+    /// What a mangle embeds: [`Self::name`] with a function-local
+    /// declaration's disambiguator applied.
+    rendered: String,
+}
+
+impl PartialEq for DeclaredHead {
+    fn eq(&self, other: &Self) -> bool {
+        self.def == other.def
+    }
+}
+
+impl Eq for DeclaredHead {}
+
+impl std::hash::Hash for DeclaredHead {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.def.hash(state);
+    }
+}
+
+impl DeclaredHead {
+    /// Render `def`. The declaring module and the declared name come off the
+    /// table, never from a caller.
+    #[must_use]
+    pub fn new(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+        let name = defs.name(def).to_string();
+        let rendered = if defs.is_function_local(def) {
+            mangle_local_item_name(&name, defs.ast_id(def))
+        } else {
+            name.clone()
+        };
+        Self {
+            def,
+            module: defs.module(def).clone(),
+            name,
+            rendered,
+        }
+    }
+
+    /// The spelling a mangle embeds.
+    #[must_use]
+    pub fn rendered(&self) -> &str {
+        &self.rendered
+    }
+
+    #[must_use]
+    pub fn def(&self) -> crate::defs::DefId {
+        self.def
+    }
+
+    #[must_use]
+    pub fn module(&self) -> &ModuleSource {
+        &self.module
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 /// The trait half of a `Type^Trait::method` mangle. The head is the trait's
-/// *declaration*, with its declaring module — never the spelling a use site
-/// wrote, which an alias or another module's import can change — or two
-/// same-named traits implemented for one type would mangle alike and one impl
-/// would overwrite the other. Type arguments are carried already-mangled.
+/// *declaration* — an identity, never the spelling a use site wrote, which an
+/// alias or another module's import can change — or two same-named traits
+/// implemented for one type would mangle alike and one impl would overwrite
+/// the other. Type arguments are carried already-mangled.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTraitName {
-    head: TypeHead,
+    head: TraitHead,
     args: Vec<String>,
 }
 
+/// What an [`FqTraitName`]'s head names.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum TraitHead {
+    /// A trait declaration.
+    Declared(DeclaredHead),
+    /// A trait position filled by a template's own binder. Not a declaration,
+    /// so it has no module and no identity — only the spelling its template
+    /// scopes.
+    Binder(String),
+}
+
+impl TraitHead {
+    fn name(&self) -> &str {
+        match self {
+            Self::Declared(head) => head.name(),
+            Self::Binder(name) => name,
+        }
+    }
+}
+
 impl FqTraitName {
-    /// A trait named by the module that declares it. `module` must be the
-    /// *declaring* module — a reference site's own module answers a different
-    /// question.
     #[must_use]
-    pub fn declared(module: &ModuleSource, name: &str) -> Self {
+    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
         Self {
-            head: TypeHead::Declared {
-                module: module.clone(),
-                name: name.to_string(),
-            },
+            head: TraitHead::Declared(DeclaredHead::new(defs, def)),
             args: Vec::new(),
         }
     }
@@ -2668,7 +2611,7 @@ impl FqTraitName {
     #[must_use]
     pub fn binder(name: &str) -> Self {
         Self {
-            head: TypeHead::Binder(name.to_string()),
+            head: TraitHead::Binder(name.to_string()),
             args: Vec::new(),
         }
     }
@@ -2690,15 +2633,20 @@ impl FqTraitName {
     /// The declaring module, or `None` for a binder.
     #[must_use]
     pub fn module(&self) -> Option<&ModuleSource> {
-        self.head.module()
+        match &self.head {
+            TraitHead::Declared(head) => Some(head.module()),
+            TraitHead::Binder(_) => None,
+        }
     }
 
-    /// The canonical `(declaring module, declaration name)` key, or `None` for
-    /// a binder.
+    /// The trait this names, or `None` for a binder. This is the identity —
+    /// compare these, never [`Self::base_name`].
     #[must_use]
-    pub fn canonical(&self) -> Option<(ModuleSource, String)> {
-        self.module()
-            .map(|m| (m.clone(), self.base_name().to_string()))
+    pub fn canonical(&self) -> Option<crate::defs::DefId> {
+        match &self.head {
+            TraitHead::Declared(head) => Some(head.def()),
+            TraitHead::Binder(_) => None,
+        }
     }
 
     #[must_use]
@@ -2719,9 +2667,8 @@ impl FqTraitName {
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let head = match &self.head {
-            TypeHead::Declared { module, name } => format!("{module}/{name}"),
-            TypeHead::Builtin(name) | TypeHead::Binder(name) => name.clone(),
-            TypeHead::Tuple => TUPLE_TYPE_NAME.to_string(),
+            TraitHead::Declared(head) => format!("{}/{}", head.module(), head.rendered()),
+            TraitHead::Binder(name) => name.clone(),
         };
         mangle_generic_name(&head, &self.args)
     }

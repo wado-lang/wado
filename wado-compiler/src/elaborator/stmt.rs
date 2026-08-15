@@ -6,7 +6,6 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
 };
@@ -70,6 +69,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tail_value: bool,
     ) {
         ctx.enter_scope();
+        let outer_items = self.hoist_local_items(block);
         let len = block.stmts.len();
         for (i, s) in block.stmts.iter().enumerate() {
             // The trailing statement is resolved in value position when the
@@ -108,7 +108,58 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             self.resolve_stmt(s, ctx);
         }
+        if let Some(outer) = outer_items {
+            self.sem.decls.fn_local_items = outer;
+        }
         ctx.exit_scope();
+    }
+
+    /// Bring a block's local items into scope ahead of its statements,
+    /// answering with the enclosing block's to restore on the way out.
+    ///
+    /// Three passes, because a name resolves through its field info: the
+    /// structs take their identity and a fieldless entry, then the newtypes
+    /// resolve — to a fixpoint, so a base may name a later newtype — then the
+    /// struct fields are filled in.
+    fn hoist_local_items(
+        &mut self,
+        block: &Block,
+    ) -> Option<crate::IndexMap<String, crate::defs::DefId>> {
+        let items: Vec<&ast::Item> = block
+            .stmts
+            .iter()
+            .filter_map(|s| match s {
+                Stmt::Item(item) => Some(&**item),
+                _ => None,
+            })
+            .collect();
+        if items.is_empty() {
+            return None;
+        }
+        let outer = self.sem.decls.fn_local_items.clone();
+        for item in &items {
+            if let ast::Item::Struct(struct_decl) = item {
+                self.declare_local_struct(struct_decl);
+            }
+        }
+        let mut pending: Vec<&ast::Newtype> = items
+            .iter()
+            .filter_map(|item| match item {
+                ast::Item::Newtype(newtype_decl) => Some(newtype_decl),
+                _ => None,
+            })
+            .collect();
+        while !pending.is_empty() {
+            let before = pending.len();
+            pending.retain(|newtype_decl| !self.resolve_local_newtype(newtype_decl));
+            if pending.len() == before {
+                break;
+            }
+        }
+        for item in items {
+            self.resolve_local_item(item);
+        }
+        Some(outer)
     }
 
     /// Resolve a statement for its facts. Reify rebuilds the `TirStmt`(s)
@@ -138,7 +189,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
-            Stmt::Item(item) => self.resolve_local_item(item),
+            // Already resolved ahead of the block's statements.
+            Stmt::Item(_) => {}
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so there is nothing to record.
             Stmt::Error(_) => {}
@@ -146,14 +198,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a `Stmt::Item` — a declaration inside a function body, scoped to
-    /// that function. Sequential and forward-declaration-required, like `let`. A
-    /// struct or newtype is minted under a mangled `{name}@{AstId}` so sibling
-    /// functions cannot collide in the module's shared tables. The other kinds
-    /// are parsed but not resolved, having no per-`AstId` fact for reify.
+    /// the block that writes it. A struct or newtype is minted under a mangled
+    /// `{name}@{AstId}` so sibling blocks cannot collide in the module's shared
+    /// tables. The other kinds are parsed but not resolved, having no
+    /// per-`AstId` fact for reify.
     fn resolve_local_item(&mut self, item: &ast::Item) {
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
-            ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
+            // `hoist_local_items` resolved these ahead of the struct fields.
+            ast::Item::Newtype(_) => {}
             // Parsed but not yet resolved — see the doc comment on
             // `resolve_local_item` above.
             ast::Item::Enum(_)
@@ -180,15 +233,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let module_source = self.current_module_source.clone();
+    /// Give a local struct its identity before any of its block's
+    /// declarations are resolved, so a type may name one written later.
+    fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
+        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
+            return;
+        };
+        // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
+        // generic struct: its usage sites mint separate `GenericInstance`
+        // TypeIds, and this one exists so `type_id_of_decl` has something to
+        // find. The head is the declaration, not the `Foo@AstId` storage
+        // spelling, which names none.
+        let type_id = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_struct(crate::tir::StructDef::Decl(def));
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .register_decl_type(struct_decl.id, type_id);
         let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
+        self.sem.decls.local_item_renders.insert(
+            (mangled_name.clone(), self.current_module_source.clone()),
+            def,
+        );
+        self.sem
+            .decls
+            .fn_local_items
+            .insert(struct_decl.name.clone(), def);
+        // The type parameters are final already — read off the AST, not
+        // resolved — so only the fields are left for `resolve_local_struct`.
+        let type_param_type_ids: Vec<TypeId> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(p.name.clone(), i as u32)
+            })
+            .collect();
+        self.sem.decls.local_item_struct_fields.insert(
+            def,
+            super::types::StructFieldInfo {
+                name: mangled_name,
+                module_source: self.current_module_source.clone(),
+                defined_at: struct_decl.id,
+                fields: Vec::new(),
+                field_ast_ids: Vec::new(),
+                field_defaults: Vec::new(),
+                type_param_bounds: Self::type_param_bounds_of(&struct_decl.type_params),
+                type_param_type_ids,
+            },
+        );
+    }
 
+    fn type_param_bounds_of(
+        params: &[ast::GenericParam],
+    ) -> Vec<(String, Vec<super::types::BoundRef>)> {
+        params
+            .iter()
+            .map(|p| {
+                (
+                    p.name.clone(),
+                    p.bounds
+                        .iter()
+                        .map(|b| super::types::BoundRef {
+                            name: b.name.clone(),
+                            site: b.id,
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         // Generic local structs need `T` etc. in scope while resolving field
         // types (so a field of type `T` becomes a `TypeParam`, not
         // `UNKNOWN`), mirroring `resolve_struct`'s top-level handling. The
         // scope is entered unconditionally — harmless no-op when there are
-        // no type params — and dropped before the type is registered below.
+        // no type params.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
@@ -206,79 +333,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
         }
-        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> = struct_decl
-            .type_params
-            .iter()
-            .map(|p| {
-                (
-                    p.name.clone(),
-                    p.bounds
-                        .iter()
-                        .map(|b| super::types::BoundRef {
-                            name: b.name.clone(),
-                            site: b.id,
-                        })
-                        .collect(),
-                )
-            })
-            .collect();
-        let type_param_type_ids: Vec<TypeId> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(p.name.clone(), i as u32)
-            })
-            .collect();
         drop(scope);
 
-        // Register a `TypeId` for the declaration itself, generic or not —
-        // mirrors `intern_all_decl_types`'s "base entry" for a module-level
-        // generic struct (its own usage sites mint separate
-        // `GenericInstance` TypeIds; this one exists so bare-name lookups
-        // like `type_id_of_decl` have something to find).
-        // A local item is a declaration with an identity of its own, so the
-        // head is that declaration — not the `Foo@AstId` storage spelling,
-        // which names none.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
             return;
         };
-        let type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_struct(crate::tir::StructDef::Decl(def));
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .register_decl_type(struct_decl.id, type_id);
-
-        let info = super::types::StructFieldInfo {
-            name: mangled_name,
-            module_source,
-            defined_at: struct_decl.id,
-            fields,
-            field_ast_ids,
-            field_defaults,
-            type_param_bounds,
-            type_param_type_ids,
-        };
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
+        let Some(info) = self.sem.decls.local_item_struct_fields.get_mut(&def) else {
             return;
         };
-        self.sem
-            .decls
-            .local_item_renders
-            .insert((info.name.clone(), info.module_source.clone()), def);
-        self.sem.decls.local_item_struct_fields.insert(def, info);
-        self.sem
-            .decls
-            .fn_local_items
-            .insert(struct_decl.name.clone(), def);
+        info.fields = fields;
+        info.field_ast_ids = field_ast_ids;
+        info.field_defaults = field_defaults;
         // Local structs have no `Item::Struct` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // statement handling (`reify_local_struct`) is what discovers and
@@ -287,7 +352,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
+    /// Resolve a local newtype, reporting whether its base came out known.
+    ///
+    /// An unknown base registers nothing: a newtype registered against
+    /// `UNKNOWN` is indistinguishable from a real one, and the next round of
+    /// the caller's fixpoint would bind a dependent to it and keep it.
+    fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) -> bool {
         if !newtype_decl.type_params.is_empty() {
             // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
             // follow-up, unlike generic local structs (see
@@ -297,13 +367,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // rather than a `TirStruct` template the monomorphizer expands)
             // that this WEP hasn't wired up. Left unresolved — a reference
             // still surfaces the ordinary "unknown type" error.
-            return;
+            return true;
         }
         let base_type_id = self.resolve_type(&newtype_decl.ty);
+        if base_type_id == crate::tir::TypeTable::UNKNOWN {
+            return false;
+        }
         let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         // Same as the local struct: the head is this declaration's identity.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return;
+            return true;
         };
         let type_id = self
             .tysys
@@ -320,15 +393,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // discoverable post-declaration the same way struct field info is
         // (see `resolve_local_struct`).
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return;
+            return true;
         };
         self.sem
             .decls
             .local_item_renders
             .insert((mangled_name, self.current_module_source.clone()), def);
         self.sem.decls.local_item_newtypes.insert(def, type_id);
-        // The walk's position — visible only for the remainder of this
-        // function's own annotate walk.
         self.sem
             .decls
             .fn_local_items
@@ -338,6 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // handling (`reify_local_newtype`) discovers and builds this
         // declaration's `TirNewtype`, from the `local_newtypes` entry just
         // recorded above.
+        true
     }
 
     pub(super) fn resolve_labeled_block(
@@ -751,26 +823,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
-            ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("an enum names a declaration");
-                self.lookup_enum_case_in(name, module_source)
-                    .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
-            }
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a nominal type names a declaration");
-                self.lookup_variant_case_in(name, module_source)
-                    .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
-            }
+            ResolvedType::Enum { .. } => self
+                .enum_of_type(type_id)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+                .variant_of_type(type_id)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
         }
     }
@@ -851,30 +909,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return case_name.to_string();
         };
         format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
-    }
-
-    /// Build the lookup key for `associated_constants`, matching how the map was
-    /// populated via `get_type_name` (base name only, no generic type arguments).
-    ///
-    /// For example, `Maybe<i32>::CONST` must look up as `"Maybe::CONST"` because
-    /// `get_type_name` strips generic args when building the key.
-    fn format_assoc_const_key(variant_name: &str, qualifier: Option<&Type>) -> String {
-        let Some(qualifier) = qualifier else {
-            return variant_name.to_string();
-        };
-        let base = match qualifier {
-            Type::Named(t) => t.name.as_str(),
-            Type::Generic(t) => t.name.as_str(),
-            Type::NamespacedGeneric(t) => t.name.as_str(),
-            Type::Function(_)
-            | Type::Tuple(_)
-            | Type::Reference(_)
-            | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
-            | Type::Infer(_)
-            | Type::Error(_) => return variant_name.to_string(),
-        };
-        format!("{base}::{variant_name}")
     }
 
     /// Resolve a let pattern (for tuple/struct destructuring).
@@ -1472,11 +1506,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check for associated constants (e.g., `i32::MAX`, `f64::PI`).
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
-                    let assoc_const_key =
-                        Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
                     if let Some((_const_module, type_id, const_expr)) =
-                        self.lookup_associated_constant(&assoc_const_key)
+                        self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal
@@ -1534,12 +1566,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Handle enum types (no payload, just discriminant matching)
                 if let ResolvedType::Enum { .. } = &resolved_type {
-                    let (name, module_source) = &self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(scrutinee_type)
-                        .expect("an enum names a declaration");
                     if !bindings.is_empty() {
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: format!("enum case `{variant_name}` does not have a payload"),
@@ -1547,8 +1573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.lookup_enum_case_in(name, module_source).cloned()
-                    {
+                    if let Some(enum_info) = self.enum_of_type(scrutinee_type).cloned() {
                         if let Some(case_data) =
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
@@ -1575,8 +1600,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return Vec::new();
                     }
+                    let enum_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
                     let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: format!("enum type `{name}`"),
+                        expected: format!("enum type `{enum_name}`"),
                         found: "unknown enum".to_string(),
                         span: *span,
                     });
@@ -1599,44 +1625,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
+                let scrutinee_decl = self.tysys.type_def(scrutinee_type);
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
                     ResolvedType::Variant { .. } => {
-                        let (name, module_source) = &self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_head(scrutinee_type)
-                            .expect("a variant names a declaration");
-                        self.get_variant_case_payload_type(
-                            name,
-                            module_source,
-                            normalized_variant_name,
-                            &[],
-                            *span,
-                        )
+                        scrutinee_decl.map_or(TypeTable::UNKNOWN, |def| {
+                            self.get_variant_case_payload_type(
+                                def,
+                                normalized_variant_name,
+                                &[],
+                                *span,
+                            )
+                        })
                     }
                     // Generic variant instantiation
                     ResolvedType::GenericInstance { type_args, .. } => {
-                        let (name, module_source) = &self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_head(scrutinee_type)
-                            .expect("a generic instance names a declaration");
                         // Check if this is a variant (not a struct)
-                        if self.contains_variant(name) {
+                        let is_variant = scrutinee_decl
+                            .is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
+                        if is_variant {
                             self.get_variant_case_payload_type(
-                                name,
-                                module_source,
+                                scrutinee_decl.expect("a variant answers with its declaration"),
                                 normalized_variant_name,
                                 type_args,
                                 *span,
                             )
                         } else {
+                            let found = self.tysys.type_table.borrow().type_name(scrutinee_type);
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
-                                found: name.clone(),
+                                found,
                                 span: *span,
                             });
                             TypeTable::UNKNOWN
@@ -1971,15 +1989,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get payload type for a variant case, substituting type parameters if needed
     pub(super) fn get_variant_case_payload_type(
         &mut self,
-        variant_name: &str,
-        variant_module: &ModuleSource,
+        variant: crate::defs::DefId,
         case_name: &str,
         type_args: &[TypeId],
         span: Span,
     ) -> TypeId {
         // Clone payload first to avoid borrow conflict with substitute_type_params.
         let payload_opt = self
-            .lookup_variant_case_in(variant_name, variant_module)
+            .type_lookup()
+            .variant_cases_of(variant)
             .and_then(|info| {
                 info.cases
                     .iter()
@@ -1992,20 +2010,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.substitute_type_params(payload, type_args);
         }
 
-        // Check if variant exists but case not found
-        if self.contains_variant(variant_name) {
-            let _ = self.emit(TypeError::PatternTypeMismatch {
-                expected: format!("valid case of variant {variant_name}"),
-                found: case_name.to_string(),
-                span,
-            });
-        } else {
-            let _ = self.emit(TypeError::PatternTypeMismatch {
-                expected: "known variant type".to_string(),
-                found: variant_name.to_string(),
-                span,
-            });
-        }
+        // The declaration is a variant — it answered `variant_cases_of` or it
+        // would not be one — so the only way here is a case it does not
+        // declare. The diagnostic reads its spelling at the point of
+        // reporting, off the declaration.
+        let variant_name = self.tysys.resolutions.defs().name(variant).to_string();
+        let _ = self.emit(TypeError::PatternTypeMismatch {
+            expected: format!("valid case of variant {variant_name}"),
+            found: case_name.to_string(),
+            span,
+        });
         TypeTable::UNKNOWN
     }
     /// Resolve a loop statement (infinite loop).
@@ -2540,40 +2554,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
-        let option_shape: Option<(String, ModuleSource, Vec<TypeId>)> =
+        let option_shape: Option<(crate::defs::DefId, Vec<TypeId>)> = {
+            let decl = self.tysys.type_def(option_type);
+            let is_variant =
+                decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
             match self.tysys.type_table.borrow().get(option_type).clone() {
-                ResolvedType::GenericInstance { def, type_args }
-                    if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
-                {
-                    let (n, m) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(option_type)
-                        .expect("a generic instance names a declaration");
-                    Some((n, m, type_args))
-                }
-                ResolvedType::Variant { def }
-                    if self.contains_variant(self.tysys.type_table.borrow().def_name(def)) =>
-                {
-                    let (n, m) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(option_type)
-                        .expect("a variant names a declaration");
-                    Some((n, m, vec![]))
-                }
+                ResolvedType::GenericInstance { type_args, .. } if is_variant => Some((
+                    decl.expect("a variant answers with its declaration"),
+                    type_args,
+                )),
+                ResolvedType::Variant { .. } if is_variant => Some((
+                    decl.expect("a variant answers with its declaration"),
+                    vec![],
+                )),
                 _ => None,
-            };
+            }
+        };
         let item_type = match option_shape {
-            Some((name, module_source, type_args)) => self.get_variant_case_payload_type(
-                &name,
-                &module_source,
-                &some_case_name,
-                &type_args,
-                span,
-            ),
+            Some((def, type_args)) => {
+                self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)
+            }
             // `.next()` returned an unexpected non-Option type. The iterator-
             // trait check above (or method dispatch downstream) has already
             // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
