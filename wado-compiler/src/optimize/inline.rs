@@ -294,12 +294,15 @@ impl CostWalk<'_> {
                     + self.block(*then_branch, seen)
                     + else_branch.map_or(0, |b| self.block(b, seen))
             }
-            // Every arm is a branch target, so an n-way dispatch splices n
-            // blocks into the caller however cheap the arms are. Pricing the
-            // dispatch once left a 20-arm table of constants costing 2 — an
-            // `if`'s price — and inlining at every call site from `-O1` up.
+            // The dispatch is one branch, but each arm is a block spliced into
+            // the caller however cheap its body is. Pricing only the dispatch
+            // left a 20-arm table of constants costing 2 — an `if`'s price —
+            // and inlining at every call site from `-O1` up. An arm is worth
+            // `OP`, not `BRANCH`: at `BRANCH` the same `-Os` output came out
+            // 0.4% smaller but cost sqlite_parse ~2% of its throughput.
             ExprKind::Match { expr, arms } => {
-                arms.len() * weight::BRANCH
+                weight::BRANCH
+                    + arms.len() * weight::OP
                     + self.operand(*expr, seen)
                     + arms
                         .iter()
@@ -315,7 +318,8 @@ impl CostWalk<'_> {
                 default,
                 ..
             } => {
-                (arms.len() + 1) * weight::BRANCH
+                weight::BRANCH
+                    + (arms.len() + 1) * weight::OP
                     + self.operand(*scrutinee, seen)
                     + arms.iter().map(|a| self.block(*a, seen)).sum::<usize>()
                     + self.block(*default, seen)
