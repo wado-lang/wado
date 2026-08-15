@@ -1265,7 +1265,7 @@ fn build_future_intrinsic_types(
     pkg: &str,
 ) -> (u32, u32) {
     let fields_resource_idx = ctx.type_idx(&format!("{pkg}-fields-resource"));
-    let error_code = CmTypeKey::Leaf(ctx.type_idx(&format!("{pkg}-error-code")));
+    let error_code = CmTypeKey::Leaf(ctx.type_idx(&error_code_key(pkg)));
 
     let fields = intern_cm_type(
         builder,
@@ -2898,7 +2898,7 @@ fn handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
             ctx.type_idx(&format!("{pkg}-response")),
         ))),
         err: Some(Box::new(CmTypeKey::Leaf(
-            ctx.type_idx(&format!("{pkg}-error-code")),
+            ctx.type_idx(&error_code_key(pkg)),
         ))),
     }
 }
@@ -3139,7 +3139,7 @@ fn import_resource_defining_interface(
                 .get_enum_cm_name_by_interface(types_fq, "ErrorCode")
         })
         .expect("ErrorCode CM name not found for the types interface");
-    ctx.register_type(&format!("{pkg}-error-code"));
+    ctx.register_type(&error_code_key(&pkg));
     builder.alias_export(
         ctx.instance_idx(&types_instance),
         http_error_code_cm,
@@ -3189,7 +3189,7 @@ fn import_resource_defining_interface(
     // Intern the `result<own<response>, error-code>` handler composite when this
     // interface provides both arms (the handler/world-export shape). The export
     // lift and any client interface resolve it by structure.
-    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&format!("{pkg}-error-code")) {
+    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&error_code_key(&pkg)) {
         let key = handler_result_key(ctx, &pkg);
         intern_cm_type(builder, ctx, &key, None);
     }

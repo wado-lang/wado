@@ -42,24 +42,37 @@ pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -
 
 const IMPORT_SECTION_ID: u8 = 2;
 
-/// Rewrite a module that *defines* a memory into one that *imports* it, so it
-/// can share the component's memory with the other core modules.
+/// Rewrite a wasm asset so it takes the component's memory as an import rather
+/// than defining its own, letting it share memory with the other core modules.
 ///
-/// Every other section is carried over byte-for-byte, in its original order.
-/// Only three are touched: the memory definition is dropped, the memory export
-/// is dropped (the importer owns it now), and the import section gains the
-/// memory import — created if the module had none. This leaves every index
-/// space unchanged: a memory import takes slot 0, exactly where the dropped
-/// definition sat, and the memory space is disjoint from the function, global,
-/// and table spaces.
+/// Handles all three shapes `loader.rs` accepts (see [`MemorySource`]). Every
+/// section other than the memory definition, the memory export, and the import
+/// section is carried over byte-for-byte, in its original order. That leaves
+/// every index space unchanged: the memory import takes slot 0, exactly where
+/// the dropped definition sat, and the memory space is disjoint from the
+/// function, global, and table spaces.
 pub fn convert_memory_to_import(
     wasm_bytes: &[u8],
     import_module: &str,
     import_name: &str,
 ) -> Result<Vec<u8>, String> {
-    let memory = find_single_memory(wasm_bytes)?;
+    // `None` once the module already imports its memory: it needs no new one,
+    // and adding a second would be a duplicate.
+    let to_import: Option<MemoryType> = match find_memory_source(wasm_bytes)? {
+        MemorySource::AlreadyImported => None,
+        MemorySource::Defined(mem) => Some(mem),
+        MemorySource::Absent => Some(MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        }),
+    };
     let memory_import = |module: &mut Module, mut imports: ImportSection| {
-        imports.import(import_module, import_name, memory);
+        if let Some(mem) = to_import {
+            imports.import(import_module, import_name, mem);
+        }
         module.section(&imports);
     };
 
@@ -72,6 +85,7 @@ pub fn convert_memory_to_import(
         // import. When the module has none of its own, open one right before
         // the first such section (any id above the import section's own 2).
         if !memory_import_written
+            && to_import.is_some()
             && let Some((id, _)) = payload.as_section()
             && id > IMPORT_SECTION_ID
         {
@@ -134,27 +148,37 @@ pub fn convert_memory_to_import(
         }
     }
 
-    if !memory_import_written {
+    if !memory_import_written && to_import.is_some() {
         memory_import(&mut module, ImportSection::new());
     }
 
     Ok(module.finish())
 }
 
-/// The memory this module defines, as an import-ready [`MemoryType`]. The
-/// rewrite maps the definition onto import slot 0, so exactly one defined
-/// memory and no imported one is the only shape it can preserve.
-fn find_single_memory(wasm_bytes: &[u8]) -> Result<MemoryType, String> {
-    let mut found: Option<MemoryType> = None;
+/// Where a wasm asset's memory comes from. These are the shapes `loader.rs`
+/// admits: it rejects more than one memory, and `env.memory` is the only import
+/// it allows — so all three arms are ordinary inputs, not error cases.
+enum MemorySource {
+    /// Defines exactly one. The rewrite drops it and imports the same shape.
+    Defined(MemoryType),
+    /// Already written against the component's memory; nothing to convert.
+    AlreadyImported,
+    /// Neither defines nor imports one, so it cannot touch linear memory. It
+    /// still gets a minimal import, keeping every embedded module one shape.
+    Absent,
+}
+
+fn find_memory_source(wasm_bytes: &[u8]) -> Result<MemorySource, String> {
+    let mut defined: Option<MemoryType> = None;
     for payload in Parser::new(0).parse_all(wasm_bytes) {
         match payload.map_err(|e| format!("Parse error: {e}"))? {
             Payload::MemorySection(reader) => {
                 for mem in reader {
                     let mem = mem.map_err(|e| format!("Parse error: {e}"))?;
-                    if found.is_some() {
+                    if defined.is_some() {
                         return Err("module defines more than one memory".to_string());
                     }
-                    found = Some(MemoryType {
+                    defined = Some(MemoryType {
                         minimum: mem.initial,
                         maximum: mem.maximum,
                         memory64: mem.memory64,
@@ -168,10 +192,7 @@ fn find_single_memory(wasm_bytes: &[u8]) -> Result<MemoryType, String> {
                     for entry in group.map_err(|e| format!("Parse error: {e}"))? {
                         let (_, import) = entry.map_err(|e| format!("Parse error: {e}"))?;
                         if matches!(import.ty, wasmparser::TypeRef::Memory(_)) {
-                            return Err(format!(
-                                "module already imports memory {}/{}",
-                                import.module, import.name
-                            ));
+                            return Ok(MemorySource::AlreadyImported);
                         }
                     }
                 }
@@ -179,7 +200,7 @@ fn find_single_memory(wasm_bytes: &[u8]) -> Result<MemoryType, String> {
             _ => {}
         }
     }
-    found.ok_or_else(|| "module defines no memory to convert".to_string())
+    Ok(defined.map_or(MemorySource::Absent, MemorySource::Defined))
 }
 
 fn entity_type(ty: wasmparser::TypeRef) -> Option<EntityType> {
@@ -237,6 +258,24 @@ mod tests {
             }
         }
         None
+    }
+
+    fn count_memory_imports(wasm: &[u8]) -> usize {
+        let mut n = 0;
+        for payload in Parser::new(0).parse_all(wasm) {
+            if let Ok(Payload::ImportSection(imports)) = payload {
+                for group in imports.into_iter().flatten() {
+                    for import in group {
+                        if let Ok((_, imp)) = import
+                            && matches!(imp.ty, wasmparser::TypeRef::Memory(_))
+                        {
+                            n += 1;
+                        }
+                    }
+                }
+            }
+        }
+        n
     }
 
     fn section_ids(wasm: &[u8]) -> Vec<u8> {
@@ -352,9 +391,37 @@ mod tests {
         assert!(memory_import_of(&converted).is_some());
     }
 
+    /// `loader.rs` accepts a wasm asset with no memory at all (it only rejects
+    /// more than one), so the rewrite must still hand it the component's
+    /// memory rather than refusing the module.
     #[test]
-    fn convert_memory_to_import_rejects_a_module_with_no_memory() {
-        let bytes = wat::parse_str("(module (func))").expect("fixture must parse");
+    fn convert_memory_to_import_accepts_a_module_with_no_memory() {
+        let bytes = wat::parse_str(r#"(module (func (export "add_one")))"#).expect("fixture");
+        let converted = convert_memory_to_import(&bytes, "env", "memory").expect("conversion");
+        validate(&converted).expect("converted module must validate");
+        assert!(memory_import_of(&converted).is_some(), "memory import");
+    }
+
+    /// `env.memory` is the one import `loader.rs` permits in a wasm asset, so a
+    /// module already written against it is a normal input, not an error — and
+    /// it must not come back with the import duplicated.
+    #[test]
+    fn convert_memory_to_import_passes_through_an_existing_memory_import() {
+        let source = r#"
+            (module
+              (import "env" "memory" (memory 1))
+              (func (export "load") (result i32) (i32.load (i32.const 0))))
+        "#;
+        let bytes = wat::parse_str(source).expect("fixture must parse");
+        let converted = convert_memory_to_import(&bytes, "env", "memory").expect("conversion");
+        validate(&converted).expect("converted module must validate");
+        assert!(memory_import_of(&converted).is_some(), "memory import");
+        assert_eq!(count_memory_imports(&converted), 1, "no duplicate import");
+    }
+
+    #[test]
+    fn convert_memory_to_import_rejects_more_than_one_memory() {
+        let bytes = wat::parse_str("(module (memory 1) (memory 1))").expect("fixture must parse");
         assert!(convert_memory_to_import(&bytes, "env", "memory").is_err());
     }
 }
