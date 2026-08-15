@@ -178,7 +178,6 @@ global global:value_copy_array_get_mono.wado::__const_obj_57: ref null "core:pre
 global global:value_copy_array_get_mono.wado::__const_obj_58: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 69 };
 global global:value_copy_array_get_mono.wado::__const_obj_60: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 52, 95, 99, 111, 112, 121, 95, 105, 110, 95, 97, 95, 108, 111, 111, 112, 95, 98, 111, 100, 121), used: 28 };
 global global:value_copy_array_get_mono.wado::__const_obj_64: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 66 };
-global global:value_copy_array_get_mono.wado::__const_obj_68: ref null "core:prelude//List<value_copy_array_get_mono.wado/Cell>" = struct.new "core:prelude//List<value_copy_array_get_mono.wado/Cell>" { repr: array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">(struct.new "value_copy_array_get_mono.wado//Cell" { v: 1 }, struct.new "value_copy_array_get_mono.wado//Cell" { v: 2 }), used: 2 };
 
 fn "value_copy_array_get_mono.wado/__test_0_direct_list_index_binding_copies"() {
     let __v0_3: i32;
@@ -263,6 +262,7 @@ fn "value_copy_array_get_mono.wado/__test_3_element_pushed_into_another_list_is_
 }
 
 fn "value_copy_array_get_mono.wado/__test_4_copy_in_a_loop_body"() {
+    let src: ref "core:prelude//List<value_copy_array_get_mono.wado/Cell>";
     let sum: i32;
     let i: i32;
     let __v0_5: i32;
@@ -274,9 +274,10 @@ fn "value_copy_array_get_mono.wado/__test_4_copy_in_a_loop_body"() {
     let arr: ref "Array<value_copy_array_get_mono.wado/Cell>";
     let __sroa_e_v: i32;
     let _licm_repr_57: ref "Array<value_copy_array_get_mono.wado/Cell>";
+    src = struct.new "core:prelude//List<value_copy_array_get_mono.wado/Cell>" { repr: array.new_fixed<ref "value_copy_array_get_mono.wado//Cell">(struct.new "value_copy_array_get_mono.wado//Cell" { v: 1 }, struct.new "value_copy_array_get_mono.wado//Cell" { v: 2 }), used: 2 };
     sum = 0;
     i = 0;
-    _licm_repr_57 = global:value_copy_array_get_mono.wado::__const_obj_68.repr;
+    _licm_repr_57 = src.repr;
     b7: block {
         l8: loop {
             break_if b7 i >= 2;

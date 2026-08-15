@@ -83,9 +83,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:value_copy_demote_element_mut.wado::__modules_initialized: bool = 0;
-global global:value_copy_demote_element_mut.wado::__const_obj_33: ref null "core:prelude//List<core:prelude/string.wado/String>" = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 111), used: 2 }), used: 2 };
 
 fn "value_copy_demote_element_mut.wado/run"() with Stdout {
+    let words_1: ref "core:prelude//List<core:prelude/string.wado/String>";
     let s: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/string.wado//String";
     let v_11: ref "core:prelude/string.wado//String";
@@ -105,7 +105,10 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:value_copy_demote_element_mut.wado::__modules_initialized = 1;
     };
-    __sroa_x_repr = builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(global:value_copy_demote_element_mut.wado::__const_obj_33.repr, 2);
+    words_1 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 111), used: 2 }), used: 2 };
+    __sroa_x_repr = builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">(words_1.repr, 2);
+    block {
+    };
     self_15 = builtin::array_get<ref "core:prelude/string.wado//String">(__sroa_x_repr, 0);
     new_used_27 = self_15.used + 1;
     if @unlikely(new_used_27 > builtin::array_len(self_15.repr)) {
@@ -115,6 +118,8 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
     start_28 = self_15.used;
     self_15.used = new_used_27;
     builtin::array_set_u8(self_15.repr, start_28, 33);
+    block {
+    };
     v_11 = builtin::array_get<ref "core:prelude/string.wado//String">(__sroa_x_repr, 0);
     s = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_11.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_11.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_11.used };
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -200,12 +205,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 i >= len;
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l4;
+            continue l6;
         };
     };
 }
@@ -229,20 +234,20 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b5: block {
-        l6: loop {
-            break_if b5 offset >= count;
+    b7: block {
+        l8: loop {
+            break_if b7 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b5 (if (result >> 4) == 0 -> i32 {
+            break_if b7 (if (result >> 4) == 0 -> i32 {
                 1;
             } else {
                 (result & 15) != 0;
             });
-            continue l6;
+            continue l8;
         };
     };
 }
