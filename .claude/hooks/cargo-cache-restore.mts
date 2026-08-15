@@ -125,11 +125,10 @@ async function fetchObject(token: string, object: string, timeout: number): Prom
 // would double the peak draw on the session's fixed disk allowance, which is
 // the resource under pressure here.
 //
-// `lock` is taken for the whole extraction, so a cargo that starts meanwhile
-// waits for a complete tree instead of racing a half-written one, and a build
-// already holding it makes the restore stand down. `keepExisting` decides the
-// other half of that coexistence: whatever the container already put in
-// destDir wins over the published copy.
+// `lock` is held for the whole extraction, so a cargo that starts meanwhile
+// waits for a complete tree rather than racing a half-written one, and a build
+// already holding it makes the restore stand down. `keepExisting` settles who
+// wins where both have a file: what the container built, over the cache.
 type UntarOptions = { lock?: string; keepExisting?: boolean };
 
 async function untar(
@@ -157,8 +156,8 @@ async function untar(
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? -1));
   });
-  // A lock conflict exits before anything reads stdin, so the write fails with
-  // EPIPE; the child's exit code is the verdict either way.
+  // On a lock conflict nothing ever reads stdin, so the write fails with EPIPE.
+  // The exit code is the verdict; hold the write error back until it is known.
   let writeError: Error | null = null;
   const written = pipeline(Readable.fromWeb(body), child.stdin!).catch((e: Error) => {
     writeError = e;
@@ -205,8 +204,9 @@ function buildInProgress(): boolean {
 }
 
 async function restoreTargetDeps(token: string): Promise<void> {
-  // Existence says nothing: a resumed container carries whatever target/ its
-  // image was snapshotted with, and restoring over it is the whole point.
+  // A target/ that merely exists proves nothing: a resumed container carries
+  // whatever its image was snapshotted with, and restoring over that is the
+  // whole point.
   if (existsSync(RESTORED_MARKER)) {
     log(`${TARGET_DIR} already holds a restored cache; skipping target restore`);
     return;
@@ -232,12 +232,12 @@ async function restoreTargetDeps(token: string): Promise<void> {
   const res = await fetchObject(token, TARGET_OBJECT, DOWNLOAD_TIMEOUT_MS);
   if (!res) return;
 
-  // The tarball is ordered artifacts-then-fingerprints, so an extraction cut
-  // short leaves units cargo rebuilds rather than units it wrongly trusts —
-  // and the next session's restore fills the gaps it left.
+  // Extracting in place needs no atomic swap: the lock keeps cargo out, and the
+  // archive's order (see pack-target-deps.sh) makes a cut-short extraction
+  // rebuild rather than mislead. The next restore fills the gaps it left.
   const outcome = await untar(res.body!, TARGET_DIR, { lock: BUILD_LOCK, keepExisting: true });
   if (outcome === "lock-busy") {
-    log(`a build already owns ${TARGET_DIR}; skipping target restore`);
+    log(`a build took ${TARGET_DIR} during the download; skipping target restore`);
     return;
   }
   log(`restored gs://${BUCKET}/${TARGET_OBJECT} into ${TARGET_DIR} (built at ${manifest.commit})`);

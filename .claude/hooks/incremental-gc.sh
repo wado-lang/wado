@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
 # PreToolUse hook for the Bash tool: spend target/debug/incremental to keep the
-# session's disk allowance from running out.
+# session's disk allowance from running out. Nothing else bounds the directory
+# -- rustc prunes only within one crate's, and cargo's `-Z gc` is nightly and
+# collects the registry, not target/.
 #
-# rustc prunes stale sessions inside one crate's directory, but nothing bounds
-# the total and cargo has no target/ collector (`-Z gc` is nightly, and collects
-# the registry rather than target/). Incremental state is the cheapest thing in
-# the container to lose -- worth a recompile, never worth a failed write -- so
-# it is what gets dropped when the disk gets tight.
-#
-# The trigger is free space rather than the directory's own size: a cap would
-# throw away state while the disk is still half empty, and would say nothing
-# about the space anything else consumed.
-#
-# Runs before the command rather than after it, so the build about to start is
-# the one that gets the headroom. Eviction is per crate directory, least
-# recently used first: the crate being edited keeps its incremental state while
-# crates the session has moved on from pay.
+# Free space is the trigger rather than the directory's own size: a size cap
+# discards state while the disk is still half empty, and says nothing about
+# what else filled it. Running before the command hands the headroom to the
+# build about to start, and evicting least-recently-used crate directories
+# spares the one being edited.
 
 set -euo pipefail
 
@@ -40,9 +33,9 @@ floor=$(gib "$FLOOR_GB")
 goal=$(gib "$(awk -v f="$FLOOR_GB" -v m="$MARGIN_GB" 'BEGIN { print f + m }')")
 [ "$(avail)" -lt "$floor" ] || exit 0
 
-# Read-write rather than truncating: cargo owns this file, we only lock it.
+# `<>` rather than `>`: cargo owns this file, we only lock it. A build holds it
+# exclusively, and rustc is writing the directories below.
 exec 9<>"$BUILD_LOCK"
-# A build holds it exclusively, and rustc is writing these directories.
 flock --exclusive --nonblock 9 || exit 0
 
 evicted=0

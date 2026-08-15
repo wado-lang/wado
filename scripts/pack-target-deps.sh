@@ -104,8 +104,8 @@ json.dump(
 )
 PY
 
-# Last entry in the archive on purpose: the restore hook reads its presence in
-# target/ as "an extraction finished here", and skips on that.
+# Last entry in the archive on purpose: the restore hook takes its presence in
+# target/ as proof that an extraction finished, and skips on that.
 cp "$MANIFEST_OUT" "$TARGET_DIR/wado-cache-manifest.json"
 echo "wado-cache-manifest.json" >> "${WORK}/files.list"
 
