@@ -615,16 +615,22 @@ impl Engine {
     ///
     /// Reads from the snapshot cache populated by [`Engine::snapshot`].
     /// The semantics pipeline runs at most once per document version
-    /// regardless of which queries the client issued first. Each
-    /// diagnostic's column is re-encoded against the source whose file
-    /// matches its
-    /// `span.file` — cross-file diagnostics keep the compiler's codepoint
-    /// columns, the entry document is re-expressed in the negotiated
-    /// position encoding.
+    /// regardless of which queries the client issued first.
+    ///
+    /// Only diagnostics belonging to `uri` are returned. LSP publishes
+    /// diagnostics per document, so a diagnostic whose `span.file` names an
+    /// imported module cannot be reported here: it would draw a squiggle at
+    /// the *imported* file's line and column inside the document the user
+    /// has open. The importing document sees the loader's own failures
+    /// instead, and the imported file reports its errors when the client
+    /// opens it. A span-less diagnostic is about the request itself (a
+    /// loader hard failure) and is always kept.
+    ///
+    /// Columns of the kept diagnostics are re-encoded against the document
+    /// text in the negotiated position encoding.
     ///
     /// Unused / dead-code warnings are applied here (not baked into the
-    /// snapshot, so [`Engine::set_unused_diagnostics`] stays live) and are
-    /// kept only for the entry document.
+    /// snapshot, so [`Engine::set_unused_diagnostics`] stays live).
     pub async fn diagnostics<H: CompilerHost>(&self, uri: &str, host: &H) -> Vec<Diagnostic> {
         let Some(snapshot) = self.snapshot(uri, host).await else {
             return Vec::new();
@@ -632,23 +638,19 @@ impl Engine {
         let filename = Uri::new(uri).to_filename();
         let encoding = self.position_encoding;
         let entry_text = self.documents.get(uri).map(|d| d.text.as_str());
-        let reencode = |d: &CompilerDiagnostic| {
-            // Re-encode against the entry text only when the diagnostic points
-            // at it; imported-module spans keep raw codepoint columns.
-            let source = d
-                .span
-                .as_ref()
-                .filter(|s| s.file == filename)
-                .and(entry_text);
-            diagnostics::from_compiler_diagnostic(d, uri, source, encoding)
+        let convert = |d: &CompilerDiagnostic| {
+            let span = d.span.as_ref();
+            if span.is_some_and(|s| s.file != filename) {
+                return None;
+            }
+            diagnostics::from_compiler_diagnostic(d, uri, entry_text, encoding)
         };
-        let mut out: Vec<Diagnostic> = snapshot.diagnostics.iter().filter_map(&reencode).collect();
+        let mut out: Vec<Diagnostic> = snapshot.diagnostics.iter().filter_map(&convert).collect();
         if self.unused_diagnostics {
             out.extend(
                 wado_compiler::unused_diagnostics(&snapshot.sem, false)
                     .iter()
-                    .filter(|d| d.span.as_ref().is_some_and(|s| s.file == filename))
-                    .filter_map(&reencode),
+                    .filter_map(&convert),
             );
         }
         out

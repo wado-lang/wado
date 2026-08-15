@@ -52,10 +52,71 @@ pub struct Diagnostic {
     pub tags: Vec<DiagnosticTag>,
 }
 
+/// Anchor for a diagnostic the compiler reported without a source location.
+const DOCUMENT_START: Range = Range {
+    start: Position {
+        line: 0,
+        character: 0,
+    },
+    end: Position {
+        line: 0,
+        character: 0,
+    },
+};
+
+/// Convert a [`DiagnosticSpan`](wado_compiler::DiagnosticSpan) to an LSP
+/// [`Range`], re-expressing the compiler's 1-based codepoint columns in
+/// `encoding`. `source` is the text the span points into; `None` passes the
+/// codepoint columns through (correct for ASCII / UTF-32).
+fn span_to_range(
+    span: &wado_compiler::DiagnosticSpan,
+    source: Option<&str>,
+    encoding: PositionEncoding,
+) -> Range {
+    // Compiler uses 1-based line/codepoint column; LSP uses 0-based.
+    let start_line = span.line.saturating_sub(1) as u32;
+    let end_line = span
+        .end_line
+        .map_or(start_line, |l| l.saturating_sub(1) as u32);
+    let start_codepoint = span.column.saturating_sub(1) as u32;
+    let end_codepoint = span
+        .end_column
+        .map_or(start_codepoint.saturating_add(1), |c| {
+            c.saturating_sub(1) as u32
+        });
+
+    let (start_char, end_char) = match source {
+        Some(src) => (
+            codepoint_offset_to_character(src, start_line, start_codepoint, encoding),
+            codepoint_offset_to_character(src, end_line, end_codepoint, encoding),
+        ),
+        None => (start_codepoint, end_codepoint),
+    };
+
+    Range {
+        start: Position {
+            line: start_line,
+            character: start_char,
+        },
+        end: Position {
+            line: end_line,
+            character: end_char,
+        },
+    }
+}
+
 /// Convert a compiler diagnostic to an LSP-compatible diagnostic.
 ///
 /// Returns `None` for diagnostics that should not be shown to the user
-/// (span tracking, log messages, diagnostics without source location).
+/// (span tracking, log messages, `Debug`-severity output).
+///
+/// A diagnostic with no span is anchored at the start of the document
+/// rather than dropped. The loader reports its hard failures — a missing
+/// or unreadable import (`ModuleNotFound`) above all — without a span, and
+/// those are exactly the failures that also blank out every position query
+/// for the document. Dropping them left the editor showing a file with no
+/// errors, no hover, and no navigation, with nothing on screen to explain
+/// why.
 ///
 /// `source` and `encoding` are used to re-express the compiler's
 /// codepoint columns in the negotiated position encoding. Pass
@@ -89,39 +150,13 @@ pub fn from_compiler_diagnostic(
         Vec::new()
     };
 
-    let span = diag.span.as_ref()?;
-
-    // Compiler uses 1-based line/codepoint column; LSP uses 0-based.
-    let start_line = span.line.saturating_sub(1) as u32;
-    let end_line = span
-        .end_line
-        .map_or(start_line, |l| l.saturating_sub(1) as u32);
-    let start_codepoint = span.column.saturating_sub(1) as u32;
-    let end_codepoint = span
-        .end_column
-        .map_or(start_codepoint.saturating_add(1), |c| {
-            c.saturating_sub(1) as u32
-        });
-
-    let (start_char, end_char) = match source {
-        Some(src) => (
-            codepoint_offset_to_character(src, start_line, start_codepoint, encoding),
-            codepoint_offset_to_character(src, end_line, end_codepoint, encoding),
-        ),
-        None => (start_codepoint, end_codepoint),
+    let range = match diag.span.as_ref() {
+        Some(span) => span_to_range(span, source, encoding),
+        None => DOCUMENT_START,
     };
 
     Some(Diagnostic {
-        range: Range {
-            start: Position {
-                line: start_line,
-                character: start_char,
-            },
-            end: Position {
-                line: end_line,
-                character: end_char,
-            },
-        },
+        range,
         severity,
         code: format!("{}", diag.code),
         source: Some("wado".to_string()),
@@ -240,22 +275,25 @@ mod tests {
     }
 
     #[test]
-    fn test_skip_no_span() {
+    fn span_less_diagnostic_anchors_at_document_start() {
+        // The loader reports `ModuleNotFound` without a span, and that same
+        // failure empties the `Semantics` so every position query goes quiet.
+        // Dropping it left the user with a silently dead file.
         let compiler_diag = CompilerDiagnostic {
             severity: CompilerSeverity::Error,
-            code: Code::CodegenError,
-            message: "internal error".to_string(),
+            code: Code::ModuleNotFound,
+            message: "module not found: ./missing.wado".to_string(),
             span: None,
         };
-        assert!(
-            from_compiler_diagnostic(
-                &compiler_diag,
-                "file:///test.wado",
-                None,
-                PositionEncoding::Utf16
-            )
-            .is_none()
-        );
+        let diag = from_compiler_diagnostic(
+            &compiler_diag,
+            "file:///test.wado",
+            None,
+            PositionEncoding::Utf16,
+        )
+        .expect("a span-less error must still reach the editor");
+        assert_eq!(diag.range, DOCUMENT_START);
+        assert_eq!(diag.severity, Severity::Error);
     }
 
     #[test]

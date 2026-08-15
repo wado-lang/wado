@@ -78,14 +78,24 @@ impl Uri {
     /// (`Logger::set_file`, `DiagnosticSpan::file`).
     ///
     /// For `file://` URIs returns the absolute path with the scheme
-    /// stripped. For every other scheme returns the raw URI — matching
+    /// stripped **and percent-escapes decoded** — LSP clients send
+    /// rfc3986-encoded URIs, so a workspace under `my project/` arrives as
+    /// `file:///…/my%20project/…`. Without decoding, every path this crate
+    /// derives from the URI (the `FilesystemCompilerHost` base path, the
+    /// kiln manifest walk-up, the `span.file` match in
+    /// `Engine::diagnostics`) names a directory that does not exist, and
+    /// the whole language service silently answers nothing.
+    ///
+    /// For every other scheme returns the raw URI — matching
     /// `ModuleSource::source_path` so cross-file diagnostic
-    /// rendering stays consistent.
+    /// rendering stays consistent. Non-`file:` schemes are compiler-minted
+    /// (`core:`, `wasi:`, `kiln:`) and never percent-encoded, so decoding
+    /// them would only corrupt a literal `%` in a generated path.
     #[must_use]
     pub fn to_filename(&self) -> String {
         self.0
             .strip_prefix("file://")
-            .map_or_else(|| self.0.clone(), str::to_owned)
+            .map_or_else(|| self.0.clone(), percent_decode)
     }
 
     /// Path / opaque component after the scheme delimiter `:`.
@@ -125,6 +135,52 @@ impl Uri {
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| PathBuf::from(".")),
         )
+    }
+}
+
+/// Decode rfc3986 percent-escapes (`%XX`) in `s`.
+///
+/// Decoding happens at the byte level and the result is re-validated as
+/// UTF-8, so a multi-byte character split across several escapes (`%E3%81%82`
+/// for `あ`) round-trips. A malformed escape — a `%` not followed by two hex
+/// digits, or a byte sequence that is not valid UTF-8 — leaves the input
+/// untouched rather than dropping characters: a path we cannot decode is
+/// better handed to the filesystem verbatim than silently mangled.
+fn percent_decode(s: &str) -> String {
+    if !s.contains('%') {
+        return s.to_owned();
+    }
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let Some(hex) = bytes.get(i + 1..i + 3) else {
+                return s.to_owned();
+            };
+            let Some(byte) = hex_pair(hex[0], hex[1]) else {
+                return s.to_owned();
+            };
+            out.push(byte);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_owned())
+}
+
+fn hex_pair(hi: u8, lo: u8) -> Option<u8> {
+    Some(hex_digit(hi)? << 4 | hex_digit(lo)?)
+}
+
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -209,6 +265,51 @@ mod tests {
         // imports off the bad URI. The typed accessor refuses such
         // URIs.
         assert_eq!(Uri::new("file://").workspace_root(), None);
+    }
+
+    #[test]
+    fn file_uri_percent_escapes_are_decoded() {
+        // LSP clients percent-encode every reserved character. Leaving the
+        // escapes in place pointed `FilesystemCompilerHost` at a directory
+        // that does not exist, so every cross-file query in a workspace whose
+        // path contains a space returned nothing — with no diagnostic.
+        let u = Uri::new("file:///home/user/my%20project/main.wado");
+        assert_eq!(u.to_filename(), "/home/user/my project/main.wado");
+        assert_eq!(
+            u.workspace_root(),
+            Some(PathBuf::from("/home/user/my project")),
+        );
+    }
+
+    #[test]
+    fn multi_byte_percent_escapes_decode_as_utf8() {
+        // A non-ASCII directory arrives as one escape per UTF-8 byte.
+        let u = Uri::new("file:///home/%E3%81%82/main.wado");
+        assert_eq!(u.to_filename(), "/home/あ/main.wado");
+    }
+
+    #[test]
+    fn encoded_percent_round_trips() {
+        let u = Uri::new("file:///home/100%25/main.wado");
+        assert_eq!(u.to_filename(), "/home/100%/main.wado");
+    }
+
+    #[test]
+    fn malformed_escape_is_left_verbatim() {
+        // `%zz` is not a valid escape. Dropping it (or the rest of the path)
+        // would be worse than handing the raw text to the filesystem.
+        let u = Uri::new("file:///home/%zz/main.wado");
+        assert_eq!(u.to_filename(), "/home/%zz/main.wado");
+        let truncated = Uri::new("file:///home/trailing%2");
+        assert_eq!(truncated.to_filename(), "/home/trailing%2");
+    }
+
+    #[test]
+    fn non_file_schemes_are_not_decoded() {
+        // `core:` / `wasi:` / `kiln:` URIs are compiler-minted and never
+        // percent-encoded; decoding would corrupt a literal `%` in a
+        // generated path.
+        assert_eq!(Uri::new("kiln:/tmp/a%20b.wado").to_filename(), "kiln:/tmp/a%20b.wado");
     }
 
     #[test]
