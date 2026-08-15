@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786823878663,
+  "lastUpdate": 1786832804004,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48389,6 +48389,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0c6346cd492f27f3763e3a3db73119e259632b7d",
+          "message": "Merge pull request #1822 from wado-lang/claude/benchmark-json-catalog-analysis-y6jsjf\n\nperf(optimize): price the inline budget in emitted Wasm instructions",
+          "timestamp": "2026-08-16T07:12:56+09:00",
+          "tree_id": "031dba2673d1ac90f65f5cac3738ca9b71e88a33",
+          "url": "https://github.com/wado-lang/wado/commit/0c6346cd492f27f3763e3a3db73119e259632b7d"
+        },
+        "date": 1786832803145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1975,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6493,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16648,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284956,
             "unit": "bytes"
           }
         ]
