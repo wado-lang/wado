@@ -259,6 +259,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_enum_compiler_item(
                             &type_table,
                             &enum_decl.attrs,
+                            enum_decl.id,
                             &enum_decl.name,
                             module_source,
                             enum_decl.span,
@@ -288,6 +289,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 },
                             );
                         }
+                        super::item::register_resource_compiler_item(
+                            &type_table,
+                            &resource_decl.attrs,
+                            resource_decl.id,
+                            &resource_decl.name,
+                            module_source,
+                            resource_decl.span,
+                            logger,
+                        );
                     }
                     Item::Trait(trait_decl) => {
                         super::item::register_trait_compiler_item(
@@ -306,6 +316,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_tuple_compiler_item(
                             &type_table,
                             &decl.attrs,
+                            decl.id,
                             module_source,
                             decl.span,
                             logger,
@@ -315,6 +326,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         super::item::register_builtin_type_compiler_item(
                             &type_table,
                             &decl.attrs,
+                            decl.id,
+                            &decl.name,
+                            module_source,
+                            decl.span,
+                            logger,
+                        );
+                    }
+                    Item::Newtype(decl) => {
+                        super::item::register_newtype_compiler_item(
+                            &type_table,
+                            &decl.attrs,
+                            decl.id,
                             &decl.name,
                             module_source,
                             decl.span,
@@ -417,7 +440,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                module_source: module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
@@ -597,7 +620,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .map(|p| p.name.clone())
                                 .collect();
                             let info = GenericNewtypeInfo {
-                                module_source: module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             };

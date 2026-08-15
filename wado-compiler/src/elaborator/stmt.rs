@@ -751,26 +751,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
-            ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("an enum names a declaration");
-                self.lookup_enum_case_in(name, module_source)
-                    .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
-            }
-            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a nominal type names a declaration");
-                self.lookup_variant_case_in(name, module_source)
-                    .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
-            }
+            ResolvedType::Enum { .. } => self
+                .enum_of_type(type_id)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+                .variant_of_type(type_id)
+                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
         }
     }
@@ -851,30 +837,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return case_name.to_string();
         };
         format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
-    }
-
-    /// Build the lookup key for `associated_constants`, matching how the map was
-    /// populated via `get_type_name` (base name only, no generic type arguments).
-    ///
-    /// For example, `Maybe<i32>::CONST` must look up as `"Maybe::CONST"` because
-    /// `get_type_name` strips generic args when building the key.
-    fn format_assoc_const_key(variant_name: &str, qualifier: Option<&Type>) -> String {
-        let Some(qualifier) = qualifier else {
-            return variant_name.to_string();
-        };
-        let base = match qualifier {
-            Type::Named(t) => t.name.as_str(),
-            Type::Generic(t) => t.name.as_str(),
-            Type::NamespacedGeneric(t) => t.name.as_str(),
-            Type::Function(_)
-            | Type::Tuple(_)
-            | Type::Reference(_)
-            | Type::MutReference(_)
-            | Type::TypePackSpread(_, _)
-            | Type::Infer(_)
-            | Type::Error(_) => return variant_name.to_string(),
-        };
-        format!("{base}::{variant_name}")
     }
 
     /// Resolve a let pattern (for tuple/struct destructuring).
@@ -1472,11 +1434,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Check for associated constants (e.g., `i32::MAX`, `f64::PI`).
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
-                    let assoc_const_key =
-                        Self::format_assoc_const_key(variant_name, variant_qualifier.as_ref());
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((_const_module, type_id, const_expr)) =
-                        self.lookup_associated_constant(&assoc_const_key)
+                    if let Some((_const_module, type_id, const_expr)) = self
+                        .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal
@@ -1534,12 +1494,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Handle enum types (no payload, just discriminant matching)
                 if let ResolvedType::Enum { .. } = &resolved_type {
-                    let (name, module_source) = &self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(scrutinee_type)
-                        .expect("an enum names a declaration");
                     if !bindings.is_empty() {
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: format!("enum case `{variant_name}` does not have a payload"),
@@ -1547,8 +1501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.lookup_enum_case_in(name, module_source).cloned()
-                    {
+                    if let Some(enum_info) = self.enum_of_type(scrutinee_type).cloned() {
                         if let Some(case_data) =
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
@@ -1575,8 +1528,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return Vec::new();
                     }
+                    let enum_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
                     let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: format!("enum type `{name}`"),
+                        expected: format!("enum type `{enum_name}`"),
                         found: "unknown enum".to_string(),
                         span: *span,
                     });

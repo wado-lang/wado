@@ -2703,11 +2703,11 @@ impl TypeSystem {
         explicit_args: &[TypeId],
         holes: &[bool],
     ) -> TypeId {
-        // Track the canonical module_source from expected_type if available.
-        // This ensures the created GenericInstance uses the same module_source
-        // as the type annotation (e.g., ModuleSource::prelude() for Option/Result),
-        // which may differ from variant_info.module_source (e.g., prelude/types.wado).
-        let mut canonical_module_source = None;
+        // An expected type pins the declaration the instance is interned
+        // against: a `Result` annotation and the variant reached through the
+        // prelude are one declaration, and the annotation is the one the
+        // caller's frame resolved.
+        let mut canonical_def = None;
 
         let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
@@ -2740,7 +2740,7 @@ impl TypeSystem {
                 && self.type_table.borrow().def_name(def) == variant_name
                 && expected_args.len() == variant_info.type_param_type_ids.len()
             {
-                canonical_module_source = Some(self.type_table.borrow().def_module(def).clone());
+                canonical_def = Some(def);
                 for (&param_id, &expected_arg) in variant_info
                     .type_param_type_ids
                     .iter()
@@ -2752,9 +2752,6 @@ impl TypeSystem {
         }
 
         let type_args = infer.solve();
-
-        let module_source =
-            canonical_module_source.unwrap_or_else(|| variant_info.module_source.clone());
 
         // If unresolved type params remain in concrete code, fall back to bare Variant
         let has_unresolved = type_args
@@ -2768,11 +2765,13 @@ impl TypeSystem {
                 .type_id_of_decl(variant_info.defined_at);
         }
 
-        let def = self
-            .type_table
-            .borrow()
-            .decl_named_in(&variant_info.name, &module_source)
-            .expect("the variant being instantiated is declared");
+        let def = canonical_def.unwrap_or_else(|| {
+            self.type_table
+                .borrow()
+                .defs()
+                .of_ast_id(variant_info.defined_at)
+                .expect("the variant being instantiated is declared")
+        });
         self.type_table
             .borrow_mut()
             .make_generic_instance(def, type_args)

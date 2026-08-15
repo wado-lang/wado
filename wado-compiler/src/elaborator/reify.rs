@@ -280,20 +280,42 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
-    /// Look up an impl-associated constant by its use-site `Type::NAME`
-    /// spelling, canonicalized the same way as
-    /// `Elaborator::lookup_associated_constant` so both walkers resolve a
-    /// constant to the same identity.
-    fn lookup_associated_constant(&self, key: &str) -> Option<(ModuleSource, TypeId, ast::Expr)> {
-        let (owner, name) = super::trait_query::canonical_assoc_const_key(
-            key,
-            &self.current_module_source,
-            &self.tysys.resolutions,
-        )?;
+    /// The impl-associated constant `owner` declares as `name` — the same
+    /// answer `Elaborator::associated_constant_of` gives, from the same table,
+    /// so annotate and reify cannot disagree about which constant a use site
+    /// names.
+    fn associated_constant_of(
+        &self,
+        owner: crate::defs::DefId,
+        name: &str,
+    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
         self.tysys
             .signatures
-            .associated_constant(owner, &name)
+            .associated_constant(owner, name)
             .cloned()
+    }
+
+    /// [`Self::associated_constant_of`] for a qualified path in expression
+    /// position, whose leading segment carries the site that names the owner.
+    fn associated_constant_of_path(
+        &self,
+        ident: &ast::IdentExpr,
+    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+        let owner =
+            super::trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
+        let name = ident.segments.last()?;
+        self.associated_constant_of(owner, &name.name)
+    }
+
+    /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
+    /// spelling, whose qualifier is a written `ast::Type` with its own site.
+    fn associated_constant_qualified(
+        &self,
+        qualifier: Option<&ast::Type>,
+        name: &str,
+    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+        let owner = super::trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
+        self.associated_constant_of(owner, name)
     }
 
     /// Construct a per-module `Reify` for the orchestration driver. The `tysys`
@@ -4725,34 +4747,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // registry — reproduce here so the same `module_source` lands
         // even if a future inference change made the recorded type
         // less specific.
-        let (struct_name, module_source) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            match range.kind {
-                RangeKind::Exclusive => (
-                    "RangeExclusive".to_string(),
-                    items
-                        .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
-                        .cloned()
-                        .unwrap_or_else(crate::module_source::ModuleSource::range),
-                ),
-                RangeKind::Inclusive => (
-                    "RangeInclusive".to_string(),
-                    items
-                        .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
-                        .cloned()
-                        .unwrap_or_else(crate::module_source::ModuleSource::range),
-                ),
-            }
+        let item = match range.kind {
+            RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
+            RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
         };
+        let struct_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(item)
+            .to_string();
 
         let struct_type = {
             let def = self
                 .tysys
                 .type_table
-                .borrow_mut()
-                .decl_named_in(&struct_name, &module_source)
-                .expect("the declaration this type names exists");
+                .borrow()
+                .require_compiler_item_def(item);
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -8777,8 +8789,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)`.
-        if let Some((const_module, type_id, const_expr)) =
-            self.lookup_associated_constant(&ident.name)
+        if let Some((const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
         {
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
@@ -9606,18 +9617,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<TirPattern> {
         use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirLiteralPattern};
 
-        // Key matches `Elaborator::format_assoc_const_key`: bare name when
-        // unqualified, else `<base>::<name>` using the qualifier's base
-        // type name.
-        let key = match variant_qualifier {
-            None => variant_name.to_string(),
-            Some(ast::Type::Named(t)) => format!("{}::{}", t.name, variant_name),
-            Some(ast::Type::Generic(t)) => format!("{}::{}", t.name, variant_name),
-            Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
-            Some(_) => variant_name.to_string(),
-        };
-
-        let (const_module, type_id, const_expr) = self.lookup_associated_constant(&key)?;
+        let (const_module, type_id, const_expr) =
+            self.associated_constant_qualified(variant_qualifier, variant_name)?;
 
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
@@ -9686,14 +9687,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             {
                 return v;
             }
-            let key = match variant_qualifier {
-                None => variant_name.clone(),
-                Some(ast::Type::Named(t)) => format!("{}::{}", t.name, variant_name),
-                Some(ast::Type::Generic(t)) => format!("{}::{}", t.name, variant_name),
-                Some(ast::Type::NamespacedGeneric(t)) => format!("{}::{}", t.name, variant_name),
-                Some(_) => variant_name.clone(),
-            };
-            if let Some((const_module, type_id, const_expr)) = self.lookup_associated_constant(&key)
+            if let Some((const_module, type_id, const_expr)) =
+                self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
             {
                 let resolved = self.with_const_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))

@@ -106,18 +106,41 @@ impl StructuralMember<'_> {
     }
 }
 
-/// The owning declaration and constant name a use-site `Type::CONST` spelling
-/// means. `None` for a key with no `::` (never a constant key), and for a
-/// prefix that reaches no declaration. Shared by annotate and reify so both
-/// resolve a constant to the same identity.
-pub(super) fn canonical_assoc_const_key(
-    key: &str,
-    current_module_source: &ModuleSource,
+/// The declaration a `Type::CONST` use site qualifies its constant with, read
+/// off the qualifier's own reference site. `None` for a bare name, which
+/// qualifies nothing and so names no associated constant, and for a qualifier
+/// that reaches no declaration. Shared by annotate and reify so both resolve a
+/// constant to the same identity.
+pub(super) fn assoc_const_owner(
+    qualifier: Option<&ast::Type>,
     resolutions: &crate::resolve::Resolutions,
-) -> Option<(DefId, String)> {
-    let (prefix, name) = key.split_once("::")?;
-    let owner = resolutions.declaration_named(current_module_source, prefix)?;
-    Some((owner, name.to_string()))
+) -> Option<DefId> {
+    let site = match qualifier? {
+        ast::Type::Named(t) => t.id,
+        ast::Type::Generic(t) => t.id,
+        ast::Type::NamespacedGeneric(t) => t.id,
+        _ => return None,
+    };
+    match resolutions.get(site) {
+        crate::resolve::Resolution::Def(def) => Some(def),
+        _ => None,
+    }
+}
+
+/// [`assoc_const_owner`] for a qualified path written in expression position
+/// (`f64::PI`, `ns::Config::MAX`): the segment before the constant's own name
+/// is the qualifier, and the resolve walk answered for it — so the owner is
+/// read off that site rather than off the fused spelling `IdentExpr::name`
+/// holds.
+pub(super) fn assoc_const_owner_of_path(
+    ident: &ast::IdentExpr,
+    resolutions: &crate::resolve::Resolutions,
+) -> Option<DefId> {
+    let owner = ident.segments.len().checked_sub(2)?;
+    match resolutions.get(ident.segments[owner].id) {
+        crate::resolve::Resolution::Def(def) => Some(def),
+        _ => None,
+    }
 }
 
 /// Whether `ty` spells one of the declaration's own type packs

@@ -587,9 +587,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             args.iter().map(|t| self.resolve_type(t)).collect();
                         let def = self
                             .tysys
-                            .type_table
-                            .borrow()
-                            .decl_named_in(name, &variant_info.module_source)
+                            .resolutions
+                            .defs()
+                            .of_ast_id(variant_info.defined_at)
                             .expect("the generic variant being instantiated exists");
                         self.tysys
                             .type_table
@@ -610,9 +610,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `MyArray<i32>` head no `impl` header writes.
                     let def = self
                         .tysys
-                        .type_table
-                        .borrow()
-                        .decl_named_in(name, &gn_info.module_source)
+                        .resolutions
+                        .defs()
+                        .of_ast_id(gn_info.defined_at)
                         .expect("the generic newtype being instantiated exists");
                     self.tysys.type_table.borrow_mut().make_newtype_instance(
                         def,

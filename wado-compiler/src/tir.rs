@@ -702,9 +702,10 @@ pub struct TypeTable {
     anon_structs: Vec<(ModuleSource, AnonShape)>,
     /// Dedup for the above: the same shape in the same module is one id.
     anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
-    /// `(name, module)` of each type declaration, for [`Self::decl_named_in`].
-    /// Built with [`Self::attach_defs`], so it answers at any point in the
-    /// pipeline rather than only after a declaration's type is interned.
+    /// `(WIT name, generated module)` of each type declaration, for
+    /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
+    /// any point in the pipeline rather than only after a declaration's type is
+    /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
@@ -1179,13 +1180,14 @@ impl TypeTable {
         use crate::defs::DefKind;
 
         let prelude = ModuleSource::prelude();
+        let tuple_def = self.declare_for_test(Self::TUPLE_TYPE_NAME, prelude.clone(), DefKind::Struct);
         let _ = self.compiler_items.register(
             CompilerItem::Tuple,
             Resolved::TupleFamily {
                 module_source: prelude.clone(),
+                decl: self.defs.ast_id(tuple_def),
             },
         );
-        self.declare_for_test(Self::TUPLE_TYPE_NAME, prelude.clone(), DefKind::Struct);
 
         for (item, name) in [
             (CompilerItem::List, "List"),
@@ -1222,49 +1224,28 @@ impl TypeTable {
 
     /// The declaration a compiler item names.
     ///
-    /// The registry records the declaring node, so this answers at any point
-    /// in the pipeline — unlike [`Self::decl_named_in`], which needs the
-    /// declaration's own type to be interned already.
+    /// The registry records the declaring node for every kind that names a
+    /// type of its own, so this answers at any point in the pipeline and for
+    /// any stdlib type the compiler knows — no site has to spell one.
     #[must_use]
     pub fn compiler_item_def(
         &self,
         item: crate::compiler_item::CompilerItem,
     ) -> Option<crate::defs::DefId> {
-        if let Some(def) = self
-            .compiler_items
-            .variant_decl(item)
-            .or_else(|| self.compiler_items.struct_decl(item))
+        self.compiler_items
+            .decl(item)
             .and_then(|ast| self.defs.of_ast_id(ast))
-        {
-            return Some(def);
-        }
-        // An enum item records `(module, name)` rather than its declaring
-        // node, so its identity comes from the module the registry knows —
-        // not from a module a caller guessed.
-        let (module, name) = match self.compiler_items.get(item)? {
-            crate::compiler_item::Resolved::Enum {
-                module_source,
-                name,
-            } => (module_source.clone(), name.clone()),
-            _ => return None,
-        };
-        self.decl_named_in(&name, &module)
     }
 
-    /// The declaration `module` declares under `name`.
-    ///
-    /// This is a name reaching an identity, which the design forbids
-    /// everywhere else, and it is here only for the consumers that still hold
-    /// a spelling and nothing else — synthesis targets built from TIR
-    /// declarations, and the stdlib heads a constructor spells outright. Both
-    /// go when what they hold carries an identity; `compiler_item.rs`'s
-    /// registry is what replaces the second. It cannot invent one: a name that
-    /// declares nothing answers `None`.
+    /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
+    /// — for the items the compiler requires to be registered.
     #[must_use]
-    pub fn decl_named_in(&self, name: &str, module: &ModuleSource) -> Option<crate::defs::DefId> {
-        self.decl_index
-            .get(&(name.to_string(), module.clone()))
-            .copied()
+    pub fn require_compiler_item_def(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> crate::defs::DefId {
+        self.compiler_item_def(item)
+            .unwrap_or_else(|| panic!("compiler item `{item}` names no declaration"))
     }
 
     /// The declaration a nominal type was written from, if it names one.
@@ -1776,10 +1757,7 @@ impl TypeTable {
     /// Same shape as [`Self::make_compiler_struct`]: routes both name
     /// and module through the registry.
     pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
-        let (module_source, name) = self.compiler_items.enum_owned(item);
-        let def = self
-            .decl_named_in(&name, &module_source)
-            .unwrap_or_else(|| panic!("compiler item {item:?} is not a declared enum"));
+        let def = self.require_compiler_item_def(item);
         self.make_enum(def)
     }
 
@@ -1803,9 +1781,7 @@ impl TypeTable {
 
     /// Create a `Future<T>` generic resource type.
     pub fn make_future(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("Future", &ModuleSource::types())
-            .expect("`Future` is declared in core:types");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Future);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1814,9 +1790,8 @@ impl TypeTable {
 
     /// Create a `FutureWritable<T>` generic resource type.
     pub fn make_future_writable(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("FutureWritable", &ModuleSource::types())
-            .expect("`FutureWritable` is declared in core:types");
+        let def =
+            self.require_compiler_item_def(crate::compiler_item::CompilerItem::FutureWritable);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1825,9 +1800,7 @@ impl TypeTable {
 
     /// Create a `Stream<T>` generic resource type.
     pub fn make_stream(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("Stream", &ModuleSource::types())
-            .expect("`Stream` is declared in core:types");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Stream);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1836,9 +1809,8 @@ impl TypeTable {
 
     /// Create a `StreamWritable<T>` generic resource type.
     pub fn make_stream_writable(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("StreamWritable", &ModuleSource::types())
-            .expect("`StreamWritable` is declared in core:types");
+        let def =
+            self.require_compiler_item_def(crate::compiler_item::CompilerItem::StreamWritable);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1852,9 +1824,7 @@ impl TypeTable {
     /// handle and the result buffer, so it is represented as a
     /// `GenericInstance`, not a `GenericResource`.
     pub fn make_async_call(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("AsyncCall", &ModuleSource::types())
-            .expect("`AsyncCall` is declared in core:types");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::AsyncCall);
         self.make_generic_instance(def, vec![inner])
     }
 
@@ -1902,14 +1872,7 @@ impl TypeTable {
     }
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
-        let module_source = self
-            .compiler_items
-            .tuple_module()
-            .cloned()
-            .unwrap_or_else(ModuleSource::prelude);
-        let def = self
-            .decl_named_in(Self::TUPLE_TYPE_NAME, &module_source)
-            .expect("the tuple declaration is a compiler item");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Tuple);
         self.intern(ResolvedType::GenericInstance {
             def,
             type_args: elements,
@@ -2074,15 +2037,42 @@ impl TypeTable {
         self.intern_map.get(&ResolvedType::Flags { def }).copied()
     }
 
-    /// Find any decl-backed named type by exact `(name, module_source)` key,
-    /// for CM types whose interface FQ maps to a concrete `ModuleSource`
-    /// (component imports, `--lib` locals) rather than a cm-package prefix.
+    /// The declaration `module` declares under the WIT name `name`.
+    ///
+    /// The one place a name still reaches an identity, and it is the Component
+    /// Model boundary. Two things make it unavoidable rather than unfinished:
+    /// a WIT name is written in a namespace no Wado resolver walked, so there
+    /// is no reference site to ask; and `CmInterfaceRegistry` parses its own
+    /// copy of the WASI modules once per process, independent of any
+    /// compilation, so the declaring node it could record is not a node this
+    /// program's `DefTable` ever saw.
+    ///
+    /// It cannot mis-identify: `wado-from-idl` generates exactly one module per
+    /// interface and each declares a WIT name once, so `module` picks the
+    /// generated module and `name` the single declaration in it. It cannot
+    /// invent one either — a name that declares nothing answers `None`.
+    /// Nothing outside `synthesis::cm_binding` may call it; a Wado name
+    /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
+    /// through [`Self::compiler_item_def`].
+    #[must_use]
+    pub(crate) fn cm_decl_in(
+        &self,
+        name: &str,
+        module: &ModuleSource,
+    ) -> Option<crate::defs::DefId> {
+        self.decl_index
+            .get(&(name.to_string(), module.clone()))
+            .copied()
+    }
+
+    /// The interned type the CM declaration `module` names `name` was
+    /// registered under, whichever nominal shape it is.
     pub fn find_named_type_by_source(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<TypeId> {
-        let def = self.decl_named_in(name, module_source)?;
+        let def = self.cm_decl_in(name, module_source)?;
         self.find_struct_type(StructDef::Decl(def))
             .or_else(|| self.find_variant_type(def))
             .or_else(|| self.find_enum_type(def))
@@ -2986,9 +2976,7 @@ impl TypeTable {
     /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
     pub fn make_byte_list(&mut self) -> TypeId {
         let base = self.make_list(TypeTable::U8);
-        let def = self
-            .decl_named_in("ByteList", &ModuleSource::bytes())
-            .expect("`ByteList` is declared in core:bytes");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteList);
         self.make_newtype(def, base)
     }
 

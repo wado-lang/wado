@@ -151,6 +151,7 @@ impl Default for Option<T> {
 ///
 /// Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
 /// The readable end is passed to consumers; the writable end fulfills the future.
+#[compiler_item("future")]
 internal resource Future<T> {
     /// Create a new future pair: [Future<T>, FutureWritable<T>].
     #[cm("future-new")]
@@ -172,6 +173,7 @@ internal resource Future<T> {
 
 /// Writable end of an async value (WASI Component Model future).
 /// Opaque i32 handle managed by the runtime.
+#[compiler_item("future_writable")]
 internal resource FutureWritable<T> {
     /// Fulfill the future with a value.
     #[cm("future-write")]
@@ -190,6 +192,7 @@ internal resource FutureWritable<T> {
 /// Opaque i32 handle managed by the runtime.
 ///
 /// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
+#[compiler_item("stream")]
 internal resource Stream<T> {
     /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
     #[cm("stream-new")]
@@ -212,6 +215,7 @@ internal resource Stream<T> {
 
 /// Writable end of an async sequence (WASI Component Model stream).
 /// Opaque i32 handle managed by the runtime.
+#[compiler_item("stream_writable")]
 internal resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
     #[cm("stream-write")]
@@ -329,6 +333,7 @@ internal resource Subtask {
 /// body_tx.drop();
 /// let resp = task.wait();             // block for response
 /// ```
+#[compiler_item("async_call")]
 internal struct AsyncCall<T> {
     // CM-ABI plumbing populated by the synthesised `__cm_binding__*`
     // adapter via a TIR-level `StructLiteral` (which bypasses field

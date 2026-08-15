@@ -221,6 +221,7 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
 pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -235,6 +236,69 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Enum {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, module_source, logger);
+    }
+}
+
+/// Register a `resource` declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_resource_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, CompilerItemKind::Resource, module_source, span, logger)
+    {
+        return;
+    }
+    let resolved = Resolved::Resource {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        decl,
+    };
+    if let Err(err) = type_table
+        .borrow_mut()
+        .compiler_items_mut()
+        .register(item, resolved)
+    {
+        report_register_error(err, span, module_source, logger);
+    }
+}
+
+/// Register a `type X = Y;` declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_newtype_compiler_item<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
+    attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
+    name: &str,
+    module_source: &ModuleSource,
+    span: Span,
+    logger: &Logger<'_, H>,
+) {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, CompilerItemKind::Newtype, module_source, span, logger)
+    {
+        return;
+    }
+    let resolved = Resolved::Newtype {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -430,6 +494,7 @@ pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
 pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -448,6 +513,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     }
     let resolved = Resolved::TupleFamily {
         module_source: module_source.clone(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -465,6 +531,7 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
 pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[crate::ast::Attribute],
+    decl: crate::ast::AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -485,6 +552,7 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     let resolved = Resolved::BuiltinType {
         module_source: module_source.clone(),
         name: name.to_string(),
+        decl,
     };
     if let Err(err) = type_table
         .borrow_mut()
@@ -1517,7 +1585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_params: &[ast::GenericParam],
         methods: &[ast::InterfaceMethod],
-        resource_self: Option<(&str, ModuleSource)>,
+        resource_self: Option<crate::defs::DefId>,
     ) -> Vec<TirEffectOp> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1528,7 +1596,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reference its own `TypeParam`s (which gap-2 substitution then
         // specialises per impl-block instantiation). For non-generic
         // resources this is just a plain `Resource { def }`.
-        let self_type: Option<TypeId> = resource_self.map(|(name, module)| {
+        let self_type: Option<TypeId> = resource_self.map(|def| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params
                     .iter()
@@ -1543,20 +1611,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                let mut tt = scope.tysys.type_table.borrow_mut();
-                let def = tt
-                    .decl_named_in(name, &module)
-                    .expect("the resource declaring these operations exists");
-                tt.intern(crate::tir::ResolvedType::GenericResource {
-                    def,
-                    type_args: type_arg_ids,
-                })
+                scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .intern(crate::tir::ResolvedType::GenericResource {
+                        def,
+                        type_args: type_arg_ids,
+                    })
             } else {
-                let mut tt = scope.tysys.type_table.borrow_mut();
-                let def = tt
-                    .decl_named_in(name, &module)
-                    .expect("the resource declaring these operations exists");
-                tt.make_resource(def)
+                scope.tysys.type_table.borrow_mut().make_resource(def)
             }
         });
 

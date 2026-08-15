@@ -359,7 +359,6 @@ impl Monomorphizer {
         // not register as one wasm-GC type.
         let head = key
             .def
-            .or_else(|| type_table.decl_named_in(&key.name, &key.module_source))
             .map_or_else(|| key.name.clone(), |def| type_table.decl_render_name(def));
         mangle_generic_name(&head, &args)
     }

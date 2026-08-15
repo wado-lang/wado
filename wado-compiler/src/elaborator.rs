@@ -1184,23 +1184,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.local_types.insert(def_id, type_id);
     }
 
-    /// Look up an impl-associated constant by its use-site `Type::NAME`
-    /// spelling (aliased and `ns$Type` prefixes included). The prefix
-    /// canonicalizes in the current module's scope, so a same-named type
-    /// in an unrelated module can never satisfy the lookup.
-    pub(super) fn lookup_associated_constant(
+    /// The impl-associated constant `owner` declares as `name`.
+    ///
+    /// `owner` is the declaration the use site's qualifier resolved to — an
+    /// alias and a `ns$Type` prefix answer with it like any other spelling —
+    /// so a same-named type in an unrelated module can never satisfy the
+    /// lookup.
+    pub(super) fn associated_constant_of(
         &self,
-        key: &str,
+        owner: crate::defs::DefId,
+        name: &str,
     ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
-        let (owner, name) = trait_query::canonical_assoc_const_key(
-            key,
-            &self.current_module_source,
-            &self.tysys.resolutions,
-        )?;
         self.tysys
             .signatures
-            .associated_constant(owner, &name)
+            .associated_constant(owner, name)
             .cloned()
+    }
+
+    /// [`Self::associated_constant_of`] for a qualified path in expression
+    /// position, whose leading segment carries the site that names the owner.
+    pub(super) fn associated_constant_of_path(
+        &self,
+        ident: &ast::IdentExpr,
+    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+        let owner =
+            trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
+        let name = ident.segments.last()?;
+        self.associated_constant_of(owner, &name.name)
+    }
+
+    /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
+    /// spelling, whose qualifier is a written `ast::Type` with its own site.
+    pub(super) fn associated_constant_qualified(
+        &self,
+        qualifier: Option<&ast::Type>,
+        name: &str,
+    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+        let owner = trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
+        self.associated_constant_of(owner, name)
     }
 
     pub(super) fn lookup_struct_fields_in(
@@ -1268,6 +1289,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_source: &ModuleSource,
     ) -> Option<&EnumInfo> {
         self.type_lookup().enum_case_in(name, module_source)
+    }
+
+    /// The enum `type_id` is, or `None` when it is not one. Asks the type for
+    /// its declaration, the way [`Self::variant_of_type`] does.
+    pub(super) fn enum_of_type(&self, type_id: TypeId) -> Option<&EnumInfo> {
+        let def = self.tysys.type_def(type_id)?;
+        self.tysys.all_enum_cases.get(&def)
+    }
+
+    /// The struct `type_id` is an instance of; see [`Self::variant_of_type`].
+    pub(super) fn struct_fields_of_type(&self, type_id: TypeId) -> Option<&StructFieldInfo> {
+        let def = self.tysys.type_def(type_id)?;
+        self.lookup_struct_fields_of_decl(def)
     }
 
     pub(super) fn lookup_flags_case_in(
@@ -1666,25 +1700,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             crate::ast::AstId,
             Vec<ast::GenericParam>,
             Vec<ast::InterfaceMethod>,
-            Option<String>,
+            bool,
         )> = module
             .items
             .iter()
             .filter_map(|item| match item {
-                Item::Interface(decl) => Some((decl.id, Vec::new(), decl.methods.clone(), None)),
+                Item::Interface(decl) => Some((decl.id, Vec::new(), decl.methods.clone(), false)),
                 Item::Resource(decl) => Some((
                     decl.id,
                     decl.type_params.clone(),
                     decl.methods.clone(),
-                    Some(decl.name.clone()),
+                    true,
                 )),
                 _ => None,
             })
             .collect();
-        for (decl_id, type_params, methods, resource_name) in decl_ops {
-            let resource_self = resource_name
-                .as_deref()
-                .map(|name| (name, module_source.clone()));
+        for (decl_id, type_params, methods, is_resource) in decl_ops {
+            let resource_self = is_resource
+                .then(|| self.tysys.resolutions.defs().of_ast_id(decl_id))
+                .flatten();
             let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
             for method in &methods {
                 self.sem

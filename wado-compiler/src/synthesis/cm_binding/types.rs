@@ -167,6 +167,17 @@ impl LiftContext<'_> {
         module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
     }
 
+    /// The declaration behind a CM named type — see
+    /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
+    /// a name rather than following a reference site.
+    pub(super) fn cm_decl(&self, source: &str, name: &str) -> crate::defs::DefId {
+        let module_source = self.module_source_for(source);
+        self.type_table
+            .borrow()
+            .cm_decl_in(name, &module_source)
+            .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
+    }
+
     /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware:
     /// unlike [`cm_type_to_type_id`], a lib-local named type resolves through its
     /// recorded entry `ModuleSource` and yields the concrete GC id rather than
@@ -187,12 +198,10 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return {
-                            let def = tt
-                                .decl_named_in(&n.name, &ms)
-                                .expect("the declaration this type names exists");
-                            tt.make_struct(crate::tir::StructDef::Decl(def))
-                        };
+                        let def = tt
+                            .cm_decl_in(&n.name, &ms)
+                            .expect("the declaration this type names exists");
+                        return tt.make_struct(crate::tir::StructDef::Decl(def));
                     }
                     if self
                         .cm_interface_registry
@@ -200,12 +209,10 @@ impl LiftContext<'_> {
                         .is_some()
                     {
                         let ms = self.module_source_for(&src);
-                        return {
-                            let def = tt
-                                .decl_named_in(&n.name, &ms)
-                                .expect("the declaration this type names exists");
-                            tt.make_variant(def)
-                        };
+                        let def = tt
+                            .cm_decl_in(&n.name, &ms)
+                            .expect("the declaration this type names exists");
+                        return tt.make_variant(def);
                     }
                 }
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)

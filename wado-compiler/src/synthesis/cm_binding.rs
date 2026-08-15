@@ -1284,15 +1284,19 @@ mod tests {
         );
         // A WASI variant payload lifts through a tuple, and `make_tuple`
         // reads the tuple family's declaration like any other head.
-        tt.declare_for_test(
-            TypeTable::TUPLE_TYPE_NAME,
-            ModuleSource::prelude(),
-            crate::defs::DefKind::Struct,
-        );
+        let tuple_decl = {
+            let def = tt.declare_for_test(
+                TypeTable::TUPLE_TYPE_NAME,
+                ModuleSource::prelude(),
+                crate::defs::DefKind::Struct,
+            );
+            tt.defs().ast_id(def)
+        };
         let _ = tt.compiler_items_mut().register(
             CompilerItem::Tuple,
             Resolved::TupleFamily {
                 module_source: ModuleSource::prelude(),
+                decl: tuple_decl,
             },
         );
         // The list adapters call through `IndexValue`, and they name it by the

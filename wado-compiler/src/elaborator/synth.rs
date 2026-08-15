@@ -435,7 +435,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 OpaqueReason::Unresolved
             });
         }
-        if let Some((_, ty, _)) = self.lookup_associated_constant(name) {
+        if let Some((_, ty, _)) = self.associated_constant_of_path(id) {
             return self.class_of_type(ty);
         }
         let name = name.to_string();
@@ -769,46 +769,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// head alone otherwise — which is still enough to tell the two range
     /// types apart from a plain index.
     fn synth_range(&mut self, range: &ast::RangeExpr, scope: &mut SynthScope<'_>) -> ArgClass {
-        let (item, fallback) = match range.kind {
-            ast::RangeKind::Exclusive => (
-                crate::compiler_item::CompilerItem::RangeExclusive,
-                "RangeExclusive",
-            ),
-            ast::RangeKind::Inclusive => (
-                crate::compiler_item::CompilerItem::RangeInclusive,
-                "RangeInclusive",
-            ),
+        let item = match range.kind {
+            ast::RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
+            ast::RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
         };
-        let module = self
+        let range_decl = self
             .tysys
             .type_table
             .borrow()
-            .compiler_struct_module(item)
-            .cloned()
-            .unwrap_or_else(crate::module_source::ModuleSource::range);
+            .compiler_item_def(item);
         let start = self.synth(&range.start, scope);
         let element = start.meet(self.synth(&range.end, scope));
+        let Some(def) = range_decl else {
+            return ArgClass::Opaque(OpaqueReason::Unresolved);
+        };
         match element {
-            ArgClass::Exact(t) => {
-                let range_type = {
-                    let def = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .decl_named_in(fallback, &module)
-                        .expect("the declaration this type names exists");
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_generic_instance(def, vec![t])
-                };
-                ArgClass::Exact(range_type)
-            }
-            _ => self
-                .decl_key_or_local(fallback)
-                .map_or(ArgClass::Opaque(OpaqueReason::Unresolved), |def| {
-                    ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def))
-                }),
+            ArgClass::Exact(t) => ArgClass::Exact(
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_generic_instance(def, vec![t]),
+            ),
+            _ => ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def)),
         }
     }
 

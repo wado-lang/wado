@@ -463,9 +463,8 @@ fn build_template_block(
 
     let formatter_type = {
         let def = tt
-            .borrow_mut()
-            .decl_named_in(&ctx.names.formatter, &ModuleSource::format())
-            .expect("the declaration this type names exists");
+            .borrow()
+            .require_compiler_item_def(crate::compiler_item::CompilerItem::Formatter);
         tt.borrow_mut()
             .make_struct(crate::tir::StructDef::Decl(def))
     };
@@ -819,9 +818,8 @@ fn build_formatter_expr(
     let pf = parsed.as_ref().unwrap();
     let alignment_type = {
         let def = tt
-            .borrow_mut()
-            .decl_named_in(&names.alignment, &ModuleSource::format())
-            .expect("the declaration this type names exists");
+            .borrow()
+            .require_compiler_item_def(crate::compiler_item::CompilerItem::Alignment);
         tt.borrow_mut().make_enum(def)
     };
     let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });

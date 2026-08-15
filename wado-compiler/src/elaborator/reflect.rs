@@ -182,20 +182,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             tt.make_tuple(slots)
         } else if method == members_method {
             let mut tt = self.tysys.type_table.borrow_mut();
-            let (field_module, field_name) = {
-                let items = tt.compiler_items();
-                let (m, n) =
-                    items.require_struct(crate::compiler_item::CompilerItem::ReflectStructField);
-                (m.clone(), n.to_string())
-            };
+            let def = tt
+                .require_compiler_item_def(crate::compiler_item::CompilerItem::ReflectStructField);
             let members: Vec<TypeId> = field_types
                 .into_iter()
-                .map(|field_ty| {
-                    let def = tt
-                        .decl_named_in(&field_name, &field_module)
-                        .expect("the declaration this type names exists");
-                    tt.make_generic_instance(def, vec![self_ty, field_ty])
-                })
+                .map(|field_ty| tt.make_generic_instance(def, vec![self_ty, field_ty]))
                 .collect();
             tt.make_tuple(members)
         } else if method == wire_name_policy_method {
@@ -855,19 +846,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .make_compiler_enum(CompilerItem::CaseStyle)
         } else if method == cases_method {
             let mut tt = self.tysys.type_table.borrow_mut();
-            let (case_module, case_name) = {
-                let items = tt.compiler_items();
-                let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
-                (m.clone(), n.to_string())
-            };
+            let def = tt.require_compiler_item_def(CompilerItem::ReflectVariantCase);
             let members: Vec<TypeId> = payloads
                 .into_iter()
-                .map(|payload| {
-                    let def = tt
-                        .decl_named_in(&case_name, &case_module)
-                        .expect("the declaration this type names exists");
-                    tt.make_generic_instance(def, vec![self_ty, payload])
-                })
+                .map(|payload| tt.make_generic_instance(def, vec![self_ty, payload]))
                 .collect();
             tt.make_tuple(members)
         } else {
@@ -1045,18 +1027,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => Some((name.clone(), *index)),
             _ => None,
         })?;
-        let (case_module, case_name) = {
-            let items = tt.compiler_items();
-            let (m, n) = items.require_struct(CompilerItem::ReflectVariantCase);
-            (m.clone(), n.to_string())
-        };
+        let def = tt.require_compiler_item_def(CompilerItem::ReflectVariantCase);
         let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
-        let member = {
-            let def = tt
-                .decl_named_in(&case_name, &case_module)
-                .expect("the declaration this type names exists");
-            tt.make_generic_instance(def, vec![self_ty, elem_param])
-        };
+        let member = tt.make_generic_instance(def, vec![self_ty, elem_param]);
         let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
         Some(tt.make_tuple(vec![member_pack]))
     }
@@ -1088,18 +1061,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => Some((name.clone(), *index)),
             _ => None,
         })?;
-        let (field_module, field_name) = {
-            let items = tt.compiler_items();
-            let (m, n) = items.require_struct(CompilerItem::ReflectStructField);
-            (m.clone(), n.to_string())
-        };
+        let def = tt.require_compiler_item_def(CompilerItem::ReflectStructField);
         let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
-        let member = {
-            let def = tt
-                .decl_named_in(&field_name, &field_module)
-                .expect("the declaration this type names exists");
-            tt.make_generic_instance(def, vec![self_ty, elem_param])
-        };
+        let member = tt.make_generic_instance(def, vec![self_ty, elem_param]);
         let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
         Some(tt.make_tuple(vec![member_pack]))
     }
@@ -1526,19 +1490,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         member_types: &[TypeId],
     ) -> TypeId {
         let mut tt = self.tysys.type_table.borrow_mut();
-        let (module, name) = {
-            let items = tt.compiler_items();
-            let (m, n) = items.require_struct(member_struct_item);
-            (m.clone(), n.to_string())
-        };
+        let def = tt.require_compiler_item_def(member_struct_item);
         let handles: Vec<TypeId> = member_types
             .iter()
-            .map(|&payload| {
-                let def = tt
-                    .decl_named_in(&name, &module)
-                    .expect("the declaration this type names exists");
-                tt.make_generic_instance(def, vec![subject, payload])
-            })
+            .map(|&payload| tt.make_generic_instance(def, vec![subject, payload]))
             .collect();
         tt.make_tuple(handles)
     }
@@ -1553,17 +1508,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let count = self.scalar_member_count(spec, self_name);
         let mut tt = self.tysys.type_table.borrow_mut();
-        let (member_module, member_name) = {
-            let items = tt.compiler_items();
-            let (m, n) = items.require_struct(spec.member_struct_item);
-            (m.clone(), n.to_string())
-        };
-        let member_type = {
-            let def = tt
-                .decl_named_in(&member_name, &member_module)
-                .expect("the declaration this type names exists");
-            tt.make_generic_instance(def, vec![self_ty])
-        };
+        let def = tt.require_compiler_item_def(spec.member_struct_item);
+        let member_type = tt.make_generic_instance(def, vec![self_ty]);
         tt.make_tuple(std::iter::repeat_n(member_type, count).collect())
     }
 
@@ -1604,17 +1550,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => Some((name.clone(), *index)),
             _ => None,
         })?;
-        let (member_module, member_name) = {
-            let items = tt.compiler_items();
-            let (m, n) = items.require_struct(spec.member_struct_item);
-            (m.clone(), n.to_string())
-        };
-        let member = {
-            let def = tt
-                .decl_named_in(&member_name, &member_module)
-                .expect("the declaration this type names exists");
-            tt.make_generic_instance(def, vec![self_ty])
-        };
+        let def = tt.require_compiler_item_def(spec.member_struct_item);
+        let member = tt.make_generic_instance(def, vec![self_ty]);
         let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
         Some(tt.make_tuple(vec![member_pack]))
     }

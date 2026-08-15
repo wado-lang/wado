@@ -8,13 +8,12 @@
 //!
 //! The goal is that a spelling cannot reach an identity at all, so two modules'
 //! same-named declarations cannot be confused for one. Every declaration index
-//! is keyed by `DefId` and a trait head carries one, but the goal is not yet
-//! reached: [`crate::tir::TypeTable::decl_named_in`] still answers
-//! `(name, module)` with a declaration, first-declared-wins, and
-//! [`crate::name::TypeHead::Declared`] is still a pair. Until a *type* head
-//! carries a `DefId` too, what keeps two same-named type declarations apart is
-//! that their rendered names differ — a convention each site maintains, not a
-//! property of the key.
+//! is keyed by `DefId`, every nominal head carries one, and the compiler-item
+//! registry records the declaring node of each stdlib type the compiler knows
+//! by construction — so a synthesis site names a declaration rather than
+//! spelling one. What remains is listed in `NAME_TO_IDENTITY` below, and the
+//! `enforcement` test keeps that list from growing. One entry is permanent:
+//! the Component Model boundary has no Wado reference site to ask.
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
@@ -777,20 +776,19 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
          the question — the one import fact that is not a scope lookup",
     ),
     (
-        "decl_named_in",
-        "TypeTable's first-declared-wins decl index; the largest remaining \
-         group of callers, half of which name a stdlib type the compiler-item \
-         registry should record instead",
+        "cm_decl_in",
+        "the Component Model boundary, and the one entry that is permanent. A \
+         WIT name is written in a namespace no Wado resolver walked, so there \
+         is no reference site to ask; and `CmInterfaceRegistry` parses its own \
+         copy of the WASI modules once per process, so the declaring node it \
+         could record is not one this program's `DefTable` saw. `wado-from-idl` \
+         generates one module per interface declaring each WIT name once, so \
+         the pair identifies a single declaration by construction.",
     ),
     (
         "declare_for_test",
         "gated on `test` / the `test-util` feature, so production code has no \
          such constructor",
-    ),
-    (
-        "canonical_assoc_const_key",
-        "splits a use-site `Type::CONST` spelling, whose `Type` half has no \
-         reference site of its own to ask; goes when the key does",
     ),
 ];
 

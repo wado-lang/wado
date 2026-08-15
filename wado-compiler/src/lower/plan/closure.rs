@@ -756,15 +756,9 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
         span: Span,
     ) {
-        let formatter_name = type_table
-            .compiler_items()
-            .struct_name(CompilerItem::Formatter)
-            .to_string();
         let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
         let formatter_type = {
-            let def = type_table
-                .decl_named_in(&formatter_name, &ModuleSource::format())
-                .expect("the declaration this type names exists");
+            let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
             type_table.make_struct(crate::tir::StructDef::Decl(def))
         };
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);

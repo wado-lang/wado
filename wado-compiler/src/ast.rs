@@ -454,6 +454,11 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             for field in &s.fields {
                 v.visit_id(field.id, field.span);
                 v.visit_type(&field.ty);
+                // A field default is an expression written here; see
+                // `walk_function`'s parameter defaults.
+                if let Some(default) = &field.default {
+                    v.visit_expr(default);
+                }
             }
         }
         Item::Enum(e) => {
@@ -548,6 +553,12 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     for param in &func.params {
         v.visit_id(param.id, param.span);
         v.visit_type(&param.ty);
+        // A default argument is an expression written in the declaring
+        // module, so its names are reference sites like any other and the
+        // walk answers for them from that vantage (WEP 2026-08-12 §3).
+        if let Some(default) = &param.default {
+            v.visit_expr(default);
+        }
     }
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
@@ -845,11 +856,19 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
         Pattern::Variant {
             name_id,
             name_span,
+            variant_qualifier,
             bindings,
             ..
         } => {
             if let Some(id) = name_id {
                 v.visit_id(*id, *name_span);
+            }
+            // `Type::CONST` / `Type::Case` in pattern position: the qualifier
+            // is a reference site like any written type, so the walk answers
+            // for it rather than leaving the consumer to split the spelling
+            // (WEP 2026-08-12 §3).
+            if let Some(qualifier) = variant_qualifier {
+                v.visit_type(qualifier);
             }
             for p in bindings {
                 v.visit_pattern(p);

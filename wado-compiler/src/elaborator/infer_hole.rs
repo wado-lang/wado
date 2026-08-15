@@ -212,9 +212,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let def = self
                 .tysys
-                .type_table
-                .borrow_mut()
-                .decl_named_in(&variant_info.name, &variant_info.module_source)
+                .resolutions
+                .defs()
+                .of_ast_id(variant_info.defined_at)
                 .expect("the declaration this type names exists");
             self.tysys
                 .type_table

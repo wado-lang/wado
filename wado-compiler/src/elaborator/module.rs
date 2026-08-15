@@ -116,7 +116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.sem.decls.local_generic_newtypes.insert(
                             newtype_decl.name.clone(),
                             GenericNewtypeInfo {
-                                module_source: self.current_module_source.clone(),
+                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
@@ -231,6 +231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     super::item::register_enum_compiler_item(
                         &self.tysys.type_table,
                         &enum_decl.attrs,
+                        enum_decl.id,
                         &enum_decl.name,
                         &self.current_module_source,
                         enum_decl.span,

@@ -153,7 +153,9 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    pub(super) module_source: ModuleSource,
+    /// `AstId` of the `type X<T> = …;` declaration, so an instantiation is
+    /// interned against the declaration rather than looked up by spelling.
+    pub(super) defined_at: AstId,
     pub(super) type_params: Vec<String>,
     pub(super) base_type_ast: ast::Type,
 }

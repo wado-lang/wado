@@ -257,7 +257,6 @@ impl Monomorphizer {
                 let rendered_key = {
                     let tt = type_table.borrow();
                     key.def
-                        .or_else(|| tt.decl_named_in(&key.name, &key.module_source))
                         .map(|def| (tt.decl_render_name(def), key.module_source.clone()))
                         .filter(|k| *k != struct_key)
                 };

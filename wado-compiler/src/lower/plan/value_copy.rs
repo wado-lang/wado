@@ -136,10 +136,7 @@ fn register_variant_cases(flat: &FlatPackage) {
             .iter()
             .map(|c| (c.name.clone(), c.index, c.payload))
             .collect();
-        let Some(def) = type_table.decl_named_in(&variant.name, &variant.module_source) else {
-            continue;
-        };
-        type_table.register_variant_cases(def, cases);
+        type_table.register_variant_cases(variant.def, cases);
     }
 }
 

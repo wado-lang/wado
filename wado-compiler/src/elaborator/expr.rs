@@ -574,7 +574,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
         if let Some((_const_module, type_id, const_expr)) =
-            self.lookup_associated_constant(&ident.name)
+            self.associated_constant_of_path(ident)
         {
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
@@ -1147,22 +1147,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use_id: AstId,
     ) {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        let mut struct_head = None;
-        let (struct_name, module_source) = match resolved {
-            ResolvedType::Struct { def, .. } => {
-                struct_head = Some(def);
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(receiver_type)
-                    .expect("a nominal type names a declaration")
-            }
-            ResolvedType::GenericInstance { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(receiver_type)
-                .expect("a nominal type names a declaration"),
+        let struct_head = match resolved {
+            ResolvedType::Struct { def, .. } => Some(def),
+            ResolvedType::GenericInstance { .. } => None,
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1171,10 +1158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = struct_head
-            .and_then(|head| self.lookup_struct_fields_of(head))
-            .or_else(|| self.lookup_struct_fields_in(&struct_name, &module_source))
-        {
+        if let Some(info) = struct_head.and_then(|head| self.lookup_struct_fields_of(head)) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_def(use_id, *fid);
@@ -1230,16 +1214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match resolved {
             // Struct field access
             ResolvedType::Struct { def, .. } => {
-                let (name, module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(struct_type)
-                    .expect("a struct names a declaration");
-                let declared = self
-                    .lookup_struct_fields_of(def)
-                    .or_else(|| self.lookup_struct_fields_in(&name, &module_source));
-                let hit = declared.map(|info| {
+                let hit = self.lookup_struct_fields_of(def).map(|info| {
                     info.fields
                         .iter()
                         .enumerate()
@@ -1248,7 +1223,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 match hit {
                     Some(Some(found)) => return found,
-                    Some(None) => return self.field_not_found(&name, field_name, span),
+                    Some(None) => {
+                        let name = self.tysys.type_table.borrow().type_name(struct_type);
+                        return self.field_not_found(&name, field_name, span);
+                    }
                     None => {}
                 }
             }
@@ -1264,12 +1242,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // and substitute type parameters with concrete type args.
             // Tuples use numeric field access (0, 1, 2, ...).
             ResolvedType::GenericInstance { type_args, .. } => {
-                let (name, module_source) = self
+                let name = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(struct_type)
-                    .expect("a generic instance names a declaration");
+                    .expect("a generic instance names a declaration")
+                    .0;
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
@@ -1287,14 +1266,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // instance names answers first: a function-local generic
                 // struct's fields are keyed by its identity, and the spelling
                 // reaches them only through the local-item render index.
-                let by_def = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_def(struct_type)
-                    .and_then(|def| self.lookup_struct_fields_of_decl(def).cloned());
-                let fields_clone =
-                    by_def.or_else(|| self.lookup_struct_fields_in(&name, &module_source).cloned());
+                let fields_clone = self.struct_fields_of_type(struct_type).cloned();
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
@@ -1359,7 +1331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let same_package = module_source.same_package(&self.current_module_source);
-        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
+        if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
@@ -2357,13 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         match &resolved {
             ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("an enum names a declaration");
-                if let Some(enum_info) = self.lookup_enum_case_in(name, module_source) {
+                if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
                     let covered: IndexSet<&str> = {
@@ -2616,9 +2582,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            let assoc_const_key = Self::exh_assoc_const_key(variant_name, variant_qualifier);
             if let Some((_m, _type_id, const_expr)) =
-                self.lookup_associated_constant(&assoc_const_key)
+                self.associated_constant_qualified(variant_qualifier, variant_name)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {
@@ -2659,13 +2624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         match &resolved {
             ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("an enum names a declaration");
-                if let Some(enum_info) = self.lookup_enum_case_in(name, module_source)
+                if let Some(enum_info) = self.enum_of_type(scrutinee_type)
                     && enum_info.find_case(&normalized).is_some()
                 {
                     return ExhPattern::EnumCase(normalized);
@@ -2678,21 +2637,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => ExhPattern::CatchAll,
         }
-    }
-
-    /// Build the `associated_constants` lookup key. Mirrors
-    /// `Elaborator::format_assoc_const_key`.
-    fn exh_assoc_const_key(variant_name: &str, qualifier: Option<&ast::Type>) -> String {
-        let Some(qualifier) = qualifier else {
-            return variant_name.to_string();
-        };
-        let base = match qualifier {
-            ast::Type::Named(t) => t.name.as_str(),
-            ast::Type::Generic(t) => t.name.as_str(),
-            ast::Type::NamespacedGeneric(t) => t.name.as_str(),
-            _ => return variant_name.to_string(),
-        };
-        format!("{base}::{variant_name}")
     }
 
     fn exh_range(
@@ -3715,14 +3659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .lookup_struct_fields_in(&struct_name, &struct_module_source)
                 .map(|info| info.defined_at);
             let struct_type = {
-                let def = declared_at
-                    .and_then(|ast| self.tysys.resolutions.defs().of_ast_id(ast))
-                    .or_else(|| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .decl_named_in(&struct_name, &struct_module_source)
-                    });
+                let def = declared_at.and_then(|ast| self.tysys.resolutions.defs().of_ast_id(ast));
                 match def {
                     Some(def) => self
                         .tysys
@@ -3754,23 +3691,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let defined_at = self
                 .lookup_struct_fields_in(&struct_name, &struct_module_source)
                 .map(|info| info.defined_at);
-            let struct_type = if let Some(defined_at) = defined_at {
+            let struct_type = defined_at.map_or(TypeTable::UNKNOWN, |defined_at| {
                 self.tysys.type_table.borrow().type_id_of_decl(defined_at)
-            } else {
-                let def = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .decl_named_in(&struct_name, &struct_module_source);
-                match def {
-                    Some(def) => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_struct(crate::tir::StructDef::Decl(def)),
-                    None => TypeTable::UNKNOWN,
-                }
-            };
+            });
             (struct_type, struct_name, fields)
         };
 
@@ -4900,7 +4823,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         use crate::ast::RangeKind;
-        use crate::module_source::ModuleSource;
 
         // Bidirectional coercion: resolve non-literal first to infer the element type
         let start_is_literal = self.tysys.is_numeric_literal(&range.start);
@@ -4996,36 +4918,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, module_source) = match range.kind {
-            RangeKind::Exclusive => {
-                let ms = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
-                    .cloned()
-                    .unwrap_or_else(ModuleSource::range);
-                ("RangeExclusive".to_string(), ms)
-            }
-            RangeKind::Inclusive => {
-                let ms = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
-                    .cloned()
-                    .unwrap_or_else(ModuleSource::range);
-                ("RangeInclusive".to_string(), ms)
-            }
+        let item = match range.kind {
+            RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
+            RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
         };
+        let struct_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(item)
+            .to_string();
 
         let struct_type = {
             let def = self
                 .tysys
                 .type_table
-                .borrow_mut()
-                .decl_named_in(&struct_name, &module_source)
-                .expect("the declaration this type names exists");
+                .borrow()
+                .require_compiler_item_def(item);
             self.tysys
                 .type_table
                 .borrow_mut()

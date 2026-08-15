@@ -379,7 +379,14 @@ Three things, none of them comparable:
   LSP reproduce it.
 - Diagnostics. A message says what the programmer wrote, read off the site.
 - The Component Model boundary. An export name is an ABI fact derived from a
-  `DefId`, never used to look one up.
+  `DefId`. The one direction that runs the other way is a WIT type name inside
+  a generated `wasi:*` / `core:kiln/*` module, which `TypeTable::cm_decl_in`
+  resolves: no Wado resolver walked that namespace, so there is no reference
+  site, and `CmInterfaceRegistry` parses its own copy of those modules once per
+  process, so there is no declaring node this program's `DefTable` saw either.
+  `wado-from-idl` generates one module per interface and each declares a WIT
+  name once, so the `(name, module)` pair names a single declaration by
+  construction. Reachable from `synthesis::cm_binding` alone.
 
 A name is never a map key, never an equality operand, and never a parameter that
 decides which declaration is meant.
@@ -426,33 +433,37 @@ resolution, the struct literal, the WIR lookup key, template admission, template
 lookup, the registration name, and the instantiation scan. Each was a distinct
 caller of the same first-wins index. A removed mechanism takes one fix.
 
-- [ ] A *type* head carries a `DefId`, not a `(module, name)` pair.
-      `name::TypeHead::Declared` is the one left — the trait side is
-      `FqTraitName`'s `DeclaredHead`, whose equality reads the declaration and
-      whose only constructor takes one — and it is what makes `FqTypeName`
-      equality name equality. This is the step; the rest of this list is what
-      it unblocks.
-- [ ] `TypeTable::decl_named_in` deleted. It answers `(name, module)` with a
-      declaration, `or_insert` so the first declared wins, so it structurally
-      cannot tell two same-named declarations in one module apart. 45 callers.
-      Roughly half name a stdlib type outright — `Future`, `Stream`,
-      `AsyncCall`, `ByteList` — and those go the way `IndexValue` already did:
-      into `compiler_item.rs`'s registry, which records the declaration so no
-      synthesis site spells the name. With the rest go the `(String,
-      ModuleSource)`-keyed maps, one of which is a generic-struct template
-      registry in `monomorphize`.
+- [x] A *type* head carries a `DefId`, not a `(module, name)` pair.
+      `name::TypeHead::Declared` carries a `DeclaredHead` — the declaration,
+      plus the module and the two spellings its one constructor reads off the
+      table — and equality compares the `DefId`. A head that names no
+      declaration is `TypeHead::Shape`, whose rendering *is* its identity.
+- [x] `TypeTable::decl_named_in` deleted. Every stdlib type it was reached for
+      — `Future`, `Stream`, `AsyncCall`, `ByteList`, `ByteSlice`, `ArraySlice`
+      — is a `compiler_item.rs` registry entry, and the registry now records a
+      declaring node for every kind that names a type of its own (`enum`,
+      `resource`, `type X = Y`, the tuple family, a builtin type), so
+      `TypeTable::compiler_item_def` answers for all of them. The rest carry
+      the identity their site already resolved. What is left of the index is
+      `TypeTable::cm_decl_in`, reachable only from `synthesis::cm_binding` and
+      permanent: see §9's third bullet.
 - [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
-      no such lookup; these three and `decl_named_in` are what remain.
-- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Five of its seven
-      entries are the four above plus `canonical_assoc_const_key`, which
-      splits a use-site `Type::CONST` spelling whose `Type` half has no
-      reference site of its own. The two that stay are `imported_as`, which
-      answers what a module imported under a local name rather than what a
-      spelling means, and `declare_for_test`, which is `#[cfg]`-gated. When
-      only those two are left, the Enforcement bullet above is a statement
-      about production code rather than a ratchet over it.
+      no such lookup; these three are what remain. `declared_in` is the largest
+      group: `TypeLookup`'s `*_in(name, module)` family and its 45 callers,
+      most of which already reach the same answer through the `DefId` their
+      `ResolvedType` carries and keep the name lookup only as an `or_else`.
+- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. What is left of its
+      original seven is the three above plus three that stay: `imported_as`,
+      which answers what a module imported under a local name rather than what
+      a spelling means; `declare_for_test`, which is `#[cfg]`-gated; and
+      `cm_decl_in`, the Component Model boundary. `decl_named_in` and
+      `canonical_assoc_const_key` are gone — the latter because a `Type::CONST`
+      use site now reads its owner off the qualifier's own reference site,
+      which `walk_pattern` reaches and the resolve walk answers for. When only
+      those three are left, the Enforcement bullet above is a statement about
+      production code rather than a ratchet over it.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and

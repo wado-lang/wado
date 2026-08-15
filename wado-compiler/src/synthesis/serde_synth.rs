@@ -267,22 +267,13 @@ fn generate_field_schema(
     // byte-read compiler item, wrapped in the `ByteSlice` newtype to match the
     // trait signature.
     let key_slice_type = {
-        let slice_module = tt
-            .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
-            .0
-            .clone();
         let base = {
-            let def = tt
-                .decl_named_in("ArraySlice", &slice_module)
-                .expect("the declaration this type names exists");
+            let def =
+                tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice);
             tt.make_generic_instance(def, vec![TypeTable::U8])
         };
-        {
-            let def = tt
-                .decl_named_in("ByteSlice", &crate::module_source::ModuleSource::bytes())
-                .expect("the declaration this type names exists");
-            tt.make_newtype(def, base)
-        }
+        let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteSlice);
+        tt.make_newtype(def, base)
     };
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields

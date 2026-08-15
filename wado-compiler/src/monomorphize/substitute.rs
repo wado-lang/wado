@@ -127,12 +127,7 @@ impl Monomorphizer {
                     } else if TypeTable::is_tuple_type(&name) {
                         type_table.make_tuple(new_args)
                     } else {
-                        {
-                            let def = type_table
-                                .decl_named_in(&name, &module_source)
-                                .expect("the declaration this type names exists");
-                            type_table.make_generic_instance(def, new_args)
-                        }
+                        type_table.make_generic_instance(def, new_args)
                     };
                 }
 
@@ -390,12 +385,7 @@ impl Monomorphizer {
                     return tid;
                 }
 
-                {
-                    let def = type_table
-                        .decl_named_in(&name, &module_source)
-                        .expect("the declaration this type names exists");
-                    type_table.make_generic_instance(def, new_args)
-                }
+                type_table.make_generic_instance(def, new_args)
             }
             // Delegate leaf cases (TypeParam, TypePack, GenericResource,
             // AssocTypeProjection, and other non-composite types) to the

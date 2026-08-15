@@ -511,17 +511,35 @@ impl AstVisitor for Resolver<'_> {
         }
     }
 
-    /// A qualified path in expression position (`Trait::method`, `Type::CONST`)
-    /// names a declaration with its leading segment, and that segment carries
-    /// its own site. Without this the only trait reference a UFCS call has is
-    /// a substring of the callee's name, which no vantage owns.
+    /// A qualified path in expression position (`Trait::method`,
+    /// `Type::CONST`, `ns::Type::CONST`) names declarations with the segments
+    /// before its last, and each carries its own site. Without this the only
+    /// trait reference a UFCS call has is a substring of the callee's name,
+    /// which no vantage owns.
+    ///
+    /// Two segments are recorded: the head, which is what a `Trait::method`
+    /// callee names, and the *owner* — the segment just before the final name,
+    /// which is what a `Type::CONST` qualifies its constant with. They are the
+    /// same segment for a two-segment path. A namespace-qualified owner
+    /// resolves under the `ns$Type` alias the namespace import registered,
+    /// which is the only spelling naming the declaration behind it.
     fn visit_expr(&mut self, expr: &ast::Expr) {
         if let ast::Expr::Ident(ident) = expr
-            && let [head, _rest @ ..] = ident.segments.as_slice()
-            && ident.segments.len() > 1
+            && let [head, rest @ ..] = ident.segments.as_slice()
+            && !rest.is_empty()
         {
             let answer = self.resolve_name(&head.name);
             self.record(head.id, answer);
+            let owner = ident.segments.len() - 2;
+            if owner > 0 {
+                let qualified = format!(
+                    "{}${}",
+                    ident.segments[owner - 1].name,
+                    ident.segments[owner].name
+                );
+                let answer = self.resolve_name(&qualified);
+                self.record(ident.segments[owner].id, answer);
+            }
         }
         ast::walk_expr(self, expr);
     }
