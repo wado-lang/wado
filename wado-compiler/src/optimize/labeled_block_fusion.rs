@@ -2516,6 +2516,17 @@ fn plan_slot_temp_sroa(
     };
     let (label, lb_block) = (label.clone(), *lb_block);
 
+    // The block's value must arrive through `break L:` exits the transform can
+    // reach, so the tail has to terminate rather than fall through with one.
+    // Checked before the read census below, which walks the whole body.
+    let last = body.blocks[lb_block].stmts.last()?;
+    if !matches!(
+        body.stmts[*last].kind,
+        StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
+    ) {
+        return None;
+    }
+
     // Every read of the temp, anywhere in the body, must be a `temp.k`
     // projection: the block has no aggregate left to hand any other read.
     let mut reads = SlotReadCollector {
@@ -2530,16 +2541,6 @@ fn plan_slot_temp_sroa(
     }
     let mut fields: Vec<(u32, TypeId)> = reads.slots.into_iter().collect();
     fields.sort_by_key(|(field_index, _)| *field_index);
-
-    // The block's value must arrive through `break L:` exits the transform can
-    // reach, so the tail has to terminate rather than fall through with one.
-    let last = body.blocks[lb_block].stmts.last()?;
-    if !matches!(
-        body.stmts[*last].kind,
-        StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
-    ) {
-        return None;
-    }
     let widest = fields
         .last()
         .map_or(0, |(field_index, _)| *field_index as usize);
@@ -2714,11 +2715,16 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
             scalarize_exits(engine, body, plan);
             None
         }
-        // A block re-binding the label shadows the exits below it, which the
-        // plan refused; anything else is walked for exits of our own.
-        StmtKind::LabeledBlock { block, .. } => {
-            let block = *block;
-            scalarize_exits(engine, block, plan);
+        // A block re-binding the label owns every `break` to it inside, so the
+        // planner's walk skips it without looking — `walk_exit_stmt` returns
+        // for the shadowing case rather than descending. Rewriting those breaks
+        // here would scalarize exits that are not ours, which is why
+        // `scalarize_expr` skips the same shape.
+        StmtKind::LabeledBlock { label, block } => {
+            if label != &plan.label {
+                let block = *block;
+                scalarize_exits(engine, block, plan);
+            }
             None
         }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {

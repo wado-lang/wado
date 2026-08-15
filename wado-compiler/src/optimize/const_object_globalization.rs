@@ -112,6 +112,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         hoistable_pure: &hoistable_pure,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
+        ref_param_leaks: RefCell::new(IndexMap::default()),
         string_inline_max_bytes: project.string_inline_max_bytes,
     };
     let mut candidates: Vec<Candidate> = Vec::new();
@@ -1025,6 +1026,10 @@ struct Gate<'a> {
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
     param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
+    /// Memoized [`Self::callee_ref_param_leaks`], keyed like `param_readonly`:
+    /// the walk behind it is a fixpoint over the callee body, and every `&`
+    /// argument at every call site in every optimizer iteration asks again.
+    ref_param_leaks: RefCell<IndexMap<(usize, usize), bool>>,
     /// The opt-level's `NirPackage::string_inline_max_bytes`, the eager
     /// `array.new_fixed` bound `translate_packed_array` applies to a `let`-shape
     /// global's value.
@@ -1168,6 +1173,17 @@ impl Gate<'_> {
     /// Whether the callee's parameter at `param_pos` — a borrow — delivers its
     /// referent's storage out of the callee. Unknown callees count as leaking.
     fn callee_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let key = (func_id.index(), param_pos);
+        if let Some(&cached) = self.ref_param_leaks.borrow().get(&key) {
+            return cached;
+        }
+        let verdict = self.compute_ref_param_leaks(func_id, param_pos);
+        self.ref_param_leaks.borrow_mut().insert(key, verdict);
+        verdict
+    }
+
+    fn compute_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return true;

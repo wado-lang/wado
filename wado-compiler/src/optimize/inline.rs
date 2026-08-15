@@ -294,8 +294,12 @@ impl CostWalk<'_> {
                     + self.block(*then_branch, seen)
                     + else_branch.map_or(0, |b| self.block(b, seen))
             }
+            // Every arm is a branch target, so an n-way dispatch splices n
+            // blocks into the caller however cheap the arms are. Pricing the
+            // dispatch once left a 20-arm table of constants costing 2 — an
+            // `if`'s price — and inlining at every call site from `-O1` up.
             ExprKind::Match { expr, arms } => {
-                weight::BRANCH
+                arms.len() * weight::BRANCH
                     + self.operand(*expr, seen)
                     + arms
                         .iter()
@@ -311,7 +315,7 @@ impl CostWalk<'_> {
                 default,
                 ..
             } => {
-                weight::BRANCH
+                (arms.len() + 1) * weight::BRANCH
                     + self.operand(*scrutinee, seen)
                     + arms.iter().map(|a| self.block(*a, seen)).sum::<usize>()
                     + self.block(*default, seen)
