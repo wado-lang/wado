@@ -8,7 +8,9 @@
 //! - the document text,
 //! - the document URI (for relative-import URI resolution),
 //! - the negotiated [`PositionEncoding`],
-//! - a way to land an LSP [`Position`] on a compiler [`Cursor`].
+//! - a way to land an LSP [`Position`] on a compiler [`Cursor`],
+//! - a [`LineIndex`] over the document, so the many spans one query
+//!   answers share a single scan.
 //!
 //! [`QueryContext`] bundles them so feature functions take a single
 //! argument instead of threading the tuple by hand at every call site.
@@ -17,9 +19,10 @@ use wado_compiler::Cursor;
 use wado_compiler::ast::AstId;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
+use wado_compiler::token::Span;
 
-use crate::diagnostics::Position;
-use crate::text::{PositionEncoding, lsp_position_to_line_col};
+use crate::diagnostics::{Position, Range};
+use crate::text::{self, LineIndex, PositionEncoding, lsp_position_to_line_col};
 
 /// Constant inputs to one LSP query against an open document.
 ///
@@ -38,9 +41,59 @@ pub(crate) struct QueryContext<'a> {
     pub(crate) source: &'a str,
     pub(crate) uri: &'a str,
     pub(crate) encoding: PositionEncoding,
+    /// Line table over `source`, built once per query.
+    ///
+    /// A query answers many spans — every reference, every highlight — and
+    /// each one converts two columns. Rebuilding the table per span put the
+    /// document scan back in the inner loop that [`LineIndex`] exists to take
+    /// it out of.
+    lines: LineIndex<'a>,
 }
 
 impl<'a> QueryContext<'a> {
+    pub fn new(
+        sem: &'a Semantics,
+        source: &'a str,
+        uri: &'a str,
+        encoding: PositionEncoding,
+    ) -> Self {
+        Self {
+            sem,
+            source,
+            uri,
+            encoding,
+            lines: LineIndex::new(source),
+        }
+    }
+
+    /// Convert `span` — belonging to node `id` — to an LSP [`Range`].
+    ///
+    /// Spans in the entry document are re-encoded against its text; spans in
+    /// other modules keep the compiler's codepoint columns, since their
+    /// source is not on hand (correct under UTF-32 / ASCII).
+    pub fn range_of(&self, span: &Span, id: AstId) -> Range {
+        match self.source_for_id(id) {
+            Some(_) => text::span_to_range_indexed(span, &self.lines, self.encoding),
+            None => text::span_to_range(span, None, self.encoding),
+        }
+    }
+
+    /// [`Self::range_of`] for a span already known to be in the entry
+    /// document (a cursor's own span).
+    pub fn range_in_document(&self, span: &Span) -> Range {
+        text::span_to_range_indexed(span, &self.lines, self.encoding)
+    }
+
+    /// An LSP [`Position`] from a 0-based line and 0-based codepoint column
+    /// in the entry document, in the negotiated encoding. Inlay hints anchor
+    /// at one edge of a span rather than converting a whole range.
+    pub fn position_at(&self, line: u32, codepoint_col: u32) -> Position {
+        Position {
+            line,
+            character: self.lines.to_character(line, codepoint_col, self.encoding),
+        }
+    }
+
     /// The entry module — the one whose source text lives in `self.source`.
     pub fn entry(&self) -> &'a ModuleSource {
         &self.sem.entry_module_source
@@ -69,11 +122,10 @@ impl<'a> QueryContext<'a> {
         self.sem.cursor_at(self.entry(), line, col)
     }
 
-    /// Source text to feed [`crate::location::span_to_range`] when
-    /// re-encoding a span at node `id`. `Some(self.source)` for spans
-    /// inside the entry document; `None` for spans in other modules (their
-    /// source isn't available here, and `span_to_range` falls back to
-    /// "codepoint columns as code units" — correct under UTF-32 / ASCII).
+    /// Whether node `id` lives in the entry document, carrying its source
+    /// when so. `None` for spans in other modules: their text is not
+    /// available here, so [`Self::range_of`] emits the compiler's codepoint
+    /// columns verbatim (correct under UTF-32 / ASCII).
     pub fn source_for_id(&self, id: AstId) -> Option<&'a str> {
         (self.sem.module_of_id(id) == Some(self.entry())).then_some(self.source)
     }

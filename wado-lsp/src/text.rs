@@ -143,22 +143,48 @@ pub fn span_to_range(span: &Span, source: Option<&str>, encoding: PositionEncodi
     let end_line = span.end_line.saturating_sub(1) as u32;
     let end_col_codepoints = span.end_column.saturating_sub(1) as u32;
 
-    let (start_char, end_char) = match source {
-        Some(src) => (
-            codepoint_offset_to_character(src, start_line, start_col_codepoints, encoding),
-            codepoint_offset_to_character(src, end_line, end_col_codepoints, encoding),
-        ),
-        None => (start_col_codepoints, end_col_codepoints),
-    };
+    match source {
+        Some(src) => span_to_range_indexed(span, &LineIndex::new(src), encoding),
+        None => Range {
+            start: Position {
+                line: start_line,
+                character: start_col_codepoints,
+            },
+            end: Position {
+                line: end_line,
+                character: end_col_codepoints,
+            },
+        },
+    }
+}
 
+/// [`span_to_range`] against an already-built line table. Callers converting
+/// more than one span per document — every position-bearing query does —
+/// share one index instead of rescanning the source per span.
+#[must_use]
+pub(crate) fn span_to_range_indexed(
+    span: &Span,
+    lines: &LineIndex<'_>,
+    encoding: PositionEncoding,
+) -> Range {
+    let start_line = span.line.saturating_sub(1) as u32;
+    let end_line = span.end_line.saturating_sub(1) as u32;
     Range {
         start: Position {
             line: start_line,
-            character: start_char,
+            character: lines.to_character(
+                start_line,
+                span.column.saturating_sub(1) as u32,
+                encoding,
+            ),
         },
         end: Position {
             line: end_line,
-            character: end_char,
+            character: lines.to_character(
+                end_line,
+                span.end_column.saturating_sub(1) as u32,
+                encoding,
+            ),
         },
     }
 }
@@ -197,24 +223,46 @@ fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionE
     }
 }
 
-/// Translate a 0-based codepoint offset at `line` (of `source`) into a
-/// 0-based `character` in `encoding` code units. Looks the line up in
-/// `source` on each call; callers that already have the line slice on
-/// hand (e.g. a delta-encoding loop) should use
-/// [`codepoints_to_code_units`] directly to skip the lookup.
-#[must_use]
-pub(crate) fn codepoint_offset_to_character(
-    source: &str,
-    line: u32,
-    codepoint_col: u32,
-    encoding: PositionEncoding,
-) -> u32 {
-    let Some(line_text) = source.split_inclusive('\n').nth(line as usize) else {
-        return codepoint_col;
-    };
-    let line_content = line_without_terminator(line_text);
-    let line_codepoints = line_content.chars().count() as u32;
-    codepoints_to_code_units(line_content, line_codepoints, codepoint_col, encoding)
+/// A document's lines, each paired with its codepoint count.
+///
+/// Every codepoint→code-unit conversion needs the text of one line. Finding
+/// it with `source.split_inclusive('\n').nth(line)` re-scans the document
+/// from the top, so a caller converting once per diagnostic or once per inlay
+/// hint pays `O(hints × document length)`. Building this once is a single
+/// pass, and each conversion is then a slice index.
+pub(crate) struct LineIndex<'a> {
+    lines: Vec<(&'a str, u32)>,
+}
+
+impl<'a> LineIndex<'a> {
+    #[must_use]
+    pub(crate) fn new(source: &'a str) -> Self {
+        Self {
+            lines: source
+                .split_inclusive('\n')
+                .map(|line| {
+                    let text = line_without_terminator(line);
+                    (text, text.chars().count() as u32)
+                })
+                .collect(),
+        }
+    }
+
+    /// Translate a 0-based codepoint offset at `line` into a 0-based
+    /// `character` in `encoding` code units. A line past the end of the
+    /// document passes the codepoint offset through unchanged.
+    #[must_use]
+    pub(crate) fn to_character(
+        &self,
+        line: u32,
+        codepoint_col: u32,
+        encoding: PositionEncoding,
+    ) -> u32 {
+        let Some(&(text, codepoints)) = self.lines.get(line as usize) else {
+            return codepoint_col;
+        };
+        codepoints_to_code_units(text, codepoints, codepoint_col, encoding)
+    }
 }
 
 /// Codepoint offset → LSP `character` (code-unit count) inside a single

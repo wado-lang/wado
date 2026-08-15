@@ -32,7 +32,6 @@ use wado_compiler::token::Span;
 use crate::diagnostics::{Position, Range};
 use crate::macros::lsp_repr_u32_enum;
 use crate::query::QueryContext;
-use crate::text::codepoint_offset_to_character;
 
 lsp_repr_u32_enum!(
     /// LSP inlay-hint kind. Serializes as the wire integer.
@@ -93,20 +92,23 @@ struct HintCollector<'a> {
 impl HintCollector<'_> {
     /// Position immediately after `span` ends — where a `: T` label is anchored.
     fn position_after(&self, span: Span) -> Position {
-        let line = span.end_line.saturating_sub(1) as u32;
-        let codepoint_col = span.end_column.saturating_sub(1) as u32;
-        let character =
-            codepoint_offset_to_character(self.ctx.source, line, codepoint_col, self.ctx.encoding);
-        Position { line, character }
+        self.position(
+            span.end_line.saturating_sub(1) as u32,
+            span.end_column.saturating_sub(1) as u32,
+        )
     }
 
     /// Position at the start of `span` — where a `name:` parameter label is anchored.
     fn position_before(&self, span: Span) -> Position {
-        let line = span.line.saturating_sub(1) as u32;
-        let codepoint_col = span.column.saturating_sub(1) as u32;
-        let character =
-            codepoint_offset_to_character(self.ctx.source, line, codepoint_col, self.ctx.encoding);
-        Position { line, character }
+        self.position(
+            span.line.saturating_sub(1) as u32,
+            span.column.saturating_sub(1) as u32,
+        )
+    }
+
+    fn position(&self, line: u32, codepoint_col: u32) -> Position {
+        // The line table lives on the context, built once per query.
+        self.ctx.position_at(line, codepoint_col)
     }
 
     /// Emit a `: T` hint anchored at the end of `name_span` for a binding
@@ -353,12 +355,7 @@ mod tests {
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
         let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext {
-            sem: &sem,
-            source,
-            uri: &uri,
-            encoding: PositionEncoding::Utf16,
-        };
+        let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf16);
         let max_range = Range {
             start: Position {
                 line: 0,
@@ -511,12 +508,7 @@ mod tests {
             let uri = format!("file://{path}");
             let host = MapHost::single(path, src);
             let sem = wado_compiler::semantics(src, &host, Some(path)).await;
-            let ctx = QueryContext {
-                sem: &sem,
-                source: src,
-                uri: &uri,
-                encoding: PositionEncoding::Utf16,
-            };
+            let ctx = QueryContext::new(&sem, src, &uri, PositionEncoding::Utf16);
             // Restrict to line 1 only — `let x = 1` is on line 1 (0-based),
             // `let y = 2` is on line 2. Filter must drop the line-2 hint.
             let range = Range {
@@ -771,12 +763,7 @@ mod tests {
         let uri = format!("file://{path}");
         let host = MapHost::single(path, src);
         let sem = futures::executor::block_on(wado_compiler::semantics(src, &host, Some(path)));
-        let ctx = QueryContext {
-            sem: &sem,
-            source: src,
-            uri: &uri,
-            encoding: PositionEncoding::Utf16,
-        };
+        let ctx = QueryContext::new(&sem, src, &uri, PositionEncoding::Utf16);
         let max_range = Range {
             start: Position {
                 line: 0,
@@ -850,12 +837,7 @@ mod tests {
             // `./lib.wado`, not its eventual absolute path.
             let host = MapHost::with_files(&[("./other.wado", other), (path, entry)]);
             let sem = wado_compiler::semantics(entry, &host, Some(path)).await;
-            let ctx = QueryContext {
-                sem: &sem,
-                source: entry,
-                uri: &uri,
-                encoding: PositionEncoding::Utf16,
-            };
+            let ctx = QueryContext::new(&sem, entry, &uri, PositionEncoding::Utf16);
             let max_range = Range {
                 start: Position {
                     line: 0,

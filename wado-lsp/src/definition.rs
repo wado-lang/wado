@@ -14,7 +14,7 @@ use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::{module_uri, span_to_range, symbol_uri};
+use crate::location::{module_uri, symbol_uri};
 use crate::query::QueryContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ pub(crate) fn find_definition(ctx: &QueryContext, position: Position) -> Option<
     };
     Some(DefinitionResult {
         uri: def_uri,
-        range: span_to_range(&span, ctx.source_for_id(def_key), ctx.encoding),
+        range: ctx.range_of(&span, def_key),
     })
 }
 

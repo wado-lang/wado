@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
 use crate::macros::lsp_repr_u32_enum;
-use crate::text::{PositionEncoding, codepoint_offset_to_character};
+use crate::text::{LineIndex, PositionEncoding};
 
 lsp_repr_u32_enum!(
     /// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
@@ -66,11 +66,11 @@ const DOCUMENT_START: Range = Range {
 
 /// Convert a [`DiagnosticSpan`](wado_compiler::DiagnosticSpan) to an LSP
 /// [`Range`], re-expressing the compiler's 1-based codepoint columns in
-/// `encoding`. `source` is the text the span points into; `None` passes the
-/// codepoint columns through (correct for ASCII / UTF-32).
+/// `encoding`. `lines` indexes the text the span points into; `None` passes
+/// the codepoint columns through (correct for ASCII / UTF-32).
 fn span_to_range(
     span: &wado_compiler::DiagnosticSpan,
-    source: Option<&str>,
+    lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Range {
     // Compiler uses 1-based line/codepoint column; LSP uses 0-based.
@@ -85,10 +85,10 @@ fn span_to_range(
             c.saturating_sub(1) as u32
         });
 
-    let (start_char, end_char) = match source {
-        Some(src) => (
-            codepoint_offset_to_character(src, start_line, start_codepoint, encoding),
-            codepoint_offset_to_character(src, end_line, end_codepoint, encoding),
+    let (start_char, end_char) = match lines {
+        Some(lines) => (
+            lines.to_character(start_line, start_codepoint, encoding),
+            lines.to_character(end_line, end_codepoint, encoding),
         ),
         None => (start_codepoint, end_codepoint),
     };
@@ -118,17 +118,18 @@ fn span_to_range(
 /// errors, no hover, and no navigation, with nothing on screen to explain
 /// why.
 ///
-/// `source` and `encoding` are used to re-express the compiler's
+/// `lines` and `encoding` are used to re-express the compiler's
 /// codepoint columns in the negotiated position encoding. Pass
 /// `None` for diagnostics whose `span.file` is not the request
 /// document — the result will still be valid for ASCII source but may
 /// drift the column for non-ASCII codepoints (the spec's UTF-16
 /// default). For the request document itself the caller should always
-/// provide `Some(source)`.
-pub fn from_compiler_diagnostic(
+/// provide the index. It is built once per `textDocument/publishDiagnostics`
+/// and shared across every diagnostic in it — see [`LineIndex`].
+pub(crate) fn from_compiler_diagnostic(
     diag: &CompilerDiagnostic,
     _uri: &str,
-    source: Option<&str>,
+    lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Option<Diagnostic> {
     // Skip internal span tracking and log messages
@@ -151,7 +152,7 @@ pub fn from_compiler_diagnostic(
     };
 
     let range = match diag.span.as_ref() {
-        Some(span) => span_to_range(span, source, encoding),
+        Some(span) => span_to_range(span, lines, encoding),
         None => DOCUMENT_START,
     };
 
@@ -375,7 +376,7 @@ mod tests {
         let diag = from_compiler_diagnostic(
             &compiler_diag,
             "file:///entry.wado",
-            Some(src),
+            Some(&LineIndex::new(src)),
             PositionEncoding::Utf16,
         )
         .unwrap();
