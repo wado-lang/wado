@@ -1045,6 +1045,48 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
+pub struct LexerView {
+    chars: &List<char>,
+    start: i32,
+    pos: i32,
+}
+
+impl LexerView {
+    pub fn la(&self, k: i32) -> i32 {
+        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    pub fn text(&self) -> String {
+        let mut s = String::with_capacity(if self.pos > self.start { self.pos - self.start } else { 0 });
+        for let mut i = self.start; i < self.pos; i += 1 {
+            s.push(self.chars[i]);
+        }
+        return s;
+    }
+
+    pub fn start(&self) -> i32 {
+        return self.start;
+    }
+
+    pub fn pos(&self) -> i32 {
+        return self.pos;
+    }
+
+    pub fn char_at(&self, i: i32) -> i32 {
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    pub fn input_len(&self) -> i32 {
+        return self.chars.len();
+    }
+}
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
@@ -2244,9 +2286,29 @@ pub global TK_BackTickInside: i32 = 148;
 pub global TK_EOF: i32 = 149;
 pub global TK_ERROR: i32 = 150;
 
+pub interface TypeScriptLexerBase {
+    fn is_regex_possible(view: LexerView) -> bool;
+    fn process_open_brace(view: LexerView);
+    fn is_in_template_string(view: LexerView) -> bool;
+    fn process_close_brace(view: LexerView);
+    fn is_strict_mode(view: LexerView) -> bool;
+    fn process_string_literal(view: LexerView);
+    fn increase_template_depth(view: LexerView);
+    fn decrease_template_depth(view: LexerView);
+    fn start_template_string(view: LexerView);
+}
+
 struct Lexer {
     chars: List<char>,
     pos: i32,
+    act_output: String = "",
+    act_type: i32 = -1,
+    act_channel: i32 = -1,
+    act_skip: bool = false,
+    act_more: bool = false,
+    act_push_mode: i32 = -1,
+    act_pop_mode: bool = false,
+    act_set_mode: i32 = -1,
 }
 
 impl Lexer {
@@ -2261,6 +2323,99 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
+
+    fn emit(&mut self, s: String) {
+        self.act_output.push_str(&s);
+    }
+
+    fn reset_actions(&mut self) {
+        self.act_type = -1;
+        self.act_channel = -1;
+        self.act_skip = false;
+        self.act_more = false;
+        self.act_push_mode = -1;
+        self.act_pop_mode = false;
+        self.act_set_mode = -1;
+    }
+
+    fn set_type(&mut self, t: i32) {
+        self.act_type = t;
+    }
+
+    fn set_channel(&mut self, c: i32) {
+        self.act_channel = c;
+    }
+
+    fn skip(&mut self) {
+        self.act_skip = true;
+    }
+
+    fn more(&mut self) {
+        self.act_more = true;
+    }
+
+    fn push_mode(&mut self, m: i32) {
+        self.act_push_mode = m;
+    }
+
+    fn pop_mode(&mut self) {
+        self.act_pop_mode = true;
+    }
+
+    fn set_mode(&mut self, m: i32) {
+        self.act_set_mode = m;
+    }
+}
+
+pub global MODE_DEFAULT_MODE: i32 = 0;
+pub global MODE_TEMPLATE: i32 = 1;
+
+fn apply_OpenBrace_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '{' { return; }
+    pos += 1;
+    TypeScriptLexerBase::process_open_brace(LexerView { chars, start, pos });
+}
+
+fn apply_CloseBrace_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '}' { return; }
+    pos += 1;
+    TypeScriptLexerBase::process_close_brace(LexerView { chars, start, pos });
+}
+
+fn apply_StringLiteral_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+    let chars = &lx.chars;
+    let pos = end;
+    TypeScriptLexerBase::process_string_literal(LexerView { chars, start, pos });
+}
+
+fn apply_BackTick_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '`' { return; }
+    pos += 1;
+    TypeScriptLexerBase::increase_template_depth(LexerView { chars, start, pos });
+}
+
+fn apply_BackTickInside_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '`' { return; }
+    pos += 1;
+    TypeScriptLexerBase::decrease_template_depth(LexerView { chars, start, pos });
+}
+
+fn apply_TemplateStringStartExpression_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '$' { return; }
+    pos += 1;
+    if pos >= chars.len() || chars[pos] != '{' { return; }
+    pos += 1;
+    TypeScriptLexerBase::start_template_string(LexerView { chars, start, pos });
 }
 
 fn try_MultiLineComment(chars: &List<char>, start: i32) -> i32 {
@@ -2309,7 +2464,7 @@ fn try_SingleLineComment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
+fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase, stores[chars] {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -2441,6 +2596,7 @@ fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 {
         pos = rep_saved_5;
         break;
     }
+    if !(TypeScriptLexerBase::is_regex_possible(LexerView { chars, start, pos })) { return -1; }
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
     loop {
@@ -2616,8 +2772,9 @@ fn try_OpenBrace(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_TemplateCloseBrace(chars: &List<char>, start: i32) -> i32 {
+fn try_TemplateCloseBrace(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase, stores[chars] {
     let mut pos = start;
+    if !(TypeScriptLexerBase::is_in_template_string(LexerView { chars, start, pos })) { return -1; }
     if pos >= chars.len() || chars[pos] != '}' { return -1; }
     pos += 1;
     return pos;
@@ -3321,7 +3478,7 @@ fn try_HexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
+fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase, stores[chars] {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;
@@ -3339,6 +3496,7 @@ fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
         pos = rep_saved_32;
         break;
     }
+    if !(!TypeScriptLexerBase::is_strict_mode(LexerView { chars, start, pos })) { return -1; }
     return pos;
 }
 
@@ -5342,10 +5500,11 @@ fn try_TemplateStringAtom(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> TokenStream {
+pub fn tokenize(input: &String) -> TokenStream with TypeScriptLexerBase {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
+    let mut more_start: i32 = -1;
     let mut mode_stack: List<i32> = [];
     let mut current_mode: i32 = 0;
     while !lexer.at_end() {
@@ -5353,325 +5512,357 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
+        let mut best_act: i32 = -1;
+        let mut best_act_skip = false;
         let first_char = lexer.chars[start];
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
+        let mut best_set_mode: i32 = -1;
+        let mut best_more = false;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
             end = try_MultiLineComment(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MultiLineComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
+            if end > best_end { best_end = end; best_kind = TK_MultiLineComment; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 1; best_act = -1; }
             end = try_SingleLineComment(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SingleLineComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
+            if end > best_end { best_end = end; best_kind = TK_SingleLineComment; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 1; best_act = -1; }
             end = try_RegularExpressionLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RegularExpressionLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RegularExpressionLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OpenBracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_CloseBracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OpenParen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OpenParen; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OpenParen; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_CloseParen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CloseParen; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_CloseParen; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OpenBrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
             end = try_TemplateCloseBrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TemplateCloseBrace; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_TemplateCloseBrace; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_CloseBrace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
             end = try_SemiColon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SemiColon; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_SemiColon; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Comma(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Comma; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Comma; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Assign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Assign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Assign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_QuestionMark(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QuestionMark; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_QuestionMark; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_QuestionMarkDot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QuestionMarkDot; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_QuestionMarkDot; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Colon; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Colon; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Ellipsis(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Ellipsis; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Ellipsis; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dot; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Dot; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PlusPlus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PlusPlus; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PlusPlus; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_MinusMinus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MinusMinus; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_MinusMinus; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Plus; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Plus; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Minus; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Minus; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitNot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitNot; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitNot; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Not(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Not; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Not; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Multiply(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Multiply; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Multiply; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Divide(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Divide; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Divide; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Modulus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Modulus; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Modulus; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Power(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Power; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Power; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_NullCoalesce(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NullCoalesce; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_NullCoalesce; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Hashtag(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Hashtag; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Hashtag; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LeftShiftArithmetic(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LeftShiftArithmetic; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LeftShiftArithmetic; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LessThan(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LessThan; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LessThan; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_MoreThan(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MoreThan; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_MoreThan; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LessThanEquals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LessThanEquals; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LessThanEquals; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_GreaterThanEquals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GreaterThanEquals; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_GreaterThanEquals; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Equals_(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Equals_; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Equals_; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_NotEquals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NotEquals; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_NotEquals; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_IdentityEquals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IdentityEquals; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_IdentityEquals; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_IdentityNotEquals(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IdentityNotEquals; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_IdentityNotEquals; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitAnd(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitAnd; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitAnd; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitXOr(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitXOr; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitXOr; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitOr(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitOr; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitOr; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_And(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_And; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_And; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Or(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Or; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Or; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_MultiplyAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MultiplyAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_MultiplyAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_DivideAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DivideAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_DivideAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ModulusAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ModulusAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ModulusAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PlusAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PlusAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PlusAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_MinusAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MinusAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_MinusAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LeftShiftArithmeticAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LeftShiftArithmeticAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LeftShiftArithmeticAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RightShiftArithmeticAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RightShiftArithmeticAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RightShiftArithmeticAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RightShiftLogicalAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RightShiftLogicalAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RightShiftLogicalAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitAndAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitAndAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitAndAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitXorAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitXorAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitXorAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BitOrAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BitOrAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BitOrAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PowerAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PowerAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PowerAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_NullishCoalescingAssign(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NullishCoalescingAssign; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_NullishCoalescingAssign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ARROW(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARROW; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ARROW; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_NullLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NullLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_NullLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BooleanLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BooleanLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BooleanLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_DecimalLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_HexIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_HexIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_HexIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OctalIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OctalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OctalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OctalIntegerLiteral2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OctalIntegerLiteral2; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OctalIntegerLiteral2; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BinaryIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BinaryIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BinaryIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BigHexIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BigHexIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BigHexIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BigOctalIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BigOctalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BigOctalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BigBinaryIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BigBinaryIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BigBinaryIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BigDecimalIntegerLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BigDecimalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BigDecimalIntegerLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Break(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Break; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Break; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Do(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Do; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Do; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Instanceof(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Instanceof; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Instanceof; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Typeof(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Typeof; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Typeof; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Case(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Case; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Case; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Else(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Else; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Else; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_New(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_New; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_New; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Var(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Var; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Var; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Catch(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Catch; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Catch; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Finally(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Finally; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Finally; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Return(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Return; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Return; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Void(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Void; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Void; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Continue(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Continue; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Continue; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_For(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_For; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_For; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Switch(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Switch; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Switch; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_While(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_While; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_While; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Debugger(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Debugger; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Debugger; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Function_(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Function_; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Function_; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_This(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_This; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_This; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_With(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_With; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_With; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Default(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Default; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Default; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_If(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_If; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_If; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Throw(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Throw; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Throw; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Delete(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Delete; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Delete; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_In(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_In; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_In; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Try(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Try; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Try; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_As(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_As; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_As; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_From(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_From; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_From; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ReadOnly(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ReadOnly; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ReadOnly; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Async(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Async; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Async; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Await(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Await; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Await; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Yield(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Yield; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Yield; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_YieldStar(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_YieldStar; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_YieldStar; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Class(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Class; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Class; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Enum(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Enum; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Enum; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Extends(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Extends; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Extends; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Super(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Super; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Super; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Const(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Const; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Const; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Export(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Export; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Export; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Import(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Import; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Import; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Implements(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Implements; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Implements; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Let(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Let; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Let; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Private(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Private; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Private; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Public(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Public; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Public; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Interface(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Interface; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Interface; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Package(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Package; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Package; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Protected(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Protected; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Protected; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Static(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Static; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Static; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Any(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Any; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Any; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Number(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Number; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Number; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Never(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Never; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Never; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Boolean(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Boolean; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Boolean; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_String(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_String; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_String; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Unique(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Unique; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Unique; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Symbol(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Symbol; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Symbol; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Undefined(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Undefined; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Undefined; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Object(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Object; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Object; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Of(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Of; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Of; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_KeyOf(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KeyOf; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_KeyOf; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_TypeAlias(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TypeAlias; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_TypeAlias; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Constructor(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Constructor; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Constructor; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Namespace(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Namespace; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Namespace; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Require(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Require; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Require; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Module(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Module; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Module; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Declare(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Declare; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Declare; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Abstract(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Abstract; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Abstract; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Is(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Is; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Is; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_At(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_At; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_At; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_Identifier(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Identifier; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_Identifier; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_StringLiteral(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_StringLiteral; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_StringLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 2; }
             end = try_BackTick(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = 1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 3; }
             end = try_WhiteSpaces(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WhiteSpaces; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
+            if end > best_end { best_end = end; best_kind = TK_WhiteSpaces; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 1; best_act = -1; }
             end = try_LineTerminator(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LineTerminator; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
+            if end > best_end { best_end = end; best_kind = TK_LineTerminator; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 1; best_act = -1; }
             end = try_HtmlComment(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_HtmlComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
+            if end > best_end { best_end = end; best_kind = TK_HtmlComment; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 1; best_act = -1; }
             end = try_CDataComment(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CDataComment; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
+            if end > best_end { best_end = end; best_kind = TK_CDataComment; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 1; best_act = -1; }
             end = try_UnexpectedCharacter(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_push_mode = -1; best_pop_mode = false; best_channel = 2; }
+            if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 2; best_act = -1; }
         } else if current_mode == 1 {
             end = try_TemplateStringEscapeAtom(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TemplateStringEscapeAtom; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_TemplateStringEscapeAtom; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BackTickInside(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 4; }
             end = try_TemplateStringStartExpression(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TemplateStringStartExpression; best_push_mode = 0; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_TemplateStringStartExpression; best_push_mode = 0; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 5; }
             end = try_TemplateStringAtom(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TemplateStringAtom; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_TemplateStringAtom; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
         }
-        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
+        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
-            let tok_start = start;
-            let is_skip = false;
-            if is_skip {
+            if best_act >= 0 {
+                lexer.reset_actions();
+                if best_act == 0 {
+                    apply_OpenBrace_actions(&mut lexer, start, best_end);
+                } else if best_act == 1 {
+                    apply_CloseBrace_actions(&mut lexer, start, best_end);
+                } else if best_act == 2 {
+                    apply_StringLiteral_actions(&mut lexer, start, best_end);
+                } else if best_act == 3 {
+                    apply_BackTick_actions(&mut lexer, start, best_end);
+                } else if best_act == 4 {
+                    apply_BackTickInside_actions(&mut lexer, start, best_end);
+                } else if best_act == 5 {
+                    apply_TemplateStringStartExpression_actions(&mut lexer, start, best_end);
+                }
+                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
+                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                if lexer.act_more { best_more = true; }
+                if lexer.act_skip { best_act_skip = true; }
+                if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }
+                if lexer.act_pop_mode { best_pop_mode = true; }
+                if lexer.act_set_mode >= 0 { best_set_mode = lexer.act_set_mode; }
+            }
+            let tok_start = if more_start >= 0 { more_start } else { start };
+            let is_skip = false || best_act_skip;
+            if best_more {
+                if more_start < 0 { more_start = start; }
+            } else if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
+                more_start = -1;
             } else if best_channel != 0 {
                 ts.push_trivia(best_kind, tok_start, best_end, best_channel);
+                more_start = -1;
             } else {
                 ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());
                 triv_lo = ts.trivia_mark();
+                more_start = -1;
             }
             if best_push_mode >= 0 {
                 mode_stack.push(current_mode);
@@ -5687,10 +5878,15 @@ pub fn tokenize(input: &String) -> TokenStream {
                 }
                 best_pop_mode = false;
             }
+            if best_set_mode >= 0 {
+                current_mode = best_set_mode;
+                best_set_mode = -1;
+            }
             lexer.pos = best_end;
         }
     }
     ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
+    ts.output = lexer.act_output;
     return ts;
 }
 
@@ -26505,7 +26701,7 @@ fn _parse_eos(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult with TypeScriptLexerBase {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
@@ -26522,639 +26718,639 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
-pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return parse_initializer(input, max_errors);
 }
 
-pub fn parse_initializer(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_initializer(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_initializer(p));
 }
 
-pub fn parse_binding_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_binding_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_binding_pattern(p));
 }
 
-pub fn parse_type_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_parameters(p));
 }
 
-pub fn parse_type_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_parameter_list(p));
 }
 
-pub fn parse_type_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_parameter(p));
 }
 
-pub fn parse_constraint(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_constraint(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_constraint(p));
 }
 
-pub fn parse_type_arguments(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_arguments(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_arguments(p));
 }
 
-pub fn parse_type_argument_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_argument_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_argument_list(p));
 }
 
-pub fn parse_type_argument(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_argument(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_argument(p));
 }
 
-pub fn parse_type_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_(p));
 }
 
-pub fn parse_union_or_intersection_or_primary_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_union_or_intersection_or_primary_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_union_or_intersection_or_primary_type(p));
 }
 
-pub fn parse_primary_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_primary_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_primary_type(p));
 }
 
-pub fn parse_predefined_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_predefined_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_predefined_type(p));
 }
 
-pub fn parse_type_reference(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_reference(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_reference(p));
 }
 
-pub fn parse_type_generic(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_generic(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_generic(p));
 }
 
-pub fn parse_type_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_name(p));
 }
 
-pub fn parse_object_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_object_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_object_type(p));
 }
 
-pub fn parse_type_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_body(p));
 }
 
-pub fn parse_type_member_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_member_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_member_list(p));
 }
 
-pub fn parse_type_member(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_member(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_member(p));
 }
 
-pub fn parse_array_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_array_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_array_type(p));
 }
 
-pub fn parse_tuple_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_type(p));
 }
 
-pub fn parse_tuple_element_types(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tuple_element_types(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_element_types(p));
 }
 
-pub fn parse_function_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_type(p));
 }
 
-pub fn parse_constructor_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_constructor_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_constructor_type(p));
 }
 
-pub fn parse_type_query(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_query(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_query(p));
 }
 
-pub fn parse_type_query_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_query_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_query_expression(p));
 }
 
-pub fn parse_property_signatur(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_property_signatur(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_property_signatur(p));
 }
 
-pub fn parse_type_annotation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_annotation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_annotation(p));
 }
 
-pub fn parse_call_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_call_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_call_signature(p));
 }
 
-pub fn parse_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_parameter_list(p));
 }
 
-pub fn parse_required_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_required_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_required_parameter_list(p));
 }
 
-pub fn parse_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_parameter(p));
 }
 
-pub fn parse_optional_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_optional_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_optional_parameter(p));
 }
 
-pub fn parse_rest_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rest_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rest_parameter(p));
 }
 
-pub fn parse_required_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_required_parameter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_required_parameter(p));
 }
 
-pub fn parse_accessibility_modifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_accessibility_modifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_accessibility_modifier(p));
 }
 
-pub fn parse_identifier_or_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier_or_pattern(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier_or_pattern(p));
 }
 
-pub fn parse_construct_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_construct_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_construct_signature(p));
 }
 
-pub fn parse_index_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_index_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_index_signature(p));
 }
 
-pub fn parse_method_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_method_signature(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_method_signature(p));
 }
 
-pub fn parse_type_alias_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_type_alias_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_type_alias_declaration(p));
 }
 
-pub fn parse_constructor_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_constructor_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_constructor_declaration(p));
 }
 
-pub fn parse_interface_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_interface_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_interface_declaration(p));
 }
 
-pub fn parse_interface_extends_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_interface_extends_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_interface_extends_clause(p));
 }
 
-pub fn parse_class_or_interface_type_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_or_interface_type_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_or_interface_type_list(p));
 }
 
-pub fn parse_enum_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_declaration(p));
 }
 
-pub fn parse_enum_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_body(p));
 }
 
-pub fn parse_enum_member_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_member_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_member_list(p));
 }
 
-pub fn parse_enum_member(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_enum_member(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_enum_member(p));
 }
 
-pub fn parse_namespace_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_namespace_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_namespace_declaration(p));
 }
 
-pub fn parse_namespace_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_namespace_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_namespace_name(p));
 }
 
-pub fn parse_import_alias_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_alias_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_alias_declaration(p));
 }
 
-pub fn parse_decorator_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_decorator_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_decorator_list(p));
 }
 
-pub fn parse_decorator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_decorator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_decorator(p));
 }
 
-pub fn parse_decorator_member_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_decorator_member_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_decorator_member_expression(p));
 }
 
-pub fn parse_decorator_call_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_decorator_call_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_decorator_call_expression(p));
 }
 
-pub fn parse_program(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_program(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_program(p));
 }
 
-pub fn parse_source_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_source_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_source_element(p));
 }
 
-pub fn parse_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_statement(p));
 }
 
-pub fn parse_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_block(p));
 }
 
-pub fn parse_statement_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_statement_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_statement_list(p));
 }
 
-pub fn parse_abstract_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_abstract_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_abstract_declaration(p));
 }
 
-pub fn parse_import_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_statement(p));
 }
 
-pub fn parse_import_from_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_from_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_from_block(p));
 }
 
-pub fn parse_import_module_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_module_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_module_items(p));
 }
 
-pub fn parse_import_alias_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_alias_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_alias_name(p));
 }
 
-pub fn parse_module_export_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_module_export_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_module_export_name(p));
 }
 
-pub fn parse_imported_binding(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_imported_binding(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_imported_binding(p));
 }
 
-pub fn parse_import_default(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_default(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_default(p));
 }
 
-pub fn parse_import_namespace(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_namespace(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_namespace(p));
 }
 
-pub fn parse_import_from(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_import_from(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_import_from(p));
 }
 
-pub fn parse_alias_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_alias_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_alias_name(p));
 }
 
-pub fn parse_export_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_export_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_export_statement(p));
 }
 
-pub fn parse_export_from_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_export_from_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_export_from_block(p));
 }
 
-pub fn parse_export_module_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_export_module_items(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_export_module_items(p));
 }
 
-pub fn parse_export_alias_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_export_alias_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_export_alias_name(p));
 }
 
-pub fn parse_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_declaration(p));
 }
 
-pub fn parse_variable_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_variable_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_variable_statement(p));
 }
 
-pub fn parse_variable_declaration_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_variable_declaration_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_variable_declaration_list(p));
 }
 
-pub fn parse_variable_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_variable_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_variable_declaration(p));
 }
 
-pub fn parse_empty_statement_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_empty_statement_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_empty_statement_(p));
 }
 
-pub fn parse_expression_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_expression_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_statement(p));
 }
 
-pub fn parse_if_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_if_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_if_statement(p));
 }
 
-pub fn parse_iteration_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_iteration_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_iteration_statement(p));
 }
 
-pub fn parse_var_modifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_var_modifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_var_modifier(p));
 }
 
-pub fn parse_continue_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_continue_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_continue_statement(p));
 }
 
-pub fn parse_break_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_break_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_break_statement(p));
 }
 
-pub fn parse_return_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_return_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_return_statement(p));
 }
 
-pub fn parse_yield_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_yield_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_yield_statement(p));
 }
 
-pub fn parse_with_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_with_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_with_statement(p));
 }
 
-pub fn parse_switch_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_switch_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_switch_statement(p));
 }
 
-pub fn parse_case_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_case_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_case_block(p));
 }
 
-pub fn parse_case_clauses(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_case_clauses(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_case_clauses(p));
 }
 
-pub fn parse_case_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_case_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_case_clause(p));
 }
 
-pub fn parse_default_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_default_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_default_clause(p));
 }
 
-pub fn parse_labelled_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_labelled_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_labelled_statement(p));
 }
 
-pub fn parse_throw_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_throw_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_throw_statement(p));
 }
 
-pub fn parse_try_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_try_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_try_statement(p));
 }
 
-pub fn parse_catch_production(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_catch_production(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_catch_production(p));
 }
 
-pub fn parse_finally_production(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_finally_production(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_finally_production(p));
 }
 
-pub fn parse_debugger_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_debugger_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_debugger_statement(p));
 }
 
-pub fn parse_function_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_declaration(p));
 }
 
-pub fn parse_class_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_declaration(p));
 }
 
-pub fn parse_class_heritage(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_heritage(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_heritage(p));
 }
 
-pub fn parse_class_tail(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_tail(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_tail(p));
 }
 
-pub fn parse_class_extends_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_extends_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_extends_clause(p));
 }
 
-pub fn parse_implements_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_implements_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_implements_clause(p));
 }
 
-pub fn parse_class_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_element(p));
 }
 
-pub fn parse_property_member_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_property_member_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_property_member_declaration(p));
 }
 
-pub fn parse_property_member_base(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_property_member_base(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_property_member_base(p));
 }
 
-pub fn parse_index_member_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_index_member_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_index_member_declaration(p));
 }
 
-pub fn parse_generator_method(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generator_method(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generator_method(p));
 }
 
-pub fn parse_generator_function_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generator_function_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generator_function_declaration(p));
 }
 
-pub fn parse_generator_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generator_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generator_block(p));
 }
 
-pub fn parse_generator_definition(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_generator_definition(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_generator_definition(p));
 }
 
-pub fn parse_iterator_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_iterator_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_iterator_block(p));
 }
 
-pub fn parse_iterator_definition(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_iterator_definition(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_iterator_definition(p));
 }
 
-pub fn parse_class_element_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_class_element_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_class_element_name(p));
 }
 
-pub fn parse_private_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_private_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_private_identifier(p));
 }
 
-pub fn parse_formal_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_formal_parameter_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_formal_parameter_list(p));
 }
 
-pub fn parse_formal_parameter_arg(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_formal_parameter_arg(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_formal_parameter_arg(p));
 }
 
-pub fn parse_last_formal_parameter_arg(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_last_formal_parameter_arg(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_last_formal_parameter_arg(p));
 }
 
-pub fn parse_function_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_function_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_function_body(p));
 }
 
-pub fn parse_source_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_source_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_source_elements(p));
 }
 
-pub fn parse_array_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_array_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_array_literal(p));
 }
 
-pub fn parse_element_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_element_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_element_list(p));
 }
 
-pub fn parse_array_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_array_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_array_element(p));
 }
 
-pub fn parse_object_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_object_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_object_literal(p));
 }
 
-pub fn parse_property_assignment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_property_assignment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_property_assignment(p));
 }
 
-pub fn parse_get_accessor(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_get_accessor(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_get_accessor(p));
 }
 
-pub fn parse_set_accessor(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_set_accessor(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_set_accessor(p));
 }
 
-pub fn parse_property_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_property_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_property_name(p));
 }
 
-pub fn parse_arguments(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_arguments(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_arguments(p));
 }
 
-pub fn parse_argument_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_argument_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_argument_list(p));
 }
 
-pub fn parse_argument(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_argument(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_argument(p));
 }
 
-pub fn parse_expression_sequence(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_expression_sequence(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_sequence(p));
 }
 
-pub fn parse_single_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_single_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_single_expression(p));
 }
 
-pub fn parse_as_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_as_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_as_expression(p));
 }
 
-pub fn parse_assignable(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_assignable(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_assignable(p));
 }
 
-pub fn parse_anonymous_function(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_anonymous_function(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_anonymous_function(p));
 }
 
-pub fn parse_arrow_function_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_arrow_function_declaration(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_arrow_function_declaration(p));
 }
 
-pub fn parse_arrow_function_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_arrow_function_parameters(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_arrow_function_parameters(p));
 }
 
-pub fn parse_arrow_function_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_arrow_function_body(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_arrow_function_body(p));
 }
 
-pub fn parse_assignment_operator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_assignment_operator(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_assignment_operator(p));
 }
 
-pub fn parse_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_literal(p));
 }
 
-pub fn parse_template_string_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_template_string_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_template_string_literal(p));
 }
 
-pub fn parse_template_string_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_template_string_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_template_string_atom(p));
 }
 
-pub fn parse_numeric_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_numeric_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_numeric_literal(p));
 }
 
-pub fn parse_bigint_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_bigint_literal(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_bigint_literal(p));
 }
 
-pub fn parse_getter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_getter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_getter(p));
 }
 
-pub fn parse_setter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_setter(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_setter(p));
 }
 
-pub fn parse_identifier_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier_name(p));
 }
 
-pub fn parse_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier(p));
 }
 
-pub fn parse_identifier_or_key_word(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier_or_key_word(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier_or_key_word(p));
 }
 
-pub fn parse_reserved_word(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_reserved_word(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_reserved_word(p));
 }
 
-pub fn parse_keyword(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_keyword(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_keyword(p));
 }
 
-pub fn parse_eos(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_eos(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with TypeScriptLexerBase {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_eos(p));
 }
 

@@ -2,7 +2,7 @@ use {
     find_this_calls,
     superclass_base_name,
     add_super_op,
-    all_super_ops_predicates,
+    body_is_base_calls_only,
     gen_super_interface,
     super_call_expr,
     rewrite_this_calls,
@@ -84,17 +84,30 @@ test "add_super_op dedups and fixes the first role" {
     assert ops[1].name == "n" && !ops[1].is_predicate;
 }
 
-test "all_super_ops_predicates gates action-op bases out" {
-    let preds: List<SuperOp> = [
-        SuperOp { name: "a", is_predicate: true },
-        SuperOp { name: "b", is_predicate: true },
-    ];
-    assert all_super_ops_predicates(&preds);
-    let mixed: List<SuperOp> = [
-        SuperOp { name: "a", is_predicate: true },
-        SuperOp { name: "c", is_predicate: false },
-    ];
-    assert !all_super_ops_predicates(&mixed);
+test "body_is_base_calls_only accepts both the source and the rewritten call form" {
+    assert body_is_base_calls_only(&"this.processOpenBrace();", &"B");
+    assert body_is_base_calls_only(&" this.a(); this.b() ", &"B");
+    // The same body after `rewrite_superclass_calls` — the answer must not move.
+    assert body_is_base_calls_only(&"B::process_open_brace(LexerView { chars, start, pos });", &"B");
+}
+
+test "body_is_base_calls_only rejects host code around the call" {
+    assert !body_is_base_calls_only(&"int n = 1; this.a();", &"B");
+    assert !body_is_base_calls_only(&"this.a() && x > 0", &"B");
+    assert !body_is_base_calls_only(&"System.out.println(\"x\");", &"B");
+    // Another base's call is host code as far as this grammar is concerned.
+    assert !body_is_base_calls_only(&"C::m(LexerView { chars, start, pos });", &"B");
+}
+
+test "body_is_base_calls_only sees past a comment" {
+    assert body_is_base_calls_only(&"/* note */ this.a(); // trailing", &"B");
+    // A bare string is host code, not a call.
+    assert !body_is_base_calls_only(&"\"x\"", &"B");
+}
+
+test "body_is_base_calls_only holds vacuously for an empty body" {
+    assert body_is_base_calls_only(&"", &"B");
+    assert body_is_base_calls_only(&"  ", &"B");
 }
 
 test "gen_super_interface emits predicate and action ops" {

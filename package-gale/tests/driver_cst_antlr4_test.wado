@@ -13,9 +13,54 @@ use antlr4 from "./grammars/ANTLRv4Lexer.g4"
         },
     };
 use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.g4";
+use { LexerAdaptor, LexerView } from "./grammars/ANTLRv4Lexer.g4";
+
+// A hand-written stand-in for ANTLR's LexerAdaptor. The real adaptor drives the
+// lexer from these two ops — `handleBeginArgument` pushes the Argument (or
+// LexerCharSet) mode and calls `more()`, `handleEndArgument` pops the mode and
+// retypes the token — and a Gale base reaches none of that: an operation is
+// handed a read-only `LexerView`, not the lexer's command surface, and the
+// "which rule are we in" state it branches on needs the `emit` / `nextToken`
+// lifecycle hooks (both open Stage C items, see TODO.md). This port therefore
+// only counts the ops, which is what the argument brackets did before the base
+// was wired; `[ ... ]` bodies stay ordinary DEFAULT-mode tokens.
+struct Antlr4Base {
+    begins: i32,
+    ends: i32,
+}
+
+impl LexerAdaptor for Antlr4Base {
+    fn handle_begin_argument(&mut self, view: LexerView) {
+        self.begins += 1;
+        resume ();
+    }
+
+    fn handle_end_argument(&mut self, view: LexerView) {
+        self.ends += 1;
+        resume ();
+    }
+}
+
+fn new_antlr4_base() -> Antlr4Base {
+    return Antlr4Base { begins: 0, ends: 0 };
+}
+
+fn a4_tokenize(input: &String) -> antlr4::TokenStream {
+    let mut base = new_antlr4_base();
+    with LexerAdaptor => &mut base do {
+        return antlr4::tokenize(input);
+    };
+}
+
+fn a4_parse(input: &String) -> antlr4::ParseResult {
+    let mut base = new_antlr4_base();
+    with LexerAdaptor => &mut base do {
+        return antlr4::parse(input);
+    };
+}
 
 test "tokenize grammar declaration" {
-    let tokens = antlr4::tokenize(&"grammar Foo;");
+    let tokens = a4_tokenize(&"grammar Foo;");
     assert tokens.len() >= 3, `expected at least 3 tokens, got ${tokens.len()}`;
     // Verify the first token is GRAMMAR keyword
     let first_name = antlr4::token_kind_name(tokens.kinds[0]);
@@ -23,45 +68,45 @@ test "tokenize grammar declaration" {
 }
 
 test "tokenize rule with string literal" {
-    let tokens = antlr4::tokenize(&"bar : 'hello' ;");
+    let tokens = a4_tokenize(&"bar : 'hello' ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize alternatives" {
-    let tokens = antlr4::tokenize(&"expr : expr '+' expr | INT ;");
+    let tokens = a4_tokenize(&"expr : expr '+' expr | INT ;");
     // Should have: identifier, colon, identifier, string, identifier, pipe, identifier, semi
     assert tokens.len() >= 7, `expected at least 7 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize character set" {
-    let tokens = antlr4::tokenize(&"ID : [a-zA-Z_]+ ;");
+    let tokens = a4_tokenize(&"ID : [a-zA-Z_]+ ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize action block" {
-    let tokens = antlr4::tokenize(&"rule_ : 'a' { doSomething(); } ;");
+    let tokens = a4_tokenize(&"rule_ : 'a' { doSomething(); } ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize options block" {
-    let tokens = antlr4::tokenize(&"options { tokenVocab = FooLexer; }");
+    let tokens = a4_tokenize(&"options { tokenVocab = FooLexer; }");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize fragment" {
-    let tokens = antlr4::tokenize(&"fragment DIGIT : [0-9] ;");
+    let tokens = a4_tokenize(&"fragment DIGIT : [0-9] ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
     let first_name = antlr4::token_kind_name(tokens.kinds[0]);
     assert first_name == "FRAGMENT", `expected FRAGMENT, got ${first_name}`;
 }
 
 test "tokenize labels" {
-    let tokens = antlr4::tokenize(&"expr : INT # NumExpr ;");
+    let tokens = a4_tokenize(&"expr : INT # NumExpr ;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize lexer commands" {
-    let tokens = antlr4::tokenize(&"WS : [ \\t\\n]+ -> skip ;");
+    let tokens = a4_tokenize(&"WS : [ \\t\\n]+ -> skip ;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
@@ -70,7 +115,7 @@ test "parse minimal grammar" {
     // ANTLR4 lexer produces ID tokens, but the parser expects RULE_REF/TOKEN_REF
     // (distinguished by semantic predicates based on case). Without predicates,
     // any input with identifiers fails to parse. Verify the error is sensible.
-    let r = antlr4::parse(&"grammar Foo;");
+    let r = a4_parse(&"grammar Foo;");
     assert !r.ok(), "expected a diagnostic";
 }
 
@@ -82,7 +127,7 @@ test "parse minimal grammar" {
 // them as trivia with `channel == 3`, not 0 or 1. This exercises the
 // generic `channel(X)` routing path, not just the HIDDEN shortcut.
 test "user channel: LINE_COMMENT routed to COMMENT channel" {
-    let tokens = antlr4::tokenize(&"// hi\n42");
+    let tokens = a4_tokenize(&"// hi\n42");
     // LINE_COMMENT must not appear in the main stream.
     for let mut i = 0; i < tokens.len(); i += 1 {
         assert tokens.kinds[i] != TK_LINE_COMMENT, "LINE_COMMENT leaked into main stream — channel routing dropped";
@@ -104,7 +149,7 @@ test "user channel: LINE_COMMENT routed to COMMENT channel" {
 }
 
 test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
-    let tokens = antlr4::tokenize(&"/* hi */ 42");
+    let tokens = a4_tokenize(&"/* hi */ 42");
     for let mut i = 0; i < tokens.len(); i += 1 {
         assert tokens.kinds[i] != TK_BLOCK_COMMENT, "BLOCK_COMMENT leaked into main stream";
     }
@@ -120,4 +165,21 @@ test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
         }
     }
     assert found, "BLOCK_COMMENT trivia missing on INT token";
+}
+
+test "the base's argument-bracket ops run on the winning tokens" {
+    // BEGIN_ARGUMENT / END_ARGUMENT carry the grammar's only actions, and each
+    // is a bare `{this.m();}` base call — the winner replay runs them once per
+    // matched bracket, and never for a candidate that lost the tournament.
+    let mut base = new_antlr4_base();
+    with LexerAdaptor => &mut base do {
+        let tokens = antlr4::tokenize(&"r[int x] : 'a' ;");
+        assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
+    };
+    assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
+    // END_ARGUMENT lives in the `Argument` mode, which nothing enters: only the
+    // adaptor's own `pushMode` would, and a base has no lexer command surface
+    // yet. So the closing bracket never reaches the base — flip this to 1 when
+    // that lands.
+    assert base.ends == 0, `expected 0 handleEndArgument, got ${base.ends}`;
 }
