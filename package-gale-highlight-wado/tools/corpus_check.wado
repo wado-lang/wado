@@ -2,9 +2,12 @@
 //! Gale-generated parser and report each file's first diagnostic.
 //!
 //!     wado run package-gale-highlight-wado/tools/corpus_check.wado -- <paths...>
+//!     wado run package-gale-highlight-wado/tools/corpus_check.wado -- --paths-from list.txt
 //!
 //! Prints one `ok` / `ng` line per file plus a closing summary, so a corpus of
-//! compiler fixtures can be triaged against `grammar/Wado.g4`.
+//! compiler fixtures can be triaged against `grammar/Wado.g4`. `--paths-from`
+//! reads one path per line, which is also the only form that survives a path
+//! containing a space.
 
 use { parse } from "../src/lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
@@ -18,12 +21,28 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     }
     let root = dirs[0].0;
 
+    let argv = args();
+    let mut paths: List<String> = [];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--paths-from" && i + 1 < argv.len() {
+            i += 1;
+            let list = match read_file(&root, &argv[i]) {
+                Some(text) => text,
+                None => "",
+            };
+            for let line of list.lines() {
+                if !line.is_empty() {
+                    paths.push(line);
+                }
+            }
+        } else if argv[i].ends_with(".wado") {
+            paths.push(argv[i]);
+        }
+    }
+
     let mut total = 0;
     let mut bad = 0;
-    for let arg of &args() {
-        if !arg.ends_with(".wado") {
-            continue;
-        }
+    for let arg of &paths {
         total += 1;
         if let Some(src) = read_file(&root, arg) {
             let result = parse(&src);

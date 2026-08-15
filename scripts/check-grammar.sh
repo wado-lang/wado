@@ -21,14 +21,18 @@ if [ "${1:-}" = "--update" ]; then
     update=true
 fi
 
-tmp=$(mktemp -d)
+# `wado run` reaches only the current directory, so the corpus list the
+# Gale-side tool reads has to live inside the repository, not in /tmp.
+tmp=package-gale-highlight-wado/build/check-grammar
+rm -rf "${tmp}"
+mkdir -p "${tmp}"
 trap 'rm -rf "${tmp}"' EXIT
 
 cargo build --bin wado --bin wado-dev-tools
 
 # Corpus: the stdlib and its tests, the e2e fixtures, the format fixtures, and
 # the examples. `tests/generated` is excluded — its `*.wir.wado` files are IR
-# dumps, not Wado source. Paths must not contain spaces.
+# dumps, not Wado source.
 find wado-compiler/lib \
      wado-compiler/tests/fixtures \
      wado-compiler/tests/format.fixtures \
@@ -37,9 +41,8 @@ find wado-compiler/lib \
 
 ./target/debug/wado-dev-tools grammar-corpus --paths-from "${tmp}/corpus.txt" \
     > "${tmp}/compiler.tsv"
-# shellcheck disable=SC2046 # one process for the whole corpus; paths are space-free
 ./target/debug/wado run package-gale-highlight-wado/tools/corpus_check.wado -- \
-    $(cat "${tmp}/corpus.txt") > "${tmp}/gale.tsv" 2> "${tmp}/gale.err" \
+    --paths-from "${tmp}/corpus.txt" > "${tmp}/gale.tsv" 2> "${tmp}/gale.err" \
     || { cat "${tmp}/gale.err" >&2; exit 1; }
 
 {
@@ -48,11 +51,14 @@ find wado-compiler/lib \
 # `scripts/check-grammar.sh --update`. Regenerated, not hand-edited.
 #
 #   gale-rejects   Wado.g4 reports a syntax error where the compiler parses
-#                  cleanly — a grammar gap. This side must reach zero.
-#   gale-accepts   the compiler's parser rejects where Wado.g4 is happy. Most
-#                  of these are rules no context-free grammar can state (a
-#                  chained `!=`, a non-trailing default argument, `#[serde]`
-#                  spelled out in a diagnostic), so they stay.
+#                  cleanly — a grammar gap. Every entry here is work to do,
+#                  except one the grammar cannot reach: a fn type's bare
+#                  multi-effect row, which the parser separates from the next
+#                  parameter by looking three tokens ahead for an `ident:`.
+#   gale-accepts   the compiler's parser rejects where Wado.g4 is happy. Rules
+#                  no context-free grammar can state (a chained `!=`, a
+#                  non-trailing default argument, `#[serde]` spelled out in a
+#                  diagnostic), so they stay.
 #
 # kind<TAB>path<TAB>line<TAB>message
 HEADER

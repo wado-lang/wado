@@ -1,9 +1,17 @@
-// Partial ANTLR4 grammar for Wado, consumed by Gale. Covers the syntax used
-// by every example under `example/*.wado` (declarations, statements,
-// expressions, patterns, generics, attributes, traits/impls, globals, type
-// aliases, `if let` / `while let` let-chains, `task return`, map literals,
-// turbofish associated calls, and effect-handler installation via
-// `with E => h do { ... }` / `resume`, and template strings with interpolation.
+// ANTLR4 grammar for Wado, consumed by Gale.
+//
+// It is checked against the compiler's own parser: `mise run check-grammar`
+// parses the stdlib, the e2e fixtures, the format fixtures, and the examples
+// with both and reports every file they disagree about, against the committed
+// `grammar/divergences.tsv`. The compiler is the specification; this file
+// follows it.
+//
+// Two kinds of disagreement are expected and recorded there: rules no
+// context-free grammar can state (a chained `!=`, `internal` next to `pub`,
+// `#[serde]` spelled out in a diagnostic), which this grammar accepts and the
+// parser rejects; and the one construct it cannot reach, a fn type's bare
+// multi-effect row (see `fnTypeWithClause`).
+//
 // Effect *declarations* (`effect E { ... }`) are not yet modeled.
 
 grammar Wado;
@@ -13,20 +21,18 @@ sourceFile
     ;
 
 item
-    : attribute* itemKind
+    : attribute* itemModifiers itemKind
+    ;
+
+// Every item reads the same modifier prefix before its keyword decides which
+// item it is, so the dispatch stays token-led. Which combinations mean
+// something is a later question: `internal` with `pub` / `export`, or `async`
+// on anything but a `fn`, is rejected past the grammar.
+itemModifiers
+    : 'internal'? 'pub'? 'export'? 'async'?
     ;
 
 itemKind
-    : implBlock
-    | testDecl
-    | functionDecl
-    | ('pub' | 'internal')? pubItem
-    ;
-
-// Item kinds that take an optional `pub` / `internal` (plus plain `fn`). The
-// leading modifier is left-factored into `itemKind` so the dispatch is
-// token-led. `use` lives here so `pub use` re-exports parse.
-pubItem
     : useDecl
     | globalDecl
     | typeAliasDecl
@@ -38,15 +44,21 @@ pubItem
     | interfaceDecl
     | worldDecl
     | resourceDecl
+    | implBlock
+    | testDecl
+    | 'fn' funcSig
     ;
 
 globalDecl
     : 'global' 'mut'? IDENTIFIER ':' typeRef '=' expression ';'
     ;
 
+// A named alias / builtin declaration (`type Name<T> = T;`, `type Name;`), or
+// a declaration whose head is a type the name grammar cannot spell —
+// `type ();`, `type !;`, `type [..T];`.
 typeAliasDecl
-    : 'type' IDENTIFIER genericParams? ('=' typeRef)? ';'
-    | 'type' '[' '..' IDENTIFIER ']' ';'
+    : 'type' identifier genericParams? ('=' typeRef)? ';'
+    | 'type' typeRef ';'
     ;
 
 // `test` is a contextual keyword; modeled as a literal here for simplicity.
@@ -78,7 +90,7 @@ attrValue
     ;
 
 useDecl
-    : 'use' importGroup 'from' STRING_LITERAL ('with' mapLiteral)? ';'
+    : 'use' importGroup 'from' STRING_LITERAL ('with' braceLiteral)? ';'
     ;
 
 importGroup
@@ -92,11 +104,16 @@ importList
     ;
 
 importItem
-    : IDENTIFIER ('as' IDENTIFIER)?
+    : IDENTIFIER '::' '{' importList? '}'
+    | IDENTIFIER ('as' IDENTIFIER)?
     ;
 
+// A function in member position (trait / interface / resource body), where the
+// modifier prefix is part of the member rather than of an enclosing `item`.
+// Spelled out rather than referring to `itemModifiers`: an all-optional rule
+// reference at the head of an alternative defeats the member dispatch.
 functionDecl
-    : ('pub' | 'internal' | 'export')? 'async'? 'fn' funcSig
+    : 'internal'? 'pub'? 'export'? 'async'? 'fn' funcSig
     ;
 
 funcSig
@@ -110,6 +127,9 @@ identifier
     | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
+    // Words this grammar spells as literals but the lexer never reserves:
+    // they are contextual keywords, so `fn test(...)` names a function.
+    | 'test' | 'do' | 'task'
     ;
 
 paramList
@@ -136,11 +156,12 @@ withClause
 
 withItem
     : IDENTIFIER
-    | 'stores' '[' (storesItem (',' storesItem)*)? ']'
+    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
     ;
 
 storesItem
     : IDENTIFIER
+    | INTEGER
     | 'self'
     ;
 
@@ -153,7 +174,7 @@ fieldList
     ;
 
 fieldDecl
-    : attribute* 'pub'? identifier ':' typeRef ('=' expression)?
+    : attribute* ('pub' | 'internal')? identifier ':' typeRef ('=' expression)?
     ;
 
 enumDecl
@@ -193,7 +214,7 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
+    : 'trait' IDENTIFIER genericParams? (':' traitBounds)? '{' traitMember* '}'
     ;
 
 // A WIT-style interface: a named set of function signatures (and associated
@@ -208,7 +229,8 @@ worldDecl
     ;
 
 worldItem
-    : ('import' | 'export') IDENTIFIER ';'
+    : 'import' IDENTIFIER ';'
+    | 'export' ('async'? 'fn' identifier genericParams? '(' paramList? ')' returnType? | IDENTIFIER) ';'
     ;
 
 // A WIT-style resource: an opaque handle with method / static-function
@@ -269,26 +291,35 @@ typeRef
     | '!'
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
-    | '[' ('..' typeRef | (typeRef (',' typeRef)*)?) ']'
+    | '[' (typeElement (',' typeElement)*)? ']'
     | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? fnTypeWithClause?
     | path typeArgs?
     ;
 
-// A fn-*type*'s effect clause takes a single effect: a comma there would be
-// ambiguous with an enclosing list (e.g. the next parameter), and real fn
-// types never carry a comma-separated effect row (those appear only on
-// function *declarations*, where a trailing block/`;` disambiguates).
+typeElement
+    : '..'? typeRef
+    ;
+
+// A fn-*type*'s effect clause takes a parenthesized row, or a single bare
+// effect. The parser also continues a bare row across a comma when the next
+// item is an effect name rather than a parameter — it decides by looking three
+// tokens ahead for the `ident:` that starts a parameter. A grammar cannot
+// state that negative lookahead, so the bare multi-effect row is the one
+// construct this file knowingly rejects (see `grammar/divergences.tsv`).
 fnTypeWithClause
-    : 'with' withItem
+    : 'with' ('(' withItem (',' withItem)* ')' | withItem)
     ;
 
 typeArgs
     : '<' typeArg (',' typeArg)* '>'
     ;
 
-// A type argument, optionally an associated-type binding (`Iterator<Item = T>`).
+// A type argument, optionally an associated-type binding (`Iterator<Item = T>`)
+// or — in an `impl` head only — a bound the parser lifts into the block's
+// generic parameters (`impl List<T: Ord>`).
 typeArg
     : IDENTIFIER '=' typeRef
+    | IDENTIFIER ':' traitBounds
     | typeRef
     ;
 
@@ -306,18 +337,28 @@ memberName
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
+    | 'test' | 'do' | 'task'
     ;
 
-// Optional trailing expression with no `;` is the block's value (`{ 1 }`).
+// Semicolons separate statements, so the last one in a block may drop its
+// `;`: a bare expression is the block's value (`{ 1 }`), and a jump
+// (`return` / `break` / `continue` / `task return`) simply ends it.
 block
-    : '{' statement* expression? '}'
+    : '{' statement* blockTail? '}'
+    ;
+
+blockTail
+    : 'return' expression?
+    | 'task' 'return' expression?
+    | 'break' (IDENTIFIER (':' expression)?)?
+    | 'continue'
+    | expression
     ;
 
 statement
     : letStatement
     | returnStatement
     | taskReturnStatement
-    | resumeStatement
     | ifStatement
     | forStatement
     | whileStatement
@@ -326,6 +367,7 @@ statement
     | continueStatement
     | assertStatement
     | matchStatement
+    | withStatement
     | labeledBlock
     | localItem
     | exprStatement
@@ -355,7 +397,15 @@ labeledBlock
     ;
 
 letStatement
-    : 'let' pattern (':' typeRef)? '=' expression ('else' block)? ';'
+    : 'let' letBinding
+    | 'reactive' 'let' letBinding
+    ;
+
+// The initializer may be omitted (`let x: i32;`), in which case the type
+// annotation carries the type — a rule stated past the grammar.
+letBinding
+    : pattern (':' typeRef)? '=' expression ('else' block)? ';'
+    | pattern ':' typeRef ';'
     ;
 
 assertStatement
@@ -372,8 +422,10 @@ taskReturnStatement
     ;
 
 // `resume` yields a value from an effect handler back to the suspended call.
-resumeStatement
-    : 'resume' expression? ';'
+// It is an expression, so it is also a handler body's tail value (`resume x`
+// with no `;`); `resume x;` reaches it through `exprStatement`.
+resumeExpr
+    : 'resume' expression
     ;
 
 ifStatement
@@ -384,6 +436,10 @@ ifStatement
 // `&&`, folded into the trailing expression). `exprNoStruct` keeps a bare `{`
 // reserved for the body.
 condition
+    : conditionTerm ('&&' conditionTerm)*
+    ;
+
+conditionTerm
     : 'let' pattern '=' exprNoStruct
     | exprNoStruct
     ;
@@ -424,6 +480,10 @@ matchStatement
     : matchExpr
     ;
 
+withStatement
+    : withExpr
+    ;
+
 exprStatement
     : expression ';'
     ;
@@ -434,6 +494,10 @@ expression
     | expression ('..<' | '..=') expression
     | expression '||' expression
     | expression '&&' expression
+    // Logical `!` binds looser than `matches`, so `!x matches { P }` reads as
+    // "does not match"; the value-producing unaries live down in `unary`.
+    | '!' expression
+    | expression 'matches' '{' pattern ('&&' expression)? '}'
     | expression '|' expression
     | expression '^' expression
     | expression '&' expression
@@ -447,7 +511,7 @@ expression
     ;
 
 unary
-    : ('-' | '!' | '~' | '&' '&'? 'mut'? | '*') unary
+    : ('-' | '~' | '&' '&'? 'mut'? | '*') unary
     | postfix
     ;
 
@@ -460,7 +524,6 @@ postfixOp
     | '::' typeArgs '(' argumentList? ')'
     | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
     | '[' expression ']'
-    | 'matches' '{' pattern ('&&' expression)? '}'
     | '?'
     ;
 
@@ -472,8 +535,9 @@ primary
     : literal
     | 'self'
     | compileTimeExpr
+    | resumeExpr
     | structLiteral
-    | mapLiteral
+    | braceLiteral
     | block
     | exprPath
     | tupleOrArrayLiteral
@@ -497,15 +561,13 @@ withBinding
     | expression
     ;
 
-// Key-value (map) literal: `{}` or `{ key: value, ... }`. Inferred to
-// `TreeMap<String, V>` by context. Excluded from `primaryNoStruct` because a
-// `{` after an `if`/`while`/`for` header opens the body.
-mapLiteral
-    : '{' (mapEntry (',' mapEntry)* ','?)? '}'
-    ;
-
-mapEntry
-    : (identifier | STRING_LITERAL) ':' expression
+// Brace literal: `{}`, `{ x, y }` (field shorthand), `{ key: value, ..base }`.
+// Read as an implicit struct literal, or as a map by context; `use ... with
+// { ... }` configures a generator with the same shape. Excluded from
+// `primaryNoStruct` because a `{` after an `if`/`while`/`for` header opens the
+// body.
+braceLiteral
+    : '{' fieldInitList? '}'
     ;
 
 // Expression-position path, supporting interspersed turbofish segments:
@@ -529,6 +591,10 @@ exprNoStruct
     | exprNoStruct ('..<' | '..=') exprNoStruct
     | exprNoStruct '||' exprNoStruct
     | exprNoStruct '&&' exprNoStruct
+    // Logical `!` binds looser than `matches`, so `!x matches { P }` reads as
+    // "does not match"; the value-producing unaries live down in `unaryNoStruct`.
+    | '!' exprNoStruct
+    | exprNoStruct 'matches' '{' pattern ('&&' expression)? '}'
     | exprNoStruct '|' exprNoStruct
     | exprNoStruct '^' exprNoStruct
     | exprNoStruct '&' exprNoStruct
@@ -542,7 +608,7 @@ exprNoStruct
     ;
 
 unaryNoStruct
-    : ('-' | '!' | '~' | '&' '&'? 'mut'? | '*') unaryNoStruct
+    : ('-' | '~' | '&' '&'? 'mut'? | '*') unaryNoStruct
     | postfixNoStruct
     ;
 
@@ -554,6 +620,7 @@ primaryNoStruct
     : literal
     | 'self'
     | compileTimeExpr
+    | resumeExpr
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -570,8 +637,9 @@ fieldInitList
     : fieldInit (',' fieldInit)* ','?
     ;
 
+// A string literal names a field too, for JSON-shaped literals.
 fieldInit
-    : identifier (':' expression)?
+    : (memberName | STRING_LITERAL) (':' expression)?
     | '..' expression
     ;
 
@@ -586,7 +654,7 @@ arrayElement
     ;
 
 closure
-    : ('||' | '|' closureParamList? '|') (block | expression)
+    : ('||' | '|' closureParamList? '|') returnType? (block | expression)
     ;
 
 closureParamList
@@ -594,15 +662,41 @@ closureParamList
     ;
 
 closureParam
-    : 'mut'? IDENTIFIER (':' typeRef)?
+    : 'mut'? ('_' | IDENTIFIER) closureParamType?
     ;
 
+// The default is only reachable behind an annotation, so the two optionals
+// nest rather than sit side by side at the end of one alternative.
+closureParamType
+    : ':' typeRef ('=' closureDefault)?
+    ;
+
+// A closure parameter's default binds no looser than `^`, so the closing `|`
+// terminates it instead of reading as bitwise-or. Parenthesize a default that
+// needs `|`.
+closureDefault
+    : closureDefault '^' closureDefault
+    | closureDefault '&' closureDefault
+    | closureDefault ('==' | '!=') closureDefault
+    | closureDefault ('<' | '<=' | '>' | '>=') closureDefault
+    | closureDefault ('<<' | '>' '>') closureDefault
+    | closureDefault ('+' | '-') closureDefault
+    | closureDefault 'as' typeRef
+    | closureDefault ('*' | '/' | '%') closureDefault
+    | unary
+    ;
+
+// An `if` in expression position may drop its `else` (`let x: i32 = if c { 1 };`).
+// Spelled as two alternatives rather than an optional `else` group: the
+// optional form stops at the first block and leaves a trailing `else` stranded.
 ifExpr
     : 'if' condition block 'else' (ifExpr | block)
+    | 'if' condition block
     ;
 
+// The comma between arms is optional, whatever shape the arm body has.
 matchExpr
-    : 'match' exprNoStruct '{' (matchArm (',' matchArm)* ','?)? '}'
+    : 'match' exprNoStruct '{' (matchArm ','?)* '}'
     ;
 
 matchArm
@@ -610,8 +704,13 @@ matchArm
     ;
 
 // Or-patterns: `A | B | C`, as used in `match` arms and `matches { ... }`.
+// Each alternative may be a range (`0..=9`, `'a'..<'z'`).
 pattern
-    : patternPrimary ('|' patternPrimary)*
+    : patternRange ('|' patternRange)*
+    ;
+
+patternRange
+    : patternPrimary (('..<' | '..=') patternPrimary)?
     ;
 
 patternPrimary
@@ -619,10 +718,16 @@ patternPrimary
     | 'mut'? identifier
     | literal
     | '-' INTEGER
-    | path ('(' (pattern (',' pattern)*)? ')')?
+    | 'mut'? patternPath ('(' (pattern (',' pattern)*)? ')')?
     | 'mut'? path? '{' patternFieldList? '}'
-    | '(' (pattern (',' pattern)*)? ')'
-    | '[' patternElements? ']'
+    | 'mut'? '(' (pattern (',' pattern)*)? ')'
+    | 'mut'? '[' patternElements? ']'
+    ;
+
+// A case path whose qualifier may be a generic type: `Maybe<i32>::Some(x)`,
+// `Result<i32, E>::Ok(v)`.
+patternPath
+    : identifier typeArgs? ('::' (typeArgs | identifier))*
     ;
 
 patternElements
@@ -635,7 +740,7 @@ patternFieldList
     ;
 
 patternField
-    : identifier (':' pattern)?
+    : (memberName | STRING_LITERAL) (':' pattern)?
     ;
 
 literal
@@ -707,7 +812,11 @@ BACKTICK
     ;
 
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    ;
+
+fragment HEX_ESCAPE
+    : '\\' 'x' [0-9a-fA-F] [0-9a-fA-F]
     ;
 
 fragment UNICODE_ESCAPE
