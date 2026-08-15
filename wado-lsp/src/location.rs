@@ -43,11 +43,17 @@ pub(crate) fn module_uri(
     }
 }
 
+/// Wrap an absolute path as a `file:` URI, percent-encoding it on the way out.
+///
+/// The path reaching here is decoded — it came through `Uri::to_filename`, or
+/// from the compiler, which speaks in real paths. A string that is already a
+/// URI (`file://…`) is left alone, as is a relative path or a non-`file:`
+/// scheme, neither of which this function is in a position to complete.
 fn filename_to_uri(filename: &str) -> String {
     if filename.starts_with("file://") {
         filename.to_string()
     } else if filename.starts_with('/') {
-        format!("file://{filename}")
+        format!("file://{}", crate::uri::percent_encode_path(filename))
     } else {
         filename.to_string()
     }
@@ -220,6 +226,43 @@ mod tests {
     fn parent_relative_import_off_kiln_uri_collapses_too() {
         let resolved = resolve_local_uri("../gen/x.wado", "kiln:/abs/path/foo.wado");
         assert_eq!(resolved, "kiln:/abs/gen/x.wado");
+    }
+
+    #[test]
+    fn sibling_of_an_encoded_request_uri_stays_encoded() {
+        // `Uri::to_filename` decodes, so the base directory we join against is
+        // a real path. Emitting it back without re-encoding hands the client a
+        // URI string that does not match the document it already has open —
+        // the duplicate-tab failure `normalize_dot_segments` exists to avoid.
+        let resolved = resolve_local_uri("./other.wado", "file:///home/user/my%20project/foo.wado");
+        assert_eq!(resolved, "file:///home/user/my%20project/other.wado");
+    }
+
+    #[test]
+    fn non_ascii_path_segments_are_re_encoded() {
+        let resolved = resolve_local_uri("./types.wado", "file:///home/%E3%81%82/foo.wado");
+        assert_eq!(resolved, "file:///home/%E3%81%82/types.wado");
+    }
+
+    #[test]
+    fn a_literal_percent_survives_the_round_trip() {
+        // `100%` decodes from `100%25`; re-encoding must restore the escape,
+        // not emit a bare `%` that the client would decode a second time.
+        let resolved = resolve_local_uri("./x.wado", "file:///home/100%25/foo.wado");
+        assert_eq!(resolved, "file:///home/100%25/x.wado");
+        assert_eq!(
+            Uri::new(&resolved).to_filename(),
+            "/home/100%/x.wado",
+            "the emitted URI must decode back to the real path",
+        );
+    }
+
+    #[test]
+    fn path_separators_and_sub_delims_are_not_escaped() {
+        // Over-encoding is as wrong as under-encoding: `/` and `:` are legal
+        // path characters and clients do not escape them.
+        let resolved = resolve_local_uri("./a+b,c.wado", "file:///home/user/foo.wado");
+        assert_eq!(resolved, "file:///home/user/a+b,c.wado");
     }
 
     #[test]

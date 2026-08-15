@@ -34,12 +34,16 @@ const MAX_CONTENT_LENGTH: usize = 64 * 1024 * 1024;
 
 /// Failure mode of [`read_message`].
 ///
-/// `Parse` errors are recoverable: per LSP 3.18 (JSON-RPC 2.0 §5.1), the
-/// server should respond with `-32700 ParseError` and keep processing. `Io`
-/// errors are unrecoverable — the transport is broken, or the frame boundary
-/// is lost and no amount of further reading finds it again (an oversized
-/// `Content-Length` names a body we refuse to consume, so every subsequent
-/// byte would be read at the wrong offset).
+/// `Parse` errors are recoverable: the frame was consumed whole and only its
+/// contents were bad, so per LSP 3.18 (JSON-RPC 2.0 §5.1) the server answers
+/// `-32700 ParseError` and keeps processing.
+///
+/// `Io` errors are unrecoverable — the transport is broken, or the frame
+/// boundary is lost and no amount of further reading finds it again. A
+/// `Content-Length` we cannot parse or refuse to honour leaves a body we
+/// never consumed, so every subsequent byte would be read at the wrong
+/// offset; answering and looping would re-read that body as headers and spin
+/// on the same error.
 #[derive(Debug)]
 pub enum ReadError {
     Parse(String),
@@ -48,8 +52,9 @@ pub enum ReadError {
 
 /// Read one JSON-RPC message (Content-Length framed).
 ///
-/// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for malformed
-/// framing or JSON bodies, and `Err(ReadError::Io)` for transport failures.
+/// Returns `Ok(None)` on clean EOF, `Err(ReadError::Parse)` for a body that
+/// was read but is not valid JSON, and `Err(ReadError::Io)` for transport
+/// failures and for framing we cannot recover from.
 pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>, ReadError> {
     let mut content_length: Option<usize> = None;
     loop {
@@ -70,10 +75,15 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>
             && name.eq_ignore_ascii_case("Content-Length")
         {
             let value = value.trim();
+            // Fatal, like the over-limit case below and for the same reason:
+            // an unparseable length leaves us unable to say where this
+            // message's body ends, so every later read starts at an offset we
+            // cannot recover. Answering `-32700` and looping would re-read
+            // the body as headers and spin on the error forever.
             content_length = Some(
                 value
                     .parse()
-                    .map_err(|_| ReadError::Parse(format!("invalid Content-Length: {value}")))?,
+                    .map_err(|_| ReadError::Io(format!("invalid Content-Length: {value}")))?,
             );
         }
     }
@@ -280,6 +290,30 @@ mod tests {
         assert!(
             matches!(&err, ReadError::Io(m) if m.contains("exceeds")),
             "expected a fatal transport error, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn unparseable_content_length_is_fatal_not_recoverable() {
+        // Classifying it `Parse` made `run_stdio` answer `-32700` and loop —
+        // but the body was never consumed, so the next "header" it read came
+        // from mid-body and the server spun on the same error forever.
+        let raw = "Content-Length: not-a-number\r\n\r\n{}";
+        let err = read(raw.as_bytes()).expect_err("an unparseable length must be refused");
+        assert!(
+            matches!(&err, ReadError::Io(m) if m.contains("invalid Content-Length")),
+            "expected a fatal transport error, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn malformed_json_body_stays_recoverable() {
+        // The counter-case: the body *was* consumed, so the stream is still
+        // framed and JSON-RPC 2.0 §5.1's `-32700`-and-continue applies.
+        let err = read(&frame("not json")).expect_err("malformed JSON must be reported");
+        assert!(
+            matches!(&err, ReadError::Parse(m) if m.contains("invalid JSON")),
+            "expected a recoverable parse error, got {err:?}",
         );
     }
 

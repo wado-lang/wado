@@ -174,7 +174,9 @@ fn imported_module_errors_stay_off_the_importer() {
 
         let foo_diags = engine.diagnostics("file:///work/foo.wado", &host).await;
         assert!(
-            !foo_diags.iter().any(|d| d.message.contains("type mismatch")),
+            !foo_diags
+                .iter()
+                .any(|d| d.message.contains("type mismatch")),
             "bar.wado's type error must not be published on foo.wado, got {foo_diags:#?}"
         );
 

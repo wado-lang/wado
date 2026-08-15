@@ -55,6 +55,21 @@ impl Uri {
         Self(s.into())
     }
 
+    /// A `file:` URI naming `path`, percent-encoded.
+    ///
+    /// The counterpart to [`Self::to_filename`], for callers that start from a
+    /// real path rather than from the wire — `wado query`, which opens a file
+    /// named on the command line. Building the URI by concatenation instead
+    /// leaves any `%` in the path unescaped, and `to_filename` then decodes it
+    /// into a different path than the one the user named.
+    #[must_use]
+    pub fn from_file_path(path: &Path) -> Self {
+        Self(format!(
+            "file://{}",
+            percent_encode_path(&path.to_string_lossy())
+        ))
+    }
+
     /// Raw URI string as received from the client.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -169,6 +184,47 @@ fn percent_decode(s: &str) -> String {
         }
     }
     String::from_utf8(out).unwrap_or_else(|_| s.to_owned())
+}
+
+/// Percent-encode an absolute filesystem path for use as a `file:` URI body.
+///
+/// Prefer [`Uri::from_file_path`] when building a whole URI.
+///
+/// The inverse of [`percent_decode`], and the reason it must exist: this crate
+/// decodes a client URI down to a real path, joins relative imports onto it,
+/// and hands the result back as a URI. Skipping the re-encode emits a string
+/// the client cannot match against the document it already has open.
+///
+/// Unreserved characters, sub-delims, and the path-structural `/ : @` are kept
+/// verbatim (rfc3986 §3.3), matching what LSP clients emit. Everything else —
+/// space, `%`, `#`, `?`, `[`, `]`, and every non-ASCII byte — is escaped.
+/// Escaping `%` is what keeps the round trip exact for a path that really
+/// contains one.
+#[must_use]
+pub fn percent_encode_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        if is_path_safe(byte) {
+            out.push(byte as char);
+        } else {
+            out.push('%');
+            out.push(HEX[usize::from(byte >> 4)] as char);
+            out.push(HEX[usize::from(byte & 0x0f)] as char);
+        }
+    }
+    out
+}
+
+const HEX: &[u8; 16] = b"0123456789ABCDEF";
+
+fn is_path_safe(b: u8) -> bool {
+    b.is_ascii_alphanumeric()
+        // unreserved
+        || matches!(b, b'-' | b'.' | b'_' | b'~')
+        // sub-delims
+        || matches!(b, b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=')
+        // path structure
+        || matches!(b, b'/' | b':' | b'@')
 }
 
 fn hex_pair(hi: u8, lo: u8) -> Option<u8> {
@@ -309,7 +365,37 @@ mod tests {
         // `core:` / `wasi:` / `kiln:` URIs are compiler-minted and never
         // percent-encoded; decoding would corrupt a literal `%` in a
         // generated path.
-        assert_eq!(Uri::new("kiln:/tmp/a%20b.wado").to_filename(), "kiln:/tmp/a%20b.wado");
+        assert_eq!(
+            Uri::new("kiln:/tmp/a%20b.wado").to_filename(),
+            "kiln:/tmp/a%20b.wado"
+        );
+    }
+
+    #[test]
+    fn encode_escapes_only_what_a_uri_needs() {
+        assert_eq!(
+            percent_encode_path("/home/my project"),
+            "/home/my%20project"
+        );
+        assert_eq!(percent_encode_path("/home/あ"), "/home/%E3%81%82");
+        assert_eq!(percent_encode_path("/home/100%"), "/home/100%25");
+        assert_eq!(percent_encode_path("/a?b#c[d]"), "/a%3Fb%23c%5Bd%5D");
+        // Path structure and sub-delims stay legible.
+        assert_eq!(percent_encode_path("/a/b:c@d+e,f"), "/a/b:c@d+e,f");
+    }
+
+    #[test]
+    fn encode_and_decode_round_trip() {
+        for path in [
+            "/plain/main.wado",
+            "/my project/main.wado",
+            "/あ/main.wado",
+            "/100%/main.wado",
+            "/weird ?#[]/main.wado",
+        ] {
+            let uri = Uri::new(format!("file://{}", percent_encode_path(path)));
+            assert_eq!(uri.to_filename(), path, "round trip failed for {path:?}");
+        }
     }
 
     #[test]

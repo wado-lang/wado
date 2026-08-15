@@ -319,9 +319,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
 /// shares a name with `target`.
 fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
     match item {
-        Item::Function(f) => {
-            (f.id == target).then(|| unparse::unparse_function_signature(f))
-        }
+        Item::Function(f) => (f.id == target).then(|| unparse::unparse_function_signature(f)),
         // Struct fields follow `public_only` (matching `wado doc`'s `..`
         // elision when set); enum cases are always public.
         Item::Struct(s) => {
@@ -657,7 +655,8 @@ mod tests {
                 "    return apply(|n: i32| -> i32 { let doubled = n * 2; return doubled; });\n",
                 "}\n",
             );
-            let line = "    return apply(|n: i32| -> i32 { let doubled = n * 2; return doubled; });";
+            let line =
+                "    return apply(|n: i32| -> i32 { let doubled = n * 2; return doubled; });";
             let col = line.rfind("doubled").unwrap() as u32;
             let result = hover_at(source, 2, col).await.expect("hover on doubled");
             assert_eq!(result.contents.value, "```wado\nlet doubled\n```");

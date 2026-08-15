@@ -218,48 +218,82 @@ pub async fn dispatch<W: Write>(
             }
         }
         "textDocument/definition" => {
-            query(engine, writer, id, params, async |e, p: TextDocumentPositionParams, host| {
-                e.definition(&p.text_document.uri, p.position, host).await
-            })
+            query(
+                engine,
+                writer,
+                id,
+                params,
+                async |e, p: TextDocumentPositionParams, host| {
+                    e.definition(&p.text_document.uri, p.position, host).await
+                },
+            )
             .await?;
         }
         "textDocument/hover" => {
-            query(engine, writer, id, params, async |e, p: TextDocumentPositionParams, host| {
-                e.hover(&p.text_document.uri, p.position, host).await
-            })
+            query(
+                engine,
+                writer,
+                id,
+                params,
+                async |e, p: TextDocumentPositionParams, host| {
+                    e.hover(&p.text_document.uri, p.position, host).await
+                },
+            )
             .await?;
         }
         "textDocument/references" => {
-            query(engine, writer, id, params, async |e, p: ReferenceParams, host| {
-                e.references(
-                    &p.text_document.uri,
-                    p.position,
-                    p.context.include_declaration,
-                    host,
-                )
-                .await
-            })
+            query(
+                engine,
+                writer,
+                id,
+                params,
+                async |e, p: ReferenceParams, host| {
+                    e.references(
+                        &p.text_document.uri,
+                        p.position,
+                        p.context.include_declaration,
+                        host,
+                    )
+                    .await
+                },
+            )
             .await?;
         }
         "textDocument/documentHighlight" => {
-            query(engine, writer, id, params, async |e, p: TextDocumentPositionParams, host| {
-                e.document_highlight(&p.text_document.uri, p.position, host)
-                    .await
-            })
+            query(
+                engine,
+                writer,
+                id,
+                params,
+                async |e, p: TextDocumentPositionParams, host| {
+                    e.document_highlight(&p.text_document.uri, p.position, host)
+                        .await
+                },
+            )
             .await?;
         }
         "textDocument/semanticTokens/full" => {
-            query(engine, writer, id, params, async |e, p: SemanticTokensParams, host| {
-                SemanticTokens {
+            query(
+                engine,
+                writer,
+                id,
+                params,
+                async |e, p: SemanticTokensParams, host| SemanticTokens {
                     data: e.semantic_tokens(&p.text_document.uri, host).await,
-                }
-            })
+                },
+            )
             .await?;
         }
         "textDocument/inlayHint" => {
-            query(engine, writer, id, params, async |e, p: InlayHintParams, host| {
-                e.inlay_hints(&p.text_document.uri, p.range, host).await
-            })
+            query(
+                engine,
+                writer,
+                id,
+                params,
+                async |e, p: InlayHintParams, host| {
+                    e.inlay_hints(&p.text_document.uri, p.range, host).await
+                },
+            )
             .await?;
         }
         "workspace/textDocumentContent" => {

@@ -14,7 +14,7 @@ Language service engine for the Wado compiler toolchain.
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                                                                                       |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                                  |
-| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes `file:` paths                                          |
+| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                            |
 | `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, and the `LineIndex` every batch conversion shares                                                      |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`)          |
 | `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
@@ -123,6 +123,12 @@ Clients send rfc3986-encoded URIs, so `Uri::to_filename` percent-decodes
 decoding, a workspace under `my project/` resolved nothing at all.
 Non-`file:` schemes are compiler-minted and never encoded, so they pass
 through verbatim.
+
+The inverse holds on the way out: `location::filename_to_uri` percent-encodes
+via `uri::percent_encode_path` before wrapping a path as `file://…`. The
+paths it receives are decoded — from `to_filename`, or from the compiler,
+which speaks in real paths — and a URI emitted without re-encoding does not
+string-match the document the client already has open.
 
 Relative imports are normalised lexically (`../lib/x.wado` off
 `file:///a/b/foo.wado` is `file:///a/lib/x.wado`, not

@@ -221,9 +221,10 @@ pub fn dependency_index_from(
             DependencySource::Path { path, .. } => {
                 match package_lib_entry(&manifest_dir.join(path)) {
                     Ok(entry) => {
-                        index
-                            .resolved
-                            .insert(name.clone(), relative_path(&base_abs, &crate::workspace::absolutize(&entry)));
+                        index.resolved.insert(
+                            name.clone(),
+                            relative_path(&base_abs, &crate::workspace::absolutize(&entry)),
+                        );
                     }
                     Err(reason) => {
                         index.unresolved.insert(name.clone(), reason);
@@ -233,9 +234,10 @@ pub fn dependency_index_from(
             DependencySource::Git { url, directory, .. } => {
                 match git_dependency_entry(&git_pins, name, url, directory.as_deref()) {
                     Ok(entry) => {
-                        index
-                            .resolved
-                            .insert(name.clone(), relative_path(&base_abs, &crate::workspace::absolutize(&entry)));
+                        index.resolved.insert(
+                            name.clone(),
+                            relative_path(&base_abs, &crate::workspace::absolutize(&entry)),
+                        );
                     }
                     Err(reason) => {
                         index.unresolved.insert(name.clone(), reason);

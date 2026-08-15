@@ -867,7 +867,11 @@ mod tests {
         ];
         assert_eq!(expected.len(), TOKEN_MODIFIERS.len());
         for (bit, name) in expected {
-            assert_eq!(bit.count_ones(), 1, "{name} must be a single bit, got {bit}");
+            assert_eq!(
+                bit.count_ones(),
+                1,
+                "{name} must be a single bit, got {bit}"
+            );
             assert_eq!(
                 TOKEN_MODIFIERS.get(bit.trailing_zeros() as usize),
                 Some(&name),

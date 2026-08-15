@@ -408,7 +408,12 @@ impl Engine {
     /// Build a [`QueryContext`] over `uri`'s cached snapshot. The caller owns
     /// the `Rc<Snapshot>` so the borrow outlives the context.
     fn query_ctx_over<'a>(&'a self, snapshot: &'a Snapshot, uri: &'a str) -> QueryContext<'a> {
-        QueryContext::new(&snapshot.sem, self.documents.get(uri).map_or("", |d| d.text.as_str()), uri, self.position_encoding)
+        QueryContext::new(
+            &snapshot.sem,
+            self.documents.get(uri).map_or("", |d| d.text.as_str()),
+            uri,
+            self.position_encoding,
+        )
     }
 
     /// Resolve a symbol notation to a definition location. `public_only` only
