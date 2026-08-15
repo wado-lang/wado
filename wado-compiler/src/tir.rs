@@ -889,7 +889,7 @@ impl TypeTable {
     /// Mint a brand-new `TypeId` for `ty`, bypassing `intern`'s structural dedup.
     /// `intern_map` / `struct_name_index` are deliberately not updated — keyed by
     /// `(name, module_source)`, a second same-named entry would overwrite the
-    /// first. This is what a function-scoped local type declaration mints
+    /// first. This is what a local type declaration mints
     /// through: its identity is the caller's `AstId`, not this type's name.
     pub fn push_fresh(&mut self, ty: ResolvedType) -> TypeId {
         let id = self.types.next_id();
@@ -1243,7 +1243,7 @@ impl TypeTable {
     /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId).
     /// Prefer this over re-deriving one from `(name, module_source)`: the
     /// `AstId` is a cheap `Copy` key, and it stays unique even where name+module
-    /// does not — a function-scoped local type can share another's name.
+    /// does not — a local type can share another's name.
     ///
     /// Panics if `collect_types` has not run for this declaration; both that and
     /// a non-decl-backed `AstId` are compiler bugs, not recoverable conditions.

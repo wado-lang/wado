@@ -69,46 +69,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tail_value: bool,
     ) {
         ctx.enter_scope();
-        // A local item is in scope for the whole block, so the declarations
-        // are resolved ahead of the statements, and the enclosing block's
-        // items are restored on the way out.
-        let items: Vec<&ast::Item> = block
-            .stmts
-            .iter()
-            .filter_map(|s| match s {
-                Stmt::Item(item) => Some(&**item),
-                _ => None,
-            })
-            .collect();
-        let outer_items = (!items.is_empty()).then(|| self.sem.decls.fn_local_items.clone());
-        for item in &items {
-            if let ast::Item::Struct(struct_decl) = item {
-                self.declare_local_struct(struct_decl);
-            }
-        }
-        // A newtype's `TypeId` is its base type's, so it is resolved here
-        // rather than declared. The structs above are already nameable; a base
-        // naming another local newtype resolves one more link of the chain per
-        // round, and a round that resolves nothing new has reached the
-        // fixpoint. A newtype registers only once its base is known, so what
-        // it registers is never revisited.
-        let mut pending: Vec<&ast::Newtype> = items
-            .iter()
-            .filter_map(|item| match item {
-                ast::Item::Newtype(newtype_decl) => Some(newtype_decl),
-                _ => None,
-            })
-            .collect();
-        while !pending.is_empty() {
-            let before = pending.len();
-            pending.retain(|newtype_decl| !self.resolve_local_newtype(newtype_decl));
-            if pending.len() == before {
-                break;
-            }
-        }
-        for item in items {
-            self.resolve_local_item(item);
-        }
+        let outer_items = self.hoist_local_items(block);
         let len = block.stmts.len();
         for (i, s) in block.stmts.iter().enumerate() {
             // The trailing statement is resolved in value position when the
@@ -153,6 +114,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.exit_scope();
     }
 
+    /// Bring a block's local items into scope ahead of its statements,
+    /// answering with the enclosing block's to restore on the way out.
+    ///
+    /// Three passes, because a name resolves through its field info: the
+    /// structs take their identity and a fieldless entry, then the newtypes
+    /// resolve — to a fixpoint, so a base may name a later newtype — then the
+    /// struct fields are filled in.
+    fn hoist_local_items(
+        &mut self,
+        block: &Block,
+    ) -> Option<crate::IndexMap<String, crate::defs::DefId>> {
+        let items: Vec<&ast::Item> = block
+            .stmts
+            .iter()
+            .filter_map(|s| match s {
+                Stmt::Item(item) => Some(&**item),
+                _ => None,
+            })
+            .collect();
+        if items.is_empty() {
+            return None;
+        }
+        let outer = self.sem.decls.fn_local_items.clone();
+        for item in &items {
+            if let ast::Item::Struct(struct_decl) = item {
+                self.declare_local_struct(struct_decl);
+            }
+        }
+        let mut pending: Vec<&ast::Newtype> = items
+            .iter()
+            .filter_map(|item| match item {
+                ast::Item::Newtype(newtype_decl) => Some(newtype_decl),
+                _ => None,
+            })
+            .collect();
+        while !pending.is_empty() {
+            let before = pending.len();
+            pending.retain(|newtype_decl| !self.resolve_local_newtype(newtype_decl));
+            if pending.len() == before {
+                break;
+            }
+        }
+        for item in items {
+            self.resolve_local_item(item);
+        }
+        Some(outer)
+    }
+
     /// Resolve a statement for its facts. Reify rebuilds the `TirStmt`(s)
     /// from the AST; desugared constructs that expand to multiple statements
     /// record their `DesugarKind` tag here.
@@ -193,13 +202,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `{name}@{AstId}` so sibling blocks cannot collide in the module's shared
     /// tables. The other kinds are parsed but not resolved, having no
     /// per-`AstId` fact for reify.
-    ///
-    /// This is the last of the three hoisting steps `resolve_block` runs, so
-    /// what is left here is the struct field types.
     fn resolve_local_item(&mut self, item: &ast::Item) {
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
-            // Already resolved, ahead of the structs' field types.
+            // `hoist_local_items` resolved these ahead of the struct fields.
             ast::Item::Newtype(_) => {}
             // Parsed but not yet resolved — see the doc comment on
             // `resolve_local_item` above.
@@ -256,10 +262,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decls
             .fn_local_items
             .insert(struct_decl.name.clone(), def);
-        // `resolve_named_type` reads a name's arity and identity off its field
-        // info, so the entry exists from here — fieldless until
-        // `resolve_local_struct` fills it in. The type parameters are already
-        // final: they are read off the AST, not resolved.
+        // The type parameters are final already — read off the AST, not
+        // resolved — so only the fields are left for `resolve_local_struct`.
         let type_param_type_ids: Vec<TypeId> = struct_decl
             .type_params
             .iter()
@@ -348,13 +352,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    /// Resolve a local newtype, reporting whether its base type came out
-    /// known. A base naming another local newtype needs that one resolved
-    /// first, which is what the caller's fixpoint delivers.
+    /// Resolve a local newtype, reporting whether its base came out known.
     ///
-    /// An unknown base registers nothing. Registering one against `UNKNOWN`
-    /// would hand the next round a placeholder indistinguishable from the real
-    /// thing, and the dependent that bound to it would keep it.
+    /// An unknown base registers nothing: a newtype registered against
+    /// `UNKNOWN` is indistinguishable from a real one, and the next round of
+    /// the caller's fixpoint would bind a dependent to it and keep it.
     fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) -> bool {
         if !newtype_decl.type_params.is_empty() {
             // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a

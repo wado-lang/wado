@@ -30,9 +30,6 @@ Scoping rules, matching Rust's:
 - **Hoisted within the block.** A local item is in scope for the whole of its
   block, so a use may precede the declaration statement and one local item may
   name another declared later in the same block.
-
-  Both rules originally read the other way — function-scoped and sequential,
-  chosen for simplicity — and were changed to match Rust.
 - **Always private.** A `pub`/`internal`/`export` prefix on a local item is a
   dedicated parse error (`at_visibility_prefixed_local_item_start`) rather
   than the generic "expected `}`" recovery every other invalid block-level

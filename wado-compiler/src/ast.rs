@@ -1821,11 +1821,10 @@ pub enum Stmt {
     Continue(ContinueStmt),
     Assert(AssertStmt),
     LabeledBlock(LabeledBlockStmt),
-    /// A type/impl declaration local to the enclosing function: `struct`,
+    /// A type/impl declaration local to the enclosing block: `struct`,
     /// `enum`, `variant`, `flags`, `type` (newtype), `impl`, or `trait`.
-    /// Scoped to the function body — not visible outside it — and resolved
-    /// sequentially like a `let` binding (no forward reference, no mutual
-    /// reference between two local declarations). `Parser::at_local_item_start`
+    /// Scoped to the block that writes it and in scope for the whole of it, so
+    /// a use may precede the declaration. `Parser::at_local_item_start`
     /// decides which keywords start one; `Parser::at_visibility_prefixed_local_item_start`
     /// gives a dedicated error for a `pub`/`internal`/`export` prefix, since a
     /// local item is always private.

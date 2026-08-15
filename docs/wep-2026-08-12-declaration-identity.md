@@ -217,7 +217,7 @@ fn type_implements_trait(&self, …, trait_name: &str, trait_ref: Option<DeclRef
 fn type_implements_trait(&self, …, trait_: DefId) -> bool;
 ```
 
-Three rules, each of which the current signature breaks:
+Four rules, each of which the current signature breaks:
 
 - An identity parameter is never `Option`. Optional means the caller may decline,
   and the measurement says the caller declines.
@@ -225,6 +225,12 @@ Three rules, each of which the current signature breaks:
   against. A name in the same argument list is a fallback waiting to be written,
   and `same_trait`'s `impl_trait_name == trait_name` is that fallback already
   written.
+- A declaration is compared to a declaration, never to the spelling that reached
+  it. `def_name(def) == written` reads as a check and behaves as a filter: it
+  declines exactly when the two spellings differ, which is exactly when an
+  import alias, a namespace prefix, or a local item's `@AstId` mangle is in
+  play. Backward type-argument inference held four of these, so a generic
+  variant named through an alias inferred nothing at all.
 - A diagnostic reads its spelling at the point of reporting, from the site and the
   AST — never from a name threaded down for the purpose.
 

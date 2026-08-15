@@ -170,13 +170,11 @@ pub(crate) struct ModuleDecls {
     pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
 
     /// The local items in scope at the walk's position, by the name written in
-    /// source. `resolve_block` fills it from the block's own declarations
-    /// before walking the statements and restores the enclosing block's on the
-    /// way out; `clear_fn_local_items` empties it per function body.
+    /// source. `hoist_local_items` saves and restores it per block, and
+    /// `clear_fn_local_items` empties it per function body.
     ///
-    /// It answers with an identity, not with a declaration's contents: those
-    /// are read out of the two maps above, which is what keeps this the walk's
-    /// position rather than a second scope.
+    /// It answers with an identity; a declaration's contents come from the two
+    /// maps above.
     pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
 }
 
