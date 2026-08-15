@@ -88,7 +88,7 @@ importItem
     ;
 
 functionDecl
-    : 'internal'? 'pub'? 'export'? 'async'? 'fn' funcSig
+    : itemModifiers 'fn' funcSig
     ;
 
 funcSig
@@ -332,13 +332,7 @@ labeledBlock
     ;
 
 letStatement
-    : 'let' letBinding
-    | 'reactive' 'let' letBinding
-    ;
-
-letBinding
-    : pattern (':' typeRef)? '=' expression ('else' block)?
-    | pattern ':' typeRef
+    : 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
     ;
 
 assertStatement
@@ -358,8 +352,7 @@ resumeExpr
     ;
 
 ifStatement
-    : 'if' condition block 'else' (ifStatement | block)
-    | 'if' condition block
+    : 'if' condition block ('else' (ifStatement | block))?
     ;
 
 condition
@@ -585,8 +578,7 @@ closureDefault
     ;
 
 ifExpr
-    : 'if' condition block 'else' (ifExpr | block)
-    | 'if' condition block
+    : 'if' condition block ('else' (ifExpr | block))?
     ;
 
 matchExpr
