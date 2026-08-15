@@ -1,0 +1,64 @@
+//! A greedy `?` competing with an identical one in the caller.
+//!
+//! `ifExpr` ends with `('else' block)?` and the enclosing `stmt` ends with its
+//! own `('else' block)?`. ANTLR4 resolves a greedy subrule in favour of the
+//! innermost, so `if z { 1 } else { 2 } / 3` is one expression: the `else`
+//! belongs to `ifExpr` and `/ 3` continues the left-recursive chain. Gale
+//! hands the `else` to `stmt` instead, and then has no rule left for the `/`.
+//!
+//! `driver_cst_ll_empty_alt_group_test` pins the opposite resolution for the
+//! empty-alt spelling `('else' block |)`, and
+//! `driver_cst_lr_dangling_else_test` the non-greedy `??`. This is the plain
+//! greedy `?`, across a rule boundary.
+
+use g from "./grammars/ll_greedy_optional_cross_rule.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_greedy_optional_cross_rule" },
+    };
+
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+}
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// Control: with no inner `if`, the `else` is unambiguously the statement's.
+test "the statement claims an else it alone can take" {
+    assert_tree(&"let e = 1 else { 2 } ;", &"(prog (stmt let e = (expression 1) else (block { 2 }) ;))");
+}
+
+#[TODO]
+test "the inner if claims the else, and the chain continues" {
+    assert_tree(
+        &"let e = if z { 1 } else { 2 } / 3 ;",
+        &"(prog (stmt let e = (expression (expression (ifExpr if z (block { 1 }) else (block { 2 }))) / (expression 3)) ;))",
+    );
+}
+
+// Accepted today, with the else on the wrong side; asserted outside the
+// `#[TODO]` so a regression from "wrong tree" to "rejected" fails.
+test "the single-else form parses" {
+    assert_parses(&"let e = if z { 1 } else { 2 } ;");
+}
+
+#[TODO]
+test "the inner if claims the else with nothing after it" {
+    assert_tree(
+        &"let e = if z { 1 } else { 2 } ;",
+        &"(prog (stmt let e = (expression (ifExpr if z (block { 1 }) else (block { 2 }))) ;))",
+    );
+}
+
+#[TODO]
+test "two elses: the inner if takes the first, the statement the second" {
+    assert_tree(
+        &"let e = if z { 1 } else { 2 } else { 3 } ;",
+        &"(prog (stmt let e = (expression (ifExpr if z (block { 1 }) else (block { 2 }))) else (block { 3 }) ;))",
+    );
+}

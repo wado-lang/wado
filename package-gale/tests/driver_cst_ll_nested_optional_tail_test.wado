@@ -1,0 +1,39 @@
+//! An optional group ending in another optional.
+//!
+//! `stmt : 'let' ID ('=' expr ('else' block)?)? ';'` nests `('else' block)?`
+//! at the tail of `('=' expr ...)?`. Entering the outer group is a one-token
+//! decision on `'='`, but Gale's scan of it also has to get through the inner
+//! optional; when `expr` takes its multi-token alternative the scan gives up,
+//! the outer group is skipped, and `stmt` reports at the `let` it never
+//! entered. Flattening the nesting (`'=' expr ('else' block)? ';'` with no
+//! outer group) parses the same input, which is what isolates the defect.
+
+use g from "./grammars/ll_nested_optional_tail.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_nested_optional_tail" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// Control: a single-token initializer leaves nothing for the scan to trip on.
+test "single-token initializer with else" {
+    assert_tree(&"let x = 1 else { } ;", &"(prog (stmt let x = (expr 1) else (block { }) ;))");
+}
+
+#[TODO]
+test "multi-token initializer with else" {
+    assert_tree(&"let v = at ( i ) else { } ;", &"(prog (stmt let v = (expr at ( i )) else (block { }) ;))");
+}
+
+test "multi-token initializer without else" {
+    assert_tree(&"let v = at ( i ) ;", &"(prog (stmt let v = (expr at ( i )) ;))");
+}
+
+test "no initializer at all" {
+    assert_tree(&"let x ;", &"(prog (stmt let x ;))");
+}
