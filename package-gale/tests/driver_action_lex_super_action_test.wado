@@ -1,0 +1,86 @@
+//! SuperClass **action** ops (lexer). `{ this.mark() }` lowers to a
+//! unit-returning `SaBase` operation run from the winner replay, so `A`'s
+//! `mark()` never fires when `AB` wins the longer match, and each op sees the
+//! cursor it was written at. A predicate op shares the same interface.
+
+use sa from "./grammars/wado_lex_super_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super_action" },
+    };
+use { SaBase, LexerView } from "./grammars/wado_lex_super_action.g4";
+
+struct SaBaseImpl {
+    on: bool,
+    log: List<String>,
+}
+
+impl SaBase for SaBaseImpl {
+    fn mark(&mut self, view: LexerView) {
+        self.log.push(`mark@${view.pos()}`);
+        resume ();
+    }
+
+    fn done(&mut self, view: LexerView) {
+        self.log.push(`done@${view.pos()}:${view.text()}`);
+        resume ();
+    }
+
+    fn enabled(&self, view: LexerView) -> bool {
+        resume self.on;
+    }
+}
+
+fn joined(log: &List<String>) -> String {
+    return log.join(",");
+}
+
+test "the winner's actions replay, the losing candidate's stay silent" {
+    let mut base = SaBaseImpl { on: true, log: [] };
+    with SaBase => &mut base do {
+        // AB + EOF.
+        let toks = sa::tokenize(&"ab");
+        assert toks.len() == 2, `expected 2 tokens, got ${toks.len()}`;
+        let name = sa::token_kind_name(toks.kinds[0]);
+        assert name == "AB", `expected AB, got ${name}`;
+    };
+    // `try_A` also matched 'a', so a base that ran every candidate's actions
+    // would log `mark` twice.
+    assert joined(&base.log) == "mark@1,done@2:ab", `got ${joined(&base.log)}`;
+}
+
+test "the shorter rule's action runs when it is the winner" {
+    let mut base = SaBaseImpl { on: true, log: [] };
+    with SaBase => &mut base do {
+        // A + EOF.
+        let toks = sa::tokenize(&"a");
+        assert toks.len() == 2, `expected 2 tokens, got ${toks.len()}`;
+        let name = sa::token_kind_name(toks.kinds[0]);
+        assert name == "A", `expected A, got ${name}`;
+    };
+    assert joined(&base.log) == "mark@1", `got ${joined(&base.log)}`;
+}
+
+test "actions replay once per token, in match order" {
+    let mut base = SaBaseImpl { on: true, log: [] };
+    with SaBase => &mut base do {
+        // AB + A + EOF.
+        let toks = sa::tokenize(&"ab a");
+        assert toks.len() == 3, `expected 3 tokens, got ${toks.len()}`;
+    };
+    assert joined(&base.log) == "mark@1,done@2:ab,mark@4", `got ${joined(&base.log)}`;
+}
+
+test "a predicate op shares the interface with the action ops" {
+    let mut base = SaBaseImpl { on: true, log: [] };
+    with SaBase => &mut base do {
+        let toks = sa::tokenize(&"xyz");
+        let name = sa::token_kind_name(toks.kinds[0]);
+        assert name == "KW", `expected KW, got ${name}`;
+    };
+    let mut off = SaBaseImpl { on: false, log: [] };
+    with SaBase => &mut off do {
+        let toks = sa::tokenize(&"xyz");
+        let name = sa::token_kind_name(toks.kinds[0]);
+        assert name == "ID", `expected ID, got ${name}`;
+    };
+}

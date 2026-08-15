@@ -2,10 +2,12 @@ use {
     find_this_calls,
     superclass_base_name,
     add_super_op,
-    all_super_ops_predicates,
+    body_is_base_calls_only,
     gen_super_interface,
     super_call_expr,
+    super_ops_with_args,
     rewrite_this_calls,
+    SuperCall,
     SuperOp,
 } from "./superclass.wado";
 use { Grammar, GrammarKind, GrammarOption, OptionValue, ActionKind } from "./ir.wado";
@@ -14,20 +16,22 @@ use { CodeWriter } from "./wadopoet.wado";
 test "find_this_calls picks up this.method( sites" {
     let calls = find_this_calls(&"this.isRegexPossible() && x > 0");
     assert calls.len() == 1;
-    assert calls[0] == "isRegexPossible";
+    assert calls[0].name == "isRegexPossible";
+    assert !calls[0].has_args;
 }
 
 test "find_this_calls handles multiple and whitespace" {
     let calls = find_this_calls(&"this.a(); this . b ( ) ; foo.c()");
     assert calls.len() == 2;
-    assert calls[0] == "a";
-    assert calls[1] == "b";
+    assert calls[0].name == "a";
+    assert calls[1].name == "b";
+    assert !calls[1].has_args, "whitespace between the parentheses is not an argument";
 }
 
 test "find_this_calls ignores strings and comments" {
     let calls = find_this_calls(&"\"this.x()\" /* this.y() */ this.z()");
     assert calls.len() == 1;
-    assert calls[0] == "z";
+    assert calls[0].name == "z";
 }
 
 test "find_this_calls ignores a bare field access without a call" {
@@ -76,31 +80,69 @@ test "superclass_base_name is null without the option" {
 
 test "add_super_op dedups and fixes the first role" {
     let mut ops: List<SuperOp> = [];
-    add_super_op(&mut ops, &"m", &ActionKind::Predicate);
-    add_super_op(&mut ops, &"m", &ActionKind::Action);
-    add_super_op(&mut ops, &"n", &ActionKind::Action);
+    add_super_op(&mut ops, &SuperCall { name: "m", has_args: false }, &ActionKind::Predicate);
+    add_super_op(&mut ops, &SuperCall { name: "m", has_args: false }, &ActionKind::Action);
+    add_super_op(&mut ops, &SuperCall { name: "n", has_args: false }, &ActionKind::Action);
     assert ops.len() == 2;
     assert ops[0].name == "m" && ops[0].is_predicate;
     assert ops[1].name == "n" && !ops[1].is_predicate;
 }
 
-test "all_super_ops_predicates gates action-op bases out" {
-    let preds: List<SuperOp> = [
-        SuperOp { name: "a", is_predicate: true },
-        SuperOp { name: "b", is_predicate: true },
+test "find_this_calls records a call that passes arguments" {
+    let calls = find_this_calls(&"this.setChannel(2); this.plain()");
+    assert calls.len() == 2;
+    assert calls[0].name == "setChannel" && calls[0].has_args;
+    assert calls[1].name == "plain" && !calls[1].has_args;
+}
+
+test "an argument at any call site marks the op, whichever came first" {
+    // The rewrite drops arguments, so one call site passing one is enough to
+    // make the operation unrepresentable — even if the first site did not.
+    let mut ops: List<SuperOp> = [];
+    add_super_op(&mut ops, &SuperCall { name: "m", has_args: false }, &ActionKind::Action);
+    add_super_op(&mut ops, &SuperCall { name: "m", has_args: true }, &ActionKind::Action);
+    assert ops.len() == 1;
+    assert super_ops_with_args(&ops) == ["m"];
+}
+
+test "super_ops_with_args is empty for the zero-argument ops a base can take" {
+    let ops: List<SuperOp> = [
+        SuperOp { name: "a", is_predicate: true, has_args: false },
+        SuperOp { name: "b", is_predicate: false, has_args: false },
     ];
-    assert all_super_ops_predicates(&preds);
-    let mixed: List<SuperOp> = [
-        SuperOp { name: "a", is_predicate: true },
-        SuperOp { name: "c", is_predicate: false },
-    ];
-    assert !all_super_ops_predicates(&mixed);
+    assert super_ops_with_args(&ops).is_empty();
+}
+
+test "body_is_base_calls_only accepts both the source and the rewritten call form" {
+    assert body_is_base_calls_only(&"this.processOpenBrace();", &"B");
+    assert body_is_base_calls_only(&" this.a(); this.b() ", &"B");
+    // The same body after `rewrite_superclass_calls` — the answer must not move.
+    assert body_is_base_calls_only(&"B::process_open_brace(LexerView { chars, start, pos });", &"B");
+}
+
+test "body_is_base_calls_only rejects host code around the call" {
+    assert !body_is_base_calls_only(&"int n = 1; this.a();", &"B");
+    assert !body_is_base_calls_only(&"this.a() && x > 0", &"B");
+    assert !body_is_base_calls_only(&"System.out.println(\"x\");", &"B");
+    // Another base's call is host code as far as this grammar is concerned.
+    assert !body_is_base_calls_only(&"C::m(LexerView { chars, start, pos });", &"B");
+}
+
+test "body_is_base_calls_only sees past a comment" {
+    assert body_is_base_calls_only(&"/* note */ this.a(); // trailing", &"B");
+    // A bare string is host code, not a call.
+    assert !body_is_base_calls_only(&"\"x\"", &"B");
+}
+
+test "body_is_base_calls_only holds vacuously for an empty body" {
+    assert body_is_base_calls_only(&"", &"B");
+    assert body_is_base_calls_only(&"  ", &"B");
 }
 
 test "gen_super_interface emits predicate and action ops" {
     let ops: List<SuperOp> = [
-        SuperOp { name: "isRegexPossible", is_predicate: true },
-        SuperOp { name: "processOpenBrace", is_predicate: false },
+        SuperOp { name: "isRegexPossible", is_predicate: true, has_args: false },
+        SuperOp { name: "processOpenBrace", is_predicate: false, has_args: false },
     ];
     let mut w = CodeWriter::new();
     gen_super_interface(&mut w, &"LexerBase", &ops);

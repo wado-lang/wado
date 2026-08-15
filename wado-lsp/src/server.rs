@@ -21,8 +21,13 @@ use crate::server::dispatch::Lifecycle;
 use crate::server::rpc::error_codes;
 use crate::server::transport::ReadError;
 
-/// Run the LSP server over stdio until the client disconnects.
-pub async fn run_stdio() {
+/// Run the LSP server over stdio until the client disconnects or sends
+/// `exit`.
+///
+/// Returns the process exit code LSP 3.18 §exit prescribes — `0` when the
+/// client ran `shutdown` first or the transport closed cleanly, `1` when it
+/// exited without shutting down. See [`Lifecycle::exit_code`].
+pub async fn run_stdio() -> i32 {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut reader = BufReader::new(stdin.lock());
@@ -61,5 +66,9 @@ pub async fn run_stdio() {
             eprintln!("wado-lsp: {e}");
             break;
         }
+        if let Some(code) = lifecycle.exit_code {
+            return code;
+        }
     }
+    0
 }

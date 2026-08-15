@@ -6,9 +6,11 @@ use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKind};
 use wado_compiler::token::{Token, TokenKind};
 
-use crate::text::{PositionEncoding, codepoints_to_code_units, line_without_terminator};
+use crate::text::{LineIndex, PositionEncoding};
 
-/// LSP semantic token type indices (must match `TOKEN_TYPES` order).
+/// LSP semantic token type indices — positions into [`TOKEN_TYPES`], the
+/// legend the server advertises at `initialize`. The correspondence is
+/// asserted by `legend_matches_token_type_indices`.
 ///
 /// Indices `0..=13` are append-only history: keep them stable so the legend
 /// stays comparable across versions. New kinds (`14..`) map Wado-specific
@@ -56,7 +58,8 @@ pub const TOKEN_TYPES: &[&str] = &[
     "class",
 ];
 
-/// LSP semantic token modifier bit positions (must match `TOKEN_MODIFIERS`).
+/// LSP semantic token modifier bits — bit `n` is [`TOKEN_MODIFIERS`]`[n]`.
+/// Asserted by `legend_matches_token_modifier_bits`.
 pub mod token_modifier {
     pub const DECLARATION: u32 = 1 << 0;
     pub const DEFINITION: u32 = 1 << 1;
@@ -164,35 +167,15 @@ pub fn delta_encode(
     source: &str,
     encoding: PositionEncoding,
 ) -> Vec<u32> {
-    // Pre-split lines once with their codepoint count cached alongside.
-    // The hot loop converts twice per token (start and end). Without
-    // this cache each call would recompute `line.chars().count()`, so
-    // delta_encode would be O(tokens × line_codepoints); with the cache
-    // it's O(total_codepoints + tokens × min(token_codepoints, line)).
-    // UTF-32 short-circuits to a single `min`.
-    let lines: Vec<(&str, u32)> = source
-        .split_inclusive('\n')
-        .map(|line| {
-            let text = line_without_terminator(line);
-            (text, text.chars().count() as u32)
-        })
-        .collect();
+    let lines = LineIndex::new(source);
 
     let mut data = Vec::with_capacity(tokens.len() * 5);
     let mut prev_line = 0u32;
     let mut prev_start = 0u32;
 
     for token in tokens {
-        let (line_text, line_codepoints) =
-            lines.get(token.line as usize).copied().unwrap_or(("", 0));
-        let start_char =
-            codepoints_to_code_units(line_text, line_codepoints, token.start_char, encoding);
-        let end_char = codepoints_to_code_units(
-            line_text,
-            line_codepoints,
-            token.start_char + token.length,
-            encoding,
-        );
+        let start_char = lines.to_character(token.line, token.start_char, encoding);
+        let end_char = lines.to_character(token.line, token.start_char + token.length, encoding);
         let length_in_encoding = end_char.saturating_sub(start_char);
 
         let delta_line = token.line - prev_line;
@@ -826,6 +809,70 @@ mod tests {
         futures::executor::block_on(wado_compiler::semantics(source, &host, Some("/test.wado")))
     }
 
+    /// Every `token_type` constant indexes its own name in the legend.
+    ///
+    /// A constant one slot off still compiles and still carries *a* type
+    /// through every behavioural test; it shows up only as wrongly coloured
+    /// code in the editor.
+    #[test]
+    fn legend_matches_token_type_indices() {
+        let expected = [
+            (token_type::NAMESPACE, "namespace"),
+            (token_type::TYPE, "type"),
+            (token_type::TYPE_PARAMETER, "typeParameter"),
+            (token_type::PARAMETER, "parameter"),
+            (token_type::VARIABLE, "variable"),
+            (token_type::PROPERTY, "property"),
+            (token_type::ENUM_MEMBER, "enumMember"),
+            (token_type::FUNCTION, "function"),
+            (token_type::METHOD, "method"),
+            (token_type::KEYWORD, "keyword"),
+            (token_type::COMMENT, "comment"),
+            (token_type::STRING, "string"),
+            (token_type::NUMBER, "number"),
+            (token_type::OPERATOR, "operator"),
+            (token_type::STRUCT, "struct"),
+            (token_type::ENUM, "enum"),
+            (token_type::INTERFACE, "interface"),
+            (token_type::CLASS, "class"),
+        ];
+        assert_eq!(
+            expected.len(),
+            TOKEN_TYPES.len(),
+            "every legend entry needs a named constant (and vice versa)",
+        );
+        for (index, name) in expected {
+            assert_eq!(
+                TOKEN_TYPES.get(index as usize),
+                Some(&name),
+                "token type {index} should be {name:?}",
+            );
+        }
+    }
+
+    /// Each modifier constant is one bit, positioned at its legend name.
+    #[test]
+    fn legend_matches_token_modifier_bits() {
+        let expected = [
+            (token_modifier::DECLARATION, "declaration"),
+            (token_modifier::DEFINITION, "definition"),
+            (token_modifier::READONLY, "readonly"),
+        ];
+        assert_eq!(expected.len(), TOKEN_MODIFIERS.len());
+        for (bit, name) in expected {
+            assert_eq!(
+                bit.count_ones(),
+                1,
+                "{name} must be a single bit, got {bit}"
+            );
+            assert_eq!(
+                TOKEN_MODIFIERS.get(bit.trailing_zeros() as usize),
+                Some(&name),
+                "modifier bit {bit} should be {name:?}",
+            );
+        }
+    }
+
     #[test]
     fn test_empty_source() {
         let tokens = compute("", None);
@@ -948,21 +995,23 @@ mod tests {
 
     #[test]
     fn multi_line_tokens_are_skipped() {
-        // LSP semantic tokens MUST NOT span lines. Both lexer-emitted
-        // tokens (raw-newline string literals, doc/block comments) and
-        // the comment list path used to silently slip through and
-        // produce wrong-length entries that delta_encode then clipped
-        // to end-of-start-line. The fixture below uses a `/* */` block
-        // comment that crosses a newline; the parse-emitted single-
-        // line tokens around it (`fn`, `f`, etc.) must still appear,
-        // but no COMMENT token may be produced.
+        // A partially encoded token renders worse than none.
         let src = "fn f() {\n    /* multi\n    line */\n    let _ = 1;\n}\n";
         let tokens = compute(src, None);
+        // "Must not span lines", expressed against a start and a length.
+        let line_lengths: Vec<u32> = src
+            .split_inclusive('\n')
+            .map(|l| crate::text::line_without_terminator(l).chars().count() as u32)
+            .collect();
         for tok in &tokens {
-            // No token may span lines under any circumstances.
-            assert_eq!(
-                tok.length,
-                tok.length, // pin for the assertion structure
+            let line_len = line_lengths
+                .get(tok.line as usize)
+                .copied()
+                .unwrap_or_else(|| panic!("token on a line past EOF: {tok:?}"));
+            assert!(
+                tok.start_char + tok.length <= line_len,
+                "token runs past the end of line {}: {tok:?} (line is {line_len} codepoints)",
+                tok.line,
             );
         }
         assert!(

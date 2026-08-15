@@ -21,6 +21,7 @@ use {
     gen_token_constants,
     gen_lexer,
     lexer_rule_executes_actions,
+    lexer_grammar_executes_actions,
     collect_unhandled_lexer_alt_action_ids,
     lexer_grammar_run_action_ids,
     lexer_rule_replayable,
@@ -40,7 +41,7 @@ use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use {
     superclass_base_name,
     collect_lexer_super_ops,
-    all_super_ops_predicates,
+    super_ops_with_args,
     rewrite_superclass_calls,
     gen_super_interface,
     SuperOp,
@@ -165,18 +166,19 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // `emit_actions` (which gates the java2wado parser path).
     if let Some(sc) = superclass_base_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
-        if !ops.is_empty() && all_super_ops_predicates(&ops) {
-            ctx.set_superclass(&sc, ops);
-            // Must follow op collection, which scans the original `this.` sites.
-            rewrite_superclass_calls(grammar, &sc);
-        } else if !ops.is_empty() {
-            // Action ops need the (unbuilt) winner-replay path; leave the base
-            // unwired and warn, rather than emit a half-wired interface.
+        let with_args = super_ops_with_args(&ops);
+        if !with_args.is_empty() {
+            // Wiring the base would run the operation with its argument lost,
+            // so refuse it and name what forced that.
             ctx.warn(
                 &DiagnosticOwner::host(&"superClass"),
                 DiagnosticKind::UnsupportedAction,
-                `superClass '${sc}' has action operations ({this.m();}); superClass action ops are not yet executed, so the base is not wired`,
+                `superClass '${sc}' is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them, so the base is not wired`,
             );
+        } else if !ops.is_empty() {
+            ctx.set_superclass(&sc, ops);
+            // Must follow op collection, which scans the original `this.` sites.
+            rewrite_superclass_calls(grammar, &sc);
         }
     }
     if should_emit_actions(grammar) && grammar.action_language matches { Java } {
@@ -315,17 +317,21 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 /// a `mode` grammar, and fragment actions. Predicates never warn (they run at
 /// every position). Without this a dropped lexer action vanished with no
 /// diagnostic — silent, against the "loud, never silent" contract. Gated on
-/// `emit_actions`, so a `language = Java` grammar warns nothing. Lives here
+/// `emit_actions`, so a `language = Java` grammar warns nothing — except under
+/// a `superClass`, whose base-call rewrite runs actions the host translator
+/// never sees, leaving the rest to report. Lives here
 /// rather than in `lexer_gen` to keep that module free of a `GenContext`
 /// dependency (which would cycle through `gen_context`'s `LitToken` import).
 fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
-    if !ctx.emit_actions() {
+    if !ctx.emit_actions() && !ctx.has_superclass() {
         return;
     }
     let run = lexer_grammar_run_action_ids(grammar);
+    let grammar_executes = lexer_grammar_executes_actions(grammar);
     for let rule of &grammar.lexer_rules {
-        let executes = lexer_rule_executes_actions(grammar, rule);
+        let executes = lexer_rule_executes_actions(grammar_executes, rule);
         let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
+        let reason = unhandled_lexer_action_reason(grammar_executes, rule);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
             // Every alt's top-level actions run for an executing rule (the
             // winning alt is picked at replay); a nested action runs only when
@@ -345,11 +351,24 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
                 ctx.warn(
                     &DiagnosticOwner { site: DiagnosticSite::LexerAction(*id) },
                     DiagnosticKind::UnsupportedAction,
-                    `action ${*id} in lexer rule '${rule.name}' is not yet executed (nested inside an element; only top-level rule/alt actions and predicates run today)`,
+                    `action ${*id} in lexer rule '${rule.name}' is not yet executed (${reason})`,
                 );
             }
         }
     }
+}
+
+/// Why an unexecuted action in `rule` is unexecuted: a grammar whose lexer
+/// actions do not run at all is a different failure from an action codegen
+/// places nowhere.
+fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> String {
+    if !grammar_executes {
+        return "this grammar's lexer actions do not run at all: a superClass grammar runs one only when the base is wired and the body is nothing but base calls";
+    }
+    if rule.is_fragment || rule.is_virtual {
+        return "its rule has no match of its own to replay; only a caller inlining it runs the action";
+    }
+    return "nested inside an element; only top-level rule/alt actions and predicates run today";
 }
 
 fn members_present(members: &MemberDecls) -> bool {

@@ -34,6 +34,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<LspOptions, CliExit> {
 }
 
 pub async fn run(_opts: LspOptions) -> Result<(), CliExit> {
-    wado_lsp::server::run_stdio().await;
-    Ok(())
+    match wado_lsp::server::run_stdio().await {
+        0 => Ok(()),
+        code => Err(CliExit::silent_failure(code)),
+    }
 }

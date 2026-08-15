@@ -18,7 +18,6 @@ use wado_compiler::ast::AstId;
 use wado_compiler::module_source::ModuleSource;
 
 use crate::diagnostics::{Position, Range};
-use crate::location::span_to_range;
 use crate::macros::lsp_repr_u32_enum;
 use crate::query::QueryContext;
 
@@ -40,14 +39,13 @@ pub struct DocumentHighlight {
 
 #[must_use]
 pub(crate) fn document_highlight(ctx: &QueryContext, position: Position) -> Vec<DocumentHighlight> {
-    let entry = ctx.entry().clone();
     let Some(cursor) = ctx.cursor_at(position) else {
         return Vec::new();
     };
     let Some(def_key) = cursor.def_key() else {
         return Vec::new();
     };
-    highlights_for_def(ctx, def_key, &entry)
+    highlights_for_def(ctx, def_key, ctx.entry())
 }
 
 /// Highlight every occurrence of `def_key` that lives in `target_module`,
@@ -69,7 +67,7 @@ pub(crate) fn highlights_for_def(
             .or_else(|| ctx.sem.symbol_at(def_key).and_then(|s| s.span))
     {
         out.push(DocumentHighlight {
-            range: span_to_range(&span, ctx.source_for_id(def_key), ctx.encoding),
+            range: ctx.range_of(&span, def_key),
             kind: HighlightKind::Write,
         });
     }
@@ -87,7 +85,7 @@ pub(crate) fn highlights_for_def(
             HighlightKind::Read
         };
         out.push(DocumentHighlight {
-            range: span_to_range(&span, ctx.source_for_id(use_id), ctx.encoding),
+            range: ctx.range_of(&span, use_id),
             kind,
         });
     }
@@ -108,12 +106,7 @@ mod tests {
         let uri = format!("file://{path}");
         let host = MapHost::single(path, source);
         let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext {
-            sem: &sem,
-            source,
-            uri: &uri,
-            encoding: PositionEncoding::Utf16,
-        };
+        let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf16);
         document_highlight(&ctx, Position { line, character })
     }
 

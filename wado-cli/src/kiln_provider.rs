@@ -56,6 +56,7 @@ use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 use crate::oci;
+use crate::run_cache::RunCache;
 
 /// Compiled generator components, each named by the hash of its sources.
 /// Gitignored. A registry (`Spec`) generator is prebuilt and caches in the
@@ -106,6 +107,11 @@ pub struct RegistryContext {
 pub struct CliGeneratorProvider {
     manifest_root: PathBuf,
     compile_count: Arc<AtomicUsize>,
+    /// When present, resolution is pinned for the whole CLI run: the first
+    /// answer for a module is the one every later invocation gets, so an edit
+    /// mid-run cannot split the run between two generators. Absent keeps
+    /// per-call resolution.
+    run: Option<Arc<RunCache>>,
     /// When true, skip reads from the on-disk generator cache. Writes
     /// still happen so the next non-bypass run sees a warm tree.
     no_cache: bool,
@@ -121,9 +127,18 @@ impl CliGeneratorProvider {
         Self {
             manifest_root,
             compile_count: Arc::new(AtomicUsize::new(0)),
+            run: None,
             no_cache: false,
             registry: RegistryContext::default(),
         }
+    }
+
+    /// Pin this run's generator resolutions in `cache`, and record the
+    /// generator sources read into its watch.
+    #[must_use]
+    pub fn with_run_cache(mut self, cache: Arc<RunCache>) -> Self {
+        self.run = Some(cache);
+        self
     }
 
     #[must_use]
@@ -168,6 +183,23 @@ impl CliGeneratorProvider {
         std::fs::canonicalize(&joined).unwrap_or_else(|_| normalize_path(&joined))
     }
 
+    /// Record a generator source in the run's watch, so an edit to it in flight
+    /// is reported even though the run keeps the build it pinned.
+    fn observe(&self, abs: &Path, bytes: &[u8]) {
+        if let Some(run) = &self.run {
+            run.inputs().observe(abs, bytes);
+        }
+    }
+
+    /// Walk the recorded closure for its side effect on the watch: the index is
+    /// the only place that closure is enumerated, and a freshly compiled
+    /// generator has just written it.
+    fn observe_closure(&self, module_path: &str, base: &Path) {
+        if self.run.is_some() {
+            let _ = self.indexed_identity(module_path, base);
+        }
+    }
+
     fn index_path(&self) -> PathBuf {
         self.manifest_root.join(INDEX_FILE)
     }
@@ -191,7 +223,9 @@ impl CliGeneratorProvider {
         let recorded = index.generators.get(module_path)?;
         let mut validated: Vec<(String, [u8; 32])> = Vec::with_capacity(recorded.sources.len());
         for entry in &recorded.sources {
-            let bytes = std::fs::read(base.join(&entry.path)).ok()?;
+            let abs = base.join(&entry.path);
+            let bytes = std::fs::read(&abs).ok()?;
+            self.observe(&abs, &bytes);
             let actual = hash_source(&entry.path, &bytes);
             if actual != hex32_to_array(&entry.hash)? {
                 return None;
@@ -945,6 +979,7 @@ impl CliGeneratorProvider {
         let artifacts = self
             .compile_local(path.as_str().to_string(), abs, source_str)
             .await?;
+        self.observe_closure(path.as_str(), &base);
         Ok(ResolvedGenerator {
             wasm: artifacts.wasm,
             descriptor: artifacts.descriptor,
@@ -955,13 +990,38 @@ impl CliGeneratorProvider {
 
 impl GeneratorProvider for CliGeneratorProvider {
     async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
-        match module {
+        if let Some(run) = &self.run
+            && let Some(pinned) = run.generators().get(&self.run_key(module))
+        {
+            return Ok(pinned);
+        }
+        let resolved = match module {
             // A `Spec` reaching the provider is a *registry* build-dependency:
             // a path build-dependency is rewritten to `LocalPath` up front by
             // `compile::rewrite_build_dep_modules`.
-            GeneratorModule::Spec(spec) => self.resolve_spec(spec).await,
-            GeneratorModule::LocalPath(path) => self.resolve_local(path).await,
+            GeneratorModule::Spec(spec) => self.resolve_spec(spec).await?,
+            GeneratorModule::LocalPath(path) => self.resolve_local(path).await?,
+        };
+        match &self.run {
+            // Two fixtures can resolve one generator at once; whichever lands
+            // first is the run's.
+            Some(run) => Ok(run.generators().pin(self.run_key(module), resolved)),
+            None => Ok(resolved),
         }
+    }
+}
+
+impl CliGeneratorProvider {
+    /// Run-cache key. A run can span projects, and a module path means nothing
+    /// without the root it is relative to.
+    fn run_key(&self, module: &GeneratorModule) -> String {
+        let module = match module {
+            GeneratorModule::Spec(spec) => {
+                format!("spec:{}@{:?}#{:?}", spec.spec, spec.version, spec.registry)
+            }
+            GeneratorModule::LocalPath(path) => format!("path:{}", path.as_str()),
+        };
+        format!("{}\u{1}{module}", self.manifest_root.display())
     }
 }
 

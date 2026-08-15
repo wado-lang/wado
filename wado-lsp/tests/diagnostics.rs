@@ -155,6 +155,61 @@ fn imported_module_dead_code_stays_off_the_importer() {
     });
 }
 
+/// An *error* in an imported module follows the same rule as its dead code:
+/// it belongs to that module's document, not the importer's. Published on the
+/// importer it lands at the imported file's line and column, over unrelated
+/// code.
+#[test]
+fn imported_module_errors_stay_off_the_importer() {
+    futures::executor::block_on(async {
+        let bar = "pub fn boom() -> i32 {\n    return \"not an i32\";\n}\n";
+        let foo =
+            "use { boom } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = boom();\n}\n";
+        let host = MapHost::with_files(&[("/work/bar.wado", bar)]);
+        let mut engine = Engine::new();
+        engine.open_document("file:///work/foo.wado", foo.to_string());
+        engine.open_document("file:///work/bar.wado", bar.to_string());
+
+        let foo_diags = engine.diagnostics("file:///work/foo.wado", &host).await;
+        assert!(
+            !foo_diags
+                .iter()
+                .any(|d| d.message.contains("type mismatch")),
+            "bar.wado's type error must not be published on foo.wado, got {foo_diags:#?}"
+        );
+
+        let bar_diags = engine.diagnostics("file:///work/bar.wado", &host).await;
+        assert!(
+            errors(&bar_diags)
+                .iter()
+                .any(|d| d.message.contains("type mismatch")),
+            "bar.wado's own diagnostics must report its type error, got {bar_diags:#?}"
+        );
+    });
+}
+
+/// A broken import must surface as an error on the importing document.
+///
+/// `ModuleNotFound` carries no span, and the same failure empties the
+/// `Semantics` — without the diagnostic the file looks clean and answers
+/// nothing.
+#[test]
+fn missing_import_is_reported_on_the_importer() {
+    futures::executor::block_on(async {
+        let source = "use { nope } from \"./missing.wado\";\n\nexport fn run() {}\n";
+        let diags = diagnostics_for("/work/broken.wado", source).await;
+        let errs = errors(&diags);
+        assert!(
+            errs.iter().any(|d| d.message.contains("./missing.wado")),
+            "a broken import must be reported, got {diags:#?}"
+        );
+        assert!(
+            errs.iter().all(|d| d.range.start.line == 0),
+            "a span-less loader failure anchors at the document start, got {errs:#?}"
+        );
+    });
+}
+
 /// `set_unused_diagnostics(false)` takes effect at the next query, no edit.
 #[test]
 fn toggling_unused_diagnostics_takes_effect_without_reopen() {

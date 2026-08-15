@@ -14,8 +14,8 @@ Language service engine for the Wado compiler toolchain.
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                                                                                       |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                                  |
-| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting                                                                         |
-| `src/text.rs`               | `PositionEncoding` and LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion                                                                                                      |
+| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                           |
+| `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, and the `LineIndex` every batch conversion shares                                                      |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`)          |
 | `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                                                                                            |
@@ -23,9 +23,9 @@ Language service engine for the Wado compiler toolchain.
 | `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites                                                                                 |
 | `src/references.rs`         | Find-references via `Cursor::references_to_def`                                                                                                                                                  |
 | `src/document_highlight.rs` | Document highlight; Read/Write classification consults `Semantics::is_write_target`                                                                                                              |
-| `src/location.rs`           | URI / span helpers for translating compiler `ModuleSource` to LSP URIs                                                                                                                           |
+| `src/location.rs`           | `ModuleSource` → LSP URI translation, including lexical `.`/`..` normalisation of relative imports                                                                                               |
 | `src/query.rs`              | `QueryContext`: per-query bundle (`&Semantics` + source + URI + encoding) consumed by every position-bearing feature                                                                             |
-| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher                                                                                                                           |
+| `src/server.rs`             | `run_stdio()`: blocking stdin/stdout loop feeding the async dispatcher; returns the LSP exit code                                                                                                |
 | `src/server/transport.rs`   | Content-Length framing + typed JSON-RPC send/receive helpers                                                                                                                                     |
 | `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                                                                                              |
 | `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                                                                                             |
@@ -94,13 +94,54 @@ scalar value, not per byte and not per UTF-16 code unit. Every
 conversion lives in `text.rs` and routes through
 `codepoint_offset_to_character` / `character_to_codepoint_offset`.
 
+### Diagnostics
+
+`Engine::diagnostics` returns only the diagnostics belonging to the
+requested document. LSP publishes per URI, so a diagnostic whose
+`span.file` names an imported module cannot be reported on the importer:
+its line and column are the _imported_ file's, and painting them onto the
+open document draws the squiggle over unrelated code. The imported file
+reports its own errors when the client opens it.
+
+A diagnostic with no span is kept and anchored at the document start.
+The loader reports its hard failures — `ModuleNotFound` above all —
+without one, and the same failure returns `Semantics::empty`, silencing
+every position query. Dropping the diagnostic left a file that looked
+clean and answered nothing.
+
+The Design-B semantic checks (effect / stores / default-purity / resource
+moves) are derived from the snapshot lazily, on the first `diagnostics`
+call, and cached on the `Snapshot`. Every other query reuses the same
+snapshot without paying for them.
+
+### URIs
+
+Clients send rfc3986-encoded URIs, so `Uri::to_filename` percent-decodes
+`file:` paths. Everything this crate derives from a URI — the
+`FilesystemCompilerHost` base path, the kiln manifest walk-up, the
+`span.file` match in `Engine::diagnostics` — depends on it: without
+decoding, a workspace under `my project/` resolved nothing at all.
+Non-`file:` schemes are compiler-minted and never encoded, so they pass
+through verbatim.
+
+The inverse holds on the way out: `location::filename_to_uri` percent-encodes
+via `uri::percent_encode_path` before wrapping a path as `file://…`. The
+paths it receives are decoded — from `to_filename`, or from the compiler,
+which speaks in real paths — and a URI emitted without re-encoding does not
+string-match the document the client already has open.
+
+Relative imports are normalised lexically (`../lib/x.wado` off
+`file:///a/b/foo.wado` is `file:///a/lib/x.wado`, not
+`file:///a/b/../lib/x.wado`). Clients key open documents by URI string, so
+the un-normalised form opened a duplicate tab for an already-open file.
+
 ### DiagnosticCollector
 
 `DiagnosticCollector` in `lib.rs` wraps any `CompilerHost`, delegating `load_source` while silently collecting all emitted diagnostics. This avoids modifying or depending on a specific host implementation.
 
 ### Stdio server
 
-`server::run_stdio` is the binary's only entrypoint and is also re-used by `wado-cli/src/lsp.rs`. I/O is synchronous (`std::io`) so the crate builds for `wasm32-wasip2`, where tokio's `io-std` is unavailable; the dispatcher still awaits `Engine` futures between messages. Async is driven by `futures::executor::block_on` — the crate does not depend on tokio.
+`server::run_stdio` is the binary's only entrypoint and is also re-used by `wado-cli/src/lsp.rs`. It returns the process exit code (LSP 3.18 §exit) rather than calling `std::process::exit`: `dispatch` records the client's `exit` on `Lifecycle::exit_code` and the loop returns it, so `wado lsp` routes it through the CLI's own exit path and the loop stays testable. I/O is synchronous (`std::io`) so the crate builds for `wasm32-wasip2`, where tokio's `io-std` is unavailable; the dispatcher still awaits `Engine` futures between messages. Async is driven by `futures::executor::block_on` — the crate does not depend on tokio.
 
 ### Bundled stdlib content
 
@@ -187,6 +228,11 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `workspace/didChangeConfiguration`
 - [ ] `workspace/workspaceFolders` / `workspace/didChangeWorkspaceFolders`
 - [ ] `workspace/didChangeWatchedFiles`
+      Also the prerequisite for caching `FilesystemCompilerHost::dependency_index`
+      across requests: the walk-up + `wado.toml` + `wado.lock` parse currently
+      re-runs once per document version (the loader asks for the index exactly
+      once, when it is constructed). Caching it without watching the manifest
+      would serve a stale dependency set after an edit to `wado.toml`.
 - [ ] `workspace/executeCommand`
 - [ ] `workspace/applyEdit`
 - [ ] File operations (`willCreateFiles` / `didCreateFiles` / `willRenameFiles` / `didRenameFiles` / `willDeleteFiles` / `didDeleteFiles`)

@@ -17,6 +17,10 @@ use {
     log2_pow10,
     u64_bit_len,
     pow10,
+    get_pow10,
+    mul_pow10,
+    PARSE_EXP_MAX,
+    PARSE_EXP_MIN,
     unpack64,
     unpack32,
     FormatResult,
@@ -68,6 +72,15 @@ test "pow10 lookup" {
     assert pow10(2) == 100;
     assert pow10(9) == 1000000000;
     assert pow10(18) == 1000000000000000000;
+}
+
+test "get_pow10 shortcut agrees with the general decomposition" {
+    for let mut p = PARSE_EXP_MIN; p <= PARSE_EXP_MAX; p += 1 {
+        let fast = get_pow10(p);
+        let general = mul_pow10(p);
+        assert fast.hi == general.hi;
+        assert fast.lo == general.lo;
+    }
 }
 
 test "digits count" {

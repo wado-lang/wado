@@ -58,7 +58,8 @@ fn run_component(stdin: &[u8]) -> String {
             tls_ctx: wasmtime_wasi_tls::WasiTlsCtxBuilder::new().build(),
         };
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline(30);
+        // Hashing large inputs does far more guest work than a normal test.
+        crate::common::limit_store(&mut store, 30_000);
 
         // `run` is exported through the `wasi:cli/run` instance; bind via
         // `Command` and drive the async export with `run_concurrent`.
@@ -66,10 +67,11 @@ fn run_component(stdin: &[u8]) -> String {
             wasmtime_wasi::p3::bindings::Command::instantiate_async(&mut store, component, &linker)
                 .await
                 .expect("failed to instantiate");
-        match store
+        let run_result = store
             .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-            .await
-        {
+            .await;
+        crate::common::report_fuel_used(&mut store, "digest-interop", 30_000);
+        match run_result {
             Ok(Ok(result)) => {
                 if result.is_err() {
                     let stderr =
