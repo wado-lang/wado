@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786758608923,
+  "lastUpdate": 1786769292226,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48061,6 +48061,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/41a8cbb9f86622ded467f7094024ff71a67abc9a"
         },
         "date": 1786758608390,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb1f508a36cffda8103acaba26a7872b03a9ac72",
+          "message": "Merge pull request #1813 from wado-lang/claude/gcs-cache-verification-xzxw7u\n\nfix(cache): decide the target restore on cargo's lock, and bound incremental state",
+          "timestamp": "2026-08-15T13:37:57+09:00",
+          "tree_id": "d3b19ae59836de8b3ee7d7634d11713e97ad4c15",
+          "url": "https://github.com/wado-lang/wado/commit/bb1f508a36cffda8103acaba26a7872b03a9ac72"
+        },
+        "date": 1786769291580,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
