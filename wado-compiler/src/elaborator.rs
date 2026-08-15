@@ -869,8 +869,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The trait a bound's reference site names. `written` supplies the type
     /// arguments and the diagnostic spelling.
     ///
-    /// A site that names no declaration falls back to the frame's derivation;
-    /// see [`Self::fq_trait_name_undeclared`].
+    /// A site that names no declaration carries no identity, and none is
+    /// invented for it: naming a trait is what `use` is for, and the prelude —
+    /// its implementation modules included — is in scope everywhere without
+    /// one, so a name reaching nothing here reaches nothing at all. The mangle
+    /// falls back to the spelling and the reference is reported elsewhere.
     pub(super) fn fq_trait_name_at(
         &self,
         site: crate::ast::AstId,
@@ -885,30 +888,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // parser reads `<...>` after one as associated-type bindings, so no
         // type argument ever reaches here to be split back out.
         resolutions.declared(site).map_or_else(
-            || self.fq_trait_name_undeclared(written),
+            || crate::name::FqTraitName::binder(written),
             |def| crate::name::FqTraitName::declared(resolutions.defs(), def),
         )
-    }
-
-    /// The answer for a trait reference whose site names no declaration the
-    /// resolution walk can see: a name reaching no import, no declaration of
-    /// the writing module and no prelude entry.
-    ///
-    /// That is not always an error — a bodiless derive (`impl Deserialize for
-    /// Point;`) may name a stdlib trait the module never `use`d — and only the
-    /// declaration indexes can answer for it, which is what the frame
-    /// derivation consults past its import layers. A genuinely unknown trait
-    /// also lands here and is reported elsewhere.
-    fn fq_trait_name_undeclared(&self, base: &str) -> crate::name::FqTraitName {
-        self.canonical_decl_key(base)
-            .or_else(|| self.tysys.trait_env.unique_trait_decl_key(base))
-            .map_or_else(
-                // Nothing in the program declares this name. There is no
-                // identity to carry, so the mangle falls back to the spelling
-                // and the reference is reported elsewhere.
-                || crate::name::FqTraitName::binder(base),
-                |def| crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), def),
-            )
     }
 
     /// The trait a reference site names, in the form a mangled method name
@@ -918,7 +900,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
     /// in the module that wrote the reference — so an alias and a second
     /// module's same-named trait cannot reach the mangle. A site that names no
-    /// declaration falls back to [`Self::fq_trait_name_undeclared`].
+    /// declaration carries no identity — see [`Self::fq_trait_name_at`].
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> crate::name::FqTraitName {
         let written = self.get_type_name(ty);
         let args: Vec<String> = match ty {
@@ -941,7 +923,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .map(|def| crate::name::FqTraitName::declared(resolutions.defs(), def)),
                 }
             })
-            .unwrap_or_else(|| self.fq_trait_name_undeclared(&written));
+            .unwrap_or_else(|| crate::name::FqTraitName::binder(&written));
         head.with_args(args)
     }
 

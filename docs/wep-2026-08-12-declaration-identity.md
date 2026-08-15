@@ -466,12 +466,15 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       - `canonical_decl_key` and `decl_key_or_local` (19 callers) are the frame
         derivation: a name that reaches no import, no declaration of the
         writing module and no prelude entry, for which only the declaration
-        indexes can answer. `fq_trait_name_undeclared` is the case that matters
-        — a bodiless derive (`impl Deserialize for Point;`) naming a stdlib
-        trait the module never `use`d. §3 says an impl header's trait position
-        *is* an error when it resolves to nothing, so closing this one is a
-        language-visible decision, not a refactor: it stops that program from
-        compiling.
+        indexes can answer.
+
+        A trait reference no longer goes through it. `fq_trait_name_undeclared`
+        existed for a bodiless derive naming a stdlib trait the module never
+        `use`d, and the premise was wrong: naming a trait is what `use` is for,
+        and the prelude — its implementation modules included — is in scope
+        everywhere without one, so a name reaching nothing at a bound's site
+        reaches nothing at all. It is deleted; no program in the repository
+        relied on it.
       - `symbol_named` (8 callers) reads the symbol row behind a name. The four
         that held an identifier now read its site through `symbol_at`; what is
         left is reached from a mangled name or a synthesis target.
