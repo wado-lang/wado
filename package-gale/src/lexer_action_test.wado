@@ -297,3 +297,29 @@ WS : ' ' -> skip ;
     assert !src.contains("fn apply_"), "a predicate-only base emits no replay fn";
     assert !src.contains("act_type"), "a predicate-only base emits no action-effect surface";
 }
+
+test "a superClass call with arguments is refused, not silently stripped" {
+    // The call rewrite drops arguments and the generated interface has no type
+    // to declare them with, so wiring the base would run `set_channel` with the
+    // `2` lost. Refuse the base and say so.
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.setChannel(2) } ;
+WS : ' ' -> skip ;
+";
+    // Two reports: the refused base, and the action that can no longer run.
+    assert unsupported_count(src) == 2, "an argument-passing base call must be reported";
+    let out = gen_source(src);
+    assert !out.contains("pub interface B"), "no interface is emitted for a base Gale cannot represent";
+    assert !out.contains("B::set_channel"), "the call must not be emitted with its argument dropped";
+    assert !out.contains("this.setChannel"), "a body naming `this` must not reach the generated module";
+}
+
+test "a zero-argument base call is still wired" {
+    let out = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert out.contains("pub interface B"), "the argument-free base stays wired";
+}

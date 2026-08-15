@@ -41,6 +41,7 @@ use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use {
     superclass_base_name,
     collect_lexer_super_ops,
+    super_ops_with_args,
     rewrite_superclass_calls,
     gen_super_interface,
     SuperOp,
@@ -165,7 +166,18 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // `emit_actions` (which gates the java2wado parser path).
     if let Some(sc) = superclass_base_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
-        if !ops.is_empty() {
+        let with_args = super_ops_with_args(&ops);
+        if !with_args.is_empty() {
+            // The call rewrite drops a call's arguments and the interface has
+            // no type to declare them with, so wiring the base would execute
+            // the operation with the argument silently lost. Refuse the base
+            // and say which operation forced it.
+            ctx.warn(
+                &DiagnosticOwner::host(&"superClass"),
+                DiagnosticKind::UnsupportedAction,
+                `superClass '${sc}' is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them, so the base is not wired`,
+            );
+        } else if !ops.is_empty() {
             ctx.set_superclass(&sc, ops);
             // Must follow op collection, which scans the original `this.` sites.
             rewrite_superclass_calls(grammar, &sc);
@@ -319,7 +331,7 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
     let run = lexer_grammar_run_action_ids(grammar);
     let grammar_executes = lexer_grammar_executes_actions(grammar);
     for let rule of &grammar.lexer_rules {
-        let executes = lexer_rule_executes_actions(grammar, rule);
+        let executes = lexer_rule_executes_actions(grammar_executes, rule);
         let replays = lexer_rule_replayable(rule, &grammar.lexer_rules);
         let reason = unhandled_lexer_action_reason(grammar_executes, rule);
         for let mut ai = 0; ai < rule.body.len(); ai += 1 {
@@ -354,7 +366,7 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
 /// an action codegen places nowhere, so they read differently.
 fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> String {
     if !grammar_executes {
-        return "a superClass grammar runs a lexer action only when its body is nothing but base calls";
+        return "this grammar's lexer actions do not run at all: a superClass grammar runs one only when the base is wired and the body is nothing but base calls";
     }
     if rule.is_fragment || rule.is_virtual {
         return "its rule has no match of its own to replay; only a caller inlining it runs the action";

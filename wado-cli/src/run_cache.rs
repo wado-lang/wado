@@ -15,7 +15,6 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::SystemTime;
 
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
@@ -98,9 +97,6 @@ impl GeneratorCache {
 #[derive(Clone, Debug)]
 struct Stamp {
     len: u64,
-    /// `None` on a filesystem that does not report one; the hash then decides
-    /// alone, at the cost of re-reading the file to verify.
-    mtime: Option<SystemTime>,
     hash: [u8; 32],
     /// A later read in the same run returned different bytes. Sticky, because
     /// an edit reverted before the run ends still means two fixtures compiled
@@ -132,21 +128,24 @@ impl SourceWatch {
     /// run's first view of it, not its most recent one.
     pub fn observe(&self, path: &Path, bytes: &[u8]) {
         // Hash outside the lock: `wado test` reads files from every compile
-        // worker at once.
+        // worker at once. The insert-or-compare below then happens under one
+        // lock hold, so two workers reading the same path concurrently cannot
+        // each decide they are the first and drop the loser's hash.
         let hash: [u8; 32] = Sha256::digest(bytes).into();
         let mut seen = lock(&self.seen);
-        if let Some(stamp) = seen.get_mut(path) {
-            stamp.diverged |= stamp.hash != hash;
-            return;
+        match seen.get_mut(path) {
+            Some(stamp) => stamp.diverged |= stamp.hash != hash,
+            None => {
+                seen.insert(
+                    path.to_path_buf(),
+                    Stamp {
+                        len: bytes.len() as u64,
+                        hash,
+                        diverged: false,
+                    },
+                );
+            }
         }
-        drop(seen);
-        let stamp = Stamp {
-            len: bytes.len() as u64,
-            mtime: modified_at(path),
-            hash,
-            diverged: false,
-        };
-        lock(&self.seen).entry(path.to_path_buf()).or_insert(stamp);
     }
 
     /// Declare `dir` a Kiln output directory, whose files this run writes.
@@ -176,24 +175,22 @@ impl SourceWatch {
     }
 }
 
-/// Whether `path` differs from `stamp`. Length and mtime are the cheap filter —
-/// a run watches thousands of files — and only a file that fails it is re-read
-/// to compare content, so a rewrite of identical bytes reports nothing.
+/// Whether `path` differs from `stamp`. Length is the one cheap filter that
+/// cannot be wrong; a timestamp can, because the bytes reach [`SourceWatch`]
+/// already read, so a write between the read and the stat would pair the old
+/// content with the new mtime and hide the change for the rest of the run.
+/// Everything else is decided by re-reading, so a rewrite of identical bytes
+/// reports nothing.
 fn moved(path: &Path, stamp: &Stamp) -> bool {
-    let Ok(meta) = std::fs::metadata(path) else {
-        return true;
-    };
-    if meta.len() == stamp.len && modified_at(path) == stamp.mtime && stamp.mtime.is_some() {
-        return false;
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.len() != stamp.len => return true,
+        Ok(_) => {}
+        Err(_) => return true,
     }
     match std::fs::read(path) {
         Ok(bytes) => <[u8; 32]>::from(Sha256::digest(&bytes)) != stamp.hash,
         Err(_) => true,
     }
-}
-
-fn modified_at(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path).ok()?.modified().ok()
 }
 
 #[cfg(test)]
@@ -291,6 +288,38 @@ mod tests {
         watch.observe(&file, b"v1");
         watch.observe(&file, b"v2");
         write(&file, "v1");
+        assert_eq!(watch.changed(), vec![file]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_write_racing_the_read_is_not_hidden_by_a_matching_size() {
+        // The bytes reach the watch already read, so the file on disk can
+        // already be the next version by the time the stamp is taken. Same
+        // length, so only comparing content catches it.
+        let dir = tmp_dir("read-race");
+        let file = dir.join("a.wado");
+        write(&file, "NEW");
+        let watch = SourceWatch::default();
+        watch.observe(&file, b"OLD");
+        assert_eq!(watch.changed(), vec![file]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_first_reads_of_different_bytes_diverge() {
+        // Two compile workers reach the same path at once, on either side of an
+        // edit. Whichever stamps it first, the other must be compared against
+        // it rather than deciding it is also the first.
+        let dir = tmp_dir("concurrent-first");
+        let file = dir.join("a.wado");
+        write(&file, "v1");
+        let watch = SourceWatch::default();
+        std::thread::scope(|scope| {
+            for version in ["v1", "v2"] {
+                scope.spawn(|| watch.observe(&file, version.as_bytes()));
+            }
+        });
         assert_eq!(watch.changed(), vec![file]);
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -29,9 +29,20 @@ use { to_snake_case } from "./ident.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
+/// `has_args` records a call site that passes arguments: the rewrite drops
+/// them and the interface has no source for their types, so a base with one is
+/// refused rather than wired to a signature that silently loses an argument.
 pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
+    pub has_args: bool,
+}
+
+/// One `this.<method>(...)` call site found in a body.
+pub struct SuperCall {
+    pub name: String,
+    /// The call passes something — `this.m(2)`, not `this.m()`.
+    pub has_args: bool,
 }
 
 /// The base name from `options { superClass = Foo }`, or `null` when the
@@ -55,14 +66,13 @@ fn option_value_name(v: &OptionValue) -> String {
     };
 }
 
-/// Method names called as `this.<method>(` in a body, in source order,
-/// skipping string literals and comments so host text never yields a false
-/// hit. Only the `this.` receiver is a superClass call; a bare `m()` or
-/// `other.m()` is not.
-pub fn find_this_calls(body: &String) -> List<String> {
+/// The `this.<method>(` call sites in a body, in source order, skipping string
+/// literals and comments so host text never yields a false hit. Only the
+/// `this.` receiver is a superClass call; a bare `m()` or `other.m()` is not.
+pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
-    let mut out: List<String> = [];
+    let mut out: List<SuperCall> = [];
     let mut i = 0;
     while i < n {
         i = match chars[i] {
@@ -71,7 +81,7 @@ pub fn find_this_calls(body: &String) -> List<String> {
             '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
             _ => match this_call_at(&chars, i, n) {
                 Some([name, close]) => {
-                    out.push(name);
+                    out.push(SuperCall { name, has_args: call_has_args(&chars, i, close) });
                     close;
                 },
                 None => i + 1,
@@ -79,6 +89,25 @@ pub fn find_this_calls(body: &String) -> List<String> {
         };
     }
     return out;
+}
+
+/// Whether the call spanning `[start, close)` passes anything between its
+/// parentheses. Everything before the `(` is the receiver and the method name,
+/// so the last `(` in the span opens the argument list.
+fn call_has_args(chars: &List<char>, start: i32, close: i32) -> bool {
+    let mut open = start;
+    for let mut i = start; i < close; i += 1 {
+        if chars[i] == '(' {
+            open = i;
+            break;
+        }
+    }
+    for let mut i = open + 1; i + 1 < close; i += 1 {
+        if !chars[i].is_ascii_whitespace() {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// If a `this.<method>(` call starts at `i` (whitespace allowed between
@@ -173,12 +202,35 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
-/// role (predicate vs action), and later occurrences of that name are ignored.
-pub fn add_super_op(ops: &mut List<SuperOp>, name: &String, kind: &ActionKind) {
-    if ops.iter().any(|o: &SuperOp| o.name == *name) {
-        return;
+/// role (predicate vs action). A later occurrence still contributes its
+/// `has_args`, since one call site passing arguments is enough to make the
+/// operation unrepresentable.
+pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
+    for let mut i = 0; i < ops.len(); i += 1 {
+        if ops[i].name == call.name {
+            ops[i].has_args = ops[i].has_args || call.has_args;
+            return;
+        }
     }
-    ops.push(SuperOp { name: *name, is_predicate: kind matches { Predicate } });
+    ops.push(SuperOp {
+        name: call.name,
+        is_predicate: kind matches { Predicate },
+        has_args: call.has_args,
+    });
+}
+
+/// Operations called with arguments anywhere in the grammar. A base is wired
+/// only when this is empty: `rewrite_this_calls` drops a call's arguments and
+/// the generated interface has no type to give them, so executing one would
+/// silently lose it (`action.md`, "SuperClass — an effect interface").
+pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
+    let mut out: List<String> = [];
+    for let op of ops {
+        if op.has_args {
+            out.push(op.name);
+        }
+    }
+    return out;
 }
 
 /// Collect the superClass operations across a grammar's lexer rules: every
@@ -263,6 +315,18 @@ fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool 
         Repeat(rep) => elem_actions_are_base_calls(&rep.element, base_name),
         Not(nn) => elem_actions_are_base_calls(&nn.element, base_name),
         _ => true,
+    };
+}
+
+/// Whether the grammar declares a `superClass` Gale refuses to wire, because an
+/// operation is called with arguments (`super_ops_with_args`). Nothing that
+/// reaches the base can then be emitted: no interface, and no body naming
+/// `this`, which the rewrite would otherwise have replaced. The grammar's lexer
+/// actions and predicates therefore stay unexecuted, each reported.
+pub fn superclass_is_refused(grammar: &Grammar) -> bool {
+    return match superclass_base_name(grammar) {
+        Some(_) => !super_ops_with_args(&collect_lexer_super_ops(grammar)).is_empty(),
+        None => false,
     };
 }
 
@@ -357,8 +421,8 @@ fn elem_calls_super(
 
 fn collect_lexer_alt_ops(alt: &LexerAlternative, ops: &mut List<SuperOp>) {
     for let a of &alt.actions {
-        for let name of &find_this_calls(&a.source.text) {
-            add_super_op(ops, name, &a.kind);
+        for let call of &find_this_calls(&a.source.text) {
+            add_super_op(ops, call, &a.kind);
         }
     }
     for let e of &alt.elements {
