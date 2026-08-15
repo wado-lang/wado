@@ -14,7 +14,7 @@ Language service engine for the Wado compiler toolchain.
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                                                                                       |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                                  |
-| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                            |
+| `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                           |
 | `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, and the `LineIndex` every batch conversion shares                                                      |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`)          |
 | `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
@@ -99,7 +99,7 @@ conversion lives in `text.rs` and routes through
 `Engine::diagnostics` returns only the diagnostics belonging to the
 requested document. LSP publishes per URI, so a diagnostic whose
 `span.file` names an imported module cannot be reported on the importer:
-its line and column are the *imported* file's, and painting them onto the
+its line and column are the _imported_ file's, and painting them onto the
 open document draws the squiggle over unrelated code. The imported file
 reports its own errors when the client opens it.
 
