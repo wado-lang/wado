@@ -224,18 +224,15 @@ impl Drop for PooledRuntime {
 
 /// A runtime this caller has to itself for as long as it holds the handle.
 ///
-/// One current-thread runtime shared across tests serialises them on its
-/// scheduler core, and the core owns the timer wheel: a caller that does not
-/// hold it can drive its own future but cannot advance a timer, so a guest
-/// awaiting a 1 ms sleep waits on whichever fixture holds the core for as long
-/// as that fixture runs. Exclusive use is the point; the pool only decides
-/// where the runtime comes from.
+/// Sharing one across tests serialises them on its scheduler core, and the core
+/// owns the timer wheel: a caller without it can drive its own future but
+/// cannot advance a timer, so a guest awaiting a 1 ms sleep waits on whichever
+/// fixture holds the core.
 ///
-/// Pooled rather than built per call, because libtest gives each test its own
-/// thread: building one per test pays for a scheduler and its descriptors
-/// thousands of times, and caching one per thread never frees them. The pool
-/// settles at the runner's concurrency, and the lock is held only to hand a
-/// runtime over, never while one runs.
+/// Pooled because libtest gives each test its own thread: one per test rebuilds
+/// a scheduler thousands of times, one per thread never frees them. The pool
+/// settles at the runner's concurrency, and its lock is held only to hand a
+/// runtime over.
 pub fn runtime() -> PooledRuntime {
     let pooled = RUNTIME_POOL
         .get_or_init(Default::default)
@@ -265,32 +262,19 @@ const EPOCH_INTERVAL_MS: u64 = 1000;
 /// so a store gets between `ticks - 1` and `ticks` intervals depending on where
 /// its creation falls between two ticks. At least one tick, so a timeout under
 /// the interval still bounds the run.
-///
-/// Every `set_epoch_deadline` call goes through here: the tick count is a
-/// function of `EPOCH_INTERVAL_MS`, and spelling it as `ms / 1000` at the call
-/// site silently desynchronises the moment that constant moves.
 pub fn epoch_deadline_ticks(timeout_ms: u64) -> u64 {
     (timeout_ms / EPOCH_INTERVAL_MS).max(1)
 }
 
 /// Guest instructions a test may execute before wasmtime traps it.
 ///
-/// Fuel bounds guest work, which is what a runaway test spends and what a test
-/// blocked on a host call does not. Wall time is not a proxy for either: a
-/// 1 ms timer holds the guest for 1 ms of guest work and seconds of wall time
-/// under load, so an epoch deadline fails such a test for the machine's load
-/// rather than for anything the test did.
 /// Measured with `WADO_TEST_FUEL_REPORT=1` across every execution path: a test
-/// world's median spends under 2k and its heaviest 1.9M, while a CLI world runs
-/// whole programs and reaches 15M. Thirteen times that ceiling leaves room for
-/// a test that legitimately grows while still catching a loop that never ends.
-///
-/// Paths that ask for a longer budget scale from here through
-/// [`fuel_for_timeout`]; the 30s interop tests peak at 38M of their 1.2G.
+/// world's heaviest spends 1.9M, a CLI world runs a whole program and reaches
+/// 15M. Thirteen times that ceiling still catches a loop that never ends.
 pub const DEFAULT_FUEL: u64 = 200_000_000;
 
-/// Fuel budget for `timeout_ms` of the old wall-clock budget, for call sites
-/// that still express their limit in milliseconds.
+/// The share of [`DEFAULT_FUEL`] that `timeout_ms` buys, so a site raising its
+/// budget raises both limits together.
 pub fn fuel_for_timeout(timeout_ms: u64) -> u64 {
     DEFAULT_FUEL.saturating_mul(timeout_ms.max(1)) / DEFAULT_TIMEOUT_MS
 }
@@ -306,11 +290,9 @@ pub fn report_fuel(label: &str, consumed: u64) {
 /// Bound a store by `timeout_ms`: fuel for the guest's own work, the epoch for
 /// a host call that never returns and so spends no fuel.
 ///
-/// The engine turns on both mechanisms, and each one traps a store that never
-/// sets its limit — fuel starts at zero, and an unset epoch deadline is already
-/// reached. Every store the suite creates goes through here so that neither can
-/// be half-configured at a call site, and both scale with the one budget the
-/// site asked for.
+/// The engine turns on both mechanisms, and each traps a store that never sets
+/// its limit — fuel starts at zero, an unset epoch deadline is already reached.
+/// Every store goes through here so neither can be half-configured.
 pub fn limit_store<T>(store: &mut Store<T>, timeout_ms: u64) {
     store
         .set_fuel(fuel_for_timeout(timeout_ms))
@@ -318,17 +300,17 @@ pub fn limit_store<T>(store: &mut Store<T>, timeout_ms: u64) {
     store.set_epoch_deadline(epoch_deadline_ticks(timeout_ms));
 }
 
-/// Report what the guest spent of the budget `limit_store` gave it. Pass the
-/// same `timeout_ms`; every execution path reports, so `WADO_TEST_FUEL_REPORT`
-/// covers the budgets that were estimated rather than measured.
+/// Report what the guest spent of the budget `limit_store` gave it, given the
+/// same `timeout_ms`.
 pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
     let budget = fuel_for_timeout(timeout_ms);
     report_fuel(label, budget.saturating_sub(store.get_fuel().unwrap_or(0)));
 }
 
 /// Get or initialize the shared wasmtime Engine for all tests.
-/// The engine has epoch interruption enabled; a background thread increments
-/// the epoch every `EPOCH_INTERVAL_MS` to enforce test timeouts.
+/// The engine meters fuel and enables epoch interruption; a background thread
+/// increments the epoch every `EPOCH_INTERVAL_MS`. Stores take both limits from
+/// [`limit_store`].
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
         let mut config = Config::new();

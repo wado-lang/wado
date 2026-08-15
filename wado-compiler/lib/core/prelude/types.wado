@@ -255,18 +255,16 @@ internal struct WaitEvent {
 /// `WaitEvent::code` for a subtask transition (CM `EventCode.SUBTASK`).
 internal global CM_EVENT_SUBTASK: i32 = 1;
 
-/// The last in-flight state of the CM subtask state machine. `STARTING` and
-/// `STARTED` precede it; `RETURNED`, `CANCELLED_BEFORE_STARTED` and
-/// `CANCELLED_BEFORE_RETURNED` are the terminal states above it. A wait that
-/// resumes only on `RETURNED` spins forever on either cancelled state.
+/// The last in-flight state of the CM subtask state machine: `STARTING`
+/// precedes it, and `RETURNED` and the two `CANCELLED_*` states sit above it.
+/// Settling is a comparison against this, not an equality with `RETURNED`.
 internal global CM_SUBTASK_STARTED: u32 = 1;
 
-/// True once `event` says the subtask it names has resolved, which is what
-/// makes `subtask.drop` legal — the CM traps a drop of one still in flight.
+/// True once the subtask `event` names has resolved, which is what makes
+/// `subtask.drop` legal — the CM traps a drop of one still in flight.
 ///
-/// Only a subtask transition can answer that. `waitable-set.wait` is lowered
-/// with `cancellable = 0`, so it never reports `TASK_CANCELLED`; were it to,
-/// settling on it would drop an unresolved subtask.
+/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
+/// cannot arrive; settling on it would drop a subtask still in flight.
 internal fn cm_subtask_settled(event: WaitEvent) -> bool {
     assert event.code == CM_EVENT_SUBTASK;
     return event.payload > CM_SUBTASK_STARTED;
