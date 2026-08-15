@@ -12,13 +12,15 @@ When WebAssembly provides a native instruction for a feature, prefer it over a c
 
 All levels run DCE on functions, types, and globals.
 
-| Flag            | Iterations | Inline threshold | Notes                                           |
-| --------------- | ---------- | ---------------- | ----------------------------------------------- |
-| `-O0`           | 0          | N/A              | DCE only + `match_to_switch` + backend rewrites |
-| `-O1`           | 2          | 4                |                                                 |
-| `-O2` (default) | 10         | 13               |                                                 |
-| `-O3`           | 30         | 32               |                                                 |
-| `-Os`           | 10         | 13               | strips the Wasm name section                    |
+| Flag            | Iterations | Inline budget | Notes                                           |
+| --------------- | ---------- | ------------- | ----------------------------------------------- |
+| `-O0`           | 0          | N/A           | DCE only + `match_to_switch` + backend rewrites |
+| `-O1`           | 2          | 4             |                                                 |
+| `-O2` (default) | 10         | 13            |                                                 |
+| `-O3`           | 30         | 32            |                                                 |
+| `-Os`           | 10         | 13            | strips the Wasm name section                    |
+
+The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights.
 
 The fixed-point loop exits early on convergence. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
 
@@ -45,7 +47,7 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 Allocation and aggregate:
 
-- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the size threshold, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out.
+- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions: an operand leaf (a local read, a constant, a global read) is free, one operation — arithmetic, `struct.get`, `array.get`, `ref.test`, an allocation — is 1, a call is 2, a branch is 2 and a loop 3, since control flow spliced into a caller costs it register pressure where a chain of field reads does not. A `cold_path()` marker or a diverging statement ends the walk over its block, so an error path priced nothing. The promoted operand graph is walked too, charging each hash-consed value once.
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.

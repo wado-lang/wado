@@ -15,6 +15,7 @@ use crate::nir_arena::{
     StmtNode,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
@@ -25,11 +26,25 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
 use crate::token::Span;
 
-// The inline threshold is based on expression count, which provides a more
-// accurate measure of function complexity than statement count.
-// - Simple statements like `let x = 1` have 1 expression
-// - Complex statements like `let x = foo() + bar()` have 3+ expressions
-// - Method calls, binary operations, field accesses all contribute
+/// Inline cost weights, in emitted Wasm instructions. The threshold is read in
+/// the same unit, so "`-O2` inlines a callee of up to N instructions" is a
+/// statement about the output rather than about NIR node shape.
+mod weight {
+    /// One instruction over its operands: arithmetic, a `struct.get`, an
+    /// `array.get`, a `ref.test`, a `struct.new`.
+    pub const OP: usize = 1;
+    /// A call: the `call` itself plus the ABI edge the caller pays for it. Two
+    /// rather than one because a callee built out of calls is a driver, and
+    /// splicing it exposes nothing the passes downstream can use.
+    pub const CALL: usize = 2;
+    /// A branch and the block structure around it. Control flow is what makes a
+    /// spliced body expensive in the caller — it splits the caller's regions and
+    /// costs it register pressure — so it outweighs a straight-line operation.
+    pub const BRANCH: usize = 2;
+    /// A loop, for the same reason as [`BRANCH`], one step further: a loop
+    /// spliced into a caller is a region of its own.
+    pub const LOOP: usize = 3;
+}
 
 /// True when an expression is a `builtin::cold_path()` marker call.
 fn is_cold_path_call(body: &Body, id: ExprId, descriptors: &[FunctionRef]) -> bool {
@@ -42,7 +57,7 @@ fn is_cold_path_call(body: &Body, id: ExprId, descriptors: &[FunctionRef]) -> bo
 }
 
 /// How a statement ends the reachable, hot portion of its block, for the inline
-/// cost walk in [`count_block_exprs`].
+/// cost walk in [`CostWalk::block`].
 enum BlockCut {
     /// Not a cut — keep accumulating cost.
     None,
@@ -81,190 +96,245 @@ fn block_cut(
     }
 }
 
-/// Inline cost of a single statement (its own expression count).
-fn count_stmt(
-    body: &Body,
-    stmt: StmtId,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-) -> usize {
-    match &body.stmts[stmt].kind {
-        StmtKind::Expr(expr) => count_operand(body, *expr, type_table, descriptors),
-        StmtKind::Let { value, .. } => count_operand(body, *value, type_table, descriptors),
-        StmtKind::LetDestructure { value, .. } => {
-            count_operand(body, *value, type_table, descriptors)
-        }
-        StmtKind::Return { value } => {
-            value.map_or(0, |v| count_operand(body, v, type_table, descriptors))
-        }
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-            ..
-        } => {
-            count_operand(body, *condition, type_table, descriptors)
-                + count_block_exprs(body, *then_block, type_table, descriptors)
-                + else_block.map_or(0, |b| count_block_exprs(body, b, type_table, descriptors))
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            count_block_exprs(body, *b, type_table, descriptors)
-        }
-        // A `break L: <expr>` carries a value just like a `return`; cost it so
-        // labeled-block-valued callees are not systematically undercounted.
-        StmtKind::Break { value, .. } => {
-            value.map_or(0, |v| count_operand(body, v, type_table, descriptors))
-        }
-        StmtKind::Continue => 0,
-    }
+/// The immutable context of the inline cost walk: how many Wasm instructions a
+/// callee's hot path emits, in the unit [`weight`] defines.
+///
+/// The walk threads a `seen` set of promoted values because the operand graph is
+/// hash-consed — a sub-value reachable from several operands is charged once,
+/// which both matches what extraction emits for it and bounds the walk on a wide
+/// DAG. It rides `&self` so a `match` on a node can call back into the walk
+/// without copying the node's operand list out first.
+struct CostWalk<'a> {
+    body: &'a Body,
+    type_table: &'a TypeTable,
+    descriptors: &'a [FunctionRef],
 }
 
-/// Count expressions reachable through an operand (recursive).
-fn count_operand(
-    body: &Body,
-    op: Operand,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-) -> usize {
-    // A promoted constant counts as the one literal node it replaced.
-    op.as_expr()
-        .map_or(1, |e| count_expr(body, e, type_table, descriptors))
-}
+/// Promoted values already charged by one walk.
+type SeenValues = IndexSet<ValueId>;
 
-fn count_expr(
-    body: &Body,
-    id: ExprId,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-) -> usize {
-    1 + match &body.exprs[id].kind {
-        ExprKind::Binary { left, right, .. } => {
-            count_operand(body, *left, type_table, descriptors)
-                + count_operand(body, *right, type_table, descriptors)
-        }
-        ExprKind::Unary { expr, .. } => count_operand(body, *expr, type_table, descriptors),
-        ExprKind::Call { args, .. } => args
-            .iter()
-            .map(|a| count_operand(body, a.expr, type_table, descriptors))
-            .sum(),
-        ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table, descriptors),
-        ExprKind::Index { expr, index, .. } => {
-            count_operand(body, *expr, type_table, descriptors)
-                + count_operand(body, *index, type_table, descriptors)
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
-            .iter()
-            .map(|e| count_operand(body, *e, type_table, descriptors))
-            .sum(),
-        ExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .map(|f| count_operand(body, f.value, type_table, descriptors))
-            .sum(),
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_operand(body, p, type_table, descriptors))
-        }
-        ExprKind::Assign { target, value } => {
-            count_expr(body, *target, type_table, descriptors)
-                + count_operand(body, *value, type_table, descriptors)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            // Cold branches contribute nothing: `count_block_exprs` stops at a
-            // `cold_path()` marker or a diverging statement within each arm.
-            count_operand(body, *condition, type_table, descriptors)
-                + count_block_exprs(body, *then_branch, type_table, descriptors)
-                + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table, descriptors))
-        }
-        ExprKind::Match { expr, arms } => {
-            count_operand(body, *expr, type_table, descriptors)
-                + arms
-                    .iter()
-                    .map(|arm| {
-                        arm.guard
-                            .map_or(0, |g| count_operand(body, g, type_table, descriptors))
-                            + count_operand(body, arm.body, type_table, descriptors)
-                    })
-                    .sum::<usize>()
-        }
-        ExprKind::Block(block) => count_block_exprs(body, *block, type_table, descriptors),
-        ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table, descriptors),
-        ExprKind::GlobalVarSet { value, .. } => {
-            count_operand(body, *value, type_table, descriptors)
-        }
-        // Leaf expressions (no children)
-        ExprKind::PackedArray(_)
-        | ExprKind::Dead
-        | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. } => 0,
-        // Closure and effect-related expressions
-        ExprKind::EnumConstruct { .. } => 0,
-        ExprKind::CmRawCall { args, .. } => args
-            .iter()
-            .map(|a| count_operand(body, *a, type_table, descriptors))
-            .sum(),
-        ExprKind::IndirectCall { callee, args } => {
-            count_operand(body, *callee, type_table, descriptors)
-                + args
-                    .iter()
-                    .map(|a| count_operand(body, *a, type_table, descriptors))
-                    .sum::<usize>()
-        }
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            count_operand(body, *functor, type_table, descriptors)
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            count_operand(body, *scrutinee, type_table, descriptors)
-                + arms
-                    .iter()
-                    .map(|a| count_block_exprs(body, *a, type_table, descriptors))
-                    .sum::<usize>()
-                + count_block_exprs(body, *default, type_table, descriptors)
-        }
-        // Lowered pattern matching nodes - count inner expressions
-        ExprKind::VariantTag { expr }
-        | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => {
-            count_operand(body, *expr, type_table, descriptors)
-        }
-        ExprKind::LabeledBlock { block, .. } => {
-            count_block_exprs(body, *block, type_table, descriptors)
-        }
-    }
-}
-
-/// Count expressions in a NIR block (recursive), stopping once the rest of the
-/// block becomes cold or unreachable. The walk ends at the first statement that
-/// [`block_cut`] flags: a `cold_path()` marker drops the marker and everything
-/// after it, while a diverging statement (`return` / `break` / `continue` or a
-/// `-> !` call such as `panic`) is itself counted but cuts off its unreachable
-/// tail.
-fn count_block_exprs(
-    body: &Body,
-    block: BlockId,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-) -> usize {
-    let mut total = 0;
-    for i in 0..body.blocks[block].stmts.len() {
-        let stmt = body.blocks[block].stmts[i];
-        match block_cut(body, stmt, type_table, descriptors) {
-            BlockCut::Cold => break,
-            BlockCut::Diverges => {
-                total += count_stmt(body, stmt, type_table, descriptors);
-                break;
+impl CostWalk<'_> {
+    /// Cost of a NIR block, stopping once the rest of it becomes cold or
+    /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
+    /// `cold_path()` marker drops the marker and everything after it, while a
+    /// diverging statement (`return` / `break` / `continue` or a `-> !` call
+    /// such as `panic`) is itself charged but cuts off its unreachable tail.
+    fn block(&self, block: BlockId, seen: &mut SeenValues) -> usize {
+        let mut total = 0;
+        for &stmt in &self.body.blocks[block].stmts {
+            match block_cut(self.body, stmt, self.type_table, self.descriptors) {
+                BlockCut::Cold => break,
+                BlockCut::Diverges => {
+                    total += self.stmt(stmt, seen);
+                    break;
+                }
+                BlockCut::None => total += self.stmt(stmt, seen),
             }
-            BlockCut::None => total += count_stmt(body, stmt, type_table, descriptors),
+        }
+        total
+    }
+
+    fn stmt(&self, stmt: StmtId, seen: &mut SeenValues) -> usize {
+        match &self.body.stmts[stmt].kind {
+            StmtKind::Expr(expr) => self.operand(*expr, seen),
+            // A `let` is a `local.set` the backend folds into its producer, and
+            // one whose value is a bare operand disappears in copy propagation.
+            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+                self.operand(*value, seen)
+            }
+            // A `break L: <expr>` carries a value just like a `return`; charge it
+            // so labeled-block-valued callees are not systematically undercounted.
+            StmtKind::Return { value } | StmtKind::Break { value, .. } => {
+                value.map_or(0, |v| self.operand(v, seen))
+            }
+            StmtKind::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                weight::BRANCH
+                    + self.operand(*condition, seen)
+                    + self.block(*then_block, seen)
+                    + else_block.map_or(0, |b| self.block(b, seen))
+            }
+            StmtKind::Loop { body } => weight::LOOP + self.block(*body, seen),
+            StmtKind::LabeledBlock { block, .. } => self.block(*block, seen),
+            StmtKind::Continue => 0,
         }
     }
-    total
+
+    /// Cost reached through an operand slot, which holds either a skeleton
+    /// expression or a promoted pure value.
+    fn operand(&self, op: Operand, seen: &mut SeenValues) -> usize {
+        match op {
+            Operand::Expr(e) => self.expr(e, seen),
+            Operand::Value(v) => self.value(v, seen),
+        }
+    }
+
+    /// Cost of a promoted pure value, charged once per distinct `ValueId`.
+    fn value(&self, v: ValueId, seen: &mut SeenValues) -> usize {
+        if !seen.insert(v) {
+            return 0;
+        }
+        match self.body.values.kind(v) {
+            // A `T.const` / `local.get` the consuming instruction takes in place.
+            ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Opaque(_) => 0,
+            // An aggregate constant materialises — as a `global.get` once
+            // `const_object_globalization` has placed it, as the allocation
+            // itself until then.
+            ValueKind::Const(..) => weight::OP,
+            ValueKind::Binary { lhs, rhs, .. } => {
+                weight::OP + self.value(*lhs, seen) + self.value(*rhs, seen)
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                weight::OP + self.value(*operand, seen)
+            }
+            // `select_lowering`'s branchless form: one instruction, three operands.
+            ValueKind::Select { cond, then, else_ } => {
+                weight::OP
+                    + self.value(*cond, seen)
+                    + self.value(*then, seen)
+                    + self.value(*else_, seen)
+            }
+            // A loop-carried local: the recurrence is the enclosing loop's cost,
+            // and the value itself reads as a local.
+            ValueKind::LoopPhi { .. } => 0,
+            ValueKind::FieldAccess { receiver, .. } => {
+                weight::OP + self.value(*receiver, seen)
+            }
+        }
+    }
+
+    fn expr(&self, id: ExprId, seen: &mut SeenValues) -> usize {
+        match &self.body.exprs[id].kind {
+            // Operand leaves: a `local.get` / `T.const` / `global.get` the
+            // consuming instruction takes in place. Charging them is what made a
+            // chain of cheap field reads price as high as a call.
+            ExprKind::Local { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::EnumConstruct { .. }
+            | ExprKind::PackedArray(_)
+            | ExprKind::Dead => 0,
+
+            // One instruction over its operands.
+            ExprKind::Binary { left, right, .. } => {
+                weight::OP + self.operand(*left, seen) + self.operand(*right, seen)
+            }
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::FieldAccess { expr, .. }
+            | ExprKind::VariantTag { expr }
+            | ExprKind::VariantTest { expr, .. }
+            | ExprKind::VariantPayload { expr, .. } => weight::OP + self.operand(*expr, seen),
+            ExprKind::Index { expr, index, .. } => {
+                weight::OP + self.operand(*expr, seen) + self.operand(*index, seen)
+            }
+            ExprKind::GlobalVarSet { value, .. } => weight::OP + self.operand(*value, seen),
+            // The place supplies the store's own instruction — a `FieldAccess`
+            // target lowers to `struct.set` where a read would be `struct.get` —
+            // so the assignment adds only its value.
+            ExprKind::Assign { target, value } => {
+                self.expr(*target, seen) + self.operand(*value, seen)
+            }
+
+            // One allocation instruction; the initialisers cost their own.
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                weight::OP
+                    + elements
+                        .iter()
+                        .map(|e| self.operand(*e, seen))
+                        .sum::<usize>()
+            }
+            ExprKind::StructLiteral { fields, .. } => {
+                weight::OP
+                    + fields
+                        .iter()
+                        .map(|f| self.operand(f.value, seen))
+                        .sum::<usize>()
+            }
+            ExprKind::VariantConstruct { payload, .. } => {
+                weight::OP + payload.map_or(0, |p| self.operand(p, seen))
+            }
+
+            // A call is an ABI edge, not an operation.
+            ExprKind::Call { args, .. } => {
+                weight::CALL
+                    + args
+                        .iter()
+                        .map(|a| self.operand(a.expr, seen))
+                        .sum::<usize>()
+            }
+            ExprKind::CmRawCall { args, .. } => {
+                weight::CALL + args.iter().map(|a| self.operand(*a, seen)).sum::<usize>()
+            }
+            ExprKind::IndirectCall { callee, args } => {
+                weight::CALL
+                    + self.operand(*callee, seen)
+                    + args.iter().map(|a| self.operand(*a, seen)).sum::<usize>()
+            }
+            ExprKind::ClosureToCanonical { functor, .. } => {
+                weight::CALL + self.operand(*functor, seen)
+            }
+
+            // Control flow. Cold arms contribute nothing: `block` stops at a
+            // `cold_path()` marker or a diverging statement within each one.
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                weight::BRANCH
+                    + self.operand(*condition, seen)
+                    + self.block(*then_branch, seen)
+                    + else_branch.map_or(0, |b| self.block(b, seen))
+            }
+            ExprKind::Match { expr, arms } => {
+                weight::BRANCH
+                    + self.operand(*expr, seen)
+                    + arms
+                        .iter()
+                        .map(|arm| {
+                            arm.guard.map_or(0, |g| self.operand(g, seen))
+                                + self.operand(arm.body, seen)
+                        })
+                        .sum::<usize>()
+            }
+            ExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                weight::BRANCH
+                    + self.operand(*scrutinee, seen)
+                    + arms.iter().map(|a| self.block(*a, seen)).sum::<usize>()
+                    + self.block(*default, seen)
+            }
+
+            // Structural: no instruction of its own.
+            ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                self.block(*block, seen)
+            }
+        }
+    }
+}
+
+/// The inline cost of a function body, in the unit [`weight`] defines.
+fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
+    let walk = CostWalk {
+        body,
+        type_table,
+        descriptors,
+    };
+    walk.block(body.root, &mut SeenValues::default())
 }
 
 fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<String>) {
@@ -346,8 +416,7 @@ fn is_inline_eligible(
         inline_threshold
     };
 
-    // Small enough (based on expression count)
-    count_block_exprs(body, body.root, type_table, descriptors) <= effective_threshold
+    inline_cost(body, type_table, descriptors) <= effective_threshold
 }
 
 /// Detect recursive functions using call graph analysis.
