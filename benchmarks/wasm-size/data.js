@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786769292226,
+  "lastUpdate": 1786770763619,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48105,6 +48105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bb1f508a36cffda8103acaba26a7872b03a9ac72"
         },
         "date": 1786769291580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7d9916d3ebd488089305f48ff32a96052f7ede48",
+          "message": "Merge pull request #1814 from wado-lang/claude/test-fuel-metering\n\nfix: stop the e2e suite failing tests for the machine's load",
+          "timestamp": "2026-08-15T14:01:51+09:00",
+          "tree_id": "136eb0e5e27a7f1f4be5541a958a156dd6a7dccd",
+          "url": "https://github.com/wado-lang/wado/commit/7d9916d3ebd488089305f48ff32a96052f7ede48"
+        },
+        "date": 1786770763056,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
