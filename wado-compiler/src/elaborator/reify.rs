@@ -7925,11 +7925,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .contains_key(&ident.name)
             {
                 (self.current_module_source.clone(), ident.name.clone())
-            } else if let Some(def) = self
-                .tysys
-                .resolutions
-                .value_named(&self.current_module_source, &ident.name)
-            {
+            } else if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
                 let defs = self.tysys.resolutions.defs();
                 (defs.module(def).clone(), defs.name(def).to_string())
             } else {
@@ -8840,11 +8836,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if let Some(def) = self
-            .tysys
-            .resolutions
-            .value_named(&self.current_module_source, &ident.name)
-        {
+        if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
             let (import_src, original_name) = {
                 let defs = self.tysys.resolutions.defs();
                 (defs.module(def).clone(), defs.name(def).to_string())

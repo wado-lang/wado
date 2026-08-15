@@ -298,6 +298,22 @@ impl Resolutions {
         }
     }
 
+    /// The declaration a reference site names, or `None` when the site names
+    /// no declaration *or* was never walked.
+    ///
+    /// For a consumer that also walks AST the compiler synthesised — reify
+    /// reifies a foreign default's body and the bodies its own desugarings
+    /// mint — whose nodes carry ids no module ever wrote and so no walk
+    /// answered for. Everyone reading a site from source uses
+    /// [`Self::declared`], which goes through the total [`Self::get`].
+    #[must_use]
+    pub fn declared_if_walked(&self, site: AstId) -> Option<DefId> {
+        match self.refs.get(&site).copied()? {
+            Resolution::Def(def) => Some(def),
+            Resolution::Binder(_) | Resolution::Unresolved => None,
+        }
+    }
+
     /// The answer for a reference site, or `None` when the site was never
     /// walked — a coverage hole rather than an unresolved name.
     #[must_use]
@@ -363,6 +379,25 @@ impl Resolver<'_> {
     /// module's explicit imports keyed by local name, its own declarations, then
     /// the prelude and its implementation modules. Own declarations outranking
     /// the prelude is what makes a local `trait Left` mean itself (#1298).
+    /// [`Self::resolve_name`] for a name written in value position, where a
+    /// case is reachable and a type of the same name shadows it.
+    fn resolve_value_name(&self, name: &str) -> Resolution {
+        if let Some(id) = self.binder(name) {
+            return Resolution::Binder(id);
+        }
+        if let Some(def) = self
+            .locals
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+        {
+            return Resolution::Def(def);
+        }
+        self.scopes
+            .resolve_value(self.module, name)
+            .map_or(Resolution::Unresolved, Resolution::Def)
+    }
+
     fn resolve_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
@@ -528,6 +563,16 @@ impl AstVisitor for Resolver<'_> {
         {
             let answer = self.resolve_name(&name.replace("::", "$"));
             self.record(name_id, answer);
+        }
+        // A bare name in expression position: the walk answers for it too, so
+        // a consumer reads what the name means here rather than running the
+        // scope again. A local binding is not a declaration, so it answers
+        // `Unresolved` — the consumer checks its own locals first, as it must.
+        if let ast::Expr::Ident(ident) = expr
+            && ident.segments.len() <= 1
+        {
+            let answer = self.resolve_value_name(&ident.name);
+            self.record(ident.id, answer);
         }
         if let ast::Expr::Ident(ident) = expr
             && let [head, rest @ ..] = ident.segments.as_slice()
