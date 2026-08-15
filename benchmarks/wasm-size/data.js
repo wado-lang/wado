@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786786010383,
+  "lastUpdate": 1786788551929,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48193,6 +48193,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9b38ec81757d63f1a069c821e3b49c2b25eba058"
         },
         "date": 1786786009648,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e4f937b62fb6facbbe42d2be59b10d9c1d29fa4",
+          "message": "Merge pull request #1817 from wado-lang/claude/wado-lsp-smell-3bq8op\n\nfix(lsp): correct URI handling, diagnostic scoping, and hover resolution",
+          "timestamp": "2026-08-15T18:56:36+09:00",
+          "tree_id": "bbdb754504fd4f1b4bad90b9002cef1611a5ef08",
+          "url": "https://github.com/wado-lang/wado/commit/5e4f937b62fb6facbbe42d2be59b10d9c1d29fa4"
+        },
+        "date": 1786788551374,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
