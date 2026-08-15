@@ -764,28 +764,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Coherence lets any same-package module host an `impl <struct_name>`.
-        if let Some(ref module_source) = struct_module_source {
+        if struct_module_source.is_some() {
             let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
                 &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
             );
+            // The receiver's own declaration, which is what an impl header
+            // targeting it must name.
+            let receiver_decl = self.tysys.type_table.borrow().nominal_def(base_type_id);
             for (impl_module, item_id) in &entries {
                 let impl_ref = ImplBlockRef(impl_module.clone(), *item_id);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
-                if self.get_type_name(&header.ty) != struct_name {
-                    continue;
-                }
-                // Whether the impl's own module means the receiver's
-                // declaration by that spelling — asked of that module, which is
-                // the only vantage the answer is a fact about.
-                let targets_receiver = impl_module == module_source
-                    || self
-                        .tysys
-                        .resolutions
-                        .value_named(impl_module, &struct_name)
-                        .is_some_and(|def| {
-                            self.tysys.resolutions.defs().module(def) == module_source
-                        });
+                // The header names its target at a site of its own, answered
+                // in the impl's module — so "does this impl target the
+                // receiver" is one comparison of declarations rather than a
+                // spelling match plus a second lookup asking that module what
+                // the spelling means there.
+                let header_decl = crate::resolve::head_site(&header.ty)
+                    .and_then(|site| self.tysys.resolutions.declared(site));
+                let targets_receiver = match (header_decl, receiver_decl) {
+                    (Some(header), Some(receiver)) => header == receiver,
+                    // A target that names no declaration — a tuple, a function
+                    // type — has only its spelling to be compared by.
+                    _ => self.get_type_name(&header.ty) == struct_name,
+                };
                 if !targets_receiver {
                     continue;
                 }

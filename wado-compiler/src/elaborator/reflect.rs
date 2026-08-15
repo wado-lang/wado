@@ -1171,7 +1171,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let module_source = self.find_struct_module_source(&self_name);
+        // The subject is an enum or a flags type — `subject_matches` just said
+        // so — and its `ResolvedType` carries the declaration, so the module
+        // comes off that rather than off the spelling.
+        let module_source = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_def(self_ty)
+            .map_or_else(
+                || self.find_struct_module_source(&self_name),
+                |def| self.tysys.resolutions.defs().module(def).clone(),
+            );
         let Some(return_type) =
             self.check_reflect_scalar_args(spec, self_ty, &self_name, &method, static_call, ctx)
         else {

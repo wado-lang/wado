@@ -1830,7 +1830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(self.current_module_source.clone()),
             );
         }
-        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
+        if let Some(symbol) = self.symbol_at(ident.id) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -1864,7 +1864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Imported function
-        if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
+        if let Some(symbol) = self.symbol_at(ident.id) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
@@ -2634,7 +2634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(sig) => sig.decl.param_types.clone(),
                 None => return Vec::new(),
             }
-        } else if let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name) {
+        } else if let Some(symbol) = self.symbol_at(ident.id) {
             let src = symbol.module_source().clone();
             let name = symbol.name.clone();
             match self.tysys.signatures.function_sig(&src, &name) {

@@ -288,6 +288,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.tysys.resolutions.declared(ident.segments[owner].id)
     }
 
+    /// The symbol row behind a reference site — see
+    /// `Elaborator::symbol_at`, which answers the same way from the same
+    /// table, so annotate and reify cannot disagree.
+    fn symbol_at(&self, site: crate::ast::AstId) -> Option<&'a crate::symbol::Symbol> {
+        let def = self.tysys.resolutions.declared_if_walked(site)?;
+        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
     /// The impl-associated constant `owner` declares as `name` — the same
     /// answer `Elaborator::associated_constant_of` gives, from the same table,
     /// so annotate and reify cannot disagree about which constant a use site
@@ -8871,7 +8879,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
         //     `FuncRef` keyed by the function's defining module + original name.
         if self.sem.decls.imported_functions.contains(&ident.name)
-            && let Some(symbol) = self.symbol_named(&self.current_module_source, &ident.name)
+            && let Some(symbol) = self.symbol_at(ident.id)
             && matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
         {
             let type_args = self

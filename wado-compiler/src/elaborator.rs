@@ -241,6 +241,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
+    /// The symbol row behind a reference site.
+    ///
+    /// The walk answered for the site, so the declaration — and with it the
+    /// row — comes from what the name means where it was *written*, with no
+    /// second scope run beside the first.
+    pub(crate) fn symbol_at(&self, site: crate::ast::AstId) -> Option<&'a crate::symbol::Symbol> {
+        let def = self.tysys.resolutions.declared_if_walked(site)?;
+        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.

@@ -2405,7 +2405,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_concrete_impl: false,
             consumes_self: false,
         };
-        let impl_module_source = self.find_struct_module_source(struct_name);
+        // The receiver's declaration names the module the derived impl belongs
+        // to; `auto_derive_eligible_kind` above already established it is one.
+        let impl_module_source = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_def(base_type_id)
+            .map_or_else(
+                || self.find_struct_module_source(struct_name),
+                |def| self.tysys.resolutions.defs().module(def).clone(),
+            );
         // The auto-derived trait is a compiler item, so it is named by the
         // declaration the registry holds, not by a spelling resolved here.
         let trait_fq = self.tysys.type_table.borrow().compiler_trait_fq(item);

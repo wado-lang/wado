@@ -564,14 +564,20 @@ impl AstVisitor for Resolver<'_> {
             let answer = self.resolve_name(&name.replace("::", "$"));
             self.record(name_id, answer);
         }
-        // A bare name in expression position: the walk answers for it too, so
-        // a consumer reads what the name means here rather than running the
-        // scope again. A local binding is not a declaration, so it answers
-        // `Unresolved` — the consumer checks its own locals first, as it must.
-        if let ast::Expr::Ident(ident) = expr
-            && ident.segments.len() <= 1
-        {
-            let answer = self.resolve_value_name(&ident.name);
+        // The name an expression-position identifier writes, whole: the walk
+        // answers for it so a consumer reads what it means here rather than
+        // running the scope again. A local binding is not a declaration, so a
+        // bare name that is one answers `Unresolved` — the consumer checks its
+        // own locals first, as it must.
+        //
+        // A qualified path is asked under the `ns$member` spelling a namespace
+        // import registers, which is the only one naming what `ns::member`
+        // means. A path that is no such import — `Color::Red`, `Trait::method`
+        // — reaches nothing under it and answers `Unresolved`; those are named
+        // by their segments, recorded below.
+        if let ast::Expr::Ident(ident) = expr {
+            let written = ident.name.replace("::", "$");
+            let answer = self.resolve_value_name(&written);
             self.record(ident.id, answer);
         }
         if let ast::Expr::Ident(ident) = expr
