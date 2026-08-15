@@ -914,11 +914,7 @@ An owned, fixed-length byte buffer.
 
 ### `pub type ByteList = List<u8>`
 
-An owned, growable byte buffer.
-
 ### `pub type ByteSlice = ArraySlice<u8>`
-
-A borrowed, zero-copy view over a byte buffer.
 
 ## Primitive Types
 
