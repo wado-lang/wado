@@ -67,9 +67,9 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement.
-        // zlib tests with large data can take >5s, so use 30s timeout.
-        let deadline_ticks = 30;
-        store.set_epoch_deadline(deadline_ticks);
+        // zlib tests push large buffers through the guest, so raise the fuel
+        // budget well above a normal test's.
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL * 10);
 
         // `run` is exported through the `wasi:cli/run` instance; bind via
         // `Command` and drive the async export with `run_concurrent`.

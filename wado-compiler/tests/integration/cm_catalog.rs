@@ -586,7 +586,7 @@ fn run_round_trips(opt_level: OptLevel) {
         let mut store = Store::new(engine, state);
         // The shared engine enables epoch interruption; without a deadline the
         // first call traps with `interrupt`.
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -872,7 +872,7 @@ fn run_producer_round_trips(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1026,7 +1026,7 @@ fn run_stream_producer_round_trips(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1104,7 +1104,7 @@ where
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1208,7 +1208,7 @@ fn run_record_future_identity(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1274,7 +1274,7 @@ fn run_record_stream_identity(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1457,7 +1457,7 @@ fn run_named_future_identity(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1539,7 +1539,7 @@ fn run_named_stream_identity(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1651,7 +1651,7 @@ where
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1895,7 +1895,7 @@ fn run_double_free_guard(opt_level: OptLevel) {
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        store.set_epoch_deadline((crate::common::DEFAULT_TIMEOUT_MS / 1000).max(1));
+        crate::common::limit_store(&mut store, crate::common::DEFAULT_FUEL);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await

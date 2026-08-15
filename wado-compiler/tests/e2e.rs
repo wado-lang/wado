@@ -424,8 +424,7 @@ async fn run_http_request_async(
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
-    let deadline_ticks = (common::DEFAULT_TIMEOUT_MS / 1000).max(1);
-    store.set_epoch_deadline(deadline_ticks);
+    common::limit_store(&mut store, common::DEFAULT_FUEL);
 
     let service = Service::instantiate_async(&mut store, &component, &linker).await?;
 
