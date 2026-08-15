@@ -3137,8 +3137,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
+                // Which declaration the name means is the site's answer, taken
+                // once here and asked of every registry below.
+                let def = lookup.declaration_at(Some(named.id), &named.name);
                 // Check newtypes first
-                if let Some(alias_type_id) = lookup.newtype(&named.name) {
+                if let Some(alias_type_id) = def.and_then(|def| lookup.newtype_of(def)) {
                     return alias_type_id;
                 }
 
@@ -3174,21 +3177,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // each registry entry already carries, which is the same
                     // answer at every point in the bootstrap.
                     _ => {
-                        let defs = lookup.resolutions.defs();
-                        if let Some(info) = lookup.struct_fields(&named.name) {
-                            defs.of_ast_id(info.defined_at)
-                                .map_or(TypeTable::UNKNOWN, |def| {
-                                    type_table.make_struct(crate::tir::StructDef::Decl(def))
-                                })
-                        } else if let Some(info) = lookup.resource_type(&named.name) {
-                            defs.of_ast_id(info.defined_at)
-                                .map_or(TypeTable::UNKNOWN, |def| type_table.make_resource(def))
-                        } else if let Some(info) = lookup.variant_case(&named.name) {
-                            defs.of_ast_id(info.defined_at)
-                                .map_or(TypeTable::UNKNOWN, |def| type_table.make_variant(def))
-                        } else if let Some(info) = lookup.enum_case(&named.name) {
-                            defs.of_ast_id(info.defined_at)
-                                .map_or(TypeTable::UNKNOWN, |def| type_table.make_enum(def))
+                        let Some(def) = def else {
+                            return TypeTable::UNKNOWN;
+                        };
+                        if lookup.struct_fields_of(def).is_some() {
+                            type_table.make_struct(crate::tir::StructDef::Decl(def))
+                        } else if lookup.resource_type_of(def).is_some() {
+                            type_table.make_resource(def)
+                        } else if lookup.variant_cases_of(def).is_some() {
+                            type_table.make_variant(def)
+                        } else if lookup.enum_cases_of(def).is_some() {
+                            type_table.make_enum(def)
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -3219,6 +3218,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     type_table.make_builtin_array(elem)
                 }
                 _ => {
+                    let head = lookup.declaration_at(Some(generic.id), &generic.name);
                     let type_args: Vec<TypeId> = generic
                         .args
                         .iter()
@@ -3237,7 +3237,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // falls through to `UNKNOWN`, the newtype's inherited
                     // base methods (`MyArray<i32>::len` → `List<i32>::len`)
                     // never resolve, and monomorphization can't reach them.
-                    if let Some(gn_info) = lookup.generic_newtype(&generic.name).cloned() {
+                    let Some(head) = head else {
+                        return TypeTable::UNKNOWN;
+                    };
+                    if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
                         let concrete_base = super::type_resolution::substitute_type_params(
                             &gn_info.base_type_ast,
                             &gn_info.type_params,
@@ -3252,10 +3255,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // The head is the declaration this reference site
                         // resolved to, not the rendered `MyArray<i32>` a
                         // display spelling shows; the arguments sit beside it.
-                        let Some(def) = lookup.resolutions.declared(generic.id) else {
-                            return TypeTable::UNKNOWN;
-                        };
-                        return type_table.make_newtype_instance(def, type_args, base_type_id);
+                        return type_table.make_newtype_instance(head, type_args, base_type_id);
                     }
                     // A generic resource (`Stream<u8>`, `Future<T>`) must
                     // resolve to a `GenericResource`, not a
@@ -3264,10 +3264,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // not see the resource a signature implies, and
                     // `consume(rx: Stream<u8>)` fails with
                     // `missing resource 'Stream'`.
-                    if let Some(info) = lookup.resource_type(&generic.name)
-                        && let Some(def) = lookup.resolutions.defs().of_ast_id(info.defined_at)
-                    {
-                        return type_table.intern(ResolvedType::GenericResource { def, type_args });
+                    if lookup.resource_type_of(head).is_some() {
+                        return type_table.intern(ResolvedType::GenericResource {
+                            def: head,
+                            type_args,
+                        });
                     }
                     // A generic application `Name<args...>` may name a
                     // struct, a variant (`Result<T, E>`), or an enum. The
@@ -3276,23 +3277,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // enums resolve to `UNKNOWN`. `make_generic_instance`
                     // is name-based, so the same call shape works for every
                     // kind.
-                    // The declaration each of these reports is where the
-                    // identity comes from: its own declaring node. Asking the
-                    // type table for it by name would depend on the
-                    // declaration's type already being interned, which at this
-                    // point in the bootstrap it need not be.
-                    let def = lookup
-                        .struct_fields(&generic.name)
-                        .map(|info| info.defined_at)
-                        .or_else(|| {
-                            lookup
-                                .variant_case(&generic.name)
-                                .map(|info| info.defined_at)
-                        })
-                        .or_else(|| lookup.enum_case(&generic.name).map(|info| info.defined_at))
-                        .and_then(|at| lookup.resolutions.defs().of_ast_id(at));
-                    if let Some(def) = def {
-                        type_table.make_generic_instance(def, type_args)
+                    if lookup.struct_fields_of(head).is_some()
+                        || lookup.variant_cases_of(head).is_some()
+                        || lookup.enum_cases_of(head).is_some()
+                    {
+                        type_table.make_generic_instance(head, type_args)
                     } else {
                         TypeTable::UNKNOWN
                     }

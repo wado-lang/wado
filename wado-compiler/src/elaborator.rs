@@ -319,7 +319,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().newtype(name)
     }
 
-    pub(super) fn lookup_variant_case_of_decl(&self, def: crate::defs::DefId) -> Option<&VariantInfo> {
+    pub(super) fn lookup_variant_case_of_decl(
+        &self,
+        def: crate::defs::DefId,
+    ) -> Option<&VariantInfo> {
         self.type_lookup().variant_cases_of(def)
     }
 
@@ -360,13 +363,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         site: Option<crate::ast::AstId>,
         name: &str,
     ) -> Option<crate::defs::DefId> {
-        match site.and_then(|site| self.tysys.resolutions.walked(site)) {
-            Some(crate::resolve::Resolution::Def(def)) => Some(def),
-            Some(crate::resolve::Resolution::Binder(_)) => None,
-            Some(crate::resolve::Resolution::Unresolved) | None => {
-                self.type_lookup().declaration(name)
-            }
-        }
+        self.type_lookup().declaration_at(site, name)
     }
 
     pub(super) fn contains_variant(&self, name: &str) -> bool {

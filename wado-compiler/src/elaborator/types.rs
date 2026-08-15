@@ -2155,14 +2155,6 @@ impl<'a> TypeLookup<'a> {
         self.flags_members_of(self.declaration(name)?)
     }
 
-    pub(super) fn resource_type(&self, name: &str) -> Option<&'a ResourceInfo> {
-        self.resource_type_of(self.declaration(name)?)
-    }
-
-    pub(super) fn generic_newtype(&self, name: &str) -> Option<&'a GenericNewtypeInfo> {
-        self.generic_newtype_of(self.declaration(name)?)
-    }
-
     /// The newtype (or `flags` type) `name` names here.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
         self.newtype_of(self.declaration_or_render(name)?)
@@ -2221,6 +2213,27 @@ impl<'a> TypeLookup<'a> {
             .get(&def)
             .or_else(|| self.all_newtypes.get(&def))
             .copied()
+    }
+
+    /// The declaration a type reference names.
+    ///
+    /// The site decides: the walk answered for it once, in the module that
+    /// wrote it, so an alias, a namespace prefix and a function-local `struct`
+    /// all reach their own declaration with no vantage supplied here. A binder
+    /// is not a declaration and gets none. The spelling answers only where the
+    /// walk left nothing — `None` for a node the elaborator minted, and
+    /// `Unresolved` for a name it could not place, where this module's scope
+    /// is the same scope and so the same answer.
+    pub(super) fn declaration_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
+        match site.and_then(|site| self.resolutions.walked(site)) {
+            Some(crate::resolve::Resolution::Def(def)) => Some(def),
+            Some(crate::resolve::Resolution::Binder(_)) => None,
+            Some(crate::resolve::Resolution::Unresolved) | None => self.declaration_or_render(name),
+        }
     }
 
     /// Which declaration `name` reaches from the module this view stands in.

@@ -443,15 +443,15 @@ class of bug in Context is not reachable by any program the repository builds.
 It is not yet _unwritable_, which is what the design asks for. What stands
 between the two is one step, and everything else here follows from it.
 
-What prevents a collision today is that two same-named declarations _render_
-differently — `name::mangle_local_item_name`'s `@AstId` suffix, plus the
-function-local tier `TypeLookup` consults ahead of the module's own. That is a
-convention every minting site and every lookup site has to keep, not a property
-of a key. The evidence it is a convention: closing one fixture — two sibling
-functions each declaring `struct Box<T>` — took seven separate fixes, at type
-resolution, the struct literal, the WIR lookup key, template admission, template
-lookup, the registration name, and the instantiation scan. Each was a distinct
-caller of the same first-wins index. A removed mechanism takes one fix.
+What still prevents some collisions by convention rather than by key is
+`name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
+index that reads that suffix back into a declaration. That is a convention every
+minting site and every lookup site has to keep. The evidence it is a convention:
+closing one fixture — two sibling functions each declaring `struct Box<T>` —
+took seven separate fixes, at type resolution, the struct literal, the WIR
+lookup key, template admission, template lookup, the registration name, and the
+instantiation scan. Each was a distinct caller of the same first-wins index. A
+removed mechanism takes one fix.
 
 - [x] A _type_ head carries a `DefId`, not a `(module, name)` pair.
       `name::TypeHead::Declared` carries a `DeclaredHead` — the declaration,
@@ -467,6 +467,25 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       the identity their site already resolved. What is left of the index is
       `TypeTable::cm_decl_in`, reachable only from `synthesis::cm_binding` and
       permanent: see §9's third bullet.
+- [x] The tables a module's walk builds as it goes are keyed by declaration,
+      not by spelling — see §5. The `local_item_*` maps that existed to keep
+      function-local items out of the resulting collision are gone with it, an
+      anonymous shape's fields are filed under its `AnonStructId`, and
+      `with_module_perspective_for` no longer hides any of them before entering
+      another module.
+- [x] Type resolution takes the reference site. `resolve_type` hands the head's
+      `AstId` to `resolve_named_type` / `resolve_generic_type`, which read the
+      declaration off `Resolutions` rather than re-running a scope lookup from
+      wherever the walk stands; `Resolutions::walked` keeps "names a binder",
+      "names nothing" and "no walk saw this node" apart, so only the last falls
+      back to the spelling. This is what carries an alias, a namespace prefix
+      and a function-local `struct` to their own declarations without the
+      elaborator supplying a vantage, and it makes `TypeLookup`'s
+      `fn_local_items` tier redundant for every written site. One entry point
+      declines a site — `resolve_unsited_type_name`, for a `Self::` / `T::`
+      receiver the elaborator rewrote to a concrete spelling that no source
+      segment names. Giving the static-call chain the receiver's own site is
+      what removes it.
 - [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
@@ -480,9 +499,11 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       that mislaid it:
 
       - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
-        family (9 callers, each with its own). A written name in *type*
-        position has a site; these are reached from resolved types and from
-        synthesis, which do not.
+        family. Every *written* type reference now reaches the family through
+        `declaration_at`, which asks the site; what is left on the by-name
+        forms is reached holding a resolved type's rendered head — a struct
+        literal's recorded name, a pattern's qualifier, a reflection subject —
+        each of which has the type it came from and should ask that instead.
       - `canonical_decl_key` and `decl_key_or_local` (19 callers) are the frame
         derivation: a name that reaches no import, no declaration of the
         writing module and no prelude entry, for which only the declaration

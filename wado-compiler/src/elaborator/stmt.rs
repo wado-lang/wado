@@ -1038,14 +1038,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
-                // Get struct name from type
-                let struct_name = {
+                // The scrutinee's head, plus the spelling it renders to for
+                // the diagnostics below. The head is what the field lookup
+                // asks: an anonymous shape renders a name that names nothing.
+                let (struct_head, struct_name) = {
                     let type_table = self.tysys.type_table.borrow();
                     match type_table.get(type_id) {
-                        ResolvedType::Struct { def, type_args } => {
-                            Some(type_table.struct_rendered_name(*def, type_args))
-                        }
-                        _ => None,
+                        ResolvedType::Struct { def, type_args } => (
+                            Some(*def),
+                            Some(type_table.struct_rendered_name(*def, type_args)),
+                        ),
+                        _ => (None, None),
                     }
                 };
 
@@ -1100,8 +1103,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Exhaustiveness check: without `..`, all fields must be listed
                 if !has_rest
-                    && let Some(ref sname) = struct_name
-                    && let Some(struct_info) = self.lookup_struct_fields(sname)
+                    && let Some(head) = struct_head
+                    && let Some(struct_info) = self.lookup_struct_fields_of(head)
                 {
                     let total_fields = struct_info.fields.len();
                     if fields.len() != total_fields {
@@ -1744,17 +1747,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Exhaustiveness check
                 if !has_rest {
-                    let struct_name = {
-                        let type_table = self.tysys.type_table.borrow();
-                        match type_table.get(scrutinee_type) {
-                            ResolvedType::Struct { def, type_args } => {
-                                Some(type_table.struct_rendered_name(*def, type_args))
-                            }
-                            _ => None,
-                        }
+                    let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                        ResolvedType::Struct { def, .. } => Some(*def),
+                        _ => None,
                     };
-                    if let Some(ref sname) = struct_name
-                        && let Some(struct_info) = self.lookup_struct_fields(sname)
+                    if let Some(head) = struct_head
+                        && let Some(struct_info) = self.lookup_struct_fields_of(head)
                     {
                         let total_fields = struct_info.fields.len();
                         if fields.len() != total_fields {
