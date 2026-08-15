@@ -155,7 +155,14 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         return FollowArg::NoFollow;
     }
     let mut visiting: List<String> = [];
-    let [deep, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
+    let [deep, consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
+    // Whether the walk reached the end of the suffix. A mask that stops short
+    // says only that the caller's continuation could *start* at this token,
+    // not that the caller can complete; a tail-greedy callee that yields on
+    // that evidence gives up a token the caller then cannot use. Only the
+    // `Mask` branch below cares — `Combined` and `Forward` have the caller's
+    // own runtime follow appended, which carries the check to the end.
+    let covers_suffix = i + 1 + consumed >= elements.len();
     // Effective caller-continuation mask. Prefer the multi-depth deep
     // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
     // `RuleRef` at the suffix head, e.g. `a b?`), fall back to the
@@ -171,6 +178,18 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         mask.push(one_tok);
     }
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
+        // Nothing is appended to this mask at runtime, so it is the whole
+        // check — and it is only evidence that the caller can complete when
+        // it either spans the suffix or opens on an element the caller must
+        // match. A mask that stops short *and* opens on an optional says only
+        // that the caller's continuation could start here, which is what took
+        // the `else` from a nested `if` whose caller also ended in
+        // `('else' block)?`.
+        let mut head_visiting: List<String> = [];
+        let head_nullable = ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting);
+        if head_nullable && !covers_suffix {
+            return FollowArg::NoFollow;
+        }
         if let Some(id) = ctx.intern_follow_mask(&mask) {
             return FollowArg::Mask(id);
         }

@@ -2265,7 +2265,7 @@ fn scan_func_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, &FOLLOW_MASK_5, 0);
+    pos = scan_expression(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
@@ -2626,7 +2626,7 @@ fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let start = p.peek_start();
     let funcname = _parse_funcname(p, &FOLLOW_MASK_4);
     let lparen = p.expect(TK_LPAREN, &SYNC_0);
-    let expression = _parse_expression(p, &FOLLOW_MASK_5);
+    let expression = _parse_expression(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -2845,5 +2845,4 @@ global FOLLOW_MASK_1: List<List<i32>> = [[TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_
 global FOLLOW_MASK_2: List<List<i32>> = [[TK_EOF]];
 global FOLLOW_MASK_3: List<List<i32>> = [[TK_RPAREN]];
 global FOLLOW_MASK_4: List<List<i32>> = [[TK_LPAREN]];
-global FOLLOW_MASK_5: List<List<i32>> = [[TK_COMMA, TK_RPAREN]];
 

@@ -1614,7 +1614,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, &FOLLOW_MASK_1, 0);
+    pos = scan_expression(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
         let sp = pos;
@@ -1755,7 +1755,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let lit_let = p.expect(TK_LIT_LET, &SYNC_0);
     let id = p.expect(TK_ID, &SYNC_1);
     let eq = p.expect(TK_LIT_EQ, &SYNC_2);
-    let expression = _parse_expression(p, &FOLLOW_MASK_1);
+    let expression = _parse_expression(p, &EMPTY_FOLLOW);
     if p.peek_kind() == TK_LIT_ELSE {
         let lit_else = p.expect(TK_LIT_ELSE, &SYNC_3);
         let block = _parse_block(p, follow);
@@ -1949,5 +1949,4 @@ global SYNC_4: List<i32> = [TK_INT];
 global SYNC_5: List<i32> = [TK_LIT_RBRACE];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_ELSE, TK_LIT_SEMI]];
 

@@ -4,18 +4,16 @@
 //! own `('else' block)?`. ANTLR4 resolves a greedy subrule in favour of the
 //! innermost, so `if z { 1 } else { 2 } / 3` is one expression: the `else`
 //! belongs to `ifExpr` and `/ 3` continues the left-recursive chain.
-//! Gale hands the `else` to `stmt` instead, through the runtime caller-FOLLOW
-//! yield gate that `compute_gate_caller_follow` puts on a `?` at a rule's
-//! tail, and then has no rule left for the `/`.
+//! Regression for the runtime caller-FOLLOW yield gate. It fired here on a
+//! 1-deep mask — `stmt`'s own `('else' block)?` halted the mask walk, so all
+//! the mask said was "an `else` could start my continuation" — and `ifExpr`
+//! yielded on that, leaving nothing to parse the `/`.
 //!
-//! The gate is not simply wrong: `driver_cst_ll_basic_test` pins the opposite
-//! resolution for `r : (a b | a) EOF ; a : X Y? ; b : Y ;`, where ANTLR4 does
-//! yield the `Y` to `b`. Greediness is not the discriminator — viability is.
-//! ANTLR4 predicts with full context and keeps the alternative whose *whole*
-//! continuation parses; here taking the `else` at `stmt` strands the `/`,
-//! while in `ll_basic` both readings complete and the lower alt number wins.
-//! Closing this needs the gate to ask whether the caller's continuation
-//! actually completes, not whether its FOLLOW mask admits the token.
+//! Greediness is not the discriminator, viability is:
+//! `driver_cst_ll_basic_test` pins `r : (a b | a) EOF ; a : X Y? ; b : Y ;`,
+//! where ANTLR4 *does* yield the `Y` to `b`. There the mask spans the
+//! caller's whole suffix (`b` then EOF), so it is evidence the caller
+//! completes. A mask that stops short is not, and is no longer threaded.
 //!
 //! `driver_cst_ll_empty_alt_group_test` pins the opposite resolution for the
 //! empty-alt spelling `('else' block |)`, and
@@ -39,7 +37,6 @@ test "the statement claims an else it alone can take" {
     assert_tree(&"let e = 1 else { 2 } ;", &"(prog (stmt let e = (expression 1) else (block { 2 }) ;))");
 }
 
-#[TODO]
 test "the inner if claims the else, and the chain continues" {
     assert_tree(
         &"let e = if z { 1 } else { 2 } / 3 ;",
@@ -47,7 +44,6 @@ test "the inner if claims the else, and the chain continues" {
     );
 }
 
-#[TODO]
 test "the inner if claims the else with nothing after it" {
     assert_tree(
         &"let e = if z { 1 } else { 2 } ;",
@@ -55,7 +51,6 @@ test "the inner if claims the else with nothing after it" {
     );
 }
 
-#[TODO]
 test "two elses: the inner if takes the first, the statement the second" {
     assert_tree(
         &"let e = if z { 1 } else { 2 } else { 3 } ;",
