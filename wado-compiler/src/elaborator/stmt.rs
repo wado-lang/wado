@@ -69,6 +69,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         tail_value: bool,
     ) {
         ctx.enter_scope();
+        // A local item is in scope for the whole block, so the declarations
+        // are resolved ahead of the statements, and the enclosing block's
+        // items are restored on the way out.
+        let items: Vec<&ast::Item> = block
+            .stmts
+            .iter()
+            .filter_map(|s| match s {
+                Stmt::Item(item) => Some(&**item),
+                _ => None,
+            })
+            .collect();
+        let outer_items = (!items.is_empty()).then(|| self.sem.decls.fn_local_items.clone());
+        for item in &items {
+            if let ast::Item::Struct(struct_decl) = item {
+                self.declare_local_struct(struct_decl);
+            }
+        }
+        // A newtype's `TypeId` is its base type's, so it is resolved here
+        // rather than declared. The structs above are already nameable; a base
+        // naming another local newtype takes one round per link of the chain,
+        // and a round that resolves nothing new has reached the fixpoint.
+        let mut pending: Vec<&ast::Newtype> = items
+            .iter()
+            .filter_map(|item| match item {
+                ast::Item::Newtype(newtype_decl) => Some(newtype_decl),
+                _ => None,
+            })
+            .collect();
+        while !pending.is_empty() {
+            let before = pending.len();
+            pending.retain(|newtype_decl| !self.resolve_local_newtype(newtype_decl));
+            if pending.len() == before {
+                break;
+            }
+        }
+        for item in items {
+            self.resolve_local_item(item);
+        }
         let len = block.stmts.len();
         for (i, s) in block.stmts.iter().enumerate() {
             // The trailing statement is resolved in value position when the
@@ -107,6 +145,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             self.resolve_stmt(s, ctx);
         }
+        if let Some(outer) = outer_items {
+            self.sem.decls.fn_local_items = outer;
+        }
         ctx.exit_scope();
     }
 
@@ -137,7 +178,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
-            Stmt::Item(item) => self.resolve_local_item(item),
+            // Already resolved ahead of the block's statements.
+            Stmt::Item(_) => {}
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so there is nothing to record.
             Stmt::Error(_) => {}
@@ -145,14 +187,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a `Stmt::Item` — a declaration inside a function body, scoped to
-    /// that function. Sequential and forward-declaration-required, like `let`. A
-    /// struct or newtype is minted under a mangled `{name}@{AstId}` so sibling
-    /// functions cannot collide in the module's shared tables. The other kinds
-    /// are parsed but not resolved, having no per-`AstId` fact for reify.
+    /// the block that writes it. A struct or newtype is minted under a mangled
+    /// `{name}@{AstId}` so sibling blocks cannot collide in the module's shared
+    /// tables. The other kinds are parsed but not resolved, having no
+    /// per-`AstId` fact for reify.
+    ///
+    /// This is the last of the three hoisting steps `resolve_block` runs, so
+    /// what is left here is the struct field types.
     fn resolve_local_item(&mut self, item: &ast::Item) {
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
-            ast::Item::Newtype(newtype_decl) => self.resolve_local_newtype(newtype_decl),
+            // Already resolved, ahead of the structs' field types.
+            ast::Item::Newtype(_) => {}
             // Parsed but not yet resolved — see the doc comment on
             // `resolve_local_item` above.
             ast::Item::Enum(_)
@@ -179,15 +225,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let module_source = self.current_module_source.clone();
+    /// Give a local struct its identity before any of its block's
+    /// declarations are resolved, so a type may name one written later.
+    fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
+        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
+            return;
+        };
+        // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
+        // generic struct: its usage sites mint separate `GenericInstance`
+        // TypeIds, and this one exists so `type_id_of_decl` has something to
+        // find. The head is the declaration, not the `Foo@AstId` storage
+        // spelling, which names none.
+        let type_id = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_struct(crate::tir::StructDef::Decl(def));
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .register_decl_type(struct_decl.id, type_id);
         let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
+        self.sem.decls.local_item_renders.insert(
+            (mangled_name.clone(), self.current_module_source.clone()),
+            def,
+        );
+        self.sem
+            .decls
+            .fn_local_items
+            .insert(struct_decl.name.clone(), def);
+        // `resolve_named_type` reads a name's arity and identity off its field
+        // info, so the entry exists from here — fieldless until
+        // `resolve_local_struct` fills it in. The type parameters are already
+        // final: they are read off the AST, not resolved.
+        let type_param_type_ids: Vec<TypeId> = struct_decl
+            .type_params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(p.name.clone(), i as u32)
+            })
+            .collect();
+        self.sem.decls.local_item_struct_fields.insert(
+            def,
+            super::types::StructFieldInfo {
+                name: mangled_name,
+                module_source: self.current_module_source.clone(),
+                defined_at: struct_decl.id,
+                fields: Vec::new(),
+                field_ast_ids: Vec::new(),
+                field_defaults: Vec::new(),
+                type_param_bounds: Self::type_param_bounds_of(&struct_decl.type_params),
+                type_param_type_ids,
+            },
+        );
+    }
 
+    fn type_param_bounds_of(
+        params: &[ast::GenericParam],
+    ) -> Vec<(String, Vec<super::types::BoundRef>)> {
+        params
+            .iter()
+            .map(|p| {
+                (
+                    p.name.clone(),
+                    p.bounds
+                        .iter()
+                        .map(|b| super::types::BoundRef {
+                            name: b.name.clone(),
+                            site: b.id,
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         // Generic local structs need `T` etc. in scope while resolving field
         // types (so a field of type `T` becomes a `TypeParam`, not
         // `UNKNOWN`), mirroring `resolve_struct`'s top-level handling. The
         // scope is entered unconditionally — harmless no-op when there are
-        // no type params — and dropped before the type is registered below.
+        // no type params.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
@@ -205,79 +327,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
         }
-        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> = struct_decl
-            .type_params
-            .iter()
-            .map(|p| {
-                (
-                    p.name.clone(),
-                    p.bounds
-                        .iter()
-                        .map(|b| super::types::BoundRef {
-                            name: b.name.clone(),
-                            site: b.id,
-                        })
-                        .collect(),
-                )
-            })
-            .collect();
-        let type_param_type_ids: Vec<TypeId> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                scope
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(p.name.clone(), i as u32)
-            })
-            .collect();
         drop(scope);
 
-        // Register a `TypeId` for the declaration itself, generic or not —
-        // mirrors `intern_all_decl_types`'s "base entry" for a module-level
-        // generic struct (its own usage sites mint separate
-        // `GenericInstance` TypeIds; this one exists so bare-name lookups
-        // like `type_id_of_decl` have something to find).
-        // A local item is a declaration with an identity of its own, so the
-        // head is that declaration — not the `Foo@AstId` storage spelling,
-        // which names none.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
             return;
         };
-        let type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_struct(crate::tir::StructDef::Decl(def));
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .register_decl_type(struct_decl.id, type_id);
-
-        let info = super::types::StructFieldInfo {
-            name: mangled_name,
-            module_source,
-            defined_at: struct_decl.id,
-            fields,
-            field_ast_ids,
-            field_defaults,
-            type_param_bounds,
-            type_param_type_ids,
-        };
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
+        let Some(info) = self.sem.decls.local_item_struct_fields.get_mut(&def) else {
             return;
         };
-        self.sem
-            .decls
-            .local_item_renders
-            .insert((info.name.clone(), info.module_source.clone()), def);
-        self.sem.decls.local_item_struct_fields.insert(def, info);
-        self.sem
-            .decls
-            .fn_local_items
-            .insert(struct_decl.name.clone(), def);
+        info.fields = fields;
+        info.field_ast_ids = field_ast_ids;
+        info.field_defaults = field_defaults;
         // Local structs have no `Item::Struct` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // statement handling (`reify_local_struct`) is what discovers and
@@ -286,7 +346,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
+    /// Resolve a local newtype, reporting whether its base type came out
+    /// known. A base naming another local newtype needs that one resolved
+    /// first, which is what the caller's fixpoint delivers.
+    fn resolve_local_newtype(&mut self, newtype_decl: &ast::Newtype) -> bool {
         if !newtype_decl.type_params.is_empty() {
             // Generic local newtypes (`type Wrapper<T> = List<T>;`) are a
             // follow-up, unlike generic local structs (see
@@ -296,13 +359,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // rather than a `TirStruct` template the monomorphizer expands)
             // that this WEP hasn't wired up. Left unresolved — a reference
             // still surfaces the ordinary "unknown type" error.
-            return;
+            return true;
         }
         let base_type_id = self.resolve_type(&newtype_decl.ty);
         let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         // Same as the local struct: the head is this declaration's identity.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return;
+            return true;
         };
         let type_id = self
             .tysys
@@ -319,15 +382,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // discoverable post-declaration the same way struct field info is
         // (see `resolve_local_struct`).
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return;
+            return true;
         };
         self.sem
             .decls
             .local_item_renders
             .insert((mangled_name, self.current_module_source.clone()), def);
         self.sem.decls.local_item_newtypes.insert(def, type_id);
-        // The walk's position — visible only for the remainder of this
-        // function's own annotate walk.
         self.sem
             .decls
             .fn_local_items
@@ -337,6 +398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // handling (`reify_local_newtype`) discovers and builds this
         // declaration's `TirNewtype`, from the `local_newtypes` entry just
         // recorded above.
+        base_type_id != crate::tir::TypeTable::UNKNOWN
     }
 
     pub(super) fn resolve_labeled_block(

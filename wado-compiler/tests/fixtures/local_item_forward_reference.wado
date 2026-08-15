@@ -1,0 +1,16 @@
+// A local item is in scope for the whole block that declares it, so a use
+// may precede the declaration statement. Unlike `let`, an item does not
+// resolve sequentially.
+
+fn run() -> i32 {
+    let p = Point { x: 1, y: 2 };
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    return p.x + p.y;
+}
+
+test "a local item is visible before its own declaration statement" {
+    assert run() == 3;
+}

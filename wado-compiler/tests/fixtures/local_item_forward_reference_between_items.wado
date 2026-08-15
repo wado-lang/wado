@@ -1,0 +1,28 @@
+// Local items are hoisted as a group, so one may name another declared later
+// in the same block — a struct naming a later struct or newtype, and a
+// newtype naming a later newtype.
+
+fn structs() -> i32 {
+    struct Outer {
+        inner: Inner,
+    }
+    struct Inner {
+        v: i32,
+    }
+    let o = Outer { inner: Inner { v: 7 } };
+    return o.inner.v;
+}
+
+test "a local struct may name a struct declared later in the same block" {
+    assert structs() == 7;
+}
+
+test "a local struct field may name a newtype chain declared later" {
+    struct Holder {
+        v: Alias,
+    }
+    type Alias = Underlying;
+    type Underlying = i32;
+    let h = Holder { v: 9 };
+    assert h.v == 9;
+}

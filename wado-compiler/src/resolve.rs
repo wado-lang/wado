@@ -475,30 +475,20 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(&func.type_params, None, |s| ast::walk_function(s, func));
     }
 
-    /// A local item outlives the block that declares it — `struct Point` in a
-    /// match arm is nameable for the rest of the function — so a closing block
-    /// hands its scope to the enclosing one.
+    /// A block's local items are in scope for the whole of it, wherever they
+    /// are written, and for none of it once it closes.
     fn visit_block(&mut self, block: &ast::Block) {
-        self.locals.push(IndexMap::default());
-        ast::walk_block(self, block);
-        let inner = self.locals.pop().unwrap_or_default();
-        if let Some(parent) = self.locals.last_mut() {
-            parent.extend(inner);
-        }
-    }
-
-    /// A local item comes into scope at its own declaration, so it is recorded
-    /// before the rest of the block is walked and after everything before it.
-    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
-        if let ast::Stmt::Item(item) = stmt
-            && let Some(def) = self.defs.of_ast_id(item.id())
-        {
-            let name = self.defs.name(def).to_string();
-            if let Some(scope) = self.locals.last_mut() {
-                scope.insert(name, def);
+        let mut scope = IndexMap::default();
+        for stmt in &block.stmts {
+            if let ast::Stmt::Item(item) = stmt
+                && let Some(def) = self.defs.of_ast_id(item.id())
+            {
+                scope.insert(self.defs.name(def).to_string(), def);
             }
         }
-        ast::walk_stmt(self, stmt);
+        self.locals.push(scope);
+        ast::walk_block(self, block);
+        self.locals.pop();
     }
 
     fn visit_generic_params(&mut self, params: &[GenericParam]) {

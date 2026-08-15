@@ -2129,12 +2129,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Local item declarations (`Stmt::Item`) are not in `known_type_names`
         // (a module-wide set built before any function body is walked), so a
         // reference to one would otherwise fail this fast pre-check before
-        // the real elaborator (which understands sequential, function-scoped
-        // visibility) ever runs. Widen the set with every local item name
-        // reachable from this block, recursively — a coarse over-approximation
-        // (it does not enforce forward-declaration order; the real elaborator
-        // still does) is fine here: this pass only exists to fail fast on
-        // *genuinely* unknown names.
+        // the real elaborator (which understands block-scoped visibility) ever
+        // runs. Widen the set with every local item name reachable from this
+        // block, recursively — a coarse over-approximation (it does not
+        // enforce block scoping; the real elaborator still does) is fine here:
+        // this pass only exists to fail fast on *genuinely* unknown names.
         let local_item_names = Self::collect_local_item_names(block);
         let widened;
         let known_type_names = if local_item_names.is_empty() {
