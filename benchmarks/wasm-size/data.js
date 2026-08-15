@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786751488609,
+  "lastUpdate": 1786756034747,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -47983,6 +47983,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 6029,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e8e4c49b6fddbd0eb684c37e292a967a7ed1733",
+          "message": "Merge pull request #1810 from wado-lang/claude/fpfmt-fuse-output-reservation\n\nperf(fpfmt): reserve each writer's whole output once and fill it in place",
+          "timestamp": "2026-08-15T09:55:07+09:00",
+          "tree_id": "d5a97ab9153c0255463bde7f2f27509e615eb627",
+          "url": "https://github.com/wado-lang/wado/commit/6e8e4c49b6fddbd0eb684c37e292a967a7ed1733"
+        },
+        "date": 1786756033910,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
             "unit": "bytes"
           },
           {
