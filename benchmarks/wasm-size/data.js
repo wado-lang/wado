@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786809610464,
+  "lastUpdate": 1786823878663,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48325,6 +48325,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9789cb43f015c7df3f8fee8e1cc4667c4d74ab2d"
         },
         "date": 1786809609690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cc1881af386c1edb2168eb820ad19bdedbd54172",
+          "message": "Merge pull request #1821 from wado-lang/claude/wado-compiler-codegen-smell-p1brbd\n\nfix(codegen): ICE on an unresolvable index instead of emitting wrong code",
+          "timestamp": "2026-08-16T04:45:58+09:00",
+          "tree_id": "5a70b38f7ecb232d5bf53ebc5bc14b5a4ee15712",
+          "url": "https://github.com/wado-lang/wado/commit/cc1881af386c1edb2168eb820ad19bdedbd54172"
+        },
+        "date": 1786823877932,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
