@@ -169,43 +169,28 @@ fn pow10_coarse(i: i32) -> PmHiLo {
     };
 }
 
+// The fine factors are an indexed load, not a `match`: the jump table a 27-arm
+// match lowers to costs an unpredictable indirect branch on the hot path.
+global POW10_FINE: List<u64> = [
+    0x8000000000000000, 0xa000000000000000, 0xc800000000000000, 0xfa00000000000000, 0x9c40000000000000,
+    0xc350000000000000, 0xf424000000000000, 0x9896800000000000, 0xbebc200000000000, 0xee6b280000000000,
+    0x9502f90000000000, 0xba43b74000000000, 0xe8d4a51000000000, 0x9184e72a00000000, 0xb5e620f480000000,
+    0xe35fa931a0000000, 0x8e1bc9bf04000000, 0xb1a2bc2ec5000000, 0xde0b6b3a76400000, 0x8ac7230489e80000,
+    0xad78ebc5ac620000, 0xd8d726b7177a8000, 0x878678326eac9000, 0xa968163f0a57b400, 0xd3c21bcecceda100,
+    0x84595161401484a0, 0xa56fa5b99019a5c8,
+];
+
 fn pow10_fine(i: i32) -> u64 {
-    return match i {
-        0 => 0x8000000000000000,
-        1 => 0xa000000000000000,
-        2 => 0xc800000000000000,
-        3 => 0xfa00000000000000,
-        4 => 0x9c40000000000000,
-        5 => 0xc350000000000000,
-        6 => 0xf424000000000000,
-        7 => 0x9896800000000000,
-        8 => 0xbebc200000000000,
-        9 => 0xee6b280000000000,
-        10 => 0x9502f90000000000,
-        11 => 0xba43b74000000000,
-        12 => 0xe8d4a51000000000,
-        13 => 0x9184e72a00000000,
-        14 => 0xb5e620f480000000,
-        15 => 0xe35fa931a0000000,
-        16 => 0x8e1bc9bf04000000,
-        17 => 0xb1a2bc2ec5000000,
-        18 => 0xde0b6b3a76400000,
-        19 => 0x8ac7230489e80000,
-        20 => 0xad78ebc5ac620000,
-        21 => 0xd8d726b7177a8000,
-        22 => 0x878678326eac9000,
-        23 => 0xa968163f0a57b400,
-        24 => 0xd3c21bcecceda100,
-        25 => 0x84595161401484a0,
-        26 => 0xa56fa5b99019a5c8,
-        _ => unreachable(),
-    };
+    return POW10_FINE[i];
 }
+
+// Coarse/fine split of the pow10 decomposition; see mul_pow10.
+global POW10_K: i32 = 27;
 
 // mul_pow10 computes the PmHiLo representation of 10^p by decomposing
 // p = q*K + r (where K=27) and multiplying coarse[q] * fine[r].
-fn mul_pow10(p: i32) -> PmHiLo {
-    let K = 27;
+pub fn mul_pow10(p: i32) -> PmHiLo {
+    let K = POW10_K;
     let Q_MIN = -13;
 
     // Euclidean division: q and r such that p = q*K + r, 0 <= r < K
@@ -264,6 +249,12 @@ fn mul_pow10(p: i32) -> PmHiLo {
 }
 
 pub fn get_pow10(p: i32) -> PmHiLo {
+    // For 0 <= p < K the coarse factor is 10^0, so mul_pow10's 128-bit product
+    // reduces to the fine entry itself. Formatting a value with a precision
+    // takes this path twice per conversion, so the shortcut is the hot one.
+    if p >= 0 && p < POW10_K {
+        return PmHiLo { hi: pow10_fine(p), lo: 0 };
+    }
     return mul_pow10(p);
 }
 
@@ -578,15 +569,19 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     }
 }
 
-// Pre-fill n characters of '0' into buf using array.fill (fast bulk operation)
-fn fill_zeros(buf: &mut String, n: i32) {
-    buf.append_byte_filled(b'0', n);
+// Fill n bytes of '0' at `offset`. The span must already be reserved.
+fn zeros_at(buf: &mut String, offset: i32, n: i32) {
+    if n <= 0 {
+        return;
+    }
+    let raw = buf.internal_raw_bytes_mut();
+    builtin::array_fill(raw, offset, b'0', n);
 }
 
 // Reserve n uninitialized bytes at the end and return their start offset.
-// Used where the reserved span is written in full right after (write_digits_at,
-// then the decimal-point shift) — skipping the '0' fill fill_zeros would do
-// only for it to be immediately overwritten.
+// Every writer below reserves its whole output in one call and then fills the
+// span in place: a reserve per fragment costs a capacity check and a non-inlined
+// call each, and the no-op fills (a zero-length run) are the common case.
 fn reserve_uninit(buf: &mut String, n: i32) -> i32 {
     return buf.internal_reserve_uninit(n);
 }
@@ -597,15 +592,17 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
 
     if decimal_pos <= 0 {
         // Need leading zeros: 0.00...digits
-        buf.push_str(&"0.");
-        fill_zeros(buf, -decimal_pos);
-        let digit_offset = reserve_uninit(buf, nd);
-        write_digits_at(buf, digit_offset, d, nd);
+        let leading = -decimal_pos;
+        let start = reserve_uninit(buf, 2 + leading + nd);
+        buf.set_byte_unchecked(start, b'0');
+        buf.set_byte_unchecked(start + 1, b'.');
+        zeros_at(buf, start + 2, leading);
+        write_digits_at(buf, start + 2 + leading, d, nd);
     } else if decimal_pos >= nd {
         // Integer with trailing zeros: digits000...
-        let start = reserve_uninit(buf, nd);
+        let start = reserve_uninit(buf, decimal_pos);
         write_digits_at(buf, start, d, nd);
-        fill_zeros(buf, decimal_pos - nd);
+        zeros_at(buf, start + nd, decimal_pos - nd);
     } else {
         // Decimal point in the middle: dig.its
         let start = reserve_uninit(buf, nd + 1);
@@ -692,31 +689,34 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             buf.push_str(&"0");
             return;
         }
-        buf.push_str(&"0.");
+        // "0." plus exactly `precision` fractional bytes.
+        let start = reserve_uninit(buf, 2 + precision);
+        buf.set_byte_unchecked(start, b'0');
+        buf.set_byte_unchecked(start + 1, b'.');
+        let frac = start + 2;
         if precision <= leading_zeros {
-            fill_zeros(buf, precision);
+            zeros_at(buf, frac, precision);
             return;
         }
-        fill_zeros(buf, leading_zeros);
+        zeros_at(buf, frac, leading_zeros);
         let remaining_prec = precision - leading_zeros;
         let digits_to_output = if remaining_prec < nd { remaining_prec } else { nd };
-        let trailing = precision - leading_zeros - digits_to_output;
         let mut trim_d = d;
         let mut skip = nd - digits_to_output;
         while skip > 0 {
             trim_d = trim_d / 10;
             skip = skip - 1;
         }
-        let digit_offset = reserve_uninit(buf, digits_to_output);
-        write_digits_at(buf, digit_offset, trim_d, digits_to_output);
-        fill_zeros(buf, trailing);
+        write_digits_at(buf, frac + leading_zeros, trim_d, digits_to_output);
+        zeros_at(buf, frac + leading_zeros + digits_to_output, remaining_prec - digits_to_output);
     } else if decimal_pos >= nd {
-        let start = reserve_uninit(buf, nd);
+        let point = if precision > 0 { 1 + precision } else { 0 };
+        let start = reserve_uninit(buf, decimal_pos + point);
         write_digits_at(buf, start, d, nd);
-        fill_zeros(buf, decimal_pos - nd);
+        zeros_at(buf, start + nd, decimal_pos - nd);
         if precision > 0 {
-            buf.push_str(&".");
-            fill_zeros(buf, precision);
+            buf.set_byte_unchecked(start + decimal_pos, b'.');
+            zeros_at(buf, start + decimal_pos + 1, precision);
         }
     } else {
         let after_decimal = nd - decimal_pos;
@@ -736,12 +736,12 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             return;
         }
         let trailing = precision - after_decimal;
-        let start = reserve_uninit(buf, nd + 1);
+        let start = reserve_uninit(buf, nd + 1 + trailing);
         write_digits_at(buf, start, d, nd);
         let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
         buf.set_byte_unchecked(start + decimal_pos, b'.');
-        fill_zeros(buf, trailing);
+        zeros_at(buf, start + nd + 1, trailing);
     }
 }
 
@@ -765,7 +765,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         let to_output = if precision < available { precision } else { available };
         let trailing = precision - to_output;
         let digit_count = 1 + to_output;
-        let start = reserve_uninit(buf, digit_count + 1);
+        let start = reserve_uninit(buf, digit_count + 1 + trailing);
         let mut trim_d = d;
         let mut skip = nd - digit_count;
         while skip > 0 {
@@ -776,7 +776,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + 2, raw, start + 1, digit_count - 1);
         buf.set_byte_unchecked(start + 1, b'.');
-        fill_zeros(buf, trailing);
+        zeros_at(buf, start + digit_count + 1, trailing);
     } else {
         let start = reserve_uninit(buf, 1);
         let mut first_d = d;
