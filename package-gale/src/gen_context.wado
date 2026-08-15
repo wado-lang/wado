@@ -789,7 +789,11 @@ impl GenContext {
         for let elem of &alt.elements {
             let elem_first = self.first_of_element_at(elem, visiting, min_cycle);
             append_ids(&mut result, &mut seen, &elem_first);
-            if !is_nullable(elem) {
+            // Deep nullability, on its own visiting stack: a `RuleRef` to a
+            // rule that derives nothing (`mods : 'pub'?`) is nullable, and
+            // FIRST has to reach past it to the element that follows.
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nv) {
                 break;
             }
         }
@@ -809,7 +813,8 @@ impl GenContext {
             let mut visiting: List<String> = [];
             let elem_first = self.first_ids_of_element(&elements[i], &mut visiting);
             append_ids(&mut result, &mut seen, &elem_first);
-            if !is_nullable(&elements[i]) {
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut nv) {
                 break;
             }
         }

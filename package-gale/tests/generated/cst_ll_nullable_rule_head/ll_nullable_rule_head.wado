@@ -1555,7 +1555,7 @@ fn scan_member(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 break scan_alts;
             }
             return -1;
-        } else if alt_kind == TK_LIT_PUB {
+        } else if _kind_set_1(alt_kind) {
             pos = start;
             try_1: {
                 pos = scan_fn_decl(tokens, pos, follow, 0);
@@ -1647,14 +1647,14 @@ fn _parse_member__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let semicolon = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
         return;
     }
-    if kind == TK_LIT_PUB {
+    if _kind_set_1(kind) {
         let fn_decl = _parse_fn_decl(p, follow);
         return;
     }
     p.no_viable(
         "no alternative of member matches",
         p.peek_span(),
-        [token_kind_name(TK_LIT_TYPE), token_kind_name(TK_LIT_PUB)],
+        [token_kind_name(TK_LIT_TYPE), token_kind_name(TK_LIT_PUB), token_kind_name(TK_LIT_FN)],
     );
     return;
 }
@@ -1774,7 +1774,11 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_PUB | TK_LIT_TYPE };
+    return k matches { TK_LIT_FN | TK_LIT_PUB | TK_LIT_TYPE };
+}
+
+fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_LIT_FN | TK_LIT_PUB };
 }
 
 global EMPTY_SYNC: List<i32> = [];
