@@ -63,6 +63,7 @@ There is no value-copy _elision_ pass: defensive copies are chosen at the lower 
 Variant and reference:
 
 - `labeled_block_fusion` — delete the intermediate an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields. Recognises the `Option`/`Result` and the `[tag, slots…]` `sroa_variant_return` leaves in its place.
+- `slot_temp_sroa` — decompose the `[tag, slots…]` temp an inlined helper leaves where fusion cannot relocate the consumer into the block, as in the value-producing `let x = f()?`. Each projected slot gets a local declared ahead of the block, so its definition dominates every read, and the exits assign it instead of building the tuple.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
 
 Scalar and dataflow:
