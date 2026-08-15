@@ -252,6 +252,22 @@ internal struct WaitEvent {
     pub payload: u32,
 }
 
+/// `WaitEvent::code` for a subtask transition (CM `EventCode.SUBTASK`).
+internal global CM_EVENT_SUBTASK: i32 = 1;
+
+/// The last in-flight state of the CM subtask state machine. `STARTING` and
+/// `STARTED` precede it; `RETURNED`, `CANCELLED_BEFORE_STARTED` and
+/// `CANCELLED_BEFORE_RETURNED` are the terminal states above it. A wait that
+/// resumes only on `RETURNED` spins forever on either cancelled state.
+internal global CM_SUBTASK_STARTED: u32 = 1;
+
+/// True once `event` says the subtask it names is no longer in flight — it
+/// reached a terminal state, or the waiting task itself was cancelled and no
+/// further subtask transition will arrive.
+internal fn cm_subtask_settled(event: WaitEvent) -> bool {
+    return event.code != CM_EVENT_SUBTASK || event.payload > CM_SUBTASK_STARTED;
+}
+
 /// A set of waitable handles used for async task coordination.
 ///
 /// Lifecycle: create with `new()`, join waitables into the set, wait/poll for
@@ -360,9 +376,7 @@ impl AsyncCall<T> {
             raw.join(&ws);
             loop {
                 let event = ws.wait();
-                // `wait` delivers Starting (0) → Started (1) → Returned (2).
-                // Loop until the subtask reaches Returned.
-                if event.payload == 2 {
+                if cm_subtask_settled(event) {
                     break;
                 }
             }
