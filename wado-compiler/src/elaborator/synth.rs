@@ -1004,10 +1004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .lookup_struct_fields_in(&decl, &module)
             .is_some_and(|info| !info.type_param_type_ids.is_empty());
         if generic {
-            return ArgClass::Head(FqTypeName::of_head(
-                &module,
-                &self.decl_render_name(def),
-            ));
+            return ArgClass::Head(FqTypeName::of_head(&module, &self.decl_render_name(def)));
         }
         let found = self
             .tysys
@@ -1018,10 +1015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.class_of_type(type_id);
         }
         if self.tysys.is_known_type_name(&decl) {
-            return ArgClass::Head(FqTypeName::of_head(
-                &module,
-                &self.decl_render_name(def),
-            ));
+            return ArgClass::Head(FqTypeName::of_head(&module, &self.decl_render_name(def)));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
     }

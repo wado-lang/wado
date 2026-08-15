@@ -1427,7 +1427,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if let Some(key) = self.type_decl_key(current) {
                 let defs = self.tysys.resolutions.defs();
                 let rendered = self.decl_render_name(key);
-                if defs.name(key) == impl_name
+                if rendered == impl_name
                     || crate::name::FqTypeName::declared(defs.module(key), &rendered).to_mangled()
                         == impl_name
                 {
@@ -1628,10 +1628,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(owner) = self.decl_key_or_local(&type_name) else {
                 continue;
             };
-            self.sem.decls.associated_constants.insert(
-                (owner, const_name),
-                (module_source.clone(), type_id, value),
-            );
+            self.sem
+                .decls
+                .associated_constants
+                .insert((owner, const_name), (module_source.clone(), type_id, value));
         }
 
         // Must stay in the decl pass: `Signatures` is assembled once every

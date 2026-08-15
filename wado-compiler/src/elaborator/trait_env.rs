@@ -197,10 +197,7 @@ pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<(ModuleSource, AstI
 
 type ReceiverImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
 
-fn index_by_receiver(
-    index: &TraitImplIndex,
-    defs: &crate::defs::DefTable,
-) -> ReceiverImplIndex {
+fn index_by_receiver(index: &TraitImplIndex, defs: &crate::defs::DefTable) -> ReceiverImplIndex {
     let mut out: ReceiverImplIndex = IndexMap::default();
     for (key, entries) in index {
         out.entry(key.receiver(defs))
@@ -276,9 +273,9 @@ impl ImplHeader {
                 name::FqTraitName::declared(defs, *def).with_args(written_type_args(trait_type)),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
-            ImplTargetKey::Ref(_)
-            | ImplTargetKey::Builtin(_)
-            | ImplTargetKey::Undeclared(..) => None,
+            ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
+                None
+            }
         }
     }
 }
@@ -499,8 +496,9 @@ pub(super) struct TraitDeclHeader {
     pub(super) span: Span,
 }
 
-/// Pre-built index: `(declaring module, trait name)` → (`ModuleSource`, `AstId`)
-/// for trait declarations.
+/// Every `trait` declaration in the program. Membership is the question — is
+/// this declaration a trait? — and the declaration is its own answer, so there
+/// is nothing to store beside it.
 pub(super) type TraitDeclIndex = IndexSet<DefId>;
 
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
@@ -517,15 +515,13 @@ pub(super) struct InheritedBound {
 /// `Eq`.
 pub(super) type SupertraitClosureIndex = IndexMap<DefId, Vec<InheritedBound>>;
 
-/// Pre-built index: `(declaring module, effect name)` → (`ModuleSource`,
-/// `AstId`) for effect declarations. Effects are first-class citizens distinct
+/// Every `interface` declaration. Effects are first-class citizens distinct
 /// from traits and have their own impl form (`impl Effect for Type`)
 /// interpreted as installable handlers, so the elaborator and dispatch
 /// synthesis need to distinguish them quickly.
 pub(super) type EffectDeclIndex = IndexSet<DefId>;
 
-/// Pre-built index: `(declaring module, resource name)` → (`ModuleSource`,
-/// `AstId`) for resource declarations. Resources participate in
+/// Every `resource` declaration. Resources participate in
 /// `with R => h do` / `impl R for Type` exactly like effects (see WEP
 /// 2026-04-11): both kinds of declaration carry a list of operations that
 /// user handler implementations satisfy and that the dispatch-synthesis
@@ -889,9 +885,9 @@ impl TraitEnv {
             IndexMap::default();
         let mut struct_like_decl_modules: IndexMap<String, Vec<DefId>> = IndexMap::default();
         let mut newtype_decl_modules: IndexMap<String, Vec<DefId>> = IndexMap::default();
-        // (declaring module, type name) → module source, for orphan rule
-        // "is this type local?" checks. Keyed by canonical decl key so
-        // two modules can declare a same-named type without colliding.
+        // Every type declaration, for the orphan rule's "does this package own
+        // it?" check. A declaration, so a user type shadowing a stdlib name
+        // cannot vouch for the stdlib type it shadows.
         let mut type_decl_index: IndexSet<DefId> = IndexSet::default();
 
         let mut static_method_index: StaticMethodIndex = IndexMap::default();
@@ -933,9 +929,7 @@ impl TraitEnv {
                         };
                         resource_decl_index.insert(resource_key);
                         // Index static methods from resource declarations.
-                        // The resource declaration itself is the canonical
-                        // receiver, so key by the declaration's own
-                        // `(module, name)` pair.
+                        // The resource declaration itself is the receiver.
                         for (method_idx, method) in resource.methods.iter().enumerate() {
                             let has_self = method.params.iter().any(|p| {
                                 matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
@@ -1107,28 +1101,26 @@ impl TraitEnv {
                     // resolves through the symbol table, which holds no entry
                     // for a trait, so a module implementing its own `trait Sub`
                     // fell through to `core:prelude`'s arithmetic one.
-                    trait_ref
-                        .map(ImplTargetKey::Decl)
-                        .unwrap_or_else(|| {
-                            // A trait position whose site names no declaration
-                            // — a bodiless derive naming a stdlib trait the
-                            // module never `use`d. The declaration indexes are
-                            // the only thing that can answer, and they decline
-                            // when several modules declare the name. Same chain
-                            // as `Elaborator::decl_key_or_local`, so the header
-                            // and the elaborator key the trait identically.
-                            unique_declared_trait(
-                                defs,
-                                &get_type_name_static(trait_type),
-                                &decl_index,
-                                &effect_decl_index,
-                                &resource_decl_index,
-                            )
-                            .map_or_else(
-                                || impl_target_key_at(trait_type, module_source, resolutions),
-                                ImplTargetKey::Decl,
-                            )
-                        })
+                    trait_ref.map(ImplTargetKey::Decl).unwrap_or_else(|| {
+                        // A trait position whose site names no declaration
+                        // — a bodiless derive naming a stdlib trait the
+                        // module never `use`d. The declaration indexes are
+                        // the only thing that can answer, and they decline
+                        // when several modules declare the name. Same chain
+                        // as `Elaborator::decl_key_or_local`, so the header
+                        // and the elaborator key the trait identically.
+                        unique_declared_trait(
+                            defs,
+                            &get_type_name_static(trait_type),
+                            &decl_index,
+                            &effect_decl_index,
+                            &resource_decl_index,
+                        )
+                        .map_or_else(
+                            || impl_target_key_at(trait_type, module_source, resolutions),
+                            ImplTargetKey::Decl,
+                        )
+                    })
                 });
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
@@ -1483,22 +1475,20 @@ impl TraitEnv {
             .any(|entry| self.methodful_header_matches(entry, trait_))
     }
 
-    /// Receiver-matched form of [`Self::has_methodful_impl`].
-    /// The trait declaration a `(module, name)` key names.
-    ///
-    /// The index already holds the declaring node, so this is a rendering of
-    /// what the key means rather than a second resolution of the name. For the
-    /// passes that still carry `crate::defs::DefId`s.
+    /// `key` itself when it declares a trait, else `None` — the question the
+    /// callers actually ask, phrased as the identity they then compare.
     pub(crate) fn trait_def(&self, key: &DefId) -> Option<crate::defs::DefId> {
         self.decl_index.contains(key).then_some(*key)
     }
 
-    /// The trait an [`crate::name::FqTraitName`] names, for the passes that
-    /// carry one rather than an identity.
+    /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
+    /// declaration.
     pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<crate::defs::DefId> {
         self.trait_def(&fq.canonical()?)
     }
 
+    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to the impls
+    /// `module_source` itself writes.
     pub(crate) fn has_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
@@ -1752,9 +1742,8 @@ fn impl_target_key_at(
     module_source: &ModuleSource,
     resolutions: &crate::resolve::Resolutions,
 ) -> ImplTargetKey {
-    sited_impl_target_key(ty, module_source, resolutions).unwrap_or_else(|| {
-        ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty))
-    })
+    sited_impl_target_key(ty, module_source, resolutions)
+        .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
 
 /// The one trait declaration named `name`, else the one effect or resource —
@@ -1773,7 +1762,10 @@ fn unique_declared_trait(
         let first = hits.next()?;
         hits.next().is_none().then_some(*first)
     };
-    unique(Box::new(decls.iter().filter(|key| defs.name(**key) == name))).or_else(|| {
+    unique(Box::new(
+        decls.iter().filter(|key| defs.name(**key) == name),
+    ))
+    .or_else(|| {
         unique(Box::new(
             effects
                 .iter()
@@ -2620,10 +2612,7 @@ mod tests {
             Mutex::new(None);
         let mut guard = DECLS.lock().unwrap();
         let (defs, seen) = guard.get_or_insert_with(Default::default);
-        if let Some((.., def)) = seen
-            .iter()
-            .find(|(m, n, _)| m == module && n == name)
-        {
+        if let Some((.., def)) = seen.iter().find(|(m, n, _)| m == module && n == name) {
             return *def;
         }
         let def = defs.declare_for_test(module, name, crate::defs::DefKind::Struct);

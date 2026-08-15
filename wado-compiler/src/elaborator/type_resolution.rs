@@ -141,7 +141,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(param_name)
             .into_iter()
             .flatten()
-            .filter(|bound| self.trait_assoc_type_decl(&bound.name, assoc_name).is_some())
+            .filter(|bound| {
+                self.trait_assoc_type_decl(&bound.name, assoc_name)
+                    .is_some()
+            })
             // The bound's own reference site says which trait it names, so an
             // aliased bound and another module's same-named trait stay apart.
             .find_map(|bound| self.trait_decl_at(bound.id, &bound.name))

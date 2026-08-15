@@ -395,8 +395,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.trait_env.effect_decl_index.contains(key)
                     || self.tysys.trait_env.resource_decl_index.contains(key)
             });
-            let Some(decl_module) = decl_module
-                .map(|key| self.tysys.resolutions.defs().module(key).clone())
+            let Some(decl_module) =
+                decl_module.map(|key| self.tysys.resolutions.defs().module(key).clone())
             else {
                 continue;
             };

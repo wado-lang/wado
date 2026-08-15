@@ -2387,14 +2387,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, Some(d)) => (Some(d), true),
                 (None, None) => (None, false),
             };
-            let async_op = decl_ref.map(|key| scope.tysys.resolutions.defs().ast_id(key)).and_then(|decl_id| {
-                scope
-                    .tysys
-                    .signatures
-                    .resource_method_sig(decl_id, &func.name)
-                    .filter(|op| op.is_async)
-                    .map(|op| op.cm_name.is_some())
-            });
+            let async_op = decl_ref
+                .map(|key| scope.tysys.resolutions.defs().ast_id(key))
+                .and_then(|decl_id| {
+                    scope
+                        .tysys
+                        .signatures
+                        .resource_method_sig(decl_id, &func.name)
+                        .filter(|op| op.is_async)
+                        .map(|op| op.cm_name.is_some())
+                });
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {

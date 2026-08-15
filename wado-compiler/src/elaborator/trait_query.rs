@@ -1535,10 +1535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// its declared name and resolving that again is what broke an aliased
     /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
     /// second resolution found nothing.
-    pub(super) fn trait_sig_of(
-        &self,
-        key: &crate::defs::DefId,
-    ) -> Option<&super::sig::TraitSig> {
+    pub(super) fn trait_sig_of(&self, key: &crate::defs::DefId) -> Option<&super::sig::TraitSig> {
         if !self.tysys.trait_env.decl_index.contains(key) {
             return None;
         }

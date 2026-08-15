@@ -1286,9 +1286,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         Some(crate::tir::TirImpl {
-            trait_canonical: facts.trait_name.as_ref().and_then(|fq| {
-                Some((fq.module()?.clone(), fq.base_name().to_string()))
-            }),
+            trait_canonical: facts
+                .trait_name
+                .as_ref()
+                .and_then(|fq| Some((fq.module()?.clone(), fq.base_name().to_string()))),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest,

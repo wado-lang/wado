@@ -2710,9 +2710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_table
                             .borrow()
                             .nominal_def(current_type)
-                            .map(|def| {
-                                ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
-                            });
+                            .map(|def| ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def));
                     }
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {

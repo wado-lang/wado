@@ -2363,6 +2363,14 @@ pub struct FqTypeName {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeHead {
     /// A declaration, named by the module that declares it.
+    ///
+    /// The trait side of this pair is already a [`DeclaredHead`], whose
+    /// equality reads the declaration. Here equality is still name equality
+    /// within a module, which holds only because two same-named declarations
+    /// *render* differently — `mangle_local_item_name`'s suffix, a convention
+    /// every minting site keeps rather than a property of the key. Carrying a
+    /// `DefId` is the step that retires it; see
+    /// `docs/wep-2026-08-12-declaration-identity.md`.
     Declared {
         module: crate::module_source::ModuleSource,
         name: String,

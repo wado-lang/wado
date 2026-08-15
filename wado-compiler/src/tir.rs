@@ -2407,7 +2407,6 @@ impl TypeTable {
         self.resolve_assoc_type(concrete_id, assoc_name)
     }
 
-
     /// Resolve an associated type named `assoc_name` on `concrete_id`
     /// without naming a trait.
     ///

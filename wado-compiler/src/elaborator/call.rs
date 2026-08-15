@@ -1613,7 +1613,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let canonical_key = self.decl_key_or_local(effect)?;
-        if !self.tysys.trait_env.effect_decl_index.contains(&canonical_key)
+        if !self
+            .tysys
+            .trait_env
+            .effect_decl_index
+            .contains(&canonical_key)
             && !self
                 .tysys
                 .trait_env

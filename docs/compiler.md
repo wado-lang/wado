@@ -235,12 +235,16 @@ simple name alone is never an identity — two modules may declare the same one.
 
 What is one is a `crate::defs::DefId`: a dense index into the whole-program
 `DefTable`, built after loading from every module's items. Declaration data
-(fields, cases, members, visibility, span) is keyed by it, and `ResolvedType`'s
-nominal variants carry it, so a consumer reads a declaration without knowing
-which module it stands in. `TypeTable::decl_named_in` still turns a
-`(name, module)` pair into one for the callers that hold only a spelling; it
-answers first-declared-wins, so it cannot tell two same-named declarations in a
-module apart. See WEP 2026-08-12 for what still depends on that and why.
+(fields, cases, members, visibility, span) is keyed by it, `ResolvedType`'s
+nominal variants carry it, and every trait / effect / resource / impl-target
+index in the elaborator is keyed by it — so a consumer reads a declaration
+without knowing which module it stands in. `FqTraitName` carries one too, and
+has no constructor that takes a spelling.
+
+A handful of functions still turn a name into a declaration; `defs.rs`'s
+`NAME_TO_IDENTITY` lists them with the reason each survives, and
+`no_reachable_function_turns_a_name_into_an_identity` fails on a new one. See
+WEP 2026-08-12 for what is left and why.
 
 A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
 and `{decl}` repeat whenever a type is implemented in the module declaring it —
