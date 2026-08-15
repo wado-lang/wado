@@ -22,6 +22,7 @@ use {
     WaitEvent,
     Waitable,
     WaitableSet,
+    cm_subtask_settled,
 } from "core:prelude/types.wado";
 
 /// Split a packed `future.new` result (`readable | writable << 32`) into the
@@ -98,14 +99,14 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     tx.drop();
 }
 
-/// Waits for a pending async subtask to complete (reach RETURNED state).
+/// Waits for a pending async subtask to settle.
 /// In WASI P3 async calling convention, canon lower async returns (handle << 4) | status:
 ///   status = 0 (Starting): async guest task in flight, handle is nonzero
 ///   status = 1 (Started):  async host task in flight, handle is nonzero
 ///   status = 2 (Returned): sync completion, packed value = 2, handle = 0
 /// If the upper 28 bits (handle) are nonzero, an async task is in flight.
-/// A subtask transitions through Starting → Started → Returned. Each call to
-/// waitable-set.wait delivers one transition, so we must loop until RETURNED.
+/// Each call to waitable-set.wait delivers one transition, so we loop until
+/// the subtask leaves the in-flight states.
 internal fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
     let handle = packed >> 4;
     if handle != 0 {
@@ -114,8 +115,7 @@ internal fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
         subtask.join(&ws);
         loop {
             let event = ws.wait();
-            // payload == 2 means the subtask reached RETURNED state
-            if event.payload == 2 {
+            if cm_subtask_settled(event) {
                 break;
             }
         }
