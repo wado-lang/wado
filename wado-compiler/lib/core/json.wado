@@ -1306,12 +1306,15 @@ impl JsonDeserializer {
                 pos += 1;
                 let mut exp_neg = false;
                 if pos < len {
-                    let sb = input.get_unchecked(pos) as i32;
-                    if sb == '-' as i32 {
-                        exp_neg = true;
-                        pos += 1;
-                    } else if sb == '+' as i32 {
-                        pos += 1;
+                    match input.get_unchecked(pos) as u8 as char {
+                        '-' => {
+                            exp_neg = true;
+                            pos += 1;
+                        },
+                        '+' => {
+                            pos += 1;
+                        },
+                        _ => {},
                     }
                 }
                 while pos < len {
@@ -1474,22 +1477,24 @@ impl JsonDeserializer {
         // Assumes pos is at the opening '"'
         self.pos += 1;
         while self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as i32;
-            if b == '"' as i32 {
-                self.pos += 1;
-                return Result::Ok(());
-            }
-            if b == '\\' as i32 {
-                self.pos += 1;
-                if self.pos >= self.input.len() {
-                    builtin::cold_path();
-                    return Result::Err(DeserializeError::eof(self.pos as i64));
-                }
-                let esc = self.input.get_unchecked(self.pos) as i32;
-                if esc == 'u' as i32 {
-                    // \uXXXX — skip 4 hex digits
-                    self.pos += 4;
-                }
+            let b = self.input.get_unchecked(self.pos) as u8 as char;
+            match b {
+                '"' => {
+                    self.pos += 1;
+                    return Result::Ok(());
+                },
+                '\\' => {
+                    self.pos += 1;
+                    if self.pos >= self.input.len() {
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::eof(self.pos as i64));
+                    }
+                    if self.input.get_unchecked(self.pos) as u8 as char == 'u' {
+                        // \uXXXX — skip 4 hex digits
+                        self.pos += 4;
+                    }
+                },
+                _ => {},
             }
             self.pos += 1;
         }
@@ -1567,19 +1572,21 @@ impl JsonDeserializer {
                         builtin::cold_path();
                         return Result::Err(DeserializeError::eof(self.pos as i64));
                     }
-                    let c = self.input.get_unchecked(self.pos) as i32;
-                    if c == ']' as i32 {
-                        self.pos += 1;
-                        return Result::Ok(());
-                    }
-                    if c == ',' as i32 {
-                        self.pos += 1;
-                    } else {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::malformed(
-                            "expected ',' or ']'",
-                            self.pos as i64,
-                        ));
+                    match self.input.get_unchecked(self.pos) as u8 as char {
+                        ']' => {
+                            self.pos += 1;
+                            return Result::Ok(());
+                        },
+                        ',' => {
+                            self.pos += 1;
+                        },
+                        _ => {
+                            builtin::cold_path();
+                            return Result::Err(DeserializeError::malformed(
+                                "expected ',' or ']'",
+                                self.pos as i64,
+                            ));
+                        },
                     }
                 }
             },
@@ -1607,19 +1614,21 @@ impl JsonDeserializer {
                         builtin::cold_path();
                         return Result::Err(DeserializeError::eof(self.pos as i64));
                     }
-                    let c = self.input.get_unchecked(self.pos) as i32;
-                    if c == '}' as i32 {
-                        self.pos += 1;
-                        return Result::Ok(());
-                    }
-                    if c == ',' as i32 {
-                        self.pos += 1;
-                    } else {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::malformed(
-                            "expected ',' or '}'",
-                            self.pos as i64,
-                        ));
+                    match self.input.get_unchecked(self.pos) as u8 as char {
+                        '}' => {
+                            self.pos += 1;
+                            return Result::Ok(());
+                        },
+                        ',' => {
+                            self.pos += 1;
+                        },
+                        _ => {
+                            builtin::cold_path();
+                            return Result::Err(DeserializeError::malformed(
+                                "expected ',' or '}'",
+                                self.pos as i64,
+                            ));
+                        },
                     }
                 }
             },
@@ -2114,11 +2123,11 @@ impl Deserializer for JsonDeserializer {
                 let mut map = self.begin_map()?;
                 return visitor.visit_map(&mut map);
             },
+            '-' | '0'..='9' => {
+                let v = self.deserialize_f64()?;
+                return visitor.visit_f64(v);
+            },
             _ => {
-                if b == '-' || '0' <= b <= '9' {
-                    let v = self.deserialize_f64()?;
-                    return visitor.visit_f64(v);
-                }
                 return Result::Err(DeserializeError::unexpected_type(
                     "unexpected byte in JSON value",
                     self.pos as i64,

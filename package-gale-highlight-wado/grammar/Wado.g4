@@ -611,7 +611,12 @@ matchArm
 
 // Or-patterns: `A | B | C`, as used in `match` arms and `matches { ... }`.
 pattern
-    : patternPrimary ('|' patternPrimary)*
+    : patternRange ('|' patternRange)*
+    ;
+
+// Range sub-patterns: `10..=20`, `'0'..='9'`.
+patternRange
+    : patternPrimary (('..<' | '..=') patternPrimary)?
     ;
 
 patternPrimary

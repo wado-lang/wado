@@ -207,9 +207,7 @@ impl CostWalk<'_> {
             // A loop-carried local: the recurrence is the enclosing loop's cost,
             // and the value itself reads as a local.
             ValueKind::LoopPhi { .. } => 0,
-            ValueKind::FieldAccess { receiver, .. } => {
-                weight::OP + self.value(*receiver, seen)
-            }
+            ValueKind::FieldAccess { receiver, .. } => weight::OP + self.value(*receiver, seen),
         }
     }
 

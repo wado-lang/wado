@@ -19,11 +19,11 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::sroa_variant_return::{Pad, zero_pad};
 use super::arena_query::{
     block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
     single_payload_binding,
 };
+use super::sroa_variant_return::{Pad, zero_pad};
 
 /// The slot `sroa_variant_return` reserves for the tag in every scalarized
 /// variant return.
@@ -2507,7 +2507,9 @@ fn plan_slot_temp_sroa(
         _ => (Vec::new(), lv),
     };
     let ExprKind::LabeledBlock {
-        label, block: lb_block, ..
+        label,
+        block: lb_block,
+        ..
     } = &body.exprs[lb_expr].kind
     else {
         return None;
@@ -2563,8 +2565,11 @@ fn plan_slot_temp_sroa(
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
         let zero = materialize_pad(engine, pad, span);
         let next = engine.locals().len() as u32;
-        let local_index =
-            engine.alloc_local(format!("__sroa_slot_{next}"), type_id, /* is_mut */ true);
+        let local_index = engine.alloc_local(
+            format!("__sroa_slot_{next}"),
+            type_id,
+            /* is_mut */ true,
+        );
         slots.push(BoundSlot {
             field_index,
             local_index,

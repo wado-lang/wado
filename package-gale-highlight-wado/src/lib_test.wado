@@ -129,6 +129,14 @@ test "highlight match arm diverging with a bare return" {
     assert_highlights(&"fn f(o: Option<i32>) -> i32 { return match o { Some(v) => v, None => return 0 }; }\n");
 }
 
+test "highlight range pattern" {
+    assert_highlights(&"fn f(c: char) -> i32 { match c { '0'..='9' => 1, 'a'..<'f' => 2, _ => 0 }; }\n");
+}
+
+test "highlight range inside an or-pattern" {
+    assert_highlights(&"fn f(c: char) -> i32 { match c { '-' | '0'..='9' => 1, _ => 0 }; }\n");
+}
+
 test "highlight fn-type effect before next param" {
     assert_highlights(&"fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
 }
