@@ -1386,20 +1386,17 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
-    /// Deep-copy an `Array<T>`: allocate one the length of `src` and copy every
-    /// element. `element_copy_type` is set when `T` is a value-typed struct
-    /// needing its own copy per element — a bare
-    /// `array.set(dst, i, array.get(src, i))` stores the *same* ref into both
-    /// arrays — and the loop then calls that type's `$value_copy$` helper.
+    /// Deep-copy an `Array<T>` whose `T` is a value-typed struct: allocate one
+    /// the length of `src` and copy every element through `T`'s `$value_copy$`
+    /// helper, since a bare `array.set(dst, i, array.get(src, i))` would store
+    /// the *same* ref into both arrays.
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
-        /// The canonical mangle of the element type needing a per-element deep
-        /// copy, or `None` when a plain `array.set` already copies (primitive
-        /// elements). Codegen and DCE resolve this to the `$value_copy$` helper
-        /// by matching each helper's `value_copy_mangle` metadata — no name
-        /// lookup, and robust to the same type being interned more than once.
-        element_copy_mangle: Option<String>,
+        /// The element type's canonical mangle. Codegen and DCE resolve it to
+        /// the `$value_copy$` helper through each helper's `value_copy_mangle`,
+        /// so the same type interned twice still matches.
+        element_copy_mangle: String,
         /// Number of leading elements to copy — the destination's exact
         /// length. `None` clones the whole array (`array.len(src)`). Must
         /// evaluate to <= `array.len(src)`.

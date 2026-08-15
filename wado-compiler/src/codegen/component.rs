@@ -163,21 +163,24 @@ pub fn build_component(
                 ),
                 CmStreamPayload::Value(_) => unreachable!("handled above"),
                 CmStreamPayload::Record(name) => {
-                    // Alias the record type from the WASI interface that defines it.
-                    // WASI imports are already generated (generate_cm_imports runs first),
-                    // so we can alias the exported type from the interface instance.
-                    let val = if let Some(interface_name) = project
+                    // WASI imports are generated first, so the defining
+                    // interface's instance is already available to alias from.
+                    let interface_name = project
                         .cm_interface_registry
                         .find_interface_for_struct_cm_name(name)
-                    {
-                        let inst_idx = ctx.instance_idx(&interface_name);
-                        builder.alias_export(inst_idx, name, ComponentExportKind::Type);
-                        let aliased_idx = ctx.register_type(name);
-                        ComponentValType::Type(aliased_idx)
-                    } else {
-                        ComponentValType::Primitive(PrimitiveValType::U8)
-                    };
-                    (format!("stream-{name}"), val)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "stream<{name}> has no interface defining the record `{name}` — \
+                                 the interface that declares it is not imported"
+                            )
+                        });
+                    let inst_idx = ctx.instance_idx(&interface_name);
+                    builder.alias_export(inst_idx, name, ComponentExportKind::Type);
+                    let aliased_idx = ctx.register_type(name);
+                    (
+                        format!("stream-{name}"),
+                        ComponentValType::Type(aliased_idx),
+                    )
                 }
             };
             ctx.register_type(&type_key);
@@ -417,6 +420,14 @@ pub fn build_component(
         &wir_package.import_plan,
         providers,
     )
+}
+
+/// Whether codegen emits `func`: the registry supports its signature and the
+/// program calls it. Emitting a supported but unused function would drag
+/// resource types into the instance type that the world never imports.
+fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
+    project.cm_interface_registry.is_function_supported(func)
+        && project.used_wasi_functions.contains(&func.used_key())
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -759,10 +770,8 @@ fn collect_resources_in_type(
 }
 
 fn wado_type_to_cm_val_type(
-    _project: &NirPackage,
     ty: &Type,
     stream_type_idx: Option<u32>,
-    _error_code_idx: Option<u32>,
     result_param_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
@@ -921,17 +930,19 @@ fn build_transmission_future_type_for(
     ctx: &mut ComponentModelContext,
     source: &str,
 ) -> u32 {
-    let error_code_key = if source == "cli" {
+    // `cli` is the shared `wasi:cli/types` error-code, aliased under the bare
+    // key by `generate_cm_imports`; every other source aliases its own.
+    let key = if source == "cli" {
         "error-code".to_string()
     } else {
-        format!("{source}-error-code")
+        error_code_key(source)
     };
-    let error_code_idx = if ctx.has_type(&error_code_key) {
-        ctx.type_idx(&error_code_key)
-    } else {
-        // Fallback to CLI error-code if package-specific one is not available
-        ctx.type_idx("error-code")
-    };
+    assert!(
+        ctx.has_type(&key),
+        "transmission future for `{source}` needs its error-code type `{key}`, \
+         which no imported interface aliased"
+    );
+    let error_code_idx = ctx.type_idx(&key);
 
     let result = intern_cm_type(
         builder,
@@ -973,16 +984,13 @@ fn expose_self_owned_resources(
         else {
             continue;
         };
-        let resource_type_name = format!("resource:{cm_name}");
+        let resource_type_name = resource_type_key(&cm_name);
         if ctx.has_type(&resource_type_name) {
             continue;
         }
         ctx.register_type(&resource_type_name);
         builder.alias_export(
-            ctx.instance_idx(&format!(
-                "{}-{}",
-                interface_info.package, interface_info.interface
-            )),
+            ctx.instance_idx(&interface_info.instance_key()),
             &cm_name,
             ComponentExportKind::Type,
         );
@@ -1251,7 +1259,7 @@ fn build_future_intrinsic_types(
     pkg: &str,
 ) -> (u32, u32) {
     let fields_resource_idx = ctx.type_idx(&format!("{pkg}-fields-resource"));
-    let error_code = CmTypeKey::Leaf(ctx.type_idx(&format!("{pkg}-error-code")));
+    let error_code = CmTypeKey::Leaf(ctx.type_idx(&error_code_key(pkg)));
 
     let fields = intern_cm_type(
         builder,
@@ -1369,7 +1377,7 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
         ),
         CmPayloadType::Named(name) => CmTypeKey::Leaf(ctx.type_idx(name)),
         CmPayloadType::Resource(cm_name) => CmTypeKey::Own(Box::new(CmTypeKey::Leaf(
-            ctx.type_idx(&format!("resource:{cm_name}")),
+            ctx.type_idx(&resource_type_key(cm_name)),
         ))),
     }
 }
@@ -1419,7 +1427,7 @@ fn prebuild_resource_payload_types(
         }
     }
     for cm_name in cm_names {
-        if ctx.has_type(&format!("resource:{cm_name}")) {
+        if ctx.has_type(&resource_type_key(&cm_name)) {
             continue;
         }
         let Some(source) = project
@@ -1775,7 +1783,7 @@ fn emit_canonical_intrinsics(
                     .filter(|key| ctx.has_type(key));
                 let type_idx = match defining_key {
                     Some(key) => ctx.type_idx(&key),
-                    None => ctx.type_idx(&format!("resource:{cm_name}")),
+                    None => ctx.type_idx(&resource_type_key(cm_name)),
                 };
                 builder.resource_drop(type_idx);
             }
@@ -2314,13 +2322,7 @@ fn generate_cm_imports(
         let supported_functions: Vec<_> = interface_info
             .functions
             .iter()
-            .filter(|func| {
-                if !project.cm_interface_registry.is_function_supported(func) {
-                    return false;
-                }
-                let func_key = format!("{}::{}", func.interface_name, func.method_name);
-                project.used_wasi_functions.contains(&func_key)
-            })
+            .filter(|func| emits_function(project, func))
             .collect();
 
         // Collect resource types referenced in any function signature. The plan
@@ -2386,11 +2388,7 @@ fn generate_cm_imports(
             // ErrorCode may be an enum (cli/types) or a variant (filesystem/types, sockets/types).
             let has_local_error_code = project
                 .cm_interface_registry
-                .has_enum_in_interface(&interface_info.path, "ErrorCode")
-                || project
-                    .cm_interface_registry
-                    .variants_for_interface(&interface_info.path)
-                    .any(|(name, _, _)| name == "ErrorCode");
+                .declares_own_error_code(&interface_info.path);
 
             /// Recursively collect Named types from a type tree.
             fn collect_named_types(ty: &Type, out: &mut Vec<String>) {
@@ -2688,10 +2686,8 @@ fn generate_cm_imports(
                             )
                         } else {
                             wado_type_to_cm_val_type(
-                                project,
                                 ty,
                                 stream_type_idx,
-                                error_code_idx,
                                 result_param_type_idx,
                                 &enum_export_indices,
                                 &flags_export_indices,
@@ -2781,10 +2777,7 @@ fn generate_cm_imports(
             enc.instance(&instance_type);
         }
 
-        ctx.register_instance(&format!(
-            "{}-{}",
-            interface_info.package, interface_info.interface
-        ));
+        ctx.register_instance(&interface_info.instance_key());
         builder.import(
             &interface_info.path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -2801,14 +2794,11 @@ fn generate_cm_imports(
                     .cm_interface_registry
                     .get_resource_cm_name_by_source(source, resource_name)
             {
-                let resource_type_name = format!("resource:{cm_name}");
+                let resource_type_name = resource_type_key(cm_name);
                 if !ctx.has_type(&resource_type_name) {
                     ctx.register_type(&resource_type_name);
                     builder.alias_export(
-                        ctx.instance_idx(&format!(
-                            "{}-{}",
-                            interface_info.package, interface_info.interface
-                        )),
+                        ctx.instance_idx(&interface_info.instance_key()),
                         cm_name,
                         ComponentExportKind::Type,
                     );
@@ -2821,24 +2811,14 @@ fn generate_cm_imports(
         // We register them with source-qualified keys (e.g., "filesystem-error-code").
         let interface_has_error_code = project
             .cm_interface_registry
-            .has_enum_in_interface(&interface_info.path, "ErrorCode")
-            || project
-                .cm_interface_registry
-                .variants_for_interface(&interface_info.path)
-                .any(|(name, _, _)| name == "ErrorCode");
+            .declares_own_error_code(&interface_info.path);
         if interface_has_error_code {
-            let error_code_key = format!("{}-error-code", interface_info.package);
-            if !ctx.has_type(&error_code_key) {
-                ctx.register_type(&error_code_key);
-                builder.alias_export(
-                    ctx.instance_idx(&format!(
-                        "{}-{}",
-                        interface_info.package, interface_info.interface
-                    )),
-                    "error-code",
-                    ComponentExportKind::Type,
-                );
-            }
+            alias_package_error_code(
+                builder,
+                ctx,
+                &interface_info.package,
+                &interface_info.instance_key(),
+            );
         }
 
         for func in &supported_functions {
@@ -2850,10 +2830,7 @@ fn generate_cm_imports(
 
             ctx.register_comp_func(&local_name);
             builder.alias_export(
-                ctx.instance_idx(&format!(
-                    "{}-{}",
-                    interface_info.package, interface_info.interface
-                )),
+                ctx.instance_idx(&interface_info.instance_key()),
                 &func.wasi_func_name,
                 ComponentExportKind::Func,
             );
@@ -2874,13 +2851,45 @@ fn generate_cm_imports(
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 }
 
+/// Outer-scope type key for a resource aliased out of its defining interface.
+fn resource_type_key(cm_name: &str) -> String {
+    format!("resource:{cm_name}")
+}
+
+/// Outer-scope type key for a package's own `error-code`. `wasi:cli`'s uses the
+/// bare `"error-code"` instead, being the shared one others resolve to.
+fn error_code_key(package: &str) -> String {
+    format!("{package}-error-code")
+}
+
+/// Alias an interface's own `error-code` into the outer component scope, where
+/// transmission futures and composite results look it up. Idempotent: two
+/// interfaces of one package share the single alias.
+fn alias_package_error_code(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    package: &str,
+    instance_key: &str,
+) {
+    let key = error_code_key(package);
+    if ctx.has_type(&key) {
+        return;
+    }
+    ctx.register_type(&key);
+    builder.alias_export(
+        ctx.instance_idx(instance_key),
+        "error-code",
+        ComponentExportKind::Type,
+    );
+}
+
 fn handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
     CmTypeKey::Result {
         ok: Some(Box::new(CmTypeKey::Leaf(
             ctx.type_idx(&format!("{pkg}-response")),
         ))),
         err: Some(Box::new(CmTypeKey::Leaf(
-            ctx.type_idx(&format!("{pkg}-error-code")),
+            ctx.type_idx(&error_code_key(pkg)),
         ))),
     }
 }
@@ -3028,9 +3037,7 @@ fn import_resource_defining_interface(
                 }
                 // Only include functions that are actually used to avoid
                 // referencing unsupported resource types (e.g. RequestOptions).
-                project
-                    .used_wasi_functions
-                    .contains(&format!("{}::{}", f.interface_name, f.method_name))
+                project.used_wasi_functions.contains(&f.used_key())
             })
             .cloned()
             .collect();
@@ -3123,7 +3130,7 @@ fn import_resource_defining_interface(
                 .get_enum_cm_name_by_interface(types_fq, "ErrorCode")
         })
         .expect("ErrorCode CM name not found for the types interface");
-    ctx.register_type(&format!("{pkg}-error-code"));
+    ctx.register_type(&error_code_key(&pkg));
     builder.alias_export(
         ctx.instance_idx(&types_instance),
         http_error_code_cm,
@@ -3146,11 +3153,7 @@ fn import_resource_defining_interface(
                 let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[method]")
                     || f.wasi_func_name.starts_with("[static]");
-                is_resource_func
-                    && project.cm_interface_registry.is_function_supported(f)
-                    && project
-                        .used_wasi_functions
-                        .contains(&format!("{}::{}", f.interface_name, f.method_name))
+                is_resource_func && emits_function(project, f)
             })
             .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
             .collect();
@@ -3177,7 +3180,7 @@ fn import_resource_defining_interface(
     // Intern the `result<own<response>, error-code>` handler composite when this
     // interface provides both arms (the handler/world-export shape). The export
     // lift and any client interface resolve it by structure.
-    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&format!("{pkg}-error-code")) {
+    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&error_code_key(&pkg)) {
         let key = handler_result_key(ctx, &pkg);
         intern_cm_type(builder, ctx, &key, None);
     }
@@ -3269,12 +3272,7 @@ fn import_resource_using_composite_interface(
     let funcs: Vec<CmFunctionInfo> = iface
         .functions
         .iter()
-        .filter(|f| {
-            project.cm_interface_registry.is_function_supported(f)
-                && project
-                    .used_wasi_functions
-                    .contains(&format!("{}::{}", f.interface_name, f.method_name))
-        })
+        .filter(|f| emits_function(project, f))
         .cloned()
         .collect();
     if funcs.is_empty() {
@@ -3370,7 +3368,7 @@ fn import_resource_using_composite_interface(
         enc.instance(&instance_type);
     }
 
-    let instance_key = format!("{}-{}", iface.package, iface.interface);
+    let instance_key = iface.instance_key();
     ctx.register_instance(&instance_key);
     builder.import(
         iface_fq,
@@ -3409,7 +3407,7 @@ fn import_interface_with_resource(
         return;
     }
 
-    let outer_resource_type_name = format!("resource:{resource_cm_name}");
+    let outer_resource_type_name = resource_type_key(resource_cm_name);
     let has_outer_resource = ctx.has_type(&outer_resource_type_name);
 
     let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -3452,10 +3450,7 @@ fn import_interface_with_resource(
         enc.instance(&instance_type);
     }
 
-    ctx.register_instance(&format!(
-        "{}-{}",
-        interface_info.package, interface_info.interface
-    ));
+    ctx.register_instance(&interface_info.instance_key());
     builder.import(
         &interface_info.path,
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -3465,13 +3460,10 @@ fn import_interface_with_resource(
     // expose the resource at the outer component scope so that other interfaces (like
     // wasi:filesystem/preopens) can alias it using `alias outer`.
     if !has_outer_resource {
-        let resource_type_name = format!("resource:{resource_cm_name}");
+        let resource_type_name = resource_type_key(resource_cm_name);
         ctx.register_type(&resource_type_name);
         builder.alias_export(
-            ctx.instance_idx(&format!(
-                "{}-{}",
-                interface_info.package, interface_info.interface
-            )),
+            ctx.instance_idx(&interface_info.instance_key()),
             resource_cm_name,
             ComponentExportKind::Type,
         );
@@ -3479,10 +3471,7 @@ fn import_interface_with_resource(
 
     ctx.register_comp_func(&local_name);
     builder.alias_export(
-        ctx.instance_idx(&format!(
-            "{}-{}",
-            interface_info.package, interface_info.interface
-        )),
+        ctx.instance_idx(&interface_info.instance_key()),
         &func.wasi_func_name,
         ComponentExportKind::Func,
     );
@@ -3508,7 +3497,8 @@ fn import_resource_source(
     // interface `types`). The instance-type name doubles as the idempotency key:
     // it is a real builder type, so reusing it never desyncs the ctx/builder
     // type-index counters the way a phantom marker type would.
-    let instance_name = format!("{}-{}", cm_import.package, cm_import.interface);
+    let instance_name =
+        crate::component_model::cm_instance_key(&cm_import.package, &cm_import.interface);
     let instance_type_name = format!("{instance_name}-instance-type");
     if ctx.has_type(&instance_type_name) {
         return;
@@ -3527,11 +3517,7 @@ fn import_resource_source(
     // Does this source define its own ErrorCode (needed by transmission futures)?
     let source_has_error_code = project
         .cm_interface_registry
-        .variants_for_interface(source_path)
-        .any(|(name, _, _)| name == "ErrorCode")
-        || project
-            .cm_interface_registry
-            .has_enum_in_interface(source_path, "ErrorCode");
+        .declares_own_error_code(source_path);
 
     let instance_type_idx = ctx.register_type(&instance_type_name);
     let mut local_type_idx = 0u32;
@@ -3555,18 +3541,22 @@ fn import_resource_source(
                 .filter(|(name, _, _)| *name == "ErrorCode")
                 .collect();
             if let Some((_, cm_name, cases)) = interface_variants.first() {
+                let mut type_gen = CmTypeGen::with_interface_hint(source_path);
+                let no_resources: IndexMap<&str, u32> = IndexMap::default();
                 let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
                     .iter()
                     .map(|c| {
-                        let payload = c.payload.as_ref().map(|_ty| {
-                            // For simplicity, all payloads are option<string>
-                            instance_type
-                                .ty()
-                                .defined_type()
-                                .option(ComponentValType::Primitive(PrimitiveValType::String));
-                            let option_idx = local_type_idx;
-                            local_type_idx += 1;
-                            ComponentValType::Type(option_idx)
+                        let payload = c.payload.as_ref().map(|ty| {
+                            let mut sink = crate::component_model::InstanceSink {
+                                it: &mut instance_type,
+                                next_idx: &mut local_type_idx,
+                            };
+                            type_gen.ast_type_to_cm(
+                                &mut sink,
+                                ty,
+                                &project.cm_interface_registry,
+                                &no_resources,
+                            )
                         });
                         (c.cm_name.as_str(), payload)
                     })
@@ -3589,7 +3579,7 @@ fn import_resource_source(
     );
 
     for (_, cm_name) in &resources {
-        let resource_type_name = format!("resource:{cm_name}");
+        let resource_type_name = resource_type_key(cm_name);
         if !ctx.has_type(&resource_type_name) {
             ctx.register_type(&resource_type_name);
             builder.alias_export(
@@ -3601,15 +3591,7 @@ fn import_resource_source(
     }
 
     if source_has_error_code {
-        let error_code_key = format!("{}-error-code", cm_import.package);
-        if !ctx.has_type(&error_code_key) {
-            ctx.register_type(&error_code_key);
-            builder.alias_export(
-                ctx.instance_idx(&instance_name),
-                "error-code",
-                ComponentExportKind::Type,
-            );
-        }
+        alias_package_error_code(builder, ctx, &cm_import.package, &instance_name);
     }
 }
 
@@ -3679,21 +3661,9 @@ fn import_interfaces_with_resources(
         }
         let has_error_code = project
             .cm_interface_registry
-            .has_enum_in_interface(&interface_info.path, "ErrorCode")
-            || project
-                .cm_interface_registry
-                .variants_for_interface(&interface_info.path)
-                .any(|(name, _, _)| name == "ErrorCode");
+            .declares_own_error_code(&interface_info.path);
         if has_error_code {
-            let error_code_key = format!("{}-error-code", interface_info.package);
-            if !ctx.has_type(&error_code_key) {
-                ctx.register_type(&error_code_key);
-                builder.alias_export(
-                    ctx.instance_idx(&instance_key),
-                    "error-code",
-                    ComponentExportKind::Type,
-                );
-            }
+            alias_package_error_code(builder, ctx, &interface_info.package, &instance_key);
         }
     }
 
@@ -3719,8 +3689,7 @@ fn resource_using_references_defining_interface(
     };
     let mut resources: Vec<String> = Vec::new();
     for func in &iface.functions {
-        let key = format!("{}::{}", func.interface_name, func.method_name);
-        if !project.used_wasi_functions.contains(&key) || !registry.is_function_supported(func) {
+        if !emits_function(project, func) {
             continue;
         }
         if let Some(ret) = &func.return_type {
@@ -3784,13 +3753,7 @@ fn import_resource_using_interfaces(
         let supported_functions: Vec<_> = interface_info
             .functions
             .iter()
-            .filter(|func| {
-                if !project.cm_interface_registry.is_function_supported(func) {
-                    return false;
-                }
-                let func_key = format!("{}::{}", func.interface_name, func.method_name);
-                project.used_wasi_functions.contains(&func_key)
-            })
+            .filter(|func| emits_function(project, func))
             .collect();
 
         // Collect resources used in function signatures
@@ -3845,7 +3808,7 @@ fn import_resource_using_interfaces(
             else {
                 continue;
             };
-            if ctx.has_type(&format!("resource:{cm_name}")) {
+            if ctx.has_type(&resource_type_key(cm_name)) {
                 continue; // already imported (by the main loop or the source phase)
             }
             let Some(source_path) = project
@@ -3886,7 +3849,7 @@ fn import_resource_using_interfaces(
                         .cm_interface_registry
                         .get_resource_cm_name_by_source(source, resource_name)
                 {
-                    let outer_resource_type_name = format!("resource:{cm_name}");
+                    let outer_resource_type_name = resource_type_key(cm_name);
                     let source_is_self = project
                         .cm_interface_registry
                         .get_resource_source_interface(resource_name)
@@ -4027,10 +3990,7 @@ fn import_resource_using_interfaces(
             enc.instance(&instance_type);
         }
 
-        ctx.register_instance(&format!(
-            "{}-{}",
-            interface_info.package, interface_info.interface
-        ));
+        ctx.register_instance(&interface_info.instance_key());
         builder.import(
             &interface_info.path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
@@ -4050,10 +4010,7 @@ fn import_resource_using_interfaces(
 
             ctx.register_comp_func(&local_name);
             builder.alias_export(
-                ctx.instance_idx(&format!(
-                    "{}-{}",
-                    interface_info.package, interface_info.interface
-                )),
+                ctx.instance_idx(&interface_info.instance_key()),
                 &func.wasi_func_name,
                 ComponentExportKind::Func,
             );
@@ -4220,9 +4177,7 @@ fn generate_cm_world_func_imports(
         {
             continue;
         }
-        let val_type = |ty: &Type| {
-            wado_type_to_cm_val_type(project, ty, None, None, None, &empty, &empty, &empty)
-        };
+        let val_type = |ty: &Type| wado_type_to_cm_val_type(ty, None, None, &empty, &empty, &empty);
         let local_name = func.local_alias_name();
         let func_type_name = format!("world-func-type-{}", func.wasi_func_name);
 
