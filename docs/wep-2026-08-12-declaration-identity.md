@@ -406,8 +406,8 @@ them is a ratchet rather than an absolute, and says so.
   property the type system cannot state. The ones that remain are listed in
   `NAME_TO_IDENTITY` with the reason each survives, so the class cannot grow
   while it is being emptied; the test fails on a new one, and equally on a
-  stale entry, so the list shrinks as the work lands. An empty list is the
-  absolute assertion, and it is what Remaining work is for.
+  stale entry, so the list shrinks as the work lands. Remaining work says which
+  entries are still to go and which two belong there.
 
 ## Remaining work
 
@@ -445,12 +445,14 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
       no such lookup; these three and `decl_named_in` are what remain.
-- [ ] `NAME_TO_IDENTITY` emptied. Its five remaining entries are the four
-      above plus `canonical_assoc_const_key`, which splits a use-site
-      `Type::CONST` spelling whose `Type` half has no reference site of its
-      own. When the list is empty the Enforcement bullet is absolute rather
-      than a ratchet, and the `#[cfg]`-gated test constructors are all that a
-      spelling can still reach.
+- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Five of its seven
+      entries are the four above plus `canonical_assoc_const_key`, which
+      splits a use-site `Type::CONST` spelling whose `Type` half has no
+      reference site of its own. The two that stay are `imported_as`, which
+      answers what a module imported under a local name rather than what a
+      spelling means, and `declare_for_test`, which is `#[cfg]`-gated. When
+      only those two are left, the Enforcement bullet above is a statement
+      about production code rather than a ratchet over it.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and
