@@ -88,10 +88,10 @@ likelihood when the slow path is always taken once reached.
 
 Only relative numbers carry signal. A/B one change same-machine best-of-three,
 back to back — never against another machine or session (a "regression" is often
-a slower VM that hour; re-measure the unchanged reference to check). `vs best` in
-`benchmark/README.md` is the metric; the `benchmark` skill + `pick.ts` do the
-three passes. Isolate the phase — A/B a float-format change on `fts`, not on a
-serialize benchmark that dilutes it.
+a slower VM that hour; re-measure the unchanged reference to check). The recorded
+scores are produced on a fixed machine, so a branch measures its own two builds
+and quotes those. Isolate the phase — A/B a float-format change on `fts`, not on
+a serialize benchmark that dilutes it.
 
 ## 6. Lessons
 
