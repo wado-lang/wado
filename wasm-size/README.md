@@ -39,7 +39,7 @@ toolchain has not moved does not need remeasuring.
 
 | Language | Size (bytes) |
 | -------- | -----------: |
-| wado     |        6,029 |
+| wado     |        5,998 |
 | c        |       16,786 |
 | moonbit  |       23,003 |
 | zig      |       38,054 |
