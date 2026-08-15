@@ -37,23 +37,19 @@ type "functype//wasi_clocks.wado/__cm_export__run" = fn();  // TypeId(14)
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(16)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(17)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(18)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(18)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -65,9 +61,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicClock::now";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:wasi_clocks.wado::__modules_initialized: bool = 0;
 
@@ -75,6 +71,42 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
     let t1: u64;
     let t2: u64;
     let t3: u64;
+    let handle_7: i32;
+    let packed_9: i64;
+    let rx_10: i32;
+    let tx_11: i32;
+    let handle_16: i32;
+    let packed_18: i64;
+    let rx_19: i32;
+    let tx_20: i32;
+    let handle_25: i32;
+    let packed_27: i64;
+    let rx_28: i32;
+    let tx_29: i32;
+    let handle_34: i32;
+    let packed_36: i64;
+    let rx_37: i32;
+    let tx_38: i32;
+    let handle_43: i32;
+    let packed_45: i64;
+    let rx_46: i32;
+    let tx_47: i32;
+    let handle_52: i32;
+    let packed_54: i64;
+    let rx_55: i32;
+    let tx_56: i32;
+    let handle_61: i32;
+    let packed_63: i64;
+    let rx_64: i32;
+    let tx_65: i32;
+    let handle_70: i32;
+    let packed_72: i64;
+    let rx_73: i32;
+    let tx_74: i32;
+    let handle_79: i32;
+    let packed_81: i64;
+    let rx_82: i32;
+    let tx_83: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasi_clocks.wado::__modules_initialized);
         cold_path;
@@ -85,14 +117,30 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
     t2 = "wasi_clocks.wado/__cm_binding__MonotonicClock_now"();
     t3 = "wasi_clocks.wado/__cm_binding__MonotonicClock_now"();
     if t2 >=u t1 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock t2 >= t1"), used: 30 });
+        rx_10 = builtin::i32_wrap_i64(local.tee packed_9("wasi/stream-new"()));
+        tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
+        handle_7 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
+        "core:cli/write_to_stream"(tx_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock t2 >= t1"), used: 30 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_7);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 });
+        rx_19 = builtin::i32_wrap_i64(local.tee packed_18("wasi/stream-new"()));
+        tx_20 = builtin::i32_wrap_i64(packed_18 >> 32_i64);
+        handle_16 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
+        "core:cli/write_to_stream"(tx_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_16);
     }
     if t3 >=u t2 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock t3 >= t2"), used: 30 });
+        rx_28 = builtin::i32_wrap_i64(local.tee packed_27("wasi/stream-new"()));
+        tx_29 = builtin::i32_wrap_i64(packed_27 >> 32_i64);
+        handle_25 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
+        "core:cli/write_to_stream"(tx_29, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock t3 >= t2"), used: 30 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_25);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 });
+        rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
+        tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
+        handle_34 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
+        "core:cli/write_to_stream"(tx_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_34);
     }
     if (if (if t1 >u 0_i64 -> i32 {
         1;
@@ -103,16 +151,36 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
     } else {
         t3 >u 0_i64;
     }) {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returns positive values"), used: 45 });
+        rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
+        tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
+        handle_43 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_46);
+        "core:cli/write_to_stream"(tx_47, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returns positive values"), used: 45 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_43);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returned all zeros (unusual)"), used: 50 });
+        rx_55 = builtin::i32_wrap_i64(local.tee packed_54("wasi/stream-new"()));
+        tx_56 = builtin::i32_wrap_i64(packed_54 >> 32_i64);
+        handle_52 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_55);
+        "core:cli/write_to_stream"(tx_56, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: monotonic clock returned all zeros (unusual)"), used: 50 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_52);
     }
     if (t3 - t1) >=u 0_i64 {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: elapsed time is non-negative"), used: 34 });
+        rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
+        tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
+        handle_61 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_64);
+        "core:cli/write_to_stream"(tx_65, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: elapsed time is non-negative"), used: 34 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_61);
     } else {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - elapsed time is negative"), used: 39 });
+        rx_73 = builtin::i32_wrap_i64(local.tee packed_72("wasi/stream-new"()));
+        tx_74 = builtin::i32_wrap_i64(packed_72 >> 32_i64);
+        handle_70 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_73);
+        "core:cli/write_to_stream"(tx_74, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - elapsed time is negative"), used: 39 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_70);
     }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all clocks tests passed"), used: 23 });
+    rx_82 = builtin::i32_wrap_i64(local.tee packed_81("wasi/stream-new"()));
+    tx_83 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
+    handle_79 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_82);
+    "core:cli/write_to_stream"(tx_83, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("all clocks tests passed"), used: 23 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_79);
 }
 
 fn "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -135,46 +203,43 @@ fn "wasi_clocks.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len: i32;
+    let len_3: i32;
     let new_repr: ref Array<u8>;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
     let end_15: i32;
-    let packed_21: i64;
-    let ptr_22: i32;
-    let raw_len_23: i32;
-    let repr_25: ref Array<u8>;
-    len = message.used;
+    let len_18: i32;
+    let ptr_19: i32;
+    let packed_25: i64;
+    let ptr_26: i32;
+    let raw_len_27: i32;
+    let repr_29: ref Array<u8>;
+    let len_35: i32;
+    let ptr_36: i32;
+    len_3 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        end_15 = len + 1;
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
+        new_repr = builtin::array_new<u8>(len_3 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
+        builtin::array_set_u8(new_repr, len_3, 10);
+        len_18 = local.tee end_15(len_3 + 1) - 0;
+        ptr_19 = "mem/realloc"(0, 0, 1, len_18);
+        "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
-        repr_25 = message.repr;
-        ptr_22 = builtin::i32_wrap_i64(local.tee packed_21("core:rt/cm_lower_list_u8"(repr_25, 0, len - 0)));
-        raw_len_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-        "core:rt/cm_stream_write_drain"(tx, ptr_22, raw_len_23, 1);
-        drop("mem/realloc"(ptr_22, raw_len_23, 1, 0));
+        repr_29 = message.repr;
+        len_35 = len_3 - 0;
+        ptr_36 = "mem/realloc"(0, 0, 1, len_35);
+        "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
+        ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
+        raw_len_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
+        "core:rt/cm_stream_write_drain"(tx, ptr_26, raw_len_27, 1);
+        drop("mem/realloc"(ptr_26, raw_len_27, 1, 0));
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let handle: i32;
-    let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
@@ -188,13 +253,6 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l8;
         };
     };
-}
-
-fn "core:rt/cm_lower_list_u8"(data, start, len) {
-    let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(data, start, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:rt/cm_await_blocked"(handle) {

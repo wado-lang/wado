@@ -92,24 +92,6 @@ fn fl_unlink(block: i32) {
     }
 }
 
-fn fl_carve(block: i32, block_size: i32, size: i32) {
-    let remainder: i32 = (block_size - size);
-    if (remainder >= 32) {
-        let tag: i32 = (size + 1);
-        core::builtin::i32_store(block, tag);
-        core::builtin::i32_store(((block + size) - 8), tag);
-        let rest: i32 = (block + size);
-        let tag: i32 = (remainder + 0);
-        core::builtin::i32_store(rest, tag);
-        core::builtin::i32_store(((rest + remainder) - 8), tag);
-        core::allocator::fl_push(rest, remainder);
-    } else {
-        let tag: i32 = (block_size + 1);
-        core::builtin::i32_store(block, tag);
-        core::builtin::i32_store(((block + block_size) - 8), tag);
-    }
-}
-
 pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
     if (core::allocator::heap_offset < 152) {
         core::allocator::heap_offset = 152;
@@ -151,6 +133,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
     let k: i32 = ((size - 32) >> 4);
     let mut j: i32 = core::builtin::select::<i32>((k < 32), k, 32);
+    let _licm_arith_74: i32 = (size + 1);
     loop {
         if !(j < 32) {
             break;
@@ -160,12 +143,26 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             let tag: i32 = core::builtin::i32_load(b);
             let block_size: i32 = core::builtin::i32_and(tag, -8);
             core::allocator::fl_unlink(b);
-            core::allocator::fl_carve(b, block_size, size);
+            let remainder: i32 = (block_size - size);
+            if (remainder >= 32) {
+                core::builtin::i32_store(b, _licm_arith_74);
+                core::builtin::i32_store(((b + size) - 8), _licm_arith_74);
+                let rest: i32 = (b + size);
+                let tag: i32 = (remainder + 0);
+                core::builtin::i32_store(rest, tag);
+                core::builtin::i32_store(((rest + remainder) - 8), tag);
+                core::allocator::fl_push(rest, remainder);
+            } else {
+                let tag: i32 = (block_size + 1);
+                core::builtin::i32_store(b, tag);
+                core::builtin::i32_store(((b + block_size) - 8), tag);
+            }
             return (b + 8);
         }
         j = (j + 1);
     }
     let mut curr: i32 = core::builtin::i32_load(136);
+    let _licm_arith_75: i32 = (size + 1);
     loop {
         if !(curr != 0) {
             break;
@@ -174,7 +171,20 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         let block_size: i32 = core::builtin::i32_and(tag, -8);
         if (block_size >= size) {
             core::allocator::fl_unlink(curr);
-            core::allocator::fl_carve(curr, block_size, size);
+            let remainder: i32 = (block_size - size);
+            if (remainder >= 32) {
+                core::builtin::i32_store(curr, _licm_arith_75);
+                core::builtin::i32_store(((curr + size) - 8), _licm_arith_75);
+                let rest: i32 = (curr + size);
+                let tag: i32 = (remainder + 0);
+                core::builtin::i32_store(rest, tag);
+                core::builtin::i32_store(((rest + remainder) - 8), tag);
+                core::allocator::fl_push(rest, remainder);
+            } else {
+                let tag: i32 = (block_size + 1);
+                core::builtin::i32_store(curr, tag);
+                core::builtin::i32_store(((curr + block_size) - 8), tag);
+            }
             return (curr + 8);
         }
         curr = core::builtin::i32_load((curr + 8));
