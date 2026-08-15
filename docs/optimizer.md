@@ -94,7 +94,7 @@ Whole-program and backend:
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
-- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A constant a callee borrows is left alone when that callee delivers the referent back out — `build(&self) -> List<T> { return *self; }` returns the storage, and the caller keeps no copy of what was a fresh literal, so hoisting would share one object across every call. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
 
 ## Lowering optimizations
 
