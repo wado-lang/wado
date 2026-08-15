@@ -24,8 +24,8 @@
 //   WADO_CACHE_TARGET_OBJECT, WADO_CACHE_TARGET_MANIFEST.
 
 import { createSign } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, openSync, rmSync, existsSync, renameSync } from "node:fs";
-import { spawn, execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync, mkdirSync, openSync, rmSync, existsSync } from "node:fs";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { homedir } from "node:os";
@@ -45,6 +45,13 @@ const CARGO_HOME = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
 const REPO_ROOT =
   process.env.CLAUDE_PROJECT_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TARGET_DIR = process.env.CARGO_TARGET_DIR ?? join(REPO_ROOT, "target");
+// The packer appends the manifest to the tarball last, so a copy inside
+// target/ means an extraction ran to completion: the tree is already warm.
+const RESTORED_MARKER = join(TARGET_DIR, "wado-cache-manifest.json");
+// Held exclusively for the length of a build (the `.cargo-lock` beside it is
+// only taken shared, so it says nothing about a build being under way).
+const BUILD_LOCK = join(TARGET_DIR, "debug", ".cargo-build-lock");
+const LOCK_BUSY_EXIT = 42;
 const SCOPE = "https://www.googleapis.com/auth/devstorage.read_only";
 const TIMEOUT_MS = 60_000;
 // `AbortSignal.timeout` covers the streamed body, not just the response
@@ -117,17 +124,49 @@ async function fetchObject(token: string, object: string, timeout: number): Prom
 // Unpack straight from the network into destDir. Staging the tarball first
 // would double the peak draw on the session's fixed disk allowance, which is
 // the resource under pressure here.
-async function untar(body: ReadableStream<Uint8Array>, destDir: string): Promise<void> {
+//
+// `lock` is held for the whole extraction, so a cargo that starts meanwhile
+// waits for a complete tree rather than racing a half-written one, and a build
+// already holding it makes the restore stand down. `keepExisting` settles who
+// wins where both have a file: what the container built, over the cache.
+type UntarOptions = { lock?: string; keepExisting?: boolean };
+
+async function untar(
+  body: ReadableStream<Uint8Array>,
+  destDir: string,
+  { lock, keepExisting }: UntarOptions = {},
+): Promise<"extracted" | "lock-busy"> {
   // `--no-same-owner`: tar restores the archive's uid/gid when it runs as root,
   // which would leave a tree cargo writes into owned by the CI runner's uid.
-  const tar = spawn("tar", ["-xzf", "-", "--no-same-owner", "-C", destDir], {
-    stdio: ["pipe", "ignore", "inherit"],
+  const tar = [
+    "tar",
+    "-xzf",
+    "-",
+    "--no-same-owner",
+    ...(keepExisting ? ["--skip-old-files"] : []),
+    "-C",
+    destDir,
+  ];
+  const argv = lock
+    ? ["flock", "--exclusive", "--nonblock", `--conflict-exit-code=${LOCK_BUSY_EXIT}`, lock, ...tar]
+    : tar;
+
+  const child = spawn(argv[0], argv.slice(1), { stdio: ["pipe", "ignore", "inherit"] });
+  const exited = new Promise<number>((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (code) => resolve(code ?? -1));
   });
-  const exited = new Promise<void>((resolve, reject) => {
-    tar.on("error", reject);
-    tar.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`tar exited with code ${code}`))));
+  // On a lock conflict nothing ever reads stdin, so the write fails with EPIPE.
+  // The exit code is the verdict; hold the write error back until it is known.
+  let writeError: Error | null = null;
+  const written = pipeline(Readable.fromWeb(body), child.stdin!).catch((e: Error) => {
+    writeError = e;
   });
-  await Promise.all([pipeline(Readable.fromWeb(body), tar.stdin!), exited]);
+
+  const [code] = await Promise.all([exited, written]);
+  if (code === LOCK_BUSY_EXIT) return "lock-busy";
+  if (code !== 0) throw writeError ?? new Error(`${argv[0]} exited with code ${code}`);
+  return "extracted";
 }
 
 async function restoreRegistry(token: string): Promise<void> {
@@ -153,11 +192,31 @@ function manifestMismatch(m: CacheManifest): string | null {
   return null;
 }
 
+function buildInProgress(): boolean {
+  const probe = spawnSync("flock", [
+    "--exclusive",
+    "--nonblock",
+    `--conflict-exit-code=${LOCK_BUSY_EXIT}`,
+    BUILD_LOCK,
+    "true",
+  ]);
+  return probe.status === LOCK_BUSY_EXIT;
+}
+
 async function restoreTargetDeps(token: string): Promise<void> {
-  // A target/ that already exists is a build this session started; merging a
-  // tarball into it underneath a running cargo is not worth the hazard.
-  if (existsSync(TARGET_DIR)) {
-    log(`${TARGET_DIR} already exists; skipping target restore`);
+  // A target/ that merely exists proves nothing: a resumed container carries
+  // whatever its image was snapshotted with, and restoring over that is the
+  // whole point.
+  if (existsSync(RESTORED_MARKER)) {
+    log(`${TARGET_DIR} already holds a restored cache; skipping target restore`);
+    return;
+  }
+
+  // Probed before the download rather than only at extraction time: a build
+  // that already owns target/ makes the whole transfer wasted bytes.
+  mkdirSync(dirname(BUILD_LOCK), { recursive: true });
+  if (buildInProgress()) {
+    log(`a build already owns ${TARGET_DIR}; skipping target restore`);
     return;
   }
 
@@ -173,25 +232,15 @@ async function restoreTargetDeps(token: string): Promise<void> {
   const res = await fetchObject(token, TARGET_OBJECT, DOWNLOAD_TIMEOUT_MS);
   if (!res) return;
 
-  // Unpack beside the destination and rename in: a directory rename is atomic,
-  // so a cargo that starts mid-restore either sees no target/ or a complete
-  // one, never a half-written tree.
-  const staging = `${TARGET_DIR}.incoming`;
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging, { recursive: true });
-  try {
-    await untar(res.body!, staging);
-    renameSync(staging, TARGET_DIR);
-    log(`restored gs://${BUCKET}/${TARGET_OBJECT} into ${TARGET_DIR} (built at ${manifest.commit})`);
-  } catch (e) {
-    rmSync(staging, { recursive: true, force: true });
-    // A build that won the race owns target/; losing it is the correct outcome.
-    if ((e as NodeJS.ErrnoException).code === "ENOTEMPTY" || (e as NodeJS.ErrnoException).code === "EEXIST") {
-      log("a build created target/ during the restore; skipping");
-      return;
-    }
-    throw e;
+  // Extracting in place needs no atomic swap: the lock keeps cargo out, and the
+  // archive's order (see pack-target-deps.sh) makes a cut-short extraction
+  // rebuild rather than mislead. The next restore fills the gaps it left.
+  const outcome = await untar(res.body!, TARGET_DIR, { lock: BUILD_LOCK, keepExisting: true });
+  if (outcome === "lock-busy") {
+    log(`a build took ${TARGET_DIR} during the download; skipping target restore`);
+    return;
   }
+  log(`restored gs://${BUCKET}/${TARGET_OBJECT} into ${TARGET_DIR} (built at ${manifest.commit})`);
 }
 
 const DETACH_MARKER = "WADO_CACHE_RESTORE_DETACHED";
