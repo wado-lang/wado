@@ -653,11 +653,8 @@ impl TirMutVisitor for PackExpansionLocalSplitter<'_> {
 /// Result::Err(From::from(__qm_e))` returns the full pack, but `__qm_e` is this
 /// element's error and has to keep the type its own local declares.
 ///
-/// One traversal, two uses — [`Monomorphizer::collect_return_value_types`]
-/// reads the slots to build the wrong/correct type pairs of a type-pack
-/// expansion and [`Monomorphizer::fixup_return_types_in_expr`] writes them
-/// back. Sharing it is what keeps the two in step: a pair can never be
-/// computed for a slot the fixup does not reach, nor the reverse.
+/// Expansion resolves these slots under the outer substitution *before* the
+/// per-element one runs, so they never take the element type to begin with.
 struct ReturnTypeSlots<F> {
     on_slot: F,
 }
@@ -2538,9 +2535,16 @@ impl Monomorphizer {
                                 .unwrap_or_else(|| vec![concrete_pack]);
                             for &elem_type in &pack_elems {
                                 let mut elem_call = call_expr.as_ref().clone();
-                                // The generic return types, read before the
-                                // per-element substitution rewrites them.
-                                let return_types = Self::collect_return_value_types(&mut elem_call);
+                                // A `return` inside the element exits the
+                                // *enclosing* function, whose return type names
+                                // the whole pack — so resolve those slots under
+                                // the outer substitution first. They come out
+                                // concrete, which leaves the per-element pass
+                                // below nothing to rewrite on them.
+                                ReturnTypeSlots::new(|slot: &mut TypeId| {
+                                    *slot = self.substitute_type(*slot, substitution, type_table);
+                                })
+                                .visit_expr(&mut elem_call);
                                 // Per-element substitution: pack → single element type.
                                 // This correctly rewrites the static call (T::method → i32::method)
                                 // and the expression's own type (TypePack → i32).
@@ -2553,23 +2557,6 @@ impl Monomorphizer {
                                     local_count,
                                     locals,
                                 );
-                                // Fix up Return statements: the per-element substitution
-                                // incorrectly maps pack types in return positions, so put
-                                // the full-pack type back.
-                                for wrong_type in return_types {
-                                    let wrong =
-                                        self.substitute_type(wrong_type, &elem_sub, type_table);
-                                    let correct =
-                                        self.substitute_type(wrong_type, substitution, type_table);
-                                    if wrong != correct {
-                                        Self::fixup_return_types_in_expr(
-                                            &mut elem_call,
-                                            wrong,
-                                            correct,
-                                            type_table,
-                                        );
-                                    }
-                                }
                                 elements.push(elem_call);
                             }
                         } else {
@@ -4429,69 +4416,6 @@ impl Monomorphizer {
             type_table,
         }
         .visit_block(block);
-    }
-
-    /// The generic types a type-pack expansion element returns, read before the
-    /// per-element substitution — one half of the wrong/correct pairs
-    /// [`Self::fixup_return_types_in_expr`] then rewrites.
-    ///
-    /// Takes `&mut` only to share [`ReturnTypeSlots`] with the fixup; reading
-    /// the slots through the same traversal that writes them is what makes the
-    /// two sets equal by construction.
-    fn collect_return_value_types(expr: &mut TirExpr) -> IndexSet<TypeId> {
-        let mut types = IndexSet::default();
-        ReturnTypeSlots::new(|slot: &mut TypeId| {
-            types.insert(*slot);
-        })
-        .visit_expr(expr);
-        types
-    }
-
-    /// Fix up Return statements inside a type pack expansion element.
-    ///
-    /// The per-element substitution turns `[..T]` into `[elem_type]` (a single-element
-    /// tuple) in Return statements, but it should be `concrete_pack` (the full tuple).
-    fn fixup_return_types_in_expr(
-        expr: &mut TirExpr,
-        wrong_type: TypeId,
-        correct_type: TypeId,
-        type_table: &mut TypeTable,
-    ) {
-        ReturnTypeSlots::new(|slot: &mut TypeId| {
-            *slot = Self::replace_type_in_generic(*slot, wrong_type, correct_type, type_table);
-        })
-        .visit_expr(expr);
-    }
-
-    /// Replace `old_type` with `new_type` inside generic instances.
-    /// For example, Result<[i32], String> → Result<[i32,String,bool], String>
-    /// when `old_type` = [i32] and `new_type` = [i32,String,bool].
-    fn replace_type_in_generic(
-        type_id: TypeId,
-        old_type: TypeId,
-        new_type: TypeId,
-        type_table: &mut TypeTable,
-    ) -> TypeId {
-        if type_id == old_type {
-            return new_type;
-        }
-        match type_table.get(type_id).clone() {
-            ResolvedType::GenericInstance { def, type_args } => {
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&arg| Self::replace_type_in_generic(arg, old_type, new_type, type_table))
-                    .collect();
-                if new_args == type_args {
-                    type_id
-                } else {
-                    type_table.intern(ResolvedType::GenericInstance {
-                        def,
-                        type_args: new_args,
-                    })
-                }
-            }
-            _ => type_id,
-        }
     }
 
     fn rewrite_local_index_in_stmt(stmt: &mut TirStmt, old_idx: u32, new_idx: u32) {
