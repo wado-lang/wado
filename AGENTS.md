@@ -4,6 +4,11 @@ This document describes how to develop the Wado compiler toolchain.
 
 Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
 
+## Principles
+
+- Succinctly — say and write the least that fully conveys the point.
+- Fix-forward — fix the cause of a defect and move forward; never backtrack.
+
 ## Development
 
 This project uses [mise](https://mise.jdx.dev/) to manage dev tools. Project tasks are defined in `mise.toml`. Run `mise tasks` to discover available tasks.
