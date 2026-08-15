@@ -12,7 +12,14 @@ use ts from "./grammars/TypeScriptLexer.g4"
         },
     };
 use { normalize_tree } from "./support/tree_compare.wado";
-use { TK_BackTick, TK_BackTickInside, TK_WhiteSpaces, TK_Let, TK_Divide, TK_RegularExpressionLiteral } from "./grammars/TypeScriptLexer.g4";
+use {
+    TK_BackTick,
+    TK_BackTickInside,
+    TK_WhiteSpaces,
+    TK_Let,
+    TK_Divide,
+    TK_RegularExpressionLiteral,
+} from "./grammars/TypeScriptLexer.g4";
 use { TypeScriptLexerBase, LexerView } from "./grammars/TypeScriptLexer.g4";
 
 // A hand-written TypeScriptLexerBase port, installed around every recognizer
@@ -41,7 +48,7 @@ impl TypeScriptLexerBase for TsBase {
             i -= 1;
         }
         let c = view.char_at(i);
-        resume !(ends_operand(c));
+        resume !ends_operand(c);
     }
 
     fn is_in_template_string(&self, view: LexerView) -> bool {

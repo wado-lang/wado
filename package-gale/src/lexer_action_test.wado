@@ -266,8 +266,7 @@ A : 'a' { this.hit() } ;
 WS : ' ' -> skip ;
 ");
     assert src.contains("fn hit(view: LexerView);"), "an action op returns unit";
-    assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with B, stores[lx]"),
-        "the replay carries the base effect";
+    assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with B, stores[lx]"), "the replay carries the base effect";
     assert src.contains("B::hit(LexerView { chars, start, pos });"), "the action op is called from the replay";
     assert src.contains("fn try_A(chars: &List<char>, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
 }

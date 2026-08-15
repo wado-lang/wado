@@ -946,12 +946,7 @@ pub fn lexer_rule_replayable(rule: &LexerRule, all_rules: &List<LexerRule>) -> b
 /// `Group`, which the replay reaches. Single source of truth shared by the
 /// apply-fn emit and `warn_unhandled_lexer_actions`, so a run action and a
 /// warned-unhandled action cannot disagree.
-fn lexer_rule_executed_action_ids(
-    grammar: &Grammar,
-    grammar_executes: bool,
-    rule: &LexerRule,
-    out: &mut List<i32>,
-) {
+fn lexer_rule_executed_action_ids(grammar: &Grammar, grammar_executes: bool, rule: &LexerRule, out: &mut List<i32>) {
     if !lexer_rule_executes_actions(grammar_executes, rule) {
         return;
     }
