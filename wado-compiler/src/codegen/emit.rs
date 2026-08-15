@@ -21,6 +21,31 @@ use wasm_encoder::{
 /// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
 mod wide_arith_downlevel;
 
+/// Name of a scratch slot for the `-f no-array-copy` loop. Keyed by the
+/// (dest, src) type pair, so sites of the same shape share slots. The single
+/// spelling shared by the declaring walker and the emitter — building the name
+/// twice lets the two drift, and a mismatch is an "unresolved local" ICE.
+fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
+    format!("__array_copy_{role}_{dest_type_idx}_{src_type_idx}")
+}
+
+/// Name of a scratch slot for the `ArrayClone` loop, keyed by array type.
+/// Shared by the declaring walker and the emitter, as [`array_copy_slot`].
+fn array_clone_slot(role: &str, type_idx: u32) -> String {
+    format!("__copy_arr_{role}_{type_idx}")
+}
+
+/// Whether a Wasm GC packed storage type reads back signed (`Some(true)`),
+/// unsigned (`Some(false)`), or is not packed at all (`None`) — the choice
+/// between `*.get_s`, `*.get_u` and plain `*.get`.
+fn packed_signedness(ty: &WirType) -> Option<bool> {
+    match ty {
+        WirType::I8 | WirType::I16 => Some(true),
+        WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
+        _ => None,
+    }
+}
+
 /// Emit a core Wasm module from a `WirPackage`.
 pub fn emit_core_module(
     wir: &WirPackage,
@@ -212,10 +237,11 @@ impl<'a> WirEmitter<'a> {
         // This ensures `resolve_type_index` returns correct indices even for
         // forward references (e.g., array<Pair> referencing a Pair struct
         // that hasn't been emitted yet).
-        self.pre_assign_type_indices();
-
-        // Find func types that must go in the rec group (referenced from struct fields)
+        // Func types referenced from struct fields must join the rec group.
+        // Computed once and threaded into the pre-pass: the two walks assign
+        // and emit the same indices, so they must classify identically.
         let gc_func_types = self.find_gc_referenced_func_types();
+        self.pre_assign_type_indices(&gc_func_types);
 
         // Emit GC types (structs, arrays, variants) in a single `rec` group
         // so that forward references between them are allowed by the Wasm GC type system.
@@ -259,7 +285,7 @@ impl<'a> WirEmitter<'a> {
             if let WirTypeDef::Func(f) = typedef
                 && !gc_func_types.contains(&wir_idx)
             {
-                self.emit_standalone_func_type(&mut types, f, wir_idx);
+                self.emit_standalone_func_type(&mut types, f);
             }
         }
 
@@ -273,11 +299,8 @@ impl<'a> WirEmitter<'a> {
     ///
     /// Exception: func types referenced by struct fields (e.g., canonical closure func types)
     /// must also go in the rec group to avoid invalid forward references.
-    fn pre_assign_type_indices(&mut self) {
+    fn pre_assign_type_indices(&mut self, gc_func_types: &IndexSet<u32>) {
         let mut next_idx = 0u32;
-
-        // Find func types referenced from struct fields — these must go in the rec group
-        let gc_func_types = self.find_gc_referenced_func_types();
 
         // Pass 1: GC types (structs, arrays, variants) + func types referenced from GC types
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
@@ -367,12 +390,7 @@ impl<'a> WirEmitter<'a> {
         gc_func_types
     }
 
-    fn emit_standalone_func_type(
-        &mut self,
-        types: &mut TypeSection,
-        f: &WirFuncType,
-        _wir_idx: u32,
-    ) {
+    fn emit_standalone_func_type(&mut self, types: &mut TypeSection, f: &WirFuncType) {
         let params: Vec<ValType> = f
             .params
             .iter()
@@ -704,12 +722,12 @@ impl<'a> WirEmitter<'a> {
         })
     }
 
+    /// Whether the global's declared slot type admits null. Resolved through
+    /// the name map rather than a scan: this runs once per `GlobalGet`.
     fn global_slot_is_nullable(&self, name: &str) -> bool {
-        self.wir
-            .globals
-            .iter()
-            .find(|g| g.name.fq == name)
-            .is_some_and(|g| !g.ty.is_nonnull_ref())
+        !self.wir.globals[self.resolve_global(name) as usize]
+            .ty
+            .is_nonnull_ref()
     }
 
     // === Global Section ===
@@ -884,41 +902,48 @@ impl<'a> WirEmitter<'a> {
                     nullable: false,
                     heap_type: HeapType::Concrete(self.resolve_type_index(src_type_id.index())),
                 };
-                let key = format!("{}_{}", dest_type_id.index(), src_type_id.index());
+                let (dest, src) = (dest_type_id.index(), src_type_id.index());
                 if self
                     .scratch_local_names
-                    .insert(format!("__array_copy_dst_{key}"))
+                    .insert(array_copy_slot("dst", dest, src))
                 {
-                    locals.push((format!("__array_copy_dst_{key}"), ValType::Ref(dst_ref)));
-                    locals.push((format!("__array_copy_src_{key}"), ValType::Ref(src_ref)));
-                    locals.push((format!("__array_copy_dst_off_{key}"), ValType::I32));
-                    locals.push((format!("__array_copy_src_off_{key}"), ValType::I32));
-                    locals.push((format!("__array_copy_len_{key}"), ValType::I32));
-                    locals.push((format!("__array_copy_i_{key}"), ValType::I32));
+                    for (role, ty) in [
+                        ("dst", ValType::Ref(dst_ref)),
+                        ("src", ValType::Ref(src_ref)),
+                        ("dst_off", ValType::I32),
+                        ("src_off", ValType::I32),
+                        ("len", ValType::I32),
+                        ("i", ValType::I32),
+                    ] {
+                        locals.push((array_copy_slot(role, dest, src), ty));
+                    }
                 }
             }
             WirInstr::ArrayClone { type_id, .. } => {
-                let arr_ref = RefType {
+                let arr = ValType::Ref(RefType {
                     nullable: false,
                     heap_type: HeapType::Concrete(self.resolve_type_index(type_id.index())),
-                };
+                });
                 let idx = type_id.index();
                 if self
                     .scratch_local_names
-                    .insert(format!("__copy_arr_src_{idx}"))
+                    .insert(array_clone_slot("src", idx))
                 {
-                    locals.push((format!("__copy_arr_src_{idx}"), ValType::Ref(arr_ref)));
-                    locals.push((format!("__copy_arr_dst_{idx}"), ValType::Ref(arr_ref)));
-                    locals.push((format!("__copy_arr_len_{idx}"), ValType::I32));
-                    locals.push((format!("__copy_arr_i_{idx}"), ValType::I32));
                     // The clone loop's per-element nullability branch needs an
-                    // element-typed temp.
+                    // element-typed temp alongside the cursor slots.
                     let elem_val = self.array_element_val_type(idx).unwrap_or_else(|| {
                         panic!("[WIR emit] ArrayClone on non-array WIR type {idx}")
                     });
-                    self.scratch_local_names
-                        .insert(format!("__copy_arr_elem_{idx}"));
-                    locals.push((format!("__copy_arr_elem_{idx}"), elem_val));
+                    for (role, ty) in [
+                        ("src", arr),
+                        ("dst", arr),
+                        ("len", ValType::I32),
+                        ("i", ValType::I32),
+                        ("elem", elem_val),
+                    ] {
+                        self.scratch_local_names.insert(array_clone_slot(role, idx));
+                        locals.push((array_clone_slot(role, idx), ty));
+                    }
                 }
             }
             WirInstr::I64MulWideU(..)
@@ -1677,12 +1702,7 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
-                let wasm_idx = self.resolve_type_index(type_id.index());
-                match self.is_array_packed(type_id.index()) {
-                    Some(true) => f.instruction(&Instruction::ArrayGetS(wasm_idx)),
-                    Some(false) => f.instruction(&Instruction::ArrayGetU(wasm_idx)),
-                    None => f.instruction(&Instruction::ArrayGet(wasm_idx)),
-                };
+                self.emit_array_get(f, type_id.index());
                 // Array elements are declared nullable in Wasm (for
                 // `array.new_default`), so `array.get` yields a nullable ref.
                 // Narrow back to non-null only when the Wado element type is
@@ -2107,43 +2127,14 @@ impl<'a> WirEmitter<'a> {
                 // per-element get/set. The native instruction (the arm above,
                 // now the default) is selected when `array_copy` is set.
                 let dst_wasm_idx = self.resolve_type_index(dest_type_id.index());
-                let src_wasm_idx = self.resolve_type_index(src_type_id.index());
-                let dst_name = format!(
-                    "__array_copy_dst_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let src_name = format!(
-                    "__array_copy_src_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let dst_off_name = format!(
-                    "__array_copy_dst_off_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let src_off_name = format!(
-                    "__array_copy_src_off_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let len_name = format!(
-                    "__array_copy_len_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let i_name = format!(
-                    "__array_copy_i_{}_{}",
-                    dest_type_id.index(),
-                    src_type_id.index()
-                );
-                let dst_local = self.resolve_local(&dst_name);
-                let src_local = self.resolve_local(&src_name);
-                let dst_off_local = self.resolve_local(&dst_off_name);
-                let src_off_local = self.resolve_local(&src_off_name);
-                let len_local = self.resolve_local(&len_name);
-                let i_local = self.resolve_local(&i_name);
+                let (dest_ty, src_ty) = (dest_type_id.index(), src_type_id.index());
+                let slot = |role: &str| self.resolve_local(&array_copy_slot(role, dest_ty, src_ty));
+                let dst_local = slot("dst");
+                let src_local = slot("src");
+                let dst_off_local = slot("dst_off");
+                let src_off_local = slot("src_off");
+                let len_local = slot("len");
+                let i_local = slot("i");
 
                 // Stash the five argument expressions into locals. The dst/src
                 // ref slots are declared non-null (init-tracking), so coerce
@@ -2196,17 +2187,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::LocalGet(src_off_local));
                 f.instruction(&Instruction::LocalGet(i_local));
                 f.instruction(&Instruction::I32Add);
-                match self.is_array_packed(src_type_id.index()) {
-                    Some(true) => {
-                        f.instruction(&Instruction::ArrayGetS(src_wasm_idx));
-                    }
-                    Some(false) => {
-                        f.instruction(&Instruction::ArrayGetU(src_wasm_idx));
-                    }
-                    None => {
-                        f.instruction(&Instruction::ArrayGet(src_wasm_idx));
-                    }
-                }
+                self.emit_array_get(f, src_type_id.index());
                 f.instruction(&Instruction::ArraySet(dst_wasm_idx));
                 f.instruction(&Instruction::Br(0));
                 f.instruction(&Instruction::End);
@@ -2233,17 +2214,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::LocalGet(src_off_local));
                 f.instruction(&Instruction::LocalGet(i_local));
                 f.instruction(&Instruction::I32Add);
-                match self.is_array_packed(src_type_id.index()) {
-                    Some(true) => {
-                        f.instruction(&Instruction::ArrayGetS(src_wasm_idx));
-                    }
-                    Some(false) => {
-                        f.instruction(&Instruction::ArrayGetU(src_wasm_idx));
-                    }
-                    None => {
-                        f.instruction(&Instruction::ArrayGet(src_wasm_idx));
-                    }
-                }
+                self.emit_array_get(f, src_type_id.index());
                 f.instruction(&Instruction::ArraySet(dst_wasm_idx));
                 // i += 1
                 f.instruction(&Instruction::LocalGet(i_local));
@@ -2277,14 +2248,12 @@ impl<'a> WirEmitter<'a> {
                 len,
             } => {
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
-                let src_name = format!("__copy_arr_src_{}", type_id.index());
-                let dst_name = format!("__copy_arr_dst_{}", type_id.index());
-                let len_name = format!("__copy_arr_len_{}", type_id.index());
-                let loop_idx_name = format!("__copy_arr_i_{}", type_id.index());
-                let src_local = self.resolve_local(&src_name);
-                let dst_local = self.resolve_local(&dst_name);
-                let len_local = self.resolve_local(&len_name);
-                let loop_idx_local = self.resolve_local(&loop_idx_name);
+                let slot = |role: &str| self.resolve_local(&array_clone_slot(role, type_id.index()));
+                let src_local = slot("src");
+                let dst_local = slot("dst");
+                let len_local = slot("len");
+                let loop_idx_local = slot("i");
+                let elem_local = slot("elem");
                 // Keep `src` on the operand stack while `len` is emitted: the
                 // scratch locals are shared per `type_id`, so a nested clone of
                 // the same array type inside the `len` subtree would clobber
@@ -2314,17 +2283,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::LocalGet(loop_idx_local));
                 f.instruction(&Instruction::LocalGet(src_local));
                 f.instruction(&Instruction::LocalGet(loop_idx_local));
-                match self.is_array_packed(type_id.index()) {
-                    Some(true) => {
-                        f.instruction(&Instruction::ArrayGetS(arr_wasm_idx));
-                    }
-                    Some(false) => {
-                        f.instruction(&Instruction::ArrayGetU(arr_wasm_idx));
-                    }
-                    None => {
-                        f.instruction(&Instruction::ArrayGet(arr_wasm_idx));
-                    }
-                }
+                self.emit_array_get(f, type_id.index());
                 let func_idx = self
                     .resolve_function_index_by_value_copy_mangle(element_copy_mangle)
                     .unwrap_or_else(|| {
@@ -2341,8 +2300,6 @@ impl<'a> WirEmitter<'a> {
                 // the null in the destination — instead of
                 // unconditionally `ref.as_non_null` which would
                 // trap on every empty trailing slot.
-                let elem_name = format!("__copy_arr_elem_{}", type_id.index());
-                let elem_local = self.resolve_local(&elem_name);
                 let elem_val = self
                     .array_element_val_type(type_id.index())
                     .expect("collect_scratch_locals already resolved the element type");
@@ -2685,35 +2642,30 @@ impl<'a> WirEmitter<'a> {
     }
 
     fn is_array_packed(&self, wir_type_idx: u32) -> Option<bool> {
-        let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len()
-            && let WirTypeDef::Array(ref arr) = self.wir.types[idx]
-        {
-            return match &arr.element_type {
-                WirType::I8 | WirType::I16 => Some(true),
-                WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
-                _ => None,
-            };
+        match self.wir.types.get(wir_type_idx as usize) {
+            Some(WirTypeDef::Array(arr)) => packed_signedness(&arr.element_type),
+            _ => None,
         }
-        None
     }
 
     fn is_field_packed(&self, wir_type_idx: u32, field_name: &str) -> Option<bool> {
-        let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len()
-            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
-        {
-            for field in &st.fields {
-                if field.name == field_name {
-                    return match &field.ty {
-                        WirType::I8 | WirType::I16 => Some(true),
-                        WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
-                        _ => None,
-                    };
-                }
-            }
-        }
-        None
+        let Some(WirTypeDef::Struct(st)) = self.wir.types.get(wir_type_idx as usize) else {
+            return None;
+        };
+        let field = st.fields.iter().find(|f| f.name == field_name)?;
+        packed_signedness(&field.ty)
+    }
+
+    /// Emit the `array.get` flavour the element storage type calls for: the
+    /// signed or unsigned widening read for a packed element, the plain read
+    /// otherwise.
+    fn emit_array_get(&self, f: &mut Function, wir_type_idx: u32) {
+        let wasm_idx = self.resolve_type_index(wir_type_idx);
+        match self.is_array_packed(wir_type_idx) {
+            Some(true) => f.instruction(&Instruction::ArrayGetS(wasm_idx)),
+            Some(false) => f.instruction(&Instruction::ArrayGetU(wasm_idx)),
+            None => f.instruction(&Instruction::ArrayGet(wasm_idx)),
+        };
     }
 
     /// The Wasm index of a WIR function id. `build_func_index_map` maps every
@@ -2797,7 +2749,7 @@ impl<'a> WirEmitter<'a> {
                 heap_type,
                 nullable,
             } => {
-                let ht = self.wir_abstract_heap_to_wasm_heap(heap_type);
+                let ht = self.wir_abstract_heap_to_wasm(heap_type);
                 ValType::Ref(RefType {
                     nullable: *nullable,
                     heap_type: ht,
@@ -2836,10 +2788,6 @@ impl<'a> WirEmitter<'a> {
                 WirAbstractHeapType::Extern => AbstractHeapType::Extern,
             },
         }
-    }
-
-    fn wir_abstract_heap_to_wasm_heap(&self, ht: &WirAbstractHeapType) -> HeapType {
-        self.wir_abstract_heap_to_wasm(ht)
     }
 
     /// Collect all function indices referenced by `RefFunc` instructions.
