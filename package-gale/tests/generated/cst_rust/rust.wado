@@ -3763,7 +3763,7 @@ fn try_BLOCK_COMMENT_OR_DOC(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase, stores[chars] {
+fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with (RustLexerBase, stores[chars]) {
     let mut pos = start;
     if !(RustLexerBase::sof(LexerView { chars, start, pos })) { return -1; }
     let opt_saved_24 = pos;
@@ -5484,7 +5484,7 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase, stores[chars] {
+fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with (RustLexerBase, stores[chars]) {
     let mut pos = start;
     if !(RustLexerBase::float_literal_possible(LexerView { chars, start, pos })) { return -1; }
     let alts_saved_81 = pos;

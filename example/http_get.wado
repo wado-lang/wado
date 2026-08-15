@@ -52,7 +52,7 @@ fn read_body(resp: Response) -> String {
     return String::from_utf8_lossy(body);
 }
 
-export fn run() with Stdout, Client {
+export fn run() with (Stdout, Client) {
     let url = Url::parse("https://httpbin.org/get").unwrap();
     let resp = send_get(url);
     println(`Status: ${resp.get_status_code() as i32}`);

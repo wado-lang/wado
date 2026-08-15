@@ -59,7 +59,7 @@ test "smoke" {
     assert sieve_count(&mut is_prime, 100) == 25;
 }
 
-export fn run() with Stdout, MonotonicClock {
+export fn run() with (Stdout, MonotonicClock) {
     let limit = 10000000;
     // Allocate the sieve buffer once, outside the timed region.
     let mut is_prime = List::<bool>::filled(limit + 1, true);

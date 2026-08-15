@@ -465,7 +465,7 @@ pub struct FnSpec {
     effects: List<String>,
     /// Reference-parameter names for a `stores[…]` clause, rendered inside the
     /// same `with` clause after the effects (e.g. `["chars"]` →
-    /// ` with Foo, stores[chars]`).
+    /// ` with (Foo, stores[chars])`).
     stores: List<String>,
     receiver: Option<String>,
 }
@@ -575,8 +575,10 @@ impl FnSpec {
         if self.stores.len() > 0 {
             clauses.push(`stores[${join_comma(&self.stores)}]`);
         }
-        if clauses.len() > 0 {
-            sig.push_str(&` with ${join_comma(&clauses)}`);
+        if clauses.len() == 1 {
+            sig.push_str(&` with ${clauses[0]}`);
+        } else if clauses.len() > 1 {
+            sig.push_str(&` with (${join_comma(&clauses)})`);
         }
         return sig;
     }

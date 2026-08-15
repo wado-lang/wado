@@ -2370,7 +2370,7 @@ impl Lexer {
 pub global MODE_DEFAULT_MODE: i32 = 0;
 pub global MODE_TEMPLATE: i32 = 1;
 
-fn apply_OpenBrace_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+fn apply_OpenBrace_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '{' { return; }
@@ -2378,7 +2378,7 @@ fn apply_OpenBrace_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScript
     TypeScriptLexerBase::process_open_brace(LexerView { chars, start, pos });
 }
 
-fn apply_CloseBrace_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+fn apply_CloseBrace_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '}' { return; }
@@ -2386,13 +2386,13 @@ fn apply_CloseBrace_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScrip
     TypeScriptLexerBase::process_close_brace(LexerView { chars, start, pos });
 }
 
-fn apply_StringLiteral_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+fn apply_StringLiteral_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let pos = end;
     TypeScriptLexerBase::process_string_literal(LexerView { chars, start, pos });
 }
 
-fn apply_BackTick_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+fn apply_BackTick_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '`' { return; }
@@ -2400,7 +2400,7 @@ fn apply_BackTick_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptL
     TypeScriptLexerBase::increase_template_depth(LexerView { chars, start, pos });
 }
 
-fn apply_BackTickInside_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+fn apply_BackTickInside_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '`' { return; }
@@ -2408,7 +2408,7 @@ fn apply_BackTickInside_actions(lx: &mut Lexer, start: i32, end: i32) with TypeS
     TypeScriptLexerBase::decrease_template_depth(LexerView { chars, start, pos });
 }
 
-fn apply_TemplateStringStartExpression_actions(lx: &mut Lexer, start: i32, end: i32) with TypeScriptLexerBase, stores[lx] {
+fn apply_TemplateStringStartExpression_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '$' { return; }
@@ -2464,7 +2464,7 @@ fn try_SingleLineComment(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase, stores[chars] {
+fn try_RegularExpressionLiteral(chars: &List<char>, start: i32) -> i32 with (TypeScriptLexerBase, stores[chars]) {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
@@ -2772,7 +2772,7 @@ fn try_OpenBrace(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_TemplateCloseBrace(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase, stores[chars] {
+fn try_TemplateCloseBrace(chars: &List<char>, start: i32) -> i32 with (TypeScriptLexerBase, stores[chars]) {
     let mut pos = start;
     if !(TypeScriptLexerBase::is_in_template_string(LexerView { chars, start, pos })) { return -1; }
     if pos >= chars.len() || chars[pos] != '}' { return -1; }
@@ -3478,7 +3478,7 @@ fn try_HexIntegerLiteral(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 with TypeScriptLexerBase, stores[chars] {
+fn try_OctalIntegerLiteral(chars: &List<char>, start: i32) -> i32 with (TypeScriptLexerBase, stores[chars]) {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '0' { return -1; }
     pos += 1;

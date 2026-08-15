@@ -45,7 +45,7 @@ fn check_stale_def(_unused: bool) -> i32 {
     return c.size;
 }
 
-export fn run() with Stdout, MonotonicClock {
+export fn run() with (Stdout, MonotonicClock) {
     let now = MonotonicClock::now();
     let opaque: bool = now != now; // false at runtime, opaque at compile time
     let v = check_stale_def(opaque);

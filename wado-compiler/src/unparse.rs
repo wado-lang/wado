@@ -4059,21 +4059,29 @@ fn self_param_shorthand(param: &Param) -> Option<&'static str> {
     }
 }
 
+/// Emit a `with` row: one item goes bare, more than one is parenthesized.
 pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &mut String) {
-    if effects.is_empty() && stores.is_empty() {
-        return;
-    }
-    output.push_str(" with ");
-    if !effects.is_empty() {
-        output.push_str(&effects.join(", "));
-        if !stores.is_empty() {
-            output.push_str(", ");
-        }
-    }
+    let mut items: Vec<String> = effects.to_vec();
     if !stores.is_empty() {
-        output.push_str("stores[");
-        output.push_str(&stores.join(", "));
-        output.push(']');
+        items.push(format!("stores[{}]", stores.join(", ")));
+    }
+    unparse_with_row_into(&items, output);
+}
+
+/// The shared row shape. `items` are the already-rendered effect names and
+/// `stores[...]` group; an empty row emits nothing.
+fn unparse_with_row_into(items: &[String], output: &mut String) {
+    match items {
+        [] => {}
+        [only] => {
+            output.push_str(" with ");
+            output.push_str(only);
+        }
+        many => {
+            output.push_str(" with (");
+            output.push_str(&many.join(", "));
+            output.push(')');
+        }
     }
 }
 
@@ -4087,49 +4095,28 @@ fn unparse_fn_return_into(return_type: &Type, output: &mut String) {
     }
 }
 
-/// with-clause for function-type position (`stores[0, 1]` with positional indices).
-/// Bound-context variant of `fn(...)` printing. Multi-effect `with` clauses
-/// are parens-grouped because comma at this level separates trait bounds
-/// (and `stores[...]` never appears in bound position).
+/// Bound-context variant of `fn(...)` printing. `stores[...]` never appears in
+/// bound position, so the row is effects only.
 fn unparse_fn_signature_in_bound_into(sig: &FunctionType, output: &mut String) {
     output.push_str(if sig.is_mut { "fn mut" } else { "fn" });
     delimited_into("(", ")", &sig.params, output, unparse_type_into);
     unparse_fn_return_into(&sig.return_type, output);
-    match sig.effects.len() {
-        0 => {}
-        1 => {
-            output.push_str(" with ");
-            output.push_str(&sig.effects[0]);
-        }
-        _ => {
-            output.push_str(" with (");
-            output.push_str(&sig.effects.join(", "));
-            output.push(')');
-        }
-    }
+    unparse_with_row_into(&sig.effects, output);
 }
 
+/// `with` row for function-type position, where `stores` takes positional
+/// indices.
 fn unparse_fn_type_with_clause_into(
     effects: &[String],
     stores: &[StoresEntry],
     output: &mut String,
 ) {
-    if effects.is_empty() && stores.is_empty() {
-        return;
-    }
-    output.push_str(" with ");
-    if !effects.is_empty() {
-        output.push_str(&effects.join(", "));
-        if !stores.is_empty() {
-            output.push_str(", ");
-        }
-    }
+    let mut items: Vec<String> = effects.to_vec();
     if !stores.is_empty() {
-        output.push_str("stores[");
         let entries: Vec<String> = stores.iter().map(ToString::to_string).collect();
-        output.push_str(&entries.join(", "));
-        output.push(']');
+        items.push(format!("stores[{}]", entries.join(", ")));
     }
+    unparse_with_row_into(&items, output);
 }
 
 pub fn unparse_enum_case(enum_name: &str, case: &EnumCase) -> String {
@@ -4449,20 +4436,21 @@ impl<'a> TirUnparser<'a> {
     }
 
     fn unparse_tir_with_clause(&mut self, effects: &[super::tir::EffectRef], stores: &[String]) {
-        if effects.is_empty() && stores.is_empty() {
-            return;
-        }
-        self.output.push_str(" with ");
-        if !effects.is_empty() {
-            self.comma_sep(effects, |s, e| s.output.push_str(e.name()));
-            if !stores.is_empty() {
-                self.output.push_str(", ");
-            }
-        }
+        let mut items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
         if !stores.is_empty() {
-            self.output.push_str("stores[");
-            self.output.push_str(&stores.join(", "));
-            self.output.push(']');
+            items.push(format!("stores[{}]", stores.join(", ")));
+        }
+        match items.as_slice() {
+            [] => {}
+            [only] => {
+                self.output.push_str(" with ");
+                self.output.push_str(only);
+            }
+            many => {
+                self.output.push_str(" with (");
+                self.output.push_str(&many.join(", "));
+                self.output.push(')');
+            }
         }
     }
 

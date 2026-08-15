@@ -24,7 +24,7 @@ use { println, Stdout } from "core:cli";
 use { SystemClock, Instant as ClockInstant, Timezone } from "wasi:clocks";
 use { Instant, ZonedDateTime } from "core:temporal";
 
-export fn run() with Stdout, SystemClock, Timezone {
+export fn run() with (Stdout, SystemClock, Timezone) {
     let now: ClockInstant = SystemClock::now();
 
     // `core:temporal` bridges the two `Instant` types with `From`, so a

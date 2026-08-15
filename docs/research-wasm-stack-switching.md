@@ -107,7 +107,7 @@ perform I/O. This is a **compile-time** mechanism orthogonal to the runtime asyn
 
 ```wado
 // File I/O — completely synchronous-looking
-export fn run() with Stdout, Preopens {
+export fn run() with (Stdout, Preopens) {
     let file = dir.open_at(flags, "hello.txt", oflags, dflags);
     let [stream, _done] = file.read_via_stream(0 as Filesize);
     let subtask = Stdout::write_via_stream(stream);

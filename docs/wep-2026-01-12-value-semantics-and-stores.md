@@ -442,7 +442,7 @@ fn create_adder(x: i32) -> fn(i32) -> i32 {
 **Mixed with effects**:
 
 ```wado
-fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
+fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
     println("Storing data...");
     return create_handle(data);
 }

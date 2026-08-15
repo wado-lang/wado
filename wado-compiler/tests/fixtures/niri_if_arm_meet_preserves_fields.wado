@@ -63,7 +63,7 @@ fn check_arm_writes_diverge(flag: bool) -> i32 {
     return arr.len();
 }
 
-export fn run() with Stdout, MonotonicClock {
+export fn run() with (Stdout, MonotonicClock) {
     // Runtime-opaque flag.
     let now = MonotonicClock::now();
     let flag: bool = now != now;  // false at runtime, opaque at compile time

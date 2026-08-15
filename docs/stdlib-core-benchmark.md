@@ -23,7 +23,7 @@ use { Benchmark } from "core:benchmark";
 
 test "benchmark" { run(); }
 
-export fn run() with Stdout, MonotonicClock {
+export fn run() with (Stdout, MonotonicClock) {
     let mut b = Benchmark { name: "count-prime" };
     b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
     b.unit = "numbers";
@@ -115,7 +115,7 @@ Unit label for the throughput figure when `work_per_iter` is set
 (e.g. `"conversions"`, `"px"`, `"numbers"`). Ignored when throughput
 falls back to a byte rate or to `ops/s`.
 
-#### `pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T with Stdout, MonotonicClock`
+#### `pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T with (Stdout, MonotonicClock)`
 
 Run a single phase and report its throughput.
 

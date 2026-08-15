@@ -1891,44 +1891,68 @@ impl Parser {
         })
     }
 
-    /// Parse `with Effect1, Effect2, stores[param1, param2]` clause.
-    /// Returns (effects, stores). The `stores` keyword can appear anywhere in the effect list.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
+    /// Diagnostic for a bare comma-separated effect row.
+    const MULTI_EFFECT_NEEDS_PARENS: &'static str = "`with` takes one effect bare; parenthesize the row for more than one, \
+         as in `with (A, B)`";
+
+    /// Read the opening of a `with` row. `Some(true)` when the row is
+    /// parenthesized, `Some(false)` for the bare single-item form, `None` when
+    /// there is no `with` clause.
+    ///
+    /// One row shape serves every position — a declaration, a `fn` type, a
+    /// closure-type bound. A bare row holds exactly one item, so a comma after
+    /// it always belongs to the enclosing list and no position has to look
+    /// past the comma to tell an effect from the next parameter.
+    fn open_with_row(&mut self) -> Option<bool> {
         if !self.check(&TokenKind::With) {
-            return Ok((Vec::new(), Vec::new(), Vec::new()));
+            return None;
         }
         self.advance();
-
-        // Check if the first item is `stores[...]`
-        if self.check(&TokenKind::Stores) {
-            let stores = self.parse_stores_list()?;
-            return Ok((Vec::new(), Vec::new(), stores));
+        if self.check(&TokenKind::LParen) {
+            self.advance();
+            return Some(true);
         }
+        Some(false)
+    }
 
-        let (first_name, first_span) = self.consume_ident_with_span()?;
-        let mut effects = vec![first_name];
-        let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
+    /// Parse a declaration's `with (Effect1, Effect2, stores[a, b])` clause.
+    /// Returns `(effects, effect_ids, stores)`. `stores[...]` is a row member,
+    /// so it may appear at any position in the row.
+    ///
+    /// A declaration's row is followed by the body or a `;`, never by a list,
+    /// so a comma after a bare effect can only be a missing-parentheses
+    /// mistake and is reported as one.
+    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
+        let Some(parenthesized) = self.open_with_row() else {
+            return Ok((Vec::new(), Vec::new(), Vec::new()));
+        };
 
-        while self.check(&TokenKind::Comma) {
-            // Look ahead: if the token after comma is `ident :`, it's a parameter
-            // declaration, not another effect name. Stop consuming.
-            if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
-                && self.peek_nth(2).kind == TokenKind::Colon
-            {
+        let mut effects = Vec::new();
+        let mut effect_ids = Vec::new();
+        let mut stores = Vec::new();
+        loop {
+            if parenthesized && self.check(&TokenKind::RParen) {
+                break;
+            }
+            if self.check(&TokenKind::Stores) {
+                stores.extend(self.parse_stores_list()?);
+            } else {
+                let (name, span) = self.consume_ident_with_span()?;
+                effects.push(name);
+                effect_ids.push((self.alloc_ast_id(), span));
+            }
+            if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
             self.advance();
-            // Check if next item is `stores[...]`
-            if self.check(&TokenKind::Stores) {
-                let stores = self.parse_stores_list()?;
-                return Ok((effects, effect_ids, stores));
-            }
-            let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
         }
 
-        Ok((effects, effect_ids, Vec::new()))
+        if parenthesized {
+            self.expect(&TokenKind::RParen)?;
+        } else if self.check(&TokenKind::Comma) {
+            return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
+        }
+        Ok((effects, effect_ids, stores))
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
@@ -1942,53 +1966,43 @@ impl Parser {
         Ok(names)
     }
 
-    /// Parse `with` clause for function types: `with Effect1, stores[0, 1]`
-    /// In function type position, stores entries are positional indices.
+    /// Parse a function type's `with (Effect1, stores[0, 1])` clause. Same row
+    /// shape as a declaration's; only `stores` differs, taking positional
+    /// indices here.
+    ///
+    /// A bare row is one item, so the comma in `fn(f: fn() with E, x: T)` ends
+    /// the row and belongs to the parameter list.
     fn parse_with_clause_for_fn_type(
         &mut self,
     ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<StoresEntry>)> {
-        if !self.check(&TokenKind::With) {
+        let Some(parenthesized) = self.open_with_row() else {
             return Ok((Vec::new(), Vec::new(), Vec::new()));
-        }
-        self.advance();
+        };
 
-        // Check if the first item is `stores[...]`
-        if self.check(&TokenKind::Stores) {
-            let stores = self.parse_stores_list_for_fn_type()?;
-            return Ok((Vec::new(), Vec::new(), stores));
-        }
-
-        let (first_name, first_span) = self.consume_ident_with_span()?;
-        let mut effects = vec![first_name];
-        let mut effect_ids = vec![(self.alloc_ast_id(), first_span)];
-
-        while self.check(&TokenKind::Comma) {
-            // Only an effect name or `stores[...]` continues the list. Anything
-            // else after the comma belongs to the enclosing list: a trailing
-            // comma before its terminator, or the `ident:` that starts the next
-            // parameter.
-            if !matches!(
-                self.peek_nth(1).kind,
-                TokenKind::Ident(_) | TokenKind::Stores
-            ) {
+        let mut effects = Vec::new();
+        let mut effect_ids = Vec::new();
+        let mut stores = Vec::new();
+        loop {
+            if parenthesized && self.check(&TokenKind::RParen) {
                 break;
             }
-            if matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
-                && self.peek_nth(2).kind == TokenKind::Colon
-            {
+            if self.check(&TokenKind::Stores) {
+                stores.extend(self.parse_stores_list_for_fn_type()?);
+            } else {
+                let (name, span) = self.consume_ident_with_span()?;
+                effects.push(name);
+                effect_ids.push((self.alloc_ast_id(), span));
+            }
+            if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
             self.advance();
-            if self.check(&TokenKind::Stores) {
-                let stores = self.parse_stores_list_for_fn_type()?;
-                return Ok((effects, effect_ids, stores));
-            }
-            let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
         }
 
-        Ok((effects, effect_ids, Vec::new()))
+        if parenthesized {
+            self.expect(&TokenKind::RParen)?;
+        }
+        Ok((effects, effect_ids, stores))
     }
 
     /// Parse `stores[0, 1]` or `stores[name]` in function type position.
@@ -2016,6 +2030,25 @@ impl Parser {
         }
     }
 
+    /// Consume the `;` that separates this statement from the next.
+    ///
+    /// `;` separates statements, it does not terminate them, so a block's last
+    /// statement may drop it — a closing `}` ends the statement just as well.
+    /// Returns the span the statement ends at. A newline never separates:
+    /// anything else here is a missing `;`.
+    fn expect_stmt_separator(&mut self, fallback: Span) -> ParseResult<Span> {
+        if self.check(&TokenKind::Semicolon) {
+            return Ok(self.advance().span);
+        }
+        if self.check(&TokenKind::RBrace) {
+            return Ok(fallback);
+        }
+        Err(self.error_at_span(
+            self.peek().span,
+            &format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
+        ))
+    }
+
     fn parse_block(&mut self) -> ParseResult<Block> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
@@ -2034,6 +2067,12 @@ impl Parser {
                 || self.at_visibility_prefixed_local_item_start()
                 || !self.at_hard_item_keyword())
         {
+            // A lone `;` is an empty statement: nothing to record, so it
+            // leaves no node and the formatter drops it.
+            if self.check(&TokenKind::Semicolon) {
+                self.advance();
+                continue;
+            }
             let before = self.pos;
             match self.parse_stmt_in_block() {
                 Ok(stmt) => stmts.push(stmt),
@@ -2123,13 +2162,10 @@ impl Parser {
         }
     }
 
-    /// Parse a match statement (no trailing semicolon required, like if/while/loop).
+    /// Parse a match statement. Its closing `}` ends the statement, so any
+    /// `;` after it is an empty statement the block loop skips.
     fn parse_match_stmt(&mut self) -> ParseResult<Stmt> {
         let expr = self.parse_match_expr()?;
-        // Trailing semicolon is optional (consumed if present)
-        if self.check(&TokenKind::Semicolon) {
-            self.advance();
-        }
         let Expr::Match(m) = expr else {
             unreachable!("parse_match_expr must return Expr::Match");
         };
@@ -2138,18 +2174,14 @@ impl Parser {
 
     /// Parse a `with E => h do { ... }` statement.
     ///
-    /// The trailing `}` of the do-block makes the statement boundary
-    /// unambiguous, so the trailing semicolon is optional — same as
-    /// `if`, `while`, `for`, `loop`, and `match` in statement position.
-    /// The expression is wrapped in a `Stmt::Expr` so the rest of the
-    /// pipeline (effect-check, TIR lowering, dispatch synthesis)
-    /// continues to see a single `Expr::WithHandler`.
+    /// The trailing `}` of the do-block ends the statement, same as `if`,
+    /// `while`, `for`, `loop`, and `match` in statement position. The
+    /// expression is wrapped in a `Stmt::Expr` so the rest of the pipeline
+    /// (effect-check, TIR lowering, dispatch synthesis) continues to see a
+    /// single `Expr::WithHandler`.
     fn parse_with_handler_stmt(&mut self) -> ParseResult<Stmt> {
         let id = self.alloc_ast_id();
         let expr = self.parse_with_handler_expr()?;
-        if self.check(&TokenKind::Semicolon) {
-            self.advance();
-        }
         let span = expr.span();
         Ok(Stmt::Expr(crate::ast::ExprStmt { id, expr, span }))
     }
@@ -2160,17 +2192,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         let expr = self.parse_expr_recovering();
 
-        // Semicolon is optional if followed by `}` (end of block)
-        let end_span = if self.check(&TokenKind::Semicolon) {
-            self.advance().span
-        } else if !self.check(&TokenKind::RBrace) {
-            return Err(ParseError {
-                message: format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
-                span: self.peek().span,
-            });
-        } else {
-            expr.span()
-        };
+        let end_span = self.expect_stmt_separator(expr.span())?;
 
         Ok(Stmt::Expr(ExprStmt {
             id,
@@ -2219,7 +2241,11 @@ impl Parser {
             None
         };
 
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        let semi_span = self.expect_stmt_separator(
+            message
+                .as_ref()
+                .map_or_else(|| condition.span(), Expr::span),
+        )?;
 
         Ok(Stmt::Assert(AssertStmt {
             id,
@@ -2231,7 +2257,7 @@ impl Parser {
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
         let mut stmt = self.parse_let_stmt_inner(true)?;
-        let semi_span = self.expect(&TokenKind::Semicolon)?.span;
+        let semi_span = self.expect_stmt_separator(stmt.span())?;
         // Extend let statement span to include the trailing semicolon
         if let Stmt::Let(ref mut l) = stmt {
             l.span = l.span.merge(&semi_span);
@@ -2338,16 +2364,7 @@ impl Parser {
             Some(self.parse_expr_recovering())
         };
 
-        let end_span = if self.check(&TokenKind::Semicolon) {
-            self.advance().span
-        } else if self.check(&TokenKind::RBrace) {
-            value.as_ref().map(Expr::span).unwrap_or(start_span)
-        } else {
-            return Err(self.error_at_span(
-                self.peek().span,
-                &format!("expected Semicolon, found {:?}", self.peek_kind()),
-            ));
-        };
+        let end_span = self.expect_stmt_separator(value.as_ref().map_or(start_span, Expr::span))?;
 
         Ok(Stmt::Return(ReturnStmt {
             id,
@@ -2367,16 +2384,7 @@ impl Parser {
 
         let value = self.parse_expr_recovering();
 
-        let end_span = if self.check(&TokenKind::Semicolon) {
-            self.advance().span
-        } else if self.check(&TokenKind::RBrace) {
-            value.span()
-        } else {
-            return Err(self.error_at_span(
-                self.peek().span,
-                &format!("expected Semicolon, found {:?}", self.peek_kind()),
-            ));
-        };
+        let end_span = self.expect_stmt_separator(value.span())?;
 
         Ok(Stmt::TaskReturn(TaskReturnStmt {
             id,
@@ -2763,20 +2771,13 @@ impl Parser {
             (None, None, None)
         };
 
-        let end_span = if self.check(&TokenKind::Semicolon) {
-            self.advance().span
-        } else if self.check(&TokenKind::RBrace) {
+        let end_span = self.expect_stmt_separator(
             value
                 .as_ref()
                 .map(|v| v.span())
                 .or(label_span)
-                .unwrap_or(start_span)
-        } else {
-            return Err(self.error_at_span(
-                self.peek().span,
-                &format!("expected Semicolon, found {:?}", self.peek_kind()),
-            ));
-        };
+                .unwrap_or(start_span),
+        )?;
 
         Ok(Stmt::Break(BreakStmt {
             id,
@@ -2792,14 +2793,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Continue)?;
 
-        if self.check(&TokenKind::Semicolon) {
-            self.advance();
-        } else if !self.check(&TokenKind::RBrace) {
-            return Err(self.error_at_span(
-                self.peek().span,
-                &format!("expected Semicolon, found {:?}", self.peek_kind()),
-            ));
-        }
+        self.expect_stmt_separator(span)?;
 
         Ok(Stmt::Continue(ContinueStmt { id, span }))
     }
@@ -5034,9 +5028,6 @@ impl Parser {
 
     /// Parse a `fn(...)` / `fn mut(...)` closure-type bound.
     ///
-    /// Unlike free-standing function types (`parse_type`), the `with` clause
-    /// here treats comma as the next-trait-bound separator: single effect
-    /// names go bare, multiple effects must be wrapped in parens.
     ///
     /// - `fn(...) -> R`                  — no effects
     /// - `fn(...) -> R with E`            — single effect
@@ -5082,40 +5073,34 @@ impl Parser {
         }))
     }
 
-    /// Parse `with E` or `with (E1, E2, ...)` for closure-type bounds.
-    /// Returns `(effects, effect_ids)`.
+    /// Parse a closure-type bound's `with (E1, E2)` clause. Same row shape as
+    /// a declaration's, without `stores` — that belongs to a free `fn` type.
+    /// A comma after a bare effect belongs to the enclosing trait-bound or
+    /// generic-parameter list.
     fn parse_bound_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
-        if !self.check(&TokenKind::With) {
+        let Some(parenthesized) = self.open_with_row() else {
             return Ok((Vec::new(), Vec::new()));
-        }
-        self.advance();
+        };
 
-        // Paren-grouped multi-effect: `with (E1, E2, ...)`.
-        if self.check(&TokenKind::LParen) {
-            self.advance();
-            let mut effects = Vec::new();
-            let mut effect_ids = Vec::new();
-            loop {
-                if self.check(&TokenKind::RParen) {
-                    break;
-                }
-                let (name, span) = self.consume_ident_with_span()?;
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
-                if self.check(&TokenKind::Comma) {
-                    self.advance();
-                } else {
-                    break;
-                }
+        let mut effects = Vec::new();
+        let mut effect_ids = Vec::new();
+        loop {
+            if parenthesized && self.check(&TokenKind::RParen) {
+                break;
             }
-            self.expect(&TokenKind::RParen)?;
-            return Ok((effects, effect_ids));
+            let (name, span) = self.consume_ident_with_span()?;
+            effects.push(name);
+            effect_ids.push((self.alloc_ast_id(), span));
+            if !parenthesized || !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance();
         }
 
-        // Bare single-effect form: `with E`. Comma here belongs to the
-        // enclosing trait-bound or generic-param list, not the effect list.
-        let (name, span) = self.consume_ident_with_span()?;
-        Ok((vec![name], vec![(self.alloc_ast_id(), span)]))
+        if parenthesized {
+            self.expect(&TokenKind::RParen)?;
+        }
+        Ok((effects, effect_ids))
     }
 
     /// Parse type arguments for turbofish syntax: `<T1, T2, ...>`
@@ -6582,7 +6567,7 @@ mod tests {
 
     #[test]
     fn test_function_with_effects_and_stores() {
-        let module = parse("fn store(data: &Data) with Stdout, stores[data] { }").unwrap();
+        let module = parse("fn store(data: &Data) with (Stdout, stores[data]) { }").unwrap();
         if let Item::Function(func) = &module.items[0] {
             assert_eq!(func.effects, vec!["Stdout"]);
             assert_eq!(func.stores, vec!["data"]);
@@ -7397,10 +7382,11 @@ line 2
                 "fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}",
                 2,
             ),
-            // `with E, Stdout` is the parameter type's own effect list — a
-            // comma after `with` continues it, so this declares one parameter.
+            // A parameter type's own multi-effect row is parenthesized, so the
+            // comma after it belongs to the parameter list and nothing has to
+            // look past it.
             (
-                "fn f<effect E>(mut g: fn mut() with E, Stdout,) with E, Stdout {}",
+                "fn f<effect E>(mut g: fn mut() with (E, Stdout),) with (E, Stdout) {}",
                 1,
             ),
         ] {
@@ -7414,12 +7400,18 @@ line 2
 
     #[test]
     fn test_param_list_effect_list_still_takes_several_effects() {
-        // The terminator rule must not cut a genuine multi-effect list short.
-        let module = parse("fn f(mut g: fn mut() with Stdout, Stderr) {}").unwrap();
+        let module = parse("fn f(mut g: fn mut() with (Stdout, Stderr)) {}").unwrap();
         let Item::Function(func) = &module.items[0] else {
             panic!("expected a function");
         };
         assert_eq!(func.params.len(), 1);
+    }
+
+    /// Without parentheses the row is one effect, so the comma starts the next
+    /// parameter — `Stderr` is then a parameter with no type.
+    #[test]
+    fn test_param_list_bare_row_ends_at_the_comma() {
+        assert!(parse("fn f(mut g: fn mut() with Stdout, Stderr) {}").is_err());
     }
 
     #[test]
@@ -8005,6 +7997,146 @@ line 2
         };
         assert_eq!(w.handlers.len(), 1);
         assert!(w.handlers[0].effect.is_none());
+    }
+
+    /// `with` takes one effect bare; more than one needs parentheses. The rule
+    /// is the same in every position a `with` row can appear — a declaration,
+    /// a free-standing `fn` type, and a closure-type bound — so that a comma
+    /// after a bare effect always belongs to the enclosing list and never to
+    /// the row.
+    /// `;` separates statements; a block's last one may drop it, whatever kind
+    /// of statement it is. Newline never separates — there is no ASI — so two
+    /// statements with no `;` between them are an error.
+    #[test]
+    fn parse_trailing_semicolon_is_optional_for_every_statement() {
+        for source in [
+            "fn f() { let x = 1 }",
+            "fn f() { assert true }",
+            "fn f() -> i32 { return 1 }",
+            "fn f() { loop { break } }",
+            "fn f() { loop { continue } }",
+            "fn f() { g() }",
+        ] {
+            assert!(
+                parse(source).is_ok(),
+                "{source} should parse without the trailing `;`"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_empty_statements_are_allowed() {
+        for source in [
+            "fn f() { ; }",
+            "fn f() { let x = 1;; }",
+            "fn f() { ;;; let x = 1; ;; }",
+            "fn f() { if true { }; }",
+        ] {
+            assert!(parse(source).is_ok(), "{source} should parse");
+        }
+    }
+
+    /// An empty statement carries no meaning, so it leaves no node behind and
+    /// the formatter drops it.
+    #[test]
+    fn parse_empty_statements_leave_no_node() {
+        let module = parse("fn f() { ;; let x = 1; ;; }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.body.as_ref().unwrap().stmts.len(), 1);
+    }
+
+    #[test]
+    fn parse_missing_separator_between_statements_is_rejected() {
+        for source in ["fn f() { let x = 1 let y = 2 }", "fn f() { g() h() }"] {
+            assert!(
+                parse(source).is_err(),
+                "{source} must not parse: a newline does not separate statements"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_with_row_bare_single_effect() {
+        let module = parse("fn f() with E { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.effects, vec!["E".to_string()]);
+    }
+
+    #[test]
+    fn parse_with_row_parenthesized_single_effect() {
+        let module = parse("fn f() with (E) { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.effects, vec!["E".to_string()]);
+    }
+
+    #[test]
+    fn parse_with_row_parenthesized_multiple_effects() {
+        let module = parse("fn f() with (E, Stdout) { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.effects, vec!["E".to_string(), "Stdout".to_string()]);
+    }
+
+    #[test]
+    fn parse_with_row_bare_comma_is_rejected() {
+        let err = parse("fn f() with E, Stdout { }").unwrap_err();
+        assert!(
+            err.message.contains("parenthes"),
+            "the diagnostic must point at the missing parentheses, got {:?}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_with_row_stores_is_a_row_member() {
+        let module = parse("fn f() with (Stdout, stores[d]) { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.effects, vec!["Stdout".to_string()]);
+        assert_eq!(f.stores, vec!["d".to_string()]);
+    }
+
+    #[test]
+    fn parse_with_row_bare_stores() {
+        let module = parse("fn f() with stores[self] { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert!(f.effects.is_empty());
+        assert_eq!(f.stores, vec!["self".to_string()]);
+    }
+
+    /// In a `fn` type the row is the same shape, so the comma after a bare
+    /// effect ends the row and belongs to the parameter list. No lookahead
+    /// past the comma is involved.
+    #[test]
+    fn parse_with_row_in_fn_type_yields_the_comma_to_the_param_list() {
+        let module = parse("fn f(g: fn() with E, x: T) { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.params.len(), 2);
+    }
+
+    #[test]
+    fn parse_with_row_in_fn_type_parenthesized() {
+        let module = parse("fn f(g: fn() with (E, Stdout), x: T) { }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
+        };
+        assert_eq!(f.params.len(), 2);
+        let Type::Function(ft) = &f.params[0].ty else {
+            panic!("expected a fn type");
+        };
+        assert_eq!(ft.effects, vec!["E".to_string(), "Stdout".to_string()]);
     }
 
     #[test]

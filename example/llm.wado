@@ -97,7 +97,7 @@ fn read_body(resp: Response) -> ByteList {
     return buf as ByteList;
 }
 
-export fn run() with Stdout, Stderr, Environment, Client {
+export fn run() with (Stdout, Stderr, Environment, Client) {
     let api_key = match env("OPENROUTER_API_KEY") {
         Some(k) => k,
         None => {

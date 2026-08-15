@@ -2355,7 +2355,7 @@ pub global MODE_DEFAULT_MODE: i32 = 0;
 pub global MODE_Argument: i32 = 1;
 pub global MODE_LexerCharSet: i32 = 2;
 
-fn apply_BEGIN_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with LexerAdaptor, stores[lx] {
+fn apply_BEGIN_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with (LexerAdaptor, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '[' { return; }
@@ -2363,7 +2363,7 @@ fn apply_BEGIN_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with Lexer
     LexerAdaptor::handle_begin_argument(LexerView { chars, start, pos });
 }
 
-fn apply_END_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with LexerAdaptor, stores[lx] {
+fn apply_END_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with (LexerAdaptor, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != ']' { return; }

@@ -13,7 +13,7 @@ use { parse } from "../src/lib.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("error: no preopened directories available");

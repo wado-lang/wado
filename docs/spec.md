@@ -137,9 +137,46 @@ for let of of arr {
 
 ### Statements and Expressions
 
-- `expr;` makes a statement. A semicolon is required for every statement including the last one.
+- `expr;` makes a statement.
 - `return expr;` is necessary for a function to return a value.
 - Control flow statements do not need to be followed by a semicolon.
+
+#### Semicolons
+
+A semicolon separates statements. It does not terminate them, so a block's
+last statement may drop it — whatever kind of statement it is:
+
+```wado
+fn f() -> i32 {
+    let x = 1;
+    x + 1        // no `;` needed on the last statement
+}
+```
+
+A newline never separates statements. There is no automatic semicolon
+insertion, so two statements always need a `;` between them however they are
+laid out:
+
+```wado
+let x = 1 let y = 2    // error: expected `;`
+```
+
+Consecutive semicolons enclose empty statements, which mean nothing and leave
+nothing behind. `wado format` removes them.
+
+A block's value is its last expression, whether or not a `;` follows it —
+unlike Rust, a trailing semicolon does not turn the value into `()`. Write
+`()` to mean `()`:
+
+```wado
+let a = if c { 1 } else { 2 };     // 1 or 2
+let b = if c { 1; } else { 2; };   // also 1 or 2
+let c = if c { g(); () } else { () };  // ()
+```
+
+Only `if`, `match`, `loop` and labelled blocks produce a block value. A brace
+in value position is a struct literal, not a block: `let x = { 1 };` is an
+error, and `let p = { x: 1, y: 2 };` is an implicit struct literal.
 
 ### Variable Mutability
 
@@ -447,8 +484,6 @@ let abs = if x < 0 { -x } else { x };
 
 let grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" };
 ```
-
-Trailing semicolons are optional in expression blocks (like trailing commas).
 
 #### If Let Pattern Matching
 
@@ -4025,7 +4060,7 @@ use { helper }   from "./mod.wasm" with { type: "wasm" };
 // and its functions are called like WASI methods (effectful).
 use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
 
-export fn run() with Compress, Decompress {
+export fn run() with (Compress, Decompress) {
     let packed = Compress::compress(bytes);
     let back = Decompress::decompress(packed);  // Result<List<u8>, String>
 }
@@ -4114,7 +4149,7 @@ Notation distinction:
 use {Stdout::{write_via_stream as stdout_write}} from "wasi:cli";
 use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
 
-fn log() with Stdout, Stderr {
+fn log() with (Stdout, Stderr) {
     stdout_write(out_stream);
     stderr_write(err_stream);
 }
@@ -4598,7 +4633,7 @@ fn greet(name: String) with Stdout {
 }
 
 // Multiple effects
-fn show_env() with Stdout, Environment {
+fn show_env() with (Stdout, Environment) {
     let args = Environment::get_arguments();
     Stdout::write_via_stream(to_stream(`Arguments: ${args}\n`));
 }
@@ -4607,6 +4642,23 @@ fn show_env() with Stdout, Environment {
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
+```
+
+A row of one goes bare; a row of more than one is parenthesized. The rule is
+the same wherever a `with` row appears — a declaration, a `fn` type, a
+closure-type bound — so a comma after a bare effect always belongs to the
+enclosing list and never to the row:
+
+```wado
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { ... }
+fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }
+```
+
+`stores[...]` is a row member, so it is parenthesized with the rest:
+
+```wado
+fn keep(data: &Data) -> Container with (Stdout, stores[data]) { ... }
+fn keep_only(data: &Data) -> Container with stores[data] { ... }
 ```
 
 ### Importing Effect Operations
@@ -4654,7 +4706,7 @@ pub fn env(name: String) -> Option<String> with Environment {
 use {Stdout::{write_via_stream}} from "wasi:cli";
 use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
 
-pub fn log(message: String) with Stdout, Stderr {
+pub fn log(message: String) with (Stdout, Stderr) {
     write_via_stream(...);  // Calls Stdout::write_via_stream
     stderr_write(...);      // Calls Stderr::write_via_stream (renamed)
 }
@@ -4672,7 +4724,7 @@ fn internal() {
 }
 
 // Public functions must be explicit
-pub fn api_function() with Http, FileSystem {
+pub fn api_function() with (Http, FileSystem) {
     // ...
 }
 ```
@@ -4768,7 +4820,7 @@ fn process(data: &Data) -> Result {
 }
 
 // Combined with effects
-fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
+fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
     println("Storing data...");
     return register(data);
 }

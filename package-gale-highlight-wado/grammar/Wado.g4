@@ -122,7 +122,7 @@ returnType
     ;
 
 withClause
-    : 'with' withItem (',' withItem)*
+    : 'with' ('(' (withItem (',' withItem)*)? ')' | withItem)
     ;
 
 withItem
@@ -256,16 +256,12 @@ typeRef
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
     | '[' (typeElement (',' typeElement)*)? ']'
-    | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? fnTypeWithClause?
+    | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? withClause?
     | path typeArgs?
     ;
 
 typeElement
     : '..'? typeRef
-    ;
-
-fnTypeWithClause
-    : 'with' ('(' withItem (',' withItem)* ')' | withItem)
     ;
 
 typeArgs
@@ -295,33 +291,25 @@ memberName
     ;
 
 block
-    : '{' statement* blockTail? '}'
-    ;
-
-blockTail
-    : 'return' expression?
-    | 'task' 'return' expression?
-    | 'break' (IDENTIFIER (':' expression)?)?
-    | 'continue'
-    | expression
+    : '{' (statement | ';')* '}'
     ;
 
 statement
-    : letStatement
-    | returnStatement
-    | taskReturnStatement
-    | ifStatement
+    : ifStatement
     | forStatement
     | whileStatement
     | loopStatement
-    | breakStatement
-    | continueStatement
-    | assertStatement
     | matchStatement
     | withStatement
     | labeledBlock
     | localItem
-    | exprStatement
+    | letStatement ';'?
+    | returnStatement ';'?
+    | taskReturnStatement ';'?
+    | breakStatement ';'?
+    | continueStatement ';'?
+    | assertStatement ';'?
+    | exprStatement ';'?
     ;
 
 localItem
@@ -349,20 +337,20 @@ letStatement
     ;
 
 letBinding
-    : pattern (':' typeRef)? '=' expression ('else' block)? ';'
-    | pattern ':' typeRef ';'
+    : pattern (':' typeRef)? '=' expression ('else' block)?
+    | pattern ':' typeRef
     ;
 
 assertStatement
-    : 'assert' expression (',' expression)? ';'
+    : 'assert' expression (',' expression)?
     ;
 
 returnStatement
-    : 'return' expression? ';'
+    : 'return' expression?
     ;
 
 taskReturnStatement
-    : 'task' 'return' expression? ';'
+    : 'task' 'return' expression?
     ;
 
 resumeExpr
@@ -370,7 +358,8 @@ resumeExpr
     ;
 
 ifStatement
-    : 'if' condition block ('else' (ifStatement | block))?
+    : 'if' condition block 'else' (ifStatement | block)
+    | 'if' condition block
     ;
 
 condition
@@ -405,11 +394,11 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' (IDENTIFIER (':' expression)?)? ';'
+    : 'break' (IDENTIFIER (':' expression)?)?
     ;
 
 continueStatement
-    : 'continue' ';'
+    : 'continue'
     ;
 
 matchStatement
@@ -421,7 +410,7 @@ withStatement
     ;
 
 exprStatement
-    : expression ';'
+    : expression
     ;
 
 expression
