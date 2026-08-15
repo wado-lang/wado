@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786770763619,
+  "lastUpdate": 1786786010383,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48149,6 +48149,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7d9916d3ebd488089305f48ff32a96052f7ede48"
         },
         "date": 1786770763056,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 5998,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16230,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 255590,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b38ec81757d63f1a069c821e3b49c2b25eba058",
+          "message": "Merge pull request #1816 from wado-lang/claude/monomorph-smell-fix-x0xrck\n\nrefactor(monomorphize): walk the TIR through the visitors, resolve return positions directly",
+          "timestamp": "2026-08-15T18:14:51+09:00",
+          "tree_id": "b46a15beacafd0d7e90f754c40fa7edf41fca273",
+          "url": "https://github.com/wado-lang/wado/commit/9b38ec81757d63f1a069c821e3b49c2b25eba058"
+        },
+        "date": 1786786009648,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
