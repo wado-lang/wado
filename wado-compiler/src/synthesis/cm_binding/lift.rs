@@ -621,7 +621,7 @@ pub(super) fn synthesize_lift_list(
     // a second `TypeId` for shared stdlib records, producing a mismatched
     // `List<T>`. Otherwise (nested lists) fall back to rebuilding from the
     // element type.
-    let (elem_type_id, array_type_id, list_struct_name) = {
+    let (elem_type_id, array_type_id, list_head) = {
         let mut tt = ctx.type_table.borrow_mut();
         let (list_tid, elem_tid) = if let Some(pair) =
             override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem)))
@@ -632,10 +632,8 @@ pub(super) fn synthesize_lift_list(
             let lt = tt.make_list(elem);
             (lt, elem)
         };
-        let list_name = tt
-            .compiler_struct_name(crate::compiler_item::CompilerItem::List)
-            .to_string();
-        (elem_tid, list_tid, list_name)
+        let list_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::List);
+        (elem_tid, list_tid, list_head)
     };
 
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -664,7 +662,7 @@ pub(super) fn synthesize_lift_list(
         result_local,
         array_type_id,
         generic_static_call(
-            &list_struct_name,
+            &list_head,
             "with_capacity",
             ModuleSource::list(),
             vec![elem_type_id],
@@ -723,7 +721,7 @@ pub(super) fn synthesize_lift_list(
     // __result.push(lifted_elem)
     loop_stmts.push(expr_stmt(generic_method_call(
         local_ref(result_local, "__result", array_type_id),
-        &list_struct_name,
+        &list_head,
         "push",
         ModuleSource::list(),
         vec![lifted_elem],

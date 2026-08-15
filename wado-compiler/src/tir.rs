@@ -1115,6 +1115,18 @@ impl TypeTable {
         }
     }
 
+    /// A struct head as a mangled name embeds it: the declaration when it names
+    /// one, the interned shape otherwise.
+    #[must_use]
+    pub fn fq_struct_head(&self, head: StructDef) -> crate::name::FqTypeName {
+        match head {
+            StructDef::Decl(def) => crate::name::FqTypeName::declared(&self.defs, def),
+            StructDef::Anon(id) => {
+                crate::name::FqTypeName::shape(self.anon_struct_module(id), &self.anon_struct_name(id))
+            }
+        }
+    }
+
     /// The head as source spells it: the declared name, with no storage
     /// disambiguator. [`Self::struct_head_name`]'s counterpart in the
     /// declaration namespace — what a diagnostic shows, never a lookup key.
@@ -1582,7 +1594,7 @@ impl TypeTable {
             self.bound_driven_synth_requests.insert((
                 type_name.to_string(),
                 module_source.clone(),
-                trait_key.clone(),
+                *trait_key,
             ));
         }
     }
@@ -1618,8 +1630,15 @@ impl TypeTable {
         &self,
         item: crate::compiler_item::CompilerItem,
     ) -> crate::name::FqTypeName {
-        let (module, name) = self.compiler_items.require_struct(item);
-        crate::name::FqTypeName::declared(module, name)
+        let decl = self
+            .compiler_items
+            .struct_decl(item)
+            .expect("a registered struct item records its declaring node");
+        let def = self
+            .defs
+            .of_ast_id(decl)
+            .expect("a compiler item's declaring node is a declaration");
+        crate::name::FqTypeName::declared(&self.defs, def)
     }
 
     pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
@@ -2383,7 +2402,7 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, trait_key.clone(), assoc_name.to_string()))
+            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
             .copied()
     }
 
@@ -2462,7 +2481,7 @@ impl TypeTable {
             if found.as_ref().is_some_and(|(_, prior)| *prior != def_id) {
                 return None;
             }
-            found = Some((trait_key.clone(), def_id));
+            found = Some((*trait_key, def_id));
         }
         found
     }
@@ -2483,7 +2502,7 @@ impl TypeTable {
             .iter()
             .filter(|((decl, _, _), _)| *decl == base_decl)
             .map(|((_, trait_key, assoc_name), &def_id)| {
-                (trait_key.clone(), assoc_name.clone(), def_id)
+                (*trait_key, assoc_name.clone(), def_id)
             })
             .collect();
         for (trait_key, assoc_name, def_id) in defs {
@@ -2629,7 +2648,7 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, trait_key.clone(), assoc_name.to_string()))
+            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
             .copied()
     }
 
@@ -2644,7 +2663,7 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let key = (concrete_id, trait_key.clone(), assoc_name.to_string());
+        let key = (concrete_id, *trait_key, assoc_name.to_string());
         if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
             return Some(resolved);
         }
@@ -2654,7 +2673,7 @@ impl TypeTable {
         };
         let def_key = (
             self.decl_of_type(concrete_id)?,
-            trait_key.clone(),
+            *trait_key,
             assoc_name.to_string(),
         );
         let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
@@ -3717,8 +3736,9 @@ impl TypeTable {
     #[must_use]
     pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
         use crate::name::{FqTypeName, Receiver};
-        let declared =
-            |module: &ModuleSource, name: &str| Receiver::Type(FqTypeName::declared(module, name));
+        let declared = |def: crate::defs::DefId| {
+            Receiver::Type(FqTypeName::declared(&self.defs, def))
+        };
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
         // erasure rewrites a newtype / flags id to the representation it is
@@ -3728,10 +3748,7 @@ impl TypeTable {
                 crate::name::RefKind::from_resolved(self.get(id))
                     .map_or_else(|| builtin(""), Receiver::Ref)
             }
-            ResolvedType::Struct { def, .. } => declared(
-                &self.struct_head_module(*def).clone(),
-                &self.struct_head_name(*def),
-            ),
+            ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // A newtype's head is its declaration, arguments never spelled into
             // it — an `impl` header writes `MyArray`, not `MyArray<i32>`.
             ResolvedType::Enum { def }
@@ -3739,9 +3756,7 @@ impl TypeTable {
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::GenericInstance { def, .. } => {
-                declared(self.def_module(*def), self.def_name(*def))
-            }
+            | ResolvedType::GenericInstance { def, .. } => declared(*def),
             // A generic resource and a binder name no declaration of their own.
             ResolvedType::GenericResource { def, .. } => builtin(self.def_name(*def)),
             ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
@@ -3758,23 +3773,14 @@ impl TypeTable {
     pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
         use crate::name::FqTypeName;
         match self.get(id) {
-            ResolvedType::Struct { def, .. } => FqTypeName::declared(
-                &self.struct_head_module(*def).clone(),
-                &self.struct_head_name(*def),
-            ),
+            ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
             | ResolvedType::GenericInstance { def, .. } => {
-                // The *rendered* name, as the `Struct` arm above uses: this
-                // spells a receiver into a method name, and a function-local
-                // declaration's methods are registered under its disambiguated
-                // spelling. `def_name` here made a local `type UserId = i32`
-                // call `UserId^Inspect::inspect` against a definition emitted
-                // as `UserId@2^Inspect::inspect`.
-                FqTypeName::declared(self.def_module(*def), &self.decl_render_name(*def))
+                FqTypeName::declared(&self.defs, *def)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.fq_base_type_name(*inner)
@@ -3827,25 +3833,21 @@ impl TypeTable {
             // Head and arguments come straight off the type — the same shape
             // every other instantiated type has. No recovery step, because
             // there is no fused spelling left to recover them from.
-            ResolvedType::Struct { def, type_args } => FqTypeName::declared(
-                &self.struct_head_module(*def).clone(),
-                &self.struct_head_name(*def),
-            )
-            .with_args(args_of(type_args)),
+            ResolvedType::Struct { def, type_args } => {
+                self.fq_struct_head(*def).with_args(args_of(type_args))
+            }
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => {
-                FqTypeName::declared(self.def_module(*def), self.def_name(*def))
-            }
+            | ResolvedType::Flags { def } => FqTypeName::declared(&self.defs, *def),
             ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args = args_of(type_args);
                 if Self::is_tuple_type(self.def_name(*def)) {
                     FqTypeName::tuple(args)
                 } else {
-                    FqTypeName::declared(self.def_module(*def), self.def_name(*def)).with_args(args)
+                    FqTypeName::declared(&self.defs, *def).with_args(args)
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {

@@ -3157,7 +3157,7 @@ impl Monomorphizer {
                     // shared borrow and cannot substitute, sees the same answer.
                     type_table.register_assoc_type_resolution(
                         recv_inner,
-                        bound_trait.clone(),
+                        *bound_trait,
                         assoc.clone(),
                         pack,
                     );

@@ -1130,8 +1130,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Qualify by the module the impl was located in:
                     // `helper::Pair` and a local `Pair` are different
                     // declarations.
+                    let receiver = self
+                        .namespace_member(prefix, type_name)
+                        .map_or_else(
+                            || crate::name::FqTypeName::shape(&struct_module, type_name),
+                            |def| {
+                                crate::name::FqTypeName::of_head(
+                                    self.tysys.resolutions.defs(),
+                                    def,
+                                )
+                            },
+                        );
                     let final_mangled = MethodName::format_local(
-                        &crate::name::FqTypeName::of_head(&struct_module, type_name),
+                        &receiver,
                         method_ref.trait_name.as_ref(),
                         method_name,
                     );

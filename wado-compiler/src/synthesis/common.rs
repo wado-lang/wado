@@ -384,18 +384,14 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
 ///
 /// Without these, the monomorphizer won't instantiate the generic method.
 pub fn generic_static_call(
-    struct_name: &str,
+    receiver: &FqTypeName,
     method_name: &str,
     module_source: ModuleSource,
     type_args: Vec<TypeId>,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
-    let info = LocalMethodName::new(
-        FqTypeName::declared(&module_source, struct_name),
-        None,
-        method_name.to_string(),
-    );
+    let info = LocalMethodName::new(receiver.clone(), None, method_name.to_string());
     let mangled_name = info.to_mangled_name();
     let monomorph_info = if type_args.is_empty() {
         None
@@ -432,17 +428,13 @@ pub fn generic_static_call(
 /// - The receiver's `type_id` must be the concrete `List<String>` `TypeId`
 pub fn generic_method_call(
     receiver: TirExpr,
-    struct_name: &str,
+    head: &FqTypeName,
     method_name: &str,
     method_module_source: ModuleSource,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
-    let info = LocalMethodName::new(
-        FqTypeName::declared(&method_module_source, struct_name),
-        None,
-        method_name.to_string(),
-    );
+    let info = LocalMethodName::new(head.clone(), None, method_name.to_string());
     let mangled_name = info.to_mangled_name();
     let _n = args.len();
     TirExpr::new(

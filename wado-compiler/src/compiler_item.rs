@@ -1198,6 +1198,10 @@ pub enum Resolved {
         module_source: ModuleSource,
         /// The type the method is defined on (e.g. `"String"`).
         owner_type: String,
+        /// That type's head, as the impl block's own frame resolved it — the
+        /// receiver a synthesised call to this method hangs off. `None` only
+        /// where a registry entry is minted by a test.
+        owner_head: Option<crate::name::FqTypeName>,
         name: String,
     },
     /// The module that owns the tuple type family. Tuples have no
@@ -1625,7 +1629,20 @@ impl CompilerItems {
                 module_source,
                 owner_type,
                 name,
+                ..
             } => (module_source, owner_type.as_str(), name.as_str()),
+            other => kind_mismatch_ice(item, "Method", other),
+        }
+    }
+
+    /// The head of the type a [`CompilerItemKind::Method`] item is defined on,
+    /// as the impl block's own frame resolved it. This is what a synthesised
+    /// call hangs off, so no synthesis site spells the owner.
+    pub fn require_method_owner(&self, item: CompilerItem) -> &crate::name::FqTypeName {
+        match self.require(item) {
+            Resolved::Method { owner_head, .. } => owner_head
+                .as_ref()
+                .unwrap_or_else(|| panic!("compiler item `{item}` records no owner head")),
             other => kind_mismatch_ice(item, "Method", other),
         }
     }
@@ -1919,6 +1936,7 @@ mod tests {
             Resolved::Method {
                 module_source: ModuleSource::string(),
                 owner_type: "String".to_string(),
+                owner_head: None,
                 name: "push_str_v2".to_string(),
             },
         )

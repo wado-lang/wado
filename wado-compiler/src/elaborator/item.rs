@@ -317,6 +317,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     attrs: &[crate::ast::Attribute],
     method_name: &str,
     owner_type: &str,
+    owner_head: &crate::name::FqTypeName,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -330,6 +331,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Method {
         module_source: module_source.clone(),
         owner_type: owner_type.to_string(),
+        owner_head: Some(owner_head.clone()),
         name: method_name.to_string(),
     };
     if let Err(err) = type_table

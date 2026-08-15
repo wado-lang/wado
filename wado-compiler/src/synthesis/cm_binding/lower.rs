@@ -7,7 +7,7 @@
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -679,7 +679,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
         TypeTable::I32,
         generic_method_call(
             local_ref(list_local, "__list_val", list_type_id),
-            &names.array,
+            &names.array_fq,
             "len",
             ModuleSource::list(),
             vec![],
@@ -750,7 +750,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     // __elem = list.index_value(__i)
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
-        FqTypeName::declared(&ModuleSource::list(), &names.array),
+        names.array_fq.clone(),
         Some(names.index_value.clone().with_args(vec!["i32".to_string()])),
         "index_value".to_string(),
     );

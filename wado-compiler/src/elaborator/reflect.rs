@@ -211,6 +211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let func_ref = self.reflect_func_ref(
+            self_ty,
             &self_name,
             &type_args,
             &reflect_trait_name,
@@ -238,6 +239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instance whose type args match; `type_args` is empty for a plain type.
     fn reflect_func_ref(
         &self,
+        self_ty: TypeId,
         base_name: &str,
         type_args: &[TypeId],
         trait_name: &crate::name::FqTraitName,
@@ -245,7 +247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         module_source: crate::module_source::ModuleSource,
     ) -> FunctionRef {
         let mut method_info = LocalMethodName::new(
-            FqTypeName::declared(&module_source, base_name),
+            self.tysys.type_table.borrow().fq_base_type_name(self_ty),
             Some(trait_name.clone()),
             method.to_string(),
         );
@@ -875,8 +877,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .make_compiler_struct(CompilerItem::String)
         };
 
-        let func_ref =
-            self.reflect_func_ref(&self_name, &type_args, &trait_name, &method, module_source);
+        let func_ref = self.reflect_func_ref(
+            self_ty,
+            &self_name,
+            &type_args,
+            &trait_name,
+            &method,
+            module_source,
+        );
         self.sem.types.static_method_dispatch.insert(
             static_call.id,
             super::sem::types::StaticMethodDispatch {
@@ -1216,16 +1224,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
+        let receiver = self.tysys.type_table.borrow().fq_base_type_name(self_ty);
         let func_ref = FunctionRef {
             module_source: module_source.clone(),
-            name: MethodName::format_local(
-                &FqTypeName::declared(&module_source, &self_name),
-                Some(&trait_name),
-                &method,
-            ),
+            name: MethodName::format_local(&receiver, Some(&trait_name), &method),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                FqTypeName::declared(&module_source, &self_name),
+                receiver,
                 Some(trait_name.clone()),
                 method.clone(),
             )),

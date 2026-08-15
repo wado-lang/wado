@@ -1057,7 +1057,7 @@ impl TypeSystem {
                 && self.has_real_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(FqTypeName::of_head(&module_source, &name)),
+                    &self.type_table.borrow().impl_receiver_key(type_id),
                     trait_,
                 );
             if !serde_blocked
@@ -1155,12 +1155,7 @@ impl TypeSystem {
             ResolvedType::Struct { .. }
             | ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. } => {
-                let (name, module_source) = self
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a nominal type names a declaration");
-                (FqTypeName::of_head(&module_source, &name), None)
+                (self.type_table.borrow().fq_base_type_name(type_id), None)
             }
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
@@ -1170,13 +1165,8 @@ impl TypeSystem {
                 Some(vec![*elem]),
             ),
             ResolvedType::GenericInstance { type_args, .. } => {
-                let (name, module_source) = self
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a generic instance names a declaration");
                 (
-                    FqTypeName::of_head(&module_source, &name),
+                    self.type_table.borrow().fq_base_type_name(type_id),
                     if type_args.is_empty() {
                         None
                     } else {
@@ -1226,7 +1216,7 @@ impl TypeSystem {
                 return bounds.iter().any(|b| b.base_name() == trait_name);
             }
             ResolvedType::Newtype { base_type, .. } => {
-                let (name, module_source) = self
+                let (_name, _module_source) = self
                     .type_table
                     .borrow()
                     .nominal_head(type_id)
@@ -1235,7 +1225,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(FqTypeName::of_head(&module_source, &name)),
+                    &self.type_table.borrow().impl_receiver_key(type_id),
                     trait_,
                 ) {
                     return true;
@@ -1248,15 +1238,10 @@ impl TypeSystem {
             // indexed under the builtin spelling the unit type mangles as.
             ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags { .. } => {
-                let (name, module_source) = self
-                    .type_table
-                    .borrow()
-                    .nominal_head(type_id)
-                    .expect("a flags type names a declaration");
                 if self.find_trait_impl_for_type(
                     ctx,
                     scope,
-                    &Receiver::Type(FqTypeName::of_head(&module_source, &name)),
+                    &self.type_table.borrow().impl_receiver_key(type_id),
                     trait_,
                 ) {
                     return true;
@@ -2175,7 +2160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Resolve and register each associated type in this substituted context
-            let trait_key = info.trait_key.clone();
+            let trait_key = info.trait_key;
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2190,7 +2175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_key.clone(),
+                            trait_key,
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2281,7 +2266,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type
-            let trait_key = info.trait_key.clone();
+            let trait_key = info.trait_key;
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2296,7 +2281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_key.clone(),
+                            trait_key,
                             binding.name.clone(),
                             resolved_id,
                         );

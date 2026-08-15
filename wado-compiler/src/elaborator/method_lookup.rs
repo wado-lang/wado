@@ -210,13 +210,7 @@ impl TypeSystem {
             || name.to_string(),
             // `of_head`, not `declared`: the index also carries builtin shapes,
             // which a mangler spells bare wherever they appear.
-            |def| {
-                crate::name::FqTypeName::of_head(
-                    defs.module(def),
-                    &super::trait_env::render_decl_name(defs, def),
-                )
-                .into_string()
-            },
+            |def| crate::name::FqTypeName::of_head(defs, def).into_string(),
         )
     }
 }

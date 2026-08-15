@@ -13,7 +13,7 @@ use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
@@ -90,7 +90,7 @@ fn lower_to_flat_inner(
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
     let names =
-        super::types::CmStdlibNames::from_compiler_items(ctx.type_table.borrow().compiler_items());
+        super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -204,7 +204,7 @@ fn lower_to_flat_inner(
                 TypeTable::I32,
                 generic_method_call(
                     local_ref(arr_local, "__arr_val", type_id),
-                    &names.array,
+                    &names.array_fq,
                     "len",
                     ModuleSource::list(),
                     vec![],
@@ -275,7 +275,7 @@ fn lower_to_flat_inner(
             // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
-                FqTypeName::declared(&ModuleSource::list(), &names.array),
+                names.array_fq.clone(),
                 Some(names.index_value.clone().with_args(vec!["i32".to_string()])),
                 "index_value".to_string(),
             );
@@ -728,7 +728,7 @@ pub(super) fn synthesize_lift_from_flat_params(
 ) -> (TirExpr, usize) {
     let type_table_cell = lift_ctx.type_table;
     let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table_cell.borrow().compiler_items());
+        super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
@@ -1479,9 +1479,7 @@ impl<'a> ExportBindingEnv<'a> {
             cm_interface_registry: self.cm_interface_registry,
             type_table: self.type_table,
             wasi_package: self.cm_package,
-            names: super::types::CmStdlibNames::from_compiler_items(
-                self.type_table.borrow().compiler_items(),
-            ),
+            names: super::types::CmStdlibNames::from_type_table(&self.type_table.borrow()),
         }
     }
 
@@ -1772,7 +1770,7 @@ pub(super) fn synthesize_post_return(
     }
 
     let names =
-        super::types::CmStdlibNames::from_compiler_items(env.type_table.borrow().compiler_items());
+        super::types::CmStdlibNames::from_type_table(&env.type_table.borrow());
     let shape_ctx = env.shape_ctx(&names);
     let shape = cm_shape(ty, &shape_ctx);
 
@@ -1855,7 +1853,7 @@ fn push_result_task_return_epilogue(
         }
         other => panic!("expected Result type for export binding return, got: {other:?}"),
     };
-    let names = super::types::CmStdlibNames::from_compiler_items(tt.compiler_items());
+    let names = super::types::CmStdlibNames::from_type_table(&tt);
     drop(tt);
 
     // Mutable flat slots holding the flattened task-return args, zeroed.

@@ -940,7 +940,7 @@ fn build_resource_fallback_call(
     let _ = type_table;
     // The receiver is the resource declaration, so both the base head and the
     // instantiation label carry the module that declares it.
-    let label_fq = crate::name::FqTypeName::declared(effect_module, label);
+    let label_fq = crate::name::FqTypeName::shape(effect_module, label);
     let mangled_method_name = crate::name::MethodName::format_local(&label_fq, None, &op.name);
 
     // The label is the receiver: a rendered name has nowhere to be stored now,

@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
-use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -46,6 +46,8 @@ pub struct CmStdlibNames {
     /// declaration the registry records — never a spelling a user trait could
     /// share.
     pub index_value: crate::name::FqTraitName,
+    /// `List`'s head, likewise the declaration the registry records.
+    pub array_fq: crate::name::FqTypeName,
 }
 
 impl CmStdlibNames {
@@ -55,7 +57,8 @@ impl CmStdlibNames {
     /// it through [`LowerContext`] — mirroring the `from_compiler_items`
     /// constructor shape used by the other synthesis passes
     /// (`SerdeStdlibNames`, `FormatStdlibNames`, `TraitsStdlibNames`).
-    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+    pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+        let items = type_table.compiler_items();
         let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
         let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
         let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
@@ -74,6 +77,7 @@ impl CmStdlibNames {
             err_name: err_name.to_string(),
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
+            array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
         }
     }
 
@@ -104,6 +108,15 @@ impl CmStdlibNames {
                     crate::defs::DefKind::Trait,
                 );
                 crate::name::FqTraitName::declared(&defs, def)
+            },
+            array_fq: {
+                let mut defs = crate::defs::DefTable::default();
+                let def = defs.declare_for_test(
+                    &crate::module_source::ModuleSource::list(),
+                    "List",
+                    crate::defs::DefKind::Struct,
+                );
+                crate::name::FqTypeName::declared(&defs, def)
             },
         }
     }
@@ -552,7 +565,7 @@ pub(super) fn check_cm_boundary_representable(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    let names = CmStdlibNames::from_type_table(&type_table);
     check_cm_boundary_representable_inner(type_id, type_table, tir_modules, &names, visited)
 }
 
@@ -959,7 +972,7 @@ pub(super) fn flatten_export_type(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    let names = CmStdlibNames::from_type_table(&type_table);
     flatten_export_type_inner(ty, out, tir_modules, type_table, &names);
 }
 
@@ -1091,7 +1104,7 @@ pub(super) fn flat_types_from_type_id_into(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,
 ) {
-    let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+    let names = CmStdlibNames::from_type_table(&type_table);
     flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, &names);
 }
 

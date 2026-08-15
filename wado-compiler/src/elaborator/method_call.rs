@@ -848,7 +848,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                let (name, module_source) = self
+                let (name, _module_source) = self
                     .tysys
                     .type_table
                     .borrow()
@@ -865,7 +865,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let base = if TypeTable::is_tuple_type(&name) {
                     FqTypeName::tuple(Vec::new())
                 } else {
-                    FqTypeName::declared(&module_source, &name)
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(method_impl_type_id)
                 };
                 let mangled = base.clone().with_args(type_arg_names.clone());
                 (mangled, base, type_arg_names, Some(type_args))
@@ -898,7 +901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args: newtype_args,
                 ..
             } if !newtype_args.is_empty() => {
-                let (name, module_source) = self
+                let (_name, _module_source) = self
                     .tysys
                     .type_table
                     .borrow()
@@ -909,7 +912,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
                     tt.generic_type_args(ultimate).unwrap_or_default()
                 };
-                let head = FqTypeName::declared(&module_source, &name);
+                let head = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(method_impl_type_id);
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
@@ -1859,7 +1866,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                let mangled = FqTypeName::declared(&module_source, &name).with_args(type_arg_names);
+                let mangled = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(target_type_id)
+                    .with_args(type_arg_names);
                 (name, module_source, mangled, type_args.clone())
             }
             ResolvedType::Primitive(prim) => (
@@ -1903,7 +1915,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                     .collect();
-                let mangled = FqTypeName::declared(&module_source, &name).with_args(args);
+                let mangled = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .fq_base_type_name(target_type_id)
+                    .with_args(args);
                 (name, module_source, mangled, type_args.clone())
             }
             ResolvedType::Newtype { base_type, .. } => {
@@ -1917,7 +1934,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Check if the newtype itself has the static method
                 if self.has_static_method_direct(&newtype_name, &static_call.method) {
-                    let fq = FqTypeName::declared(&newtype_module, &newtype_name);
+                    let fq = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(target_type_id);
                     (newtype_name, newtype_module, fq, vec![])
                 } else {
                     // Fall back to the base type for inherited methods
@@ -1943,7 +1964,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .iter()
                                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                                 .collect();
-                            let fq = FqTypeName::declared(&module_source, &name).with_args(args);
+                            let fq = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .fq_base_type_name(*base_type)
+                                .with_args(args);
                             (name, module_source, fq, type_args)
                         }
                         ResolvedType::Newtype {
@@ -1971,8 +1997,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                         base_type: next, ..
                                     } => current = next,
                                     _ => {
-                                        let fq =
-                                            FqTypeName::declared(&newtype_module, &newtype_name);
+                                        let fq = self
+                                            .tysys
+                                            .type_table
+                                            .borrow()
+                                            .fq_base_type_name(target_type_id);
                                         break (newtype_name, newtype_module, fq, vec![]);
                                     }
                                 }
@@ -1985,7 +2014,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             vec![],
                         ),
                         _ => {
-                            let fq = FqTypeName::declared(&newtype_module, &newtype_name);
+                            let fq = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .fq_base_type_name(target_type_id);
                             (newtype_name, newtype_module, fq, vec![])
                         }
                     }
@@ -2000,7 +2033,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .nominal_head(target_type_id)
                     .expect("a flags type names a declaration");
                 if self.has_static_method_direct(&flags_name, &static_call.method) {
-                    let fq = FqTypeName::declared(&flags_module, &flags_name);
+                    let fq = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(target_type_id);
                     (flags_name, flags_module, fq, vec![])
                 } else {
                     (

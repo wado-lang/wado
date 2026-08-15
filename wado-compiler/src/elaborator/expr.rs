@@ -3003,12 +3003,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(target_type)
-                .map(|(n, m)| (FqTypeName::declared(&m, &n), n)),
+            ResolvedType::Struct { .. } => {
+                let tt = self.tysys.type_table.borrow();
+                tt.nominal_def(target_type)
+                    .map(|def| (FqTypeName::declared(tt.defs(), def), tt.def_name(def).to_string()))
+            }
             _ => None,
         };
 

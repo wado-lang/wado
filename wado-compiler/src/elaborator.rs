@@ -787,14 +787,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return crate::name::FqTypeName::builtin(written);
         }
         self.decl_key_or_local(written).map_or_else(
-            // A name that reaches no declaration at all: the writing module is
-            // the only vantage left, and the diagnostic that follows is what
-            // this spelling is for.
-            || crate::name::FqTypeName::declared(&self.current_module_source, written),
-            |def| {
-                let defs = self.tysys.resolutions.defs();
-                crate::name::FqTypeName::of_head(defs.module(def), &self.decl_render_name(def))
-            },
+            // A name that reaches no declaration at all: it names a shape or
+            // nothing, and the writing module is the only vantage left.
+            || crate::name::FqTypeName::shape(&self.current_module_source, written),
+            |def| crate::name::FqTypeName::of_head(self.tysys.resolutions.defs(), def),
         )
     }
 
@@ -802,6 +798,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// with a function-local declaration's disambiguator applied.
     pub(super) fn decl_render_name(&self, def: crate::defs::DefId) -> String {
         trait_env::render_decl_name(self.tysys.resolutions.defs(), def)
+    }
+
+    /// The declaration `ns::Name` reaches from this module.
+    ///
+    /// A namespace import enters its module's declarations under `ns$Name`
+    /// aliases, so this is the import tier answering the qualification the
+    /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
+    /// type position, rather than a second lookup beside it.
+    pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<crate::defs::DefId> {
+        self.tysys.resolutions.imported_as(
+            &self.current_module_source,
+            &crate::name::namespace_member_alias(namespace, name),
+        )
     }
 
     /// The declared name of the trait `trait_name` refers to here — the same
@@ -1426,10 +1435,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // never parsed.
             if let Some(key) = self.type_decl_key(current) {
                 let defs = self.tysys.resolutions.defs();
-                let rendered = self.decl_render_name(key);
-                if rendered == impl_name
-                    || crate::name::FqTypeName::declared(defs.module(key), &rendered).to_mangled()
-                        == impl_name
+                if self.decl_render_name(key) == impl_name
+                    || crate::name::FqTypeName::declared(defs, key).to_mangled() == impl_name
                 {
                     return Some(key);
                 }

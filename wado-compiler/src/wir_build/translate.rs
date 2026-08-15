@@ -143,7 +143,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
         let call_method_local = crate::name::MethodName::format_local(
-            &crate::name::FqTypeName::declared(module_source, functor_name),
+            &crate::name::FqTypeName::shape(module_source, functor_name),
             None,
             crate::name::CLOSURE_CALL_METHOD,
         );
@@ -475,7 +475,7 @@ fn register_inspect_wrapper(
     // The per-functor impl's local name is `<fq functor>^Trait::method`;
     // module + local name together form its `func_map` key.
     let impl_local_name = crate::name::MethodName::format_local(
-        &crate::name::FqTypeName::declared(module_source, functor_name),
+        &crate::name::FqTypeName::shape(module_source, functor_name),
         Some(trait_name),
         method_name,
     );

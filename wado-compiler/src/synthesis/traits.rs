@@ -7,7 +7,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
@@ -69,17 +69,15 @@ pub(crate) struct TraitsStdlibNames {
 const KEYED: &str = "a compiler trait item names a declaration";
 
 impl TraitsStdlibNames {
-    pub(crate) fn from_compiler_items(items: &CompilerItems) -> Self {
+    pub(crate) fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+        let items = type_table.compiler_items();
         let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
         let (_, _, equal_name, equal_index) = items.require_enum_case(CompilerItem::OrderingEqual);
         let (_, _, greater_name, greater_index) =
             items.require_enum_case(CompilerItem::OrderingGreater);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
-            formatter_fq: {
-                let (module, name) = items.require_struct(CompilerItem::Formatter);
-                FqTypeName::declared(module, name)
-            },
+            formatter_fq: type_table.compiler_struct_fq_name(CompilerItem::Formatter),
             display: items.trait_name(CompilerItem::Display).to_string(),
             display_fq: items.trait_fq(CompilerItem::Display),
             display_alt_fq: items.trait_fq(CompilerItem::DisplayAlt),
@@ -142,13 +140,12 @@ impl TraitPair {
 /// resolved type follows when mangled into any other name; the trait arrives
 /// already carrying its declaration.
 fn trait_method_info(
-    module_source: &ModuleSource,
-    struct_name: &str,
+    receiver: &FqTypeName,
     trait_name: &crate::name::FqTraitName,
     method: &str,
 ) -> LocalMethodName {
     LocalMethodName::new(
-        FqTypeName::of_head(module_source, struct_name),
+        receiver.clone(),
         Some(trait_name.clone()),
         method.to_string(),
     )
@@ -354,7 +351,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         let module_source = module.module_source.clone();
         let names = {
             let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+            TraitsStdlibNames::from_type_table(&tt)
         };
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
@@ -407,7 +404,7 @@ pub fn synthesize_defaults(project: &mut Package) {
         let module_source = module.module_source.clone();
         let names = {
             let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+            TraitsStdlibNames::from_type_table(&tt)
         };
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
@@ -443,7 +440,7 @@ pub fn synthesize_reflect(project: &mut Package) {
         let module_source = module.module_source.clone();
         let names = {
             let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+            TraitsStdlibNames::from_type_table(&tt)
         };
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
@@ -487,12 +484,11 @@ fn generate_struct_reflect_impls(
         let methods = generate_struct_reflect_methods(
             &module.type_table,
             &env,
-            &module_source,
             reflect_trait_name,
             target,
         );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
-        ctx.record_impl(&target.name, &reflect_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(&target.receiver, &reflect_trait_name.canonical().expect(KEYED));
     }
 
     module.functions.extend(generated);
@@ -519,6 +515,9 @@ struct ReflectTarget {
     /// The declaration selected, carried from the `TirStruct` rather than
     /// looked back up by `name`.
     def: crate::tir::StructDef,
+    /// The head every synthesised method of this target hangs off, rendered
+    /// once from [`Self::def`] so no sub-pass spells the receiver.
+    receiver: FqTypeName,
     type_params: Vec<TirTypeParam>,
     fields: Vec<ReflectFieldInfo>,
     wire_name_policy: Option<String>,
@@ -536,6 +535,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
         .map(|s| ReflectTarget {
             name: s.name.clone(),
             def: s.def,
+            receiver: module.type_table.borrow().fq_struct_head(s.def),
             type_params: s.type_params.clone(),
             fields: s
                 .fields
@@ -562,13 +562,13 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
 fn generate_struct_reflect_methods(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
-    module_source: &ModuleSource,
     reflect_trait_name: &crate::name::FqTraitName,
     target: &ReflectTarget,
 ) -> Vec<TirFunction> {
     let ReflectTarget {
-        name,
+        name: _,
         def,
+        receiver,
         type_params,
         fields,
         wire_name_policy: name_policy,
@@ -582,8 +582,7 @@ fn generate_struct_reflect_methods(
         .collect();
 
     let type_name_fn = generate_type_name_fn(
-        module_source,
-        name,
+        receiver,
         env.string_type,
         reflect_trait_name,
         &env.type_name_method,
@@ -641,40 +640,36 @@ fn generate_struct_reflect_methods(
     };
 
     let members_fn = generate_struct_members_fn(
-        module_source,
         type_table,
         env,
         reflect_trait_name,
-        name,
+        receiver,
         fields,
         &member_types,
         members_tuple_type,
         span,
     );
     let from_fields_fn = generate_struct_from_fields_fn(
-        module_source,
         env,
         reflect_trait_name,
-        name,
+        receiver,
         struct_type,
         fields,
         fields_tuple_type,
         span,
     );
     let defaults_fn = generate_struct_defaults_fn(
-        module_source,
         type_table,
         env,
         reflect_trait_name,
-        name,
+        receiver,
         fields,
         &slot_types,
         slots_tuple_type,
         span,
     );
     let wire_name_policy_fn = generate_wire_name_policy_fn(
-        module_source,
-        name,
+        receiver,
         env.case_style_type,
         name_policy,
         reflect_trait_name,
@@ -727,14 +722,14 @@ fn register_reflect_assoc_types(
             let Some(base_decl) = base_decl else { continue };
             tt.register_generic_assoc_type_def(
                 base_decl,
-                trait_key.clone(),
+                trait_key,
                 (*assoc_name).to_string(),
                 *resolved,
             );
         } else {
             tt.register_assoc_type_resolution(
                 self_type,
-                trait_key.clone(),
+                trait_key,
                 (*assoc_name).to_string(),
                 *resolved,
             );
@@ -842,7 +837,7 @@ fn synthesize_reflect_kind(
         let module_source = module.module_source.clone();
         let names = {
             let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_compiler_items(tt.compiler_items())
+            TraitsStdlibNames::from_type_table(&tt)
         };
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
@@ -932,19 +927,17 @@ fn reflect_meta_int_field(
 /// is_secret: … }, …];` — one fat member per field, each typed `StructField<S, F_k>`.
 #[allow(clippy::too_many_arguments)]
 fn generate_struct_members_fn(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
     reflect_trait_name: &crate::name::FqTraitName,
-    struct_name: &str,
+    receiver: &FqTypeName,
     fields: &[ReflectFieldInfo],
     member_types: &[TypeId],
     members_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        struct_name,
+        receiver,
         reflect_trait_name,
         &env.members_method,
     );
@@ -1049,19 +1042,17 @@ fn generate_struct_members_fn(
 /// zero, so its locals are re-allocated into this function's table before they
 /// are embedded — otherwise two fields' defaults would share slot 0.
 fn generate_struct_defaults_fn(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
     reflect_trait_name: &crate::name::FqTraitName,
-    struct_name: &str,
+    receiver: &FqTypeName,
     fields: &[ReflectFieldInfo],
     slot_types: &[TypeId],
     slots_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        struct_name,
+        receiver,
         reflect_trait_name,
         &env.defaults_method,
     );
@@ -1114,18 +1105,16 @@ fn generate_struct_defaults_fn(
 /// Build `S^ReflectStruct::from_fields(fields: [F_0, …]) -> S`:
 /// `return S { f_0: fields.0, … };`.
 fn generate_struct_from_fields_fn(
-    module_source: &ModuleSource,
     env: &ReflectSynthEnv,
     reflect_trait_name: &crate::name::FqTraitName,
-    struct_name: &str,
+    receiver: &FqTypeName,
     struct_type: TypeId,
     fields: &[ReflectFieldInfo],
     fields_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        struct_name,
+        receiver,
         reflect_trait_name,
         &env.from_fields_method,
     );
@@ -1152,7 +1141,7 @@ fn generate_struct_from_fields_fn(
     let literal = TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type,
-            struct_name: struct_name.to_string(),
+            struct_name: receiver.head().name().to_string(),
             fields: literal_fields,
         },
         struct_type,
@@ -1207,8 +1196,7 @@ fn case_style_variant(name_policy: &Option<String>) -> (u32, &'static str) {
 /// `CaseStyle` value (casing itself is resolved library-side). Shared by all
 /// four reflect kinds.
 fn generate_wire_name_policy_fn(
-    module_source: &ModuleSource,
-    type_name: &str,
+    receiver: &FqTypeName,
     case_style_type: TypeId,
     name_policy: &Option<String>,
     reflect_trait_name: &crate::name::FqTraitName,
@@ -1216,8 +1204,7 @@ fn generate_wire_name_policy_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        type_name,
+        receiver,
         reflect_trait_name,
         wire_name_policy_method,
     );
@@ -1358,23 +1345,21 @@ fn generate_field_get_helper(
 /// Build `Type^ReflectKind::type_name() -> String { return "Type"; }` —
 /// shared by the struct `ReflectStruct` and variant `ReflectVariant` syntheses.
 fn generate_type_name_fn(
-    module_source: &ModuleSource,
-    struct_name: &str,
+    receiver: &FqTypeName,
     string_type: TypeId,
     reflect_trait_name: &crate::name::FqTraitName,
     type_name_method: &str,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        struct_name,
+        receiver,
         reflect_trait_name,
         type_name_method,
     );
     let qualified_name = method_info.to_mangled_name();
 
     let literal = TirExpr::new(
-        TirExprKind::StringLiteral(struct_name.to_string()),
+        TirExprKind::StringLiteral(receiver.head().name().to_string()),
         string_type,
         span,
     );
@@ -1424,7 +1409,7 @@ fn generate_variant_reflect_impls(
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let env = ReflectVariantSynthEnv::resolve(&mut module.type_table.borrow_mut());
 
     let mut generated = Vec::new();
@@ -1432,12 +1417,11 @@ fn generate_variant_reflect_impls(
         let methods = generate_variant_reflect_methods(
             &module.type_table,
             &env,
-            &module_source,
             variant_trait_name,
             target,
         );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
-        ctx.record_impl(&target.name, &variant_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(&target.receiver, &variant_trait_name.canonical().expect(KEYED));
     }
 
     module.functions.extend(generated);
@@ -1446,9 +1430,10 @@ fn generate_variant_reflect_impls(
 /// A variant selected for `ReflectVariant` synthesis. `type_params` is empty
 /// for a plain variant; a generic one gets a single impl over `V<T, …>`.
 struct ReflectVariantTarget {
-    name: String,
     /// The declaration selected, carried from the `TirVariantDecl`.
     def: crate::defs::DefId,
+    /// The head every synthesised method of this target hangs off.
+    receiver: FqTypeName,
     type_params: Vec<TirTypeParam>,
     /// Per-case `(name, index, payload type, #[wire(name)])`; unit cases
     /// carry `()` as their payload.
@@ -1469,8 +1454,8 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
                 .is_some_and(|type_id| tt.is_reflect_eligible(type_id))
         })
         .map(|v| ReflectVariantTarget {
-            name: v.name.clone(),
             def: v.def,
+            receiver: FqTypeName::declared(module.type_table.borrow().defs(), v.def),
             type_params: v.type_params.clone(),
             cases: v
                 .cases
@@ -1549,15 +1534,13 @@ pub(crate) const REFLECT_CASE_PAYLOADS_ASSOC: &str = "CasePayloads";
 fn generate_variant_reflect_methods(
     type_table: &RefCell<TypeTable>,
     env: &ReflectVariantSynthEnv,
-    module_source: &ModuleSource,
     variant_trait_name: &crate::name::FqTraitName,
     target: &ReflectVariantTarget,
 ) -> Vec<TirFunction> {
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         env.string_type,
         variant_trait_name,
         &env.type_name_method,
@@ -1604,8 +1587,7 @@ fn generate_variant_reflect_methods(
     };
 
     let discriminant_fn = generate_variant_discriminant_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         ref_variant_type,
         variant_type,
         variant_trait_name,
@@ -1613,7 +1595,6 @@ fn generate_variant_reflect_methods(
         span,
     );
     let cases_fn = generate_variant_cases_fn(
-        module_source,
         type_table,
         env,
         variant_trait_name,
@@ -1624,8 +1605,7 @@ fn generate_variant_reflect_methods(
     );
 
     let wire_name_policy_fn = generate_wire_name_policy_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         env.case_style_type,
         &target.wire_name_policy,
         variant_trait_name,
@@ -1656,7 +1636,6 @@ fn generate_variant_reflect_methods(
 /// — one fat member per case, each typed `Case<Variant, P_k>` and carrying the
 /// `Member` metadata alongside the payload bridge.
 fn generate_variant_cases_fn(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectVariantSynthEnv,
     variant_trait_name: &crate::name::FqTraitName,
@@ -1666,8 +1645,7 @@ fn generate_variant_cases_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         variant_trait_name,
         &env.cases_method,
     );
@@ -2058,8 +2036,7 @@ fn generate_case_construct_helper(
 /// Build `Variant^ReflectVariant::discriminant(&self) -> i32` as
 /// `return <tag of *self>;`.
 fn generate_variant_discriminant_fn(
-    module_source: &ModuleSource,
-    variant_name: &str,
+    receiver: &FqTypeName,
     ref_variant_type: TypeId,
     variant_type: TypeId,
     variant_trait_name: &crate::name::FqTraitName,
@@ -2067,8 +2044,7 @@ fn generate_variant_discriminant_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        variant_name,
+        receiver,
         variant_trait_name,
         discriminant_method,
     );
@@ -2145,8 +2121,8 @@ fn generate_enum_reflect_impls(
         .iter()
         .filter(|e| e.type_params.is_empty())
         .map(|e| ReflectEnumTarget {
-            name: e.name.clone(),
             def: e.def,
+            receiver: FqTypeName::declared(module.type_table.borrow().defs(), e.def),
             cases: e
                 .cases
                 .iter()
@@ -2160,7 +2136,7 @@ fn generate_enum_reflect_impls(
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let env = ReflectEnumSynthEnv::resolve(&mut module.type_table.borrow_mut());
 
     let mut generated = Vec::new();
@@ -2168,12 +2144,11 @@ fn generate_enum_reflect_impls(
         let methods = generate_enum_reflect_methods(
             &module.type_table,
             &env,
-            &module_source,
             enum_trait_name,
             target,
         );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
-        ctx.record_impl(&target.name, &enum_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(&target.receiver, &enum_trait_name.canonical().expect(KEYED));
     }
 
     module.functions.extend(generated);
@@ -2181,9 +2156,10 @@ fn generate_enum_reflect_impls(
 
 /// An enum selected for `ReflectEnum` synthesis.
 struct ReflectEnumTarget {
-    name: String,
     /// The declaration selected, carried from the `TirEnum`.
     def: crate::defs::DefId,
+    /// The head every synthesised method of this target hangs off.
+    receiver: FqTypeName,
     /// Per-case `(name, index, #[wire(name)])`; a case's discriminant is
     /// its index.
     cases: Vec<(String, u32, Option<String>)>,
@@ -2248,15 +2224,13 @@ impl ReflectEnumSynthEnv {
 fn generate_enum_reflect_methods(
     type_table: &RefCell<TypeTable>,
     env: &ReflectEnumSynthEnv,
-    module_source: &ModuleSource,
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
 ) -> Vec<TirFunction> {
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         env.string_type,
         enum_trait_name,
         &env.type_name_method,
@@ -2292,7 +2266,6 @@ fn generate_enum_reflect_methods(
     };
 
     let discriminant_fn = generate_enum_discriminant_fn(
-        module_source,
         env,
         enum_trait_name,
         target,
@@ -2301,7 +2274,6 @@ fn generate_enum_reflect_methods(
         span,
     );
     let from_discriminant_fn = generate_enum_from_discriminant_fn(
-        module_source,
         type_table,
         env,
         enum_trait_name,
@@ -2311,7 +2283,6 @@ fn generate_enum_reflect_methods(
         span,
     );
     let members_fn = generate_enum_members_fn(
-        module_source,
         type_table,
         env,
         enum_trait_name,
@@ -2323,8 +2294,7 @@ fn generate_enum_reflect_methods(
     );
 
     let wire_name_policy_fn = generate_wire_name_policy_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         env.case_style_type,
         &target.wire_name_policy,
         enum_trait_name,
@@ -2346,7 +2316,6 @@ fn generate_enum_reflect_methods(
 /// wire_override: … }, …];` — one `EnumCase<Enum>` per case, packed into the
 /// homogeneous `Members` tuple.
 fn generate_enum_members_fn(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
@@ -2357,8 +2326,7 @@ fn generate_enum_members_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         enum_trait_name,
         &env.members_method,
     );
@@ -2433,7 +2401,6 @@ fn generate_enum_members_fn(
 /// — an enum value is its i32 discriminant, so a direct cast reads the tag (the
 /// enum analog of `ReflectFlags::bits`'s `*self as u32`).
 fn generate_enum_discriminant_fn(
-    module_source: &ModuleSource,
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
@@ -2442,8 +2409,7 @@ fn generate_enum_discriminant_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         enum_trait_name,
         &env.discriminant_method,
     );
@@ -2476,7 +2442,6 @@ fn generate_enum_discriminant_fn(
 /// Build `Enum^ReflectEnum::from_discriminant(disc: i32) -> Option<Enum>` as
 /// an `if disc == k { return Some(Case_k); }` chain ending in `None`.
 fn generate_enum_from_discriminant_fn(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectEnumSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
@@ -2486,8 +2451,7 @@ fn generate_enum_from_discriminant_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         enum_trait_name,
         &env.from_discriminant_method,
     );
@@ -2588,15 +2552,15 @@ fn generate_flags_reflect_impls(
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let targets: Vec<ReflectFlagsTarget> = module
         .flags
         .iter()
         .filter_map(|f| {
             let flags_type = module.type_table.borrow().find_flags_type(f.def)?;
             Some(ReflectFlagsTarget {
-                name: f.name.clone(),
                 flags_type,
+                receiver: FqTypeName::declared(module.type_table.borrow().defs(), f.def),
                 members: f
                     .members
                     .iter()
@@ -2616,14 +2580,13 @@ fn generate_flags_reflect_impls(
     let mut generated = Vec::new();
     for target in &targets {
         let methods = generate_flags_reflect_methods(
-            &module_source,
             &module.type_table,
             &env,
             flags_trait_name,
             target,
         );
         generated.extend(methods.into_iter().map(|f| Rc::new(RefCell::new(f))));
-        ctx.record_impl(&target.name, &flags_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(&target.receiver, &flags_trait_name.canonical().expect(KEYED));
     }
 
     module.functions.extend(generated);
@@ -2631,8 +2594,9 @@ fn generate_flags_reflect_impls(
 
 /// A flags type selected for `ReflectFlags` synthesis.
 struct ReflectFlagsTarget {
-    name: String,
     flags_type: TypeId,
+    /// The head every synthesised method of this target hangs off.
+    receiver: FqTypeName,
     /// Per-member `(name, bitmask)`.
     members: Vec<(String, u32)>,
     span: Span,
@@ -2694,7 +2658,6 @@ impl ReflectFlagsSynthEnv {
 /// Synthesize one flags type's `type_name()`, `bits(&self)`, `from_bits(raw)`,
 /// and `members()` methods.
 fn generate_flags_reflect_methods(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
@@ -2703,8 +2666,7 @@ fn generate_flags_reflect_methods(
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         env.string_type,
         flags_trait_name,
         &env.type_name_method,
@@ -2739,7 +2701,6 @@ fn generate_flags_reflect_methods(
     };
 
     let bits_fn = generate_flags_bits_fn(
-        module_source,
         env,
         flags_trait_name,
         target,
@@ -2747,7 +2708,6 @@ fn generate_flags_reflect_methods(
         span,
     );
     let from_bits_fn = generate_flags_from_bits_fn(
-        module_source,
         type_table,
         env,
         flags_trait_name,
@@ -2756,7 +2716,6 @@ fn generate_flags_reflect_methods(
         span,
     );
     let members_fn = generate_flags_members_fn(
-        module_source,
         env,
         flags_trait_name,
         target,
@@ -2766,8 +2725,7 @@ fn generate_flags_reflect_methods(
     );
 
     let wire_name_policy_fn = generate_wire_name_policy_fn(
-        module_source,
-        &target.name,
+        &target.receiver,
         env.case_style_type,
         &target.wire_name_policy,
         flags_trait_name,
@@ -2789,7 +2747,6 @@ fn generate_flags_reflect_methods(
 /// one `FlagsBit<Flags>` per member, packed into the homogeneous `Members`
 /// tuple.
 fn generate_flags_members_fn(
-    module_source: &ModuleSource,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
@@ -2798,8 +2755,7 @@ fn generate_flags_members_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         flags_trait_name,
         &env.members_method,
     );
@@ -2850,7 +2806,6 @@ fn generate_flags_members_fn(
 /// Build `Flags^ReflectFlags::bits(&self) -> u64` as
 /// `return (*self as u32) as u64;` — the widening is lossless.
 fn generate_flags_bits_fn(
-    module_source: &ModuleSource,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
@@ -2858,8 +2813,7 @@ fn generate_flags_bits_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         flags_trait_name,
         &env.bits_method,
     );
@@ -2894,7 +2848,6 @@ fn generate_flags_bits_fn(
 /// `if (raw & VALID) != raw { return None; } return Some((raw as u32) as F);`
 /// — unknown bits are rejected (CM semantics).
 fn generate_flags_from_bits_fn(
-    module_source: &ModuleSource,
     type_table: &RefCell<TypeTable>,
     env: &ReflectFlagsSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
@@ -2903,8 +2856,7 @@ fn generate_flags_from_bits_fn(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        &target.name,
+        &target.receiver,
         flags_trait_name,
         &env.from_bits_method,
     );
@@ -3058,24 +3010,24 @@ impl SynthesisCtx<'_, '_, '_> {
     /// in the current module. Used for in-pass dedup only; the canonical
     /// synthesis layer is rebuilt by `collect_synthesised_impls` after
     /// `synthesize_traits` returns.
-    pub(crate) fn record_impl(&mut self, type_name: &str, trait_key: &crate::defs::DefId) {
-        self.pending.insert((
-            type_name.to_string(),
-            self.module.clone(),
-            trait_key.clone(),
-        ));
+    pub(crate) fn record_impl(&mut self, receiver: &FqTypeName, trait_key: &crate::defs::DefId) {
+        self.pending
+            .insert((Self::key(receiver), self.module.clone(), *trait_key));
+    }
+
+    /// The in-pass dedup key of a receiver: its rendered head, which
+    /// disambiguates two same-named declarations in one module.
+    fn key(receiver: &FqTypeName) -> String {
+        receiver.head().rendered().to_string()
     }
 
     /// `true` when some `T: <trait_name>` bound (or an explicit marker) in
     /// the project actually demanded `impl <trait_name> for <type_name>` in
     /// the current module — see [`Self::requested`]. Only consulted for the
     /// `Eq` / `Ord` sub-passes; the other auto-derives stay unconditional.
-    pub(crate) fn is_requested(&self, type_name: &str, trait_key: &crate::defs::DefId) -> bool {
-        self.requested.contains(&(
-            type_name.to_string(),
-            self.module.clone(),
-            trait_key.clone(),
-        ))
+    pub(crate) fn is_requested(&self, receiver: &FqTypeName, trait_key: &crate::defs::DefId) -> bool {
+        self.requested
+            .contains(&(Self::key(receiver), self.module.clone(), *trait_key))
     }
 
     /// The receiver `type_name` indexes under in [`TraitEnv`]. A sub-pass names
@@ -3083,17 +3035,14 @@ impl SynthesisCtx<'_, '_, '_> {
     /// declaring one; the key is built exactly as
     /// [`super::super::elaborator::trait_env::ImplTargetKey::receiver`] builds
     /// the definition side.
-    fn receiver(&self, type_name: &str) -> Receiver {
-        Receiver::Type(FqTypeName::of_head(&self.module, type_name))
+    fn receiver(&self, head: &FqTypeName) -> Receiver {
+        Receiver::Type(head.clone())
     }
 
     /// `true` when this pass already emitted `<trait_name> for <type_name>`.
-    fn pending_has(&self, type_name: &str, trait_key: &crate::defs::DefId) -> bool {
-        self.pending.contains(&(
-            type_name.to_string(),
-            self.module.clone(),
-            trait_key.clone(),
-        ))
+    fn pending_has(&self, receiver: &FqTypeName, trait_key: &crate::defs::DefId) -> bool {
+        self.pending
+            .contains(&(Self::key(receiver), self.module.clone(), *trait_key))
     }
 
     /// `true` when a *methodful* impl already covers `<trait_name> for
@@ -3102,13 +3051,13 @@ impl SynthesisCtx<'_, '_, '_> {
     /// body it asks for.
     fn has_methodful_impl(
         &self,
-        type_name: &str,
+        receiver: &FqTypeName,
         trait_key: &crate::defs::DefId,
         scope: ImplScope,
     ) -> bool {
-        let type_key = self.receiver(type_name);
+        let type_key = self.receiver(receiver);
         let Some(trait_) = self.trait_env.trait_def(trait_key) else {
-            return self.pending_has(type_name, trait_key);
+            return self.pending_has(receiver, trait_key);
         };
         let real = match scope {
             ImplScope::CurrentModule => {
@@ -3119,29 +3068,33 @@ impl SynthesisCtx<'_, '_, '_> {
                 .trait_env
                 .has_any_methodful_impl_by_receiver(&type_key, trait_),
         };
-        real || self.pending_has(type_name, trait_key)
+        real || self.pending_has(receiver, trait_key)
     }
 
     /// Module-scoped methodful check, for the `Eq` / `Ord` / `Default`
     /// sub-passes.
-    pub(crate) fn has_real_impl(&self, type_name: &str, trait_key: &crate::defs::DefId) -> bool {
-        self.has_methodful_impl(type_name, trait_key, ImplScope::CurrentModule)
+    pub(crate) fn has_real_impl(
+        &self,
+        receiver: &FqTypeName,
+        trait_key: &crate::defs::DefId,
+    ) -> bool {
+        self.has_methodful_impl(receiver, trait_key, ImplScope::CurrentModule)
     }
 
     pub(crate) fn has_methodful_impl_anywhere(
         &self,
-        type_name: &str,
+        receiver: &FqTypeName,
         trait_key: &crate::defs::DefId,
     ) -> bool {
-        self.has_methodful_impl(type_name, trait_key, ImplScope::AnyModule)
+        self.has_methodful_impl(receiver, trait_key, ImplScope::AnyModule)
     }
 
     pub(crate) fn should_synthesize(
         &self,
-        type_name: &str,
+        receiver: &FqTypeName,
         trait_key: &crate::defs::DefId,
     ) -> bool {
-        self.is_requested(type_name, trait_key) && !self.has_real_impl(type_name, trait_key)
+        self.is_requested(receiver, trait_key) && !self.has_real_impl(receiver, trait_key)
     }
 }
 
@@ -3333,7 +3286,7 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let (eq_trait_name, ord_trait_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
@@ -3351,30 +3304,29 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 
     let mut generated_functions = Vec::new();
 
-    for (enum_name, span, def) in &enum_infos {
+    for (_enum_name, span, def) in &enum_infos {
         let mut type_table = module.type_table.borrow_mut();
+        let receiver = &FqTypeName::declared(type_table.defs(), *def);
         let enum_type = type_table.make_enum(*def);
         let ref_enum_type = type_table.make_ref(enum_type);
 
-        if ctx.should_synthesize(enum_name, &eq_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
             let func = generate_enum_eq_fn(
-                &module_source,
-                enum_name,
+                receiver,
                 enum_type,
                 ref_enum_type,
                 &eq_trait_name,
                 *span,
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(enum_name, &eq_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
 
-        if ctx.should_synthesize(enum_name, &ord_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &ord_trait_name.canonical().expect(KEYED)) {
             let ordering_type =
                 type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_enum_ord_fn(
-                &module_source,
-                enum_name,
+                receiver,
                 enum_type,
                 ref_enum_type,
                 ordering_type,
@@ -3383,7 +3335,7 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
                 ctx.names,
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(enum_name, &ord_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &ord_trait_name.canonical().expect(KEYED));
         }
     }
 
@@ -3398,7 +3350,7 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let (eq_trait_name, ord_trait_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
@@ -3416,30 +3368,29 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 
     let mut generated_functions = Vec::new();
 
-    for (flags_name, span, def) in &flags_infos {
+    for (_flags_name, span, def) in &flags_infos {
         let mut type_table = module.type_table.borrow_mut();
+        let receiver = &FqTypeName::declared(type_table.defs(), *def);
         let flags_type = type_table.make_flags(*def);
         let ref_flags_type = type_table.make_ref(flags_type);
 
-        if ctx.should_synthesize(flags_name, &eq_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
             let func = generate_enum_eq_fn(
-                &module_source,
-                flags_name,
+                receiver,
                 flags_type,
                 ref_flags_type,
                 &eq_trait_name,
                 *span,
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(flags_name, &eq_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
 
-        if ctx.should_synthesize(flags_name, &ord_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &ord_trait_name.canonical().expect(KEYED)) {
             let ordering_type =
                 type_table.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_enum_ord_fn(
-                &module_source,
-                flags_name,
+                receiver,
                 flags_type,
                 ref_flags_type,
                 ordering_type,
@@ -3448,7 +3399,7 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
                 ctx.names,
             );
             generated_functions.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(flags_name, &ord_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &ord_trait_name.canonical().expect(KEYED));
         }
     }
 
@@ -3481,13 +3432,14 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
     let mut tt = module.type_table.borrow_mut();
 
     let struct_infos = collect_struct_fields(module);
-    for (name, fields, span, def) in &struct_infos {
+    for (_name, fields, span, def) in &struct_infos {
+        let receiver = &tt.fq_struct_head(*def);
         let struct_type = tt.make_struct(*def);
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
             let func = generate_struct_eq_fn(
-                name,
+                receiver,
                 &[],
                 fields,
                 ref_struct_type,
@@ -3498,13 +3450,13 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, &eq_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
 
-        if ctx.should_synthesize(name, &ord_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &ord_trait_name.canonical().expect(KEYED)) {
             let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
-                name,
+                receiver,
                 &[],
                 fields,
                 ref_struct_type,
@@ -3517,19 +3469,20 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 ctx.names,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, &ord_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &ord_trait_name.canonical().expect(KEYED));
         }
     }
 
     let generic_struct_infos = collect_generic_struct_fields(module);
-    for (name, type_params, fields, span, def) in &generic_struct_infos {
+    for (_name, type_params, fields, span, def) in &generic_struct_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_struct_type = tt.make_ref(struct_type);
 
-        if ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
             let func = generate_struct_eq_fn(
-                name,
+                receiver,
                 type_params,
                 fields,
                 ref_struct_type,
@@ -3540,13 +3493,13 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 *span,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, &eq_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
         }
 
-        if ctx.should_synthesize(name, &ord_trait_name.canonical().expect(KEYED)) {
+        if ctx.should_synthesize(receiver, &ord_trait_name.canonical().expect(KEYED)) {
             let ordering_type = tt.make_compiler_enum(crate::compiler_item::CompilerItem::Ordering);
             let func = generate_struct_ord_fn(
-                name,
+                receiver,
                 type_params,
                 fields,
                 ref_struct_type,
@@ -3559,7 +3512,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
                 ctx.names,
             );
             generated.push(Rc::new(RefCell::new(func)));
-            ctx.record_impl(name, &ord_trait_name.canonical().expect(KEYED));
+            ctx.record_impl(receiver, &ord_trait_name.canonical().expect(KEYED));
         }
     }
 
@@ -3577,7 +3530,7 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let mut generated = Vec::new();
 
     let default_trait_name = module
@@ -3609,21 +3562,21 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         })
         .collect();
 
-    for (name, fields, span, def) in &infos {
-        if !ctx.should_synthesize(name, &default_trait_name.canonical().expect(KEYED)) {
+    for (_name, fields, span, def) in &infos {
+        let receiver = &tt.fq_struct_head(*def);
+        if !ctx.should_synthesize(receiver, &default_trait_name.canonical().expect(KEYED)) {
             continue;
         }
         let struct_type = tt.make_struct(*def);
         let func = generate_struct_default_fn(
-            &module_source,
-            name,
+            receiver,
             fields,
             struct_type,
             &default_trait_name,
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, &default_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &default_trait_name.canonical().expect(KEYED));
     }
 
     drop(tt);
@@ -3633,14 +3586,13 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
 /// Generate `StructName^Default::default() -> StructName` for a non-generic
 /// struct whose fields all have default expressions.
 fn generate_struct_default_fn(
-    module_source: &ModuleSource,
-    struct_name: &str,
+    receiver: &FqTypeName,
     fields: &[(String, TypeId, u32, TirExpr)],
     struct_type: TypeId,
     default_trait_name: &crate::name::FqTraitName,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, default_trait_name, "default");
+    let method_info = trait_method_info(receiver, default_trait_name, "default");
     let qualified_name = method_info.to_mangled_name();
 
     let struct_fields = fields
@@ -3655,7 +3607,7 @@ fn generate_struct_default_fn(
     let literal = TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type,
-            struct_name: struct_name.to_string(),
+            struct_name: receiver.head().name().to_string(),
             fields: struct_fields,
         },
         struct_type,
@@ -3703,14 +3655,15 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     let mut tt = module.type_table.borrow_mut();
 
     let variant_infos = collect_variant_cases(module);
-    for (name, cases, span, def) in &variant_infos {
-        if !ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
+    for (_name, cases, span, def) in &variant_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if !ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
             continue;
         }
         let variant_type = tt.make_variant(*def);
         let ref_variant_type = tt.make_ref(variant_type);
         let func = generate_variant_eq_fn(
-            name,
+            receiver,
             &[],
             cases,
             variant_type,
@@ -3721,19 +3674,20 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, &eq_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
-    for (name, type_params, cases, span, def) in &generic_variant_infos {
-        if !ctx.should_synthesize(name, &eq_trait_name.canonical().expect(KEYED)) {
+    for (_name, type_params, cases, span, def) in &generic_variant_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if !ctx.should_synthesize(receiver, &eq_trait_name.canonical().expect(KEYED)) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_variant_type = tt.make_ref(variant_type);
         let func = generate_variant_eq_fn(
-            name,
+            receiver,
             type_params,
             cases,
             variant_type,
@@ -3744,7 +3698,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
             *span,
         );
         generated.push(Rc::new(RefCell::new(func)));
-        ctx.record_impl(name, &eq_trait_name.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &eq_trait_name.canonical().expect(KEYED));
     }
 
     drop(tt);
@@ -3791,7 +3745,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_fq.canonical().expect(KEYED)) {
+        let receiver = &tt.fq_base_type_name(nt.type_id);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ResolvedType::Newtype {
@@ -3818,7 +3773,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             &ctx.names.formatter_fq,
         );
         generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
-            &nt.name,
+            receiver,
             nt.type_id,
             base_type,
             ref_type,
@@ -3831,16 +3786,17 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             &inspect_method,
             Some(as_suffix),
         ))));
-        ctx.record_impl(&nt.name, &inspect_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_fq.canonical().expect(KEYED));
     }
 
     // Parameterized types (tuples, generic resources). `Fn` signatures are
     // handled separately below via `collect_canonical_fn_signatures` because
     // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
     let span = synth_span();
-    for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = tt.fq_type_name(type_id).to_mangled();
-        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_fq.canonical().expect(KEYED)) {
+    for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
+        let instantiated = tt.fq_type_name(type_id);
+        let _mangled = instantiated.to_mangled();
+        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -3864,7 +3820,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                 };
                 let type_name = tt.type_name(type_id);
                 generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
-                    &base_name,
+                    &tt.fq_base_type_name(type_id),
                     &type_arg_names,
                     &type_name,
                     type_id,
@@ -3887,13 +3843,14 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     }
 
     for (name, rspan, def) in &resource_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_fq.canonical().expect(KEYED)) {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let resource_type = tt.make_resource(*def);
         let ref_type = tt.make_ref(resource_type);
         generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
-            name,
+            receiver,
             &[],
             name,
             resource_type,
@@ -3911,18 +3868,18 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             &lower_hex_fq,
             &lower_hex_method,
         ))));
-        ctx.record_impl(name, &inspect_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_fq.canonical().expect(KEYED));
     }
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver().to_mangled();
-        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_fq.canonical().expect(KEYED)) {
+        let instantiated = sig.receiver();
+        let _mangled = instantiated.to_mangled();
+        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
-            &module_source,
             &sig.type_arg_names,
             sig.arity,
             sig.return_type,
@@ -3947,7 +3904,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         return;
     }
 
-    let module_source = module.module_source.clone();
+    let _module_source = module.module_source.clone();
     let display_fq = ctx.names.display_fq.clone();
     let display_method = ctx.names.display_method.clone();
     let formatter_fq = ctx.names.formatter_fq.clone();
@@ -3968,15 +3925,15 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
     let ref_string_type = tt.make_ref(string_type);
 
     let mut generated = Vec::new();
-    for (name, cases, espan, def) in &enum_infos {
-        if ctx.has_methodful_impl_anywhere(name, &display_fq.canonical().expect(KEYED)) {
+    for (_name, cases, espan, def) in &enum_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if ctx.has_methodful_impl_anywhere(receiver, &display_fq.canonical().expect(KEYED)) {
             continue;
         }
         let enum_type = tt.make_enum(*def);
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_enum_display_fn(
-            &module_source,
-            name,
+            receiver,
             cases,
             enum_type,
             ref_type,
@@ -3988,7 +3945,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
             &display_method,
             &formatter_fq,
         ))));
-        ctx.record_impl(name, &display_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &display_fq.canonical().expect(KEYED));
     }
 
     drop(tt);
@@ -3999,8 +3956,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
 /// name. Mirrors [`generate_enum_inspect_fn`] but omits the `EnumName::` prefix.
 #[allow(clippy::too_many_arguments)]
 fn generate_enum_display_fn(
-    module_source: &ModuleSource,
-    enum_name: &str,
+    receiver: &FqTypeName,
     cases: &[(String, u32)],
     enum_type: TypeId,
     ref_enum_type: TypeId,
@@ -4012,7 +3968,7 @@ fn generate_enum_display_fn(
     display_method: &str,
     formatter_fq: &FqTypeName,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, enum_name, display_trait, display_method);
+    let method_info = trait_method_info(receiver, display_trait, display_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = || deref_local(0, "self", ref_enum_type, enum_type, span);
@@ -4080,7 +4036,7 @@ fn generate_enum_display_fn(
 /// `100.5 as Meters`; `Display` passes `None` so it renders transparently like
 /// the base value.
 fn generate_newtype_fmt_fn(
-    newtype_name: &str,
+    receiver: &FqTypeName,
     newtype_type: TypeId,
     base_type: TypeId,
     ref_newtype_type: TypeId,
@@ -4093,7 +4049,7 @@ fn generate_newtype_fmt_fn(
     fmt_method: &str,
     suffix: Option<TirStmt>,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, newtype_name, fmt_trait, fmt_method);
+    let method_info = trait_method_info(receiver, fmt_trait, fmt_method);
     let qualified_name = method_info.to_mangled_name();
 
     let deref_self = deref_local(0, "self", ref_newtype_type, newtype_type, span);
@@ -4135,7 +4091,6 @@ fn generate_newtype_fmt_fn(
 /// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
 /// a `call_ref` through the matching `CanonicalClosure_K`'s vtable slot.
 fn generate_fn_inspect_fn(
-    module_source: &ModuleSource,
     type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
@@ -4146,7 +4101,6 @@ fn generate_fn_inspect_fn(
     inspect_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
-        module_source,
         FnDispatchTrait::Inspect,
         inspect_trait,
         inspect_method,
@@ -4161,7 +4115,6 @@ fn generate_fn_inspect_fn(
 
 /// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
 fn generate_fn_inspect_alt_fn(
-    module_source: &ModuleSource,
     type_arg_names: &[FqTypeName],
     arity: usize,
     return_type: TypeId,
@@ -4172,7 +4125,6 @@ fn generate_fn_inspect_alt_fn(
     inspect_alt_method: &str,
 ) -> TirFunction {
     generate_fn_canonical_dispatch_stub(
-        module_source,
         FnDispatchTrait::InspectAlt,
         inspect_alt_trait,
         inspect_alt_method,
@@ -4190,7 +4142,6 @@ fn generate_fn_inspect_alt_fn(
 /// label and the `FnDispatchTrait` carried in `FunctionKind`.
 #[allow(clippy::too_many_arguments)]
 fn generate_fn_canonical_dispatch_stub(
-    module_source: &ModuleSource,
     trait_kind: FnDispatchTrait,
     trait_name: &crate::name::FqTraitName,
     method_name: &str,
@@ -4202,8 +4153,7 @@ fn generate_fn_canonical_dispatch_stub(
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        crate::name::CLOSURE_FN_TRAIT,
+        &FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
         trait_name,
         method_name,
     )
@@ -4236,7 +4186,7 @@ fn generate_fn_canonical_dispatch_stub(
 /// Generate `Inspect` for an opaque resource handle, rendered as `Name#0x<hex>`.
 #[allow(clippy::too_many_arguments)]
 fn generate_opaque_inspect_fn(
-    base_name: &str,
+    receiver: &FqTypeName,
     type_arg_names: &[FqTypeName],
     type_name: &str,
     resource_type: TypeId,
@@ -4254,7 +4204,7 @@ fn generate_opaque_inspect_fn(
     lower_hex_trait: &crate::name::FqTraitName,
     lower_hex_method: &str,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, base_name, inspect_trait, inspect_method)
+    let method_info = trait_method_info(receiver, inspect_trait, inspect_method)
         .with_struct_type_args(type_arg_names);
     let qualified_name = method_info.to_mangled_name();
 
@@ -4346,7 +4296,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             return true;
         }
         let mangled = MethodName::format_local(
-            &FqTypeName::of_head(&module_source, type_name),
+            &tt.fq_base_type_name(type_id),
             Some(&inspect_fq),
             &inspect_method,
         );
@@ -4370,7 +4320,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         .map(|e| (e.name.clone(), e.def))
         .collect::<Vec<_>>()
     {
-        if ctx.has_methodful_impl_anywhere(&name, &inspect_alt_fq.canonical().expect(KEYED)) {
+        let receiver = &FqTypeName::declared(tt.defs(), def);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let enum_type = tt.make_enum(def);
@@ -4379,8 +4330,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
         let ref_type = tt.make_ref(enum_type);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&module_source, &name, &inspect_alt_fq, &inspect_alt_method),
-            trait_method_info(&module_source, &name, &inspect_fq, &inspect_method),
+            trait_method_info(receiver, &inspect_alt_fq, &inspect_alt_method),
+            trait_method_info(receiver, &inspect_fq, &inspect_method),
             ref_type,
             enum_type,
             fmt_type,
@@ -4390,25 +4341,26 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             span,
         ))));
-        ctx.record_impl(&name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     // Non-generic structs — pretty-print with begin_block/end_block
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_secret, sspan, def) in &struct_infos {
+        let receiver = &tt.fq_struct_head(*def);
         if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
             || name == &formatter_name
         {
             continue;
         }
-        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let struct_type = tt.make_struct(*def);
         let ref_type = tt.make_ref(struct_type);
         generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
-            name,
+            receiver,
             &[],
             fields,
             *has_secret,
@@ -4424,19 +4376,20 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &inspect_alt_method,
             &formatter_fq,
         ))));
-        ctx.record_impl(name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     let generic_struct_infos = collect_generic_struct_visible_fields(module);
-    for (name, type_params, fields, has_secret, sspan, def) in &generic_struct_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
+    for (_name, type_params, fields, has_secret, sspan, def) in &generic_struct_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(struct_type);
         generated.push(Rc::new(RefCell::new(generate_struct_inspect_alt_fn(
-            name,
+            receiver,
             type_params,
             fields,
             *has_secret,
@@ -4452,18 +4405,19 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &inspect_alt_method,
             &formatter_fq,
         ))));
-        ctx.record_impl(name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     let variant_infos = collect_variant_cases(module);
-    for (name, cases, vspan, def) in &variant_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
+    for (_name, cases, vspan, def) in &variant_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let variant_type = tt.make_variant(*def);
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
-            name,
+            receiver,
             &[],
             cases,
             variant_type,
@@ -4479,19 +4433,20 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &inspect_alt_method,
             &formatter_fq,
         ))));
-        ctx.record_impl(name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     let generic_variant_infos = collect_generic_variant_cases(module);
-    for (name, type_params, cases, vspan, def) in &generic_variant_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED)) {
+    for (_name, type_params, cases, vspan, def) in &generic_variant_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         generated.push(Rc::new(RefCell::new(generate_variant_inspect_alt_fn(
-            name,
+            receiver,
             type_params,
             cases,
             variant_type,
@@ -4507,7 +4462,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &inspect_alt_method,
             &formatter_fq,
         ))));
-        ctx.record_impl(name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     // Flags — delegate to Inspect (bit flags don't need pretty print)
@@ -4518,15 +4473,16 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         .collect();
 
     for (name, flags_type_id) in &flags_infos {
-        if ctx.has_methodful_impl_anywhere(name, &inspect_alt_fq.canonical().expect(KEYED))
+        let receiver = &tt.fq_base_type_name(*flags_type_id);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED))
             || !has_inspect(name, *flags_type_id, ctx, &mut tt)
         {
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(&module_source, name, &inspect_alt_fq, &inspect_alt_method),
-            trait_method_info(&module_source, name, &inspect_fq, &inspect_method),
+            trait_method_info(receiver, &inspect_alt_fq, &inspect_alt_method),
+            trait_method_info(receiver, &inspect_fq, &inspect_method),
             ref_type,
             *flags_type_id,
             fmt_type,
@@ -4536,27 +4492,23 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             span,
         ))));
-        ctx.record_impl(name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     for nt in &module.newtypes {
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if ctx.has_methodful_impl_anywhere(&nt.name, &inspect_alt_fq.canonical().expect(KEYED))
+        let receiver = &tt.fq_base_type_name(nt.type_id);
+        if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED))
             || !has_inspect(&nt.name, nt.type_id, ctx, &mut tt)
         {
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(
-                &module_source,
-                &nt.name,
-                &inspect_alt_fq,
-                &inspect_alt_method,
-            ),
-            trait_method_info(&module_source, &nt.name, &inspect_fq, &inspect_method),
+            trait_method_info(receiver, &inspect_alt_fq, &inspect_alt_method),
+            trait_method_info(receiver, &inspect_fq, &inspect_method),
             ref_type,
             nt.type_id,
             fmt_type,
@@ -4566,15 +4518,16 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             &mut tt,
             span,
         ))));
-        ctx.record_impl(&nt.name, &inspect_alt_fq.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &inspect_alt_fq.canonical().expect(KEYED));
     }
 
     // Tuples are skipped — their `InspectAlt` is provided by the variadic impl
     // in `core:prelude/tuple.wado`. Opaque resource types delegate to their
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
-    for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = tt.fq_type_name(type_id).to_mangled();
-        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_fq.canonical().expect(KEYED))
+    for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
+        let instantiated = tt.fq_type_name(type_id);
+        let mangled = instantiated.to_mangled();
+        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_alt_fq.canonical().expect(KEYED))
             || !has_inspect(&mangled, type_id, ctx, &mut tt)
         {
             continue;
@@ -4590,18 +4543,15 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             Some(m) => m,
             None => module_source.clone(),
         };
+        let _ = &shape_module;
+        let base_head = tt.fq_base_type_name(type_id);
         let ref_type = tt.make_ref(type_id);
         // Opaque resource types (Future, Stream, etc.): delegate to
         // Inspect via the stock `display_fallback`.
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
-            trait_method_info(
-                &shape_module,
-                &base_name,
-                &inspect_alt_fq,
-                &inspect_alt_method,
-            )
-            .with_struct_type_args(&type_arg_names),
-            trait_method_info(&shape_module, &base_name, &inspect_fq, &inspect_method)
+            trait_method_info(&base_head, &inspect_alt_fq, &inspect_alt_method)
+                .with_struct_type_args(&type_arg_names),
+            trait_method_info(&base_head, &inspect_fq, &inspect_method)
                 .with_struct_type_args(&type_arg_names),
             ref_type,
             type_id,
@@ -4622,15 +4572,15 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // delegate would let the optimizer collapse InspectAlt to Inspect
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver().to_mangled();
-        if ctx.has_methodful_impl_anywhere(&mangled, &inspect_alt_fq.canonical().expect(KEYED))
+        let instantiated = sig.receiver();
+        let mangled = instantiated.to_mangled();
+        if ctx.has_methodful_impl_anywhere(&instantiated, &inspect_alt_fq.canonical().expect(KEYED))
             || !has_inspect(&mangled, sig.repr_type_id, ctx, &mut tt)
         {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
-            &module_source,
             &sig.type_arg_names,
             sig.arity,
             sig.return_type,
@@ -4652,7 +4602,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
 /// sequence of Formatter calls. `impl_type_params` is empty for a non-generic
 /// struct.
 fn generate_struct_inspect_alt_fn(
-    struct_name: &str,
+    receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
     fields: &[(String, TypeId, u32)],
     has_secret: bool,
@@ -4669,15 +4619,14 @@ fn generate_struct_inspect_alt_fn(
     formatter_fq: &FqTypeName,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        struct_name,
+        receiver,
         inspect_alt_trait,
         inspect_alt_method,
     );
     let qualified_name = method_info.to_mangled_name();
 
     let stmts = build_struct_inspect_alt_body(
-        struct_name,
+        receiver.head().name(),
         fields,
         has_secret,
         ref_struct_type,
@@ -4817,7 +4766,7 @@ fn build_struct_inspect_alt_body(
 ///
 /// Pass an empty `impl_type_params` slice for non-generic variants.
 fn generate_variant_inspect_alt_fn(
-    variant_name: &str,
+    receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
     cases: &[(String, u32, TypeId)],
     variant_type: TypeId,
@@ -4834,8 +4783,7 @@ fn generate_variant_inspect_alt_fn(
     formatter_fq: &FqTypeName,
 ) -> TirFunction {
     let method_info = trait_method_info(
-        module_source,
-        variant_name,
+        receiver,
         inspect_alt_trait,
         inspect_alt_method,
     );
@@ -4862,7 +4810,7 @@ fn generate_variant_inspect_alt_fn(
     }
 
     let stmts = build_variant_inspect_alt_body(
-        variant_name,
+        receiver.head().name(),
         cases,
         &payload_bindings,
         variant_type,
@@ -5268,8 +5216,9 @@ fn generate_fallback_impls(
     let formatter_type = { tt.make_compiler_struct(crate::compiler_item::CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
 
-    let needs_fallback = |name: &str, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
-        if ctx.has_methodful_impl_anywhere(name, &pair.target_trait.canonical().expect(KEYED)) {
+    let needs_fallback = |receiver: &FqTypeName, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
+        let name = receiver.head().name();
+        if ctx.has_methodful_impl_anywhere(receiver, &pair.target_trait.canonical().expect(KEYED)) {
             return false;
         }
         if ctx.has_impl(
@@ -5279,7 +5228,7 @@ fn generate_fallback_impls(
             return true;
         }
         let delegate_key = MethodName::format_local(
-            &FqTypeName::declared(&module_source, name),
+            receiver,
             Some(&pair.delegate_trait),
             &pair.delegate_method,
         );
@@ -5289,24 +5238,15 @@ fn generate_fallback_impls(
     // Helper to materialise the fallback function. Returns the new function
     // alongside the `(type_name, trait_name)` pair so the caller can record
     // the impl into `ctx` after pushing.
-    let make_fallback = |name: &str,
+    let make_fallback = |receiver: &FqTypeName,
                          ref_type: TypeId,
                          receiver_type: TypeId,
                          impl_type_params: Vec<TirTypeParam>,
                          tt: &mut TypeTable|
      -> Rc<RefCell<TirFunction>> {
-        let target_info = trait_method_info(
-            &module_source,
-            name,
-            &pair.target_trait,
-            &pair.target_method,
-        );
-        let delegate_info = trait_method_info(
-            &module_source,
-            name,
-            &pair.delegate_trait,
-            &pair.delegate_method,
-        );
+        let target_info = trait_method_info(receiver, &pair.target_trait, &pair.target_method);
+        let delegate_info =
+            trait_method_info(receiver, &pair.delegate_trait, &pair.delegate_method);
         Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5326,14 +5266,15 @@ fn generate_fallback_impls(
         .iter()
         .map(|e| (e.name.clone(), e.def))
         .collect();
-    for (name, def) in &enum_names {
-        if !needs_fallback(name, ctx) {
+    for (_name, def) in &enum_names {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let enum_type = tt.make_enum(*def);
         let ref_type = tt.make_ref(enum_type);
-        generated.push(make_fallback(name, ref_type, enum_type, vec![], &mut tt));
-        ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
+        generated.push(make_fallback(receiver, ref_type, enum_type, vec![], &mut tt));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     let struct_names: Vec<_> = module
@@ -5343,16 +5284,17 @@ fn generate_fallback_impls(
         .map(|s| (s.name.clone(), s.def))
         .collect();
     for (name, def) in &struct_names {
+        let receiver = &tt.fq_struct_head(*def);
         if name == &string_name || name == &formatter_struct_name {
             continue;
         }
-        if !needs_fallback(name, ctx) {
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let struct_type = tt.make_struct(*def);
         let ref_type = tt.make_ref(struct_type);
-        generated.push(make_fallback(name, ref_type, struct_type, vec![], &mut tt));
-        ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
+        generated.push(make_fallback(receiver, ref_type, struct_type, vec![], &mut tt));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     let generic_struct_infos: Vec<_> = module
@@ -5370,23 +5312,24 @@ fn generate_fallback_impls(
         })
         .collect();
     for (name, type_params, def) in &generic_struct_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
         if name == &list_name {
             continue;
         }
-        if !needs_fallback(name, ctx) {
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let struct_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(struct_type);
         generated.push(make_fallback(
-            name,
+            receiver,
             ref_type,
             struct_type,
             type_params.clone(),
             &mut tt,
         ));
-        ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     let variant_names: Vec<_> = module
@@ -5395,14 +5338,15 @@ fn generate_fallback_impls(
         .filter(|v| v.type_params.is_empty())
         .map(|v| (v.name.clone(), v.def))
         .collect();
-    for (name, def) in &variant_names {
-        if !needs_fallback(name, ctx) {
+    for (_name, def) in &variant_names {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let variant_type = tt.make_variant(*def);
         let ref_type = tt.make_ref(variant_type);
-        generated.push(make_fallback(name, ref_type, variant_type, vec![], &mut tt));
-        ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
+        generated.push(make_fallback(receiver, ref_type, variant_type, vec![], &mut tt));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     let generic_variant_infos: Vec<_> = module
@@ -5411,21 +5355,22 @@ fn generate_fallback_impls(
         .filter(|v| !v.type_params.is_empty())
         .map(|v| (v.name.clone(), v.type_params.clone(), v.def))
         .collect();
-    for (name, type_params, def) in &generic_variant_infos {
-        if !needs_fallback(name, ctx) {
+    for (_name, type_params, def) in &generic_variant_infos {
+        let receiver = &FqTypeName::declared(tt.defs(), *def);
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let type_param_ids = make_type_param_ids(type_params, &mut tt);
         let variant_type = tt.make_generic_instance(*def, type_param_ids);
         let ref_type = tt.make_ref(variant_type);
         generated.push(make_fallback(
-            name,
+            receiver,
             ref_type,
             variant_type,
             type_params.clone(),
             &mut tt,
         ));
-        ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     let flags_infos: Vec<_> = module
@@ -5433,26 +5378,28 @@ fn generate_fallback_impls(
         .iter()
         .map(|f| (f.name.clone(), f.type_id))
         .collect();
-    for (name, flags_type_id) in &flags_infos {
-        if !needs_fallback(name, ctx) {
+    for (_name, flags_type_id) in &flags_infos {
+        let receiver = &tt.fq_base_type_name(*flags_type_id);
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let ref_type = tt.make_ref(*flags_type_id);
         generated.push(make_fallback(
-            name,
+            receiver,
             ref_type,
             *flags_type_id,
             vec![],
             &mut tt,
         ));
-        ctx.record_impl(name, &pair.target_trait.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     for nt in &module.newtypes {
         if module.flags.iter().any(|f| f.type_id == nt.type_id) {
             continue;
         }
-        if !needs_fallback(&nt.name, ctx) {
+        let receiver = &tt.fq_base_type_name(nt.type_id);
+        if !needs_fallback(receiver, ctx) {
             continue;
         }
         let ref_type = tt.make_ref(nt.type_id);
@@ -5466,7 +5413,7 @@ fn generate_fallback_impls(
             };
             let base_type = *base_type;
             generated.push(Rc::new(RefCell::new(generate_newtype_fmt_fn(
-                &nt.name,
+                receiver,
                 nt.type_id,
                 base_type,
                 ref_type,
@@ -5481,14 +5428,14 @@ fn generate_fallback_impls(
             ))));
         } else {
             generated.push(make_fallback(
-                &nt.name,
+                receiver,
                 ref_type,
                 nt.type_id,
                 vec![],
                 &mut tt,
             ));
         }
-        ctx.record_impl(&nt.name, &pair.target_trait.canonical().expect(KEYED));
+        ctx.record_impl(receiver, &pair.target_trait.canonical().expect(KEYED));
     }
 
     // Parameterized types (opaque types). Tuples are skipped because their
@@ -5502,8 +5449,9 @@ fn generate_fallback_impls(
         if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
-        let mangled = tt.fq_type_name(type_id).to_mangled();
-        if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
+        let instantiated = tt.fq_type_name(type_id);
+        let mangled = instantiated.to_mangled();
+        if ctx.has_methodful_impl_anywhere(&instantiated, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
         let delegate_present = ctx.has_impl(
@@ -5520,20 +5468,12 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(type_id);
-        let target_info = trait_method_info(
-            &module_source,
-            &base_name,
-            &pair.target_trait,
-            &pair.target_method,
-        )
-        .with_struct_type_args(&type_arg_names);
-        let delegate_info = trait_method_info(
-            &module_source,
-            &base_name,
-            &pair.delegate_trait,
-            &pair.delegate_method,
-        )
-        .with_struct_type_args(&type_arg_names);
+        let base_head = tt.fq_base_type_name(type_id);
+        let target_info =
+            trait_method_info(&base_head, &pair.target_trait, &pair.target_method)
+                .with_struct_type_args(&type_arg_names);
+        let delegate_info = trait_method_info(&base_head, &pair.delegate_trait, &pair.delegate_method)
+            .with_struct_type_args(&type_arg_names);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5551,8 +5491,9 @@ fn generate_fallback_impls(
 
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver().to_mangled();
-        if ctx.has_methodful_impl_anywhere(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
+        let instantiated = sig.receiver();
+        let mangled = instantiated.to_mangled();
+        if ctx.has_methodful_impl_anywhere(&instantiated, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
         let delegate_present = ctx.has_impl(
@@ -5570,15 +5511,13 @@ fn generate_fallback_impls(
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         let target_info = trait_method_info(
-            &module_source,
-            crate::name::CLOSURE_FN_TRAIT,
+            &FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
             &pair.target_trait,
             &pair.target_method,
         )
         .with_struct_type_args(&sig.type_arg_names);
         let delegate_info = trait_method_info(
-            &module_source,
-            crate::name::CLOSURE_FN_TRAIT,
+            &FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
             &pair.delegate_trait,
             &pair.delegate_method,
         )
@@ -5820,14 +5759,13 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
 ///
 /// Body: `return *self == *other;` (i32 comparison via enum discriminant)
 fn generate_enum_eq_fn(
-    module_source: &ModuleSource,
-    enum_name: &str,
+    receiver: &FqTypeName,
     enum_type: TypeId,
     ref_enum_type: TypeId,
     eq_trait_name: &crate::name::FqTraitName,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, enum_name, eq_trait_name, "eq");
+    let method_info = trait_method_info(receiver, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let comparison = TirExpr::new(
@@ -5862,8 +5800,7 @@ fn generate_enum_eq_fn(
 /// Generate `EnumName^Ord::cmp(&self, &Self) -> Ordering`, comparing the two
 /// dereferenced discriminants and returning `Less` / `Greater` / `Equal`.
 fn generate_enum_ord_fn(
-    module_source: &ModuleSource,
-    enum_name: &str,
+    receiver: &FqTypeName,
     enum_type: TypeId,
     ref_enum_type: TypeId,
     ordering_type: TypeId,
@@ -5871,7 +5808,7 @@ fn generate_enum_ord_fn(
     span: Span,
     names: &TraitsStdlibNames,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, enum_name, ord_trait_name, "cmp");
+    let method_info = trait_method_info(receiver, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
     let local_a = || local_expr(2, "a", enum_type, span);
@@ -6031,8 +5968,7 @@ fn trait_call_on_type(
             match &resolved {
                 ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
                     let base_info = trait_method_info(
-                        module_source,
-                        &info.base_struct_name(),
+                        &info.fq_base_struct_name(),
                         trait_name,
                         method_name,
                     );
@@ -6131,7 +6067,7 @@ fn cmp_call_expr(
 /// Body: `return self.f0 == other.f0 && self.f1 == other.f1 && ...`
 /// Empty structs: `return true;`
 fn generate_struct_eq_fn(
-    struct_name: &str,
+    receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
@@ -6141,7 +6077,7 @@ fn generate_struct_eq_fn(
     tt: &mut TypeTable,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, eq_trait_name, "eq");
+    let method_info = trait_method_info(receiver, eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     let result = build_struct_eq_chain(fields, ref_struct_type, trait_env, module_source, tt, span);
@@ -6254,7 +6190,7 @@ fn field_access_local(
 /// struct: compare field by field in declaration order, returning the first
 /// non-`Equal` result, else `Equal`.
 fn generate_struct_ord_fn(
-    struct_name: &str,
+    receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
     fields: &[(String, TypeId, u32)],
     ref_struct_type: TypeId,
@@ -6266,7 +6202,7 @@ fn generate_struct_ord_fn(
     span: Span,
     names: &TraitsStdlibNames,
 ) -> TirFunction {
-    let method_info = trait_method_info(module_source, struct_name, ord_trait_name, "cmp");
+    let method_info = trait_method_info(receiver, ord_trait_name, "cmp");
     let qualified_name = method_info.to_mangled_name();
 
     let (stmts, locals) = build_struct_ord_body(
@@ -6415,7 +6351,7 @@ fn build_struct_ord_body(
 /// Body: if-else chain testing each case with `VariantTest`, comparing payloads via `eq_call_expr`.
 /// Pass an empty `impl_type_params` slice for non-generic variants.
 fn generate_variant_eq_fn(
-    variant_name: &str,
+    receiver: &FqTypeName,
     impl_type_params: &[TirTypeParam],
     cases: &[(String, u32, TypeId)],
     variant_type: TypeId,
@@ -6426,7 +6362,7 @@ fn generate_variant_eq_fn(
     span: Span,
 ) -> TirFunction {
     let eq_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq);
-    let method_info = trait_method_info(module_source, variant_name, &eq_trait_name, "eq");
+    let method_info = trait_method_info(receiver, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();
 
     // Allocate two payload-binding locals (self-side, other-side) for

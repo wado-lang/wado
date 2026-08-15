@@ -460,7 +460,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         cm_interface_registry,
         type_table,
         wasi_package: "cli",
-        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+        names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     let (lower_stmts, ptr_local, count_local) = super::lower::synthesize_lower_list_to_buffer(
         &elem_ast,
@@ -810,7 +810,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         cm_interface_registry,
         type_table,
         wasi_package: &cm_package,
-        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+        names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     stmts.extend(super::lower::synthesize_lower_wasi_type_to_memory(
         &payload_ast,
@@ -1184,12 +1184,9 @@ fn synthesize_stream_read_func(
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> TirFunction {
-    let list_struct_name =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items())
-            .array;
     // `List` is a declaration, so the receiver its methods are named after
-    // carries the module that declares it.
-    let list_fq = crate::name::FqTypeName::declared(&ModuleSource::list(), &list_struct_name);
+    // carries it rather than the spelling `List` happens to have.
+    let list_fq = super::types::CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
     let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
     // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
     let list_method = |method: &str| {

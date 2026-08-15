@@ -11,7 +11,7 @@ use crate::ast::{NamedType, Type};
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
@@ -555,7 +555,7 @@ pub(super) fn synthesize_adapter(
         cm_interface_registry,
         type_table,
         wasi_package: &func_info.package,
-        names: CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items()),
+        names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     let mut builder = AdapterBuilder {
         func_info,
@@ -1063,7 +1063,7 @@ impl<'a> AdapterBuilder<'a> {
         let len_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         let len_expr = generic_method_call(
             local_ref(param_local, param_name, array_type_id),
-            &self.lower_ctx.names.array,
+            &self.lower_ctx.names.array_fq,
             "len",
             ModuleSource::list(),
             vec![],
@@ -1140,7 +1140,7 @@ impl<'a> AdapterBuilder<'a> {
         // __elem = param[__i] (IndexValue trait method)
         let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
         let iv_info = LocalMethodName::new(
-            FqTypeName::declared(&ModuleSource::list(), &self.lower_ctx.names.array),
+            self.lower_ctx.names.array_fq.clone(),
             Some(
                 self.lower_ctx
                     .names

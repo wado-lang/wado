@@ -9276,19 +9276,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let make_func_ref = |tysys: &super::tysys::TypeSystem, item: CompilerItem| {
-            let (owner_type, method_name) = {
+            let (owner_head, method_name) = {
                 let tt = tysys.type_table.borrow();
-                let (_, owner_type, method_name) = tt.compiler_method(item);
-                (owner_type.to_string(), method_name.to_string())
+                let (_, _, method_name) = tt.compiler_method(item);
+                (
+                    tt.compiler_items().require_method_owner(item).clone(),
+                    method_name.to_string(),
+                )
             };
-            let method_info = crate::name::LocalMethodName::new(
-                crate::name::FqTypeName::declared(
-                    &crate::module_source::ModuleSource::int128(),
-                    &owner_type,
-                ),
-                None,
-                method_name,
-            );
+            let method_info =
+                crate::name::LocalMethodName::new(owner_head, None, method_name);
             crate::tir::FunctionRef {
                 module_source: crate::module_source::ModuleSource::int128(),
                 name: method_info.to_mangled_name(),

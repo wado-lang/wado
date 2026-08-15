@@ -140,12 +140,11 @@ impl ImplTargetKey {
     /// definition and a lookup agree by construction.
     pub(crate) fn receiver(&self, defs: &crate::defs::DefTable) -> name::Receiver {
         match self {
-            ImplTargetKey::Decl(def) => name::Receiver::Type(name::FqTypeName::of_head(
-                defs.module(*def),
-                &render_decl_name(defs, *def),
-            )),
+            ImplTargetKey::Decl(def) => {
+                name::Receiver::Type(name::FqTypeName::of_head(defs, *def))
+            }
             ImplTargetKey::Undeclared(module, name) => {
-                name::Receiver::Type(name::FqTypeName::declared(module, name))
+                name::Receiver::Type(name::FqTypeName::shape(module, name))
             }
             // A type parameter names no declaration, so no module qualifies it.
             ImplTargetKey::TypeParam(_, name) => {

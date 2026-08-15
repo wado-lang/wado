@@ -709,7 +709,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
 
     project.closure_functors.retain(|functor| {
         let call_method_name = crate::name::MethodName::format_local(
-            &crate::name::FqTypeName::declared(&functor.module_source, &functor.struct_name),
+            &crate::name::FqTypeName::shape(&functor.module_source, &functor.struct_name),
             None,
             crate::name::CLOSURE_CALL_METHOD,
         );
@@ -1103,7 +1103,7 @@ impl<'a> DceWalker<'a> {
         // Non-monomorphized method - determine target from receiver type.
         // Strip any reference wrappers and newtypes to get the base type.
         let mut current_type = self.type_table.get(receiver_type);
-        let mut newtype_info: Option<(String, ModuleSource)> = None;
+        let mut newtype_info: Option<crate::defs::DefId> = None;
         loop {
             match current_type {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
@@ -1112,10 +1112,7 @@ impl<'a> DceWalker<'a> {
                 ResolvedType::Newtype { def, base_type, .. } => {
                     // Remember the outermost newtype for its own trait impls
                     if newtype_info.is_none() {
-                        newtype_info = Some((
-                            self.type_table.def_name(*def).to_string(),
-                            self.type_table.def_module(*def).clone(),
-                        ));
+                        newtype_info = Some(*def);
                     }
                     current_type = self.type_table.get(*base_type);
                 }
@@ -1152,10 +1149,10 @@ impl<'a> DceWalker<'a> {
 
         // If the receiver was a newtype (e.g., flags type), also mark
         // the newtype's own methods as reachable (e.g., Perms^Inspect::inspect).
-        if let Some((newtype_name, newtype_module)) = newtype_info {
+        if let Some(newtype) = newtype_info {
             let method_id = FunctionId::Method(MethodName::new(
-                newtype_module.clone(),
-                FqTypeName::declared(&newtype_module, &newtype_name),
+                self.type_table.def_module(newtype).clone(),
+                FqTypeName::declared(self.type_table.defs(), newtype),
                 trait_name.clone(),
                 method_name.clone(),
             ));
@@ -1173,7 +1170,7 @@ impl<'a> DceWalker<'a> {
                 // monomorphized functions live in the *using* module, so
                 // route the callee id through `current_module`.
                 let mangled_func_name = MethodName::format_local(
-                    &FqTypeName::declared(module_source, name),
+                    &FqTypeName::shape(module_source, name),
                     trait_name.as_ref(),
                     &method_name,
                 );
@@ -1203,12 +1200,12 @@ impl<'a> DceWalker<'a> {
                 }
             }
             ResolvedType::Struct { def, .. } => {
-                let name = self.type_table.struct_head_name(def);
-                let module_source = self.type_table.struct_head_module(def);
+                let _name = self.type_table.struct_head_name(def);
+                let module_source = self.type_table.struct_head_module(def).clone();
                 // Non-monomorphized struct method.
                 let method_id = FunctionId::Method(MethodName::new(
                     module_source.clone(),
-                    FqTypeName::declared(module_source, &name),
+                    self.type_table.fq_struct_head(def),
                     trait_name,
                     method_name,
                 ));
@@ -1218,7 +1215,7 @@ impl<'a> DceWalker<'a> {
                 // since trait impls may live in a different module than the type
                 // (e.g., `impl Display for String` is in format.wado, not string.wado)
                 let func_module = func.module_source.clone();
-                if &func_module != module_source
+                if func_module != module_source
                     && let Some(info) = func.method_info.clone()
                 {
                     let alt_method_id = FunctionId::Method(MethodName::new(
@@ -1293,12 +1290,12 @@ impl<'a> DceWalker<'a> {
                 self.analysis.callees.insert(callee_id);
             }
             ResolvedType::Enum { def } => {
-                let name = self.type_table.def_name(def).to_string();
+                let _name = self.type_table.def_name(def).to_string();
                 let module_source = self.type_table.def_module(def).clone();
                 // Enum method (user-defined or auto-derived trait impl).
                 let method_id = FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    FqTypeName::declared(&module_source, &name),
+                    module_source,
+                    FqTypeName::declared(self.type_table.defs(), def),
                     trait_name,
                     method_name,
                 ));
@@ -1312,12 +1309,12 @@ impl<'a> DceWalker<'a> {
                 self.analysis.effect_calls.insert((name, method_name));
             }
             ResolvedType::Variant { def } => {
-                let name = self.type_table.def_name(def).to_string();
+                let _name = self.type_table.def_name(def).to_string();
                 let module_source = self.type_table.def_module(def).clone();
                 // Variant method, e.g. `Shape^Inspect::inspect`.
                 let method_id = FunctionId::Method(MethodName::new(
-                    module_source.clone(),
-                    FqTypeName::declared(&module_source, &name),
+                    module_source,
+                    FqTypeName::declared(self.type_table.defs(), def),
                     trait_name,
                     method_name,
                 ));
@@ -1387,7 +1384,7 @@ impl<'a> DceWalker<'a> {
     ) {
         // `__call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
-        let struct_name = crate::name::FqTypeName::declared(
+        let struct_name = crate::name::FqTypeName::shape(
             closure_module,
             &format!(
                 "{prefix}{functor_id}",

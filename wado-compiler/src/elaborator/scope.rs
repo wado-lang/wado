@@ -237,14 +237,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
         let decl = self.bound_decl(bound, known);
-        if let Some(decl) = decl {
-            if let Some((existing, _)) = out.iter_mut().find(|(_, d)| *d == Some(decl)) {
+        if let Some(decl) = decl
+            && let Some((existing, _)) = out.iter_mut().find(|(_, d)| *d == Some(decl)) {
                 if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
                     *existing = bound.clone();
                 }
                 return;
             }
-        }
         out.push((bound.clone(), decl));
     }
 

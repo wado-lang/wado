@@ -558,10 +558,7 @@ impl Monomorphizer {
                     let base = *base_type;
                     // The head an `impl` header writes: the declaration, with
                     // any arguments left beside it rather than fused in.
-                    let own = FqTypeName::declared(
-                        type_table.def_module(*def),
-                        type_table.def_name(*def),
-                    );
+                    let own = FqTypeName::declared(type_table.defs(), *def);
                     if has_own_impl(&own, tid) {
                         return Some(own);
                     }
