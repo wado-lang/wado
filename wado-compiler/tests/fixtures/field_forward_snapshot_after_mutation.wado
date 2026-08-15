@@ -34,12 +34,21 @@ impl Counter {
     }
 }
 
-test {
+// `#[inline(never)]` keeps the asserts in a function of their own. Spliced into
+// the test world's export wrapper instead, alongside both assert messages, the
+// fold that erases them stops firing — a separate gap, and not the one this
+// fixture is about.
+#[inline(never)]
+fn snapshot_holds() {
     let mut c = Counter { value: 0 };
     let snapshot = c;
     c.increment();
     assert snapshot.get() == 0;
     assert c.get() == 1;
+}
+
+test {
+    snapshot_holds();
 }
 
 __DATA__
