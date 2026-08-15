@@ -21,9 +21,9 @@ use wasmtime::component::{Component, Linker};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
-use crate::compiler_host::KilnComponentCache;
 use crate::discover;
 use crate::manifest as project_manifest;
+use crate::run_cache::RunCache;
 use crate::runtime::{self, WasiState};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
@@ -873,14 +873,14 @@ async fn compile_artifact(
     path: String,
     flags: Arc<CompileFlags>,
     observer: Arc<StageObserver>,
-    kiln_cache: Arc<KilnComponentCache>,
+    run_cache: Arc<RunCache>,
     reporter: Arc<dyn TestReporter>,
 ) -> CompileOutcome {
     let compile_start = Instant::now();
-    let panic_or_result = AssertUnwindSafe(compile::try_compile_with_kiln_cache(
+    let panic_or_result = AssertUnwindSafe(compile::try_compile_with_run_cache(
         &path,
         &flags,
-        Some(kiln_cache),
+        Some(run_cache),
     ))
     .catch_unwind()
     .await;
@@ -1081,7 +1081,7 @@ async fn run_compile_stage(
     artifact_tx: mpsc::Sender<CompiledArtifact>,
     todo_tx: mpsc::Sender<TodoCompileError>,
     cfail_tx: mpsc::Sender<CompileFailure>,
-    kiln_cache: Arc<KilnComponentCache>,
+    run_cache: Arc<RunCache>,
     reporter: Arc<dyn TestReporter>,
 ) -> usize {
     let mut compiled_count = 0_usize;
@@ -1092,7 +1092,7 @@ async fn run_compile_stage(
             let flags = Arc::clone(&flags);
             let observer_inner = Arc::clone(&observer);
             let cpu_budget = Arc::clone(&cpu_budget);
-            let kiln_cache = Arc::clone(&kiln_cache);
+            let run_cache = Arc::clone(&run_cache);
             let reporter = Arc::clone(&reporter);
             // Spawn each per-fixture worker as an independent task so
             // its progress is not gated by `buffer_unordered`'s outer
@@ -1121,7 +1121,7 @@ async fn run_compile_stage(
                             path,
                             flags,
                             observer_inner,
-                            kiln_cache,
+                            run_cache,
                             reporter,
                         )),
                         Ok(Err(e)) => {
@@ -1520,6 +1520,7 @@ async fn run_pipeline(
     preopened_dirs: Arc<Vec<(String, String)>>,
     no_run: bool,
     reporter: Arc<dyn TestReporter>,
+    run_cache: Arc<RunCache>,
 ) -> PipelineOutcome {
     let opt_level = flags.opt_level.to_wasmtime();
     let budget = Arc::new(PipelineBudget::new(
@@ -1554,8 +1555,6 @@ async fn run_pipeline(
     let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start()));
 
     let paths_owned: Vec<String> = paths.to_vec();
-    // Shared across fixtures so each generator is AOT-compiled once per run.
-    let kiln_cache = Arc::new(KilnComponentCache::new());
     let compile_future = run_compile_stage(
         paths_owned,
         flags.clone(),
@@ -1565,7 +1564,7 @@ async fn run_pipeline(
         artifact_tx,
         todo_tx,
         cfail_tx,
-        kiln_cache,
+        run_cache.clone(),
         reporter.clone(),
     );
 
@@ -2145,6 +2144,7 @@ async fn run_one_package(
     show_banner: bool,
     no_run: bool,
     reporter: Arc<dyn TestReporter>,
+    run_cache: Arc<RunCache>,
 ) -> PackageTotals {
     reporter.on_package_start(pkg_run, show_banner);
 
@@ -2158,6 +2158,7 @@ async fn run_one_package(
         preopened_dirs,
         no_run,
         reporter.clone(),
+        run_cache,
     )
     .await;
 
@@ -2271,6 +2272,27 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
     }
 }
 
+/// Report the source files that changed while the run was in progress, and
+/// whether any did. A run that read two versions of a file describes neither
+/// tree; green is the dangerous outcome, since the pinned generator would
+/// otherwise let a mid-run edit pass silently against the pre-edit build.
+fn report_changed_inputs(run_cache: &RunCache) -> bool {
+    let changed = run_cache.inputs().changed();
+    if changed.is_empty() {
+        return false;
+    }
+    eprintln!(
+        "\nerror: {} source file(s) changed while the run was in progress, so these results \
+         describe neither the old tree nor the new one:",
+        changed.len()
+    );
+    for path in &changed {
+        eprintln!("    {}", path.display());
+    }
+    eprintln!("re-run once the edits have settled.");
+    true
+}
+
 pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
@@ -2314,6 +2336,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
         TestFormat::Tap => Arc::new(TapReporter::new(overall_start, total_files)),
     };
 
+    // One view of the source tree for the whole run, across packages.
+    let run_cache = Arc::new(RunCache::new());
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
         let totals = run_one_package(
@@ -2327,6 +2351,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             multi_pkg,
             no_run,
             reporter.clone(),
+            Arc::clone(&run_cache),
         )
         .await;
         grand.merge(&totals);
@@ -2334,6 +2359,9 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
+    if report_changed_inputs(&run_cache) {
+        return Err(CliExit::silent_failure(1));
+    }
     if grand.compile_failed > 0
         || grand.load_failed > 0
         || grand.test_failed > 0

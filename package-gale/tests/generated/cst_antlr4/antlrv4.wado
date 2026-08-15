@@ -1045,6 +1045,48 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
+pub struct LexerView {
+    chars: &List<char>,
+    start: i32,
+    pos: i32,
+}
+
+impl LexerView {
+    pub fn la(&self, k: i32) -> i32 {
+        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    pub fn text(&self) -> String {
+        let mut s = String::with_capacity(if self.pos > self.start { self.pos - self.start } else { 0 });
+        for let mut i = self.start; i < self.pos; i += 1 {
+            s.push(self.chars[i]);
+        }
+        return s;
+    }
+
+    pub fn start(&self) -> i32 {
+        return self.start;
+    }
+
+    pub fn pos(&self) -> i32 {
+        return self.pos;
+    }
+
+    pub fn char_at(&self, i: i32) -> i32 {
+        if i < 0 || i >= self.chars.len() {
+            return -1;
+        }
+        return self.chars[i] as i32;
+    }
+
+    pub fn input_len(&self) -> i32 {
+        return self.chars.len();
+    }
+}
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
@@ -2235,9 +2277,22 @@ pub global TK_LEXER_CHAR_SET_BODY: i32 = 79;
 pub global TK_EOF: i32 = 80;
 pub global TK_ERROR: i32 = 81;
 
+pub interface LexerAdaptor {
+    fn handle_begin_argument(view: LexerView);
+    fn handle_end_argument(view: LexerView);
+}
+
 struct Lexer {
     chars: List<char>,
     pos: i32,
+    act_output: String = "",
+    act_type: i32 = -1,
+    act_channel: i32 = -1,
+    act_skip: bool = false,
+    act_more: bool = false,
+    act_push_mode: i32 = -1,
+    act_pop_mode: bool = false,
+    act_set_mode: i32 = -1,
 }
 
 impl Lexer {
@@ -2252,6 +2307,68 @@ impl Lexer {
     fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
         return LexerSlice::new(&self.chars, start, end);
     }
+
+    fn emit(&mut self, s: String) {
+        self.act_output.push_str(&s);
+    }
+
+    fn reset_actions(&mut self) {
+        self.act_type = -1;
+        self.act_channel = -1;
+        self.act_skip = false;
+        self.act_more = false;
+        self.act_push_mode = -1;
+        self.act_pop_mode = false;
+        self.act_set_mode = -1;
+    }
+
+    fn set_type(&mut self, t: i32) {
+        self.act_type = t;
+    }
+
+    fn set_channel(&mut self, c: i32) {
+        self.act_channel = c;
+    }
+
+    fn skip(&mut self) {
+        self.act_skip = true;
+    }
+
+    fn more(&mut self) {
+        self.act_more = true;
+    }
+
+    fn push_mode(&mut self, m: i32) {
+        self.act_push_mode = m;
+    }
+
+    fn pop_mode(&mut self) {
+        self.act_pop_mode = true;
+    }
+
+    fn set_mode(&mut self, m: i32) {
+        self.act_set_mode = m;
+    }
+}
+
+pub global MODE_DEFAULT_MODE: i32 = 0;
+pub global MODE_Argument: i32 = 1;
+pub global MODE_LexerCharSet: i32 = 2;
+
+fn apply_BEGIN_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with LexerAdaptor, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '[' { return; }
+    pos += 1;
+    LexerAdaptor::handle_begin_argument(LexerView { chars, start, pos });
+}
+
+fn apply_END_ARGUMENT_actions(lx: &mut Lexer, start: i32, end: i32) with LexerAdaptor, stores[lx] {
+    let chars = &lx.chars;
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != ']' { return; }
+    pos += 1;
+    LexerAdaptor::handle_end_argument(LexerView { chars, start, pos });
 }
 
 fn try_DOC_COMMENT(chars: &List<char>, start: i32) -> i32 {
@@ -3621,7 +3738,7 @@ fn try_UNTERMINATED_CHAR_SET(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> TokenStream {
+pub fn tokenize(input: &String) -> TokenStream with LexerAdaptor {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
@@ -3633,140 +3750,158 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
+        let mut best_act: i32 = -1;
+        let mut best_act_skip = false;
         let first_char = lexer.chars[start];
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
+        let mut best_set_mode: i32 = -1;
         let mut best_more = false;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
             end = try_DOC_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOC_COMMENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 3; }
+            if end > best_end { best_end = end; best_kind = TK_DOC_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
             end = try_BLOCK_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 3; }
+            if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
             end = try_LINE_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 3; }
+            if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
             end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_UNTERMINATED_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_BEGIN_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BEGIN_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_BEGIN_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
             end = try_ACTION(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ACTION; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ACTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OPTIONS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OPTIONS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OPTIONS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_TOKENS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TOKENS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_TOKENS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_CHANNELS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CHANNELS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_CHANNELS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_IMPORT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IMPORT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_IMPORT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_FRAGMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_FRAGMENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_FRAGMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LEXER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LEXER; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LEXER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PARSER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PARSER; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PARSER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_GRAMMAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GRAMMAR; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_GRAMMAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PROTECTED(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PROTECTED; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PROTECTED; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PUBLIC(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PUBLIC; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PUBLIC; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PRIVATE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PRIVATE; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PRIVATE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RETURNS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RETURNS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RETURNS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LOCALS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LOCALS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LOCALS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_THROWS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_THROWS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_THROWS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_CATCH(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CATCH; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_CATCH; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_FINALLY(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_FINALLY; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_FINALLY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_MODE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MODE; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_MODE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_COLON(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COLON; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_COLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_COLONCOLON(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COLONCOLON; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_COLONCOLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_COMMA(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COMMA; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_COMMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_SEMI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SEMI; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_SEMI; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LPAREN; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RPAREN; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RBRACE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RARROW(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RARROW; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RARROW; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_LT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_GT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ASSIGN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_QUESTION(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QUESTION; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_QUESTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_STAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STAR; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_STAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PLUS_ASSIGN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUS_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PLUS_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_PLUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_PLUS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_OR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OR; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_OR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_DOLLAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_RANGE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RANGE; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_RANGE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_DOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_DOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_AT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_AT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_AT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_POUND(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_POUND; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_POUND; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_NOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NOT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_NOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 2; }
+            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 2; best_act = -1; }
         } else if current_mode == 1 {
             end = try_NESTED_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = 1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ARGUMENT_ESCAPE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ARGUMENT_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ARGUMENT_CHAR_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_END_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_END_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_END_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
             end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
         } else if current_mode == 2 {
             end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_more = true; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
             end = try_LEXER_CHAR_SET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
             end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_more = false; best_channel = 0; }
+            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
         }
-        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
+        if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_act >= 0 {
+                lexer.reset_actions();
+                if best_act == 0 {
+                    apply_BEGIN_ARGUMENT_actions(&mut lexer, start, best_end);
+                } else if best_act == 1 {
+                    apply_END_ARGUMENT_actions(&mut lexer, start, best_end);
+                }
+                if lexer.act_type >= 0 { best_kind = lexer.act_type; }
+                if lexer.act_channel >= 0 { best_channel = lexer.act_channel; }
+                if lexer.act_more { best_more = true; }
+                if lexer.act_skip { best_act_skip = true; }
+                if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }
+                if lexer.act_pop_mode { best_pop_mode = true; }
+                if lexer.act_set_mode >= 0 { best_set_mode = lexer.act_set_mode; }
+            }
             let tok_start = if more_start >= 0 { more_start } else { start };
-            let is_skip = false;
+            let is_skip = false || best_act_skip;
             if best_more {
                 if more_start < 0 { more_start = start; }
             } else if is_skip {
@@ -3794,10 +3929,15 @@ pub fn tokenize(input: &String) -> TokenStream {
                 }
                 best_pop_mode = false;
             }
+            if best_set_mode >= 0 {
+                current_mode = best_set_mode;
+                best_set_mode = -1;
+            }
             lexer.pos = best_end;
         }
     }
     ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
+    ts.output = lexer.act_output;
     return ts;
 }
 
@@ -8832,7 +8972,7 @@ fn _parse_qualified_identifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult with LexerAdaptor {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
@@ -8849,275 +8989,275 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
-pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return parse_grammar_spec(input, max_errors);
 }
 
-pub fn parse_grammar_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_grammar_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_grammar_spec(p));
 }
 
-pub fn parse_grammar_decl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_grammar_decl(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_grammar_decl(p));
 }
 
-pub fn parse_grammar_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_grammar_type(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_grammar_type(p));
 }
 
-pub fn parse_prequel_construct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_prequel_construct(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_prequel_construct(p));
 }
 
-pub fn parse_options_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_options_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_options_spec(p));
 }
 
-pub fn parse_option(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_option(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_option(p));
 }
 
-pub fn parse_option_value(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_option_value(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_option_value(p));
 }
 
-pub fn parse_delegate_grammars(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_delegate_grammars(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_delegate_grammars(p));
 }
 
-pub fn parse_delegate_grammar(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_delegate_grammar(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_delegate_grammar(p));
 }
 
-pub fn parse_tokens_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_tokens_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tokens_spec(p));
 }
 
-pub fn parse_channels_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_channels_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_channels_spec(p));
 }
 
-pub fn parse_id_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_id_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_id_list(p));
 }
 
-pub fn parse_action_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_action_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_action_(p));
 }
 
-pub fn parse_action_scope_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_action_scope_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_action_scope_name(p));
 }
 
-pub fn parse_action_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_action_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_action_block(p));
 }
 
-pub fn parse_arg_action_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_arg_action_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_arg_action_block(p));
 }
 
-pub fn parse_mode_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_mode_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_mode_spec(p));
 }
 
-pub fn parse_rules(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rules(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rules(p));
 }
 
-pub fn parse_rule_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_spec(p));
 }
 
-pub fn parse_parser_rule_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_parser_rule_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_parser_rule_spec(p));
 }
 
-pub fn parse_exception_group(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_exception_group(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_exception_group(p));
 }
 
-pub fn parse_exception_handler(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_exception_handler(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_exception_handler(p));
 }
 
-pub fn parse_finally_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_finally_clause(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_finally_clause(p));
 }
 
-pub fn parse_rule_prequel(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_prequel(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_prequel(p));
 }
 
-pub fn parse_rule_returns(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_returns(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_returns(p));
 }
 
-pub fn parse_throws_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_throws_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_throws_spec(p));
 }
 
-pub fn parse_locals_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_locals_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_locals_spec(p));
 }
 
-pub fn parse_rule_action(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_action(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_action(p));
 }
 
-pub fn parse_rule_modifiers(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_modifiers(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_modifiers(p));
 }
 
-pub fn parse_rule_modifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_modifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_modifier(p));
 }
 
-pub fn parse_rule_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_block(p));
 }
 
-pub fn parse_rule_alt_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_rule_alt_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_rule_alt_list(p));
 }
 
-pub fn parse_labeled_alt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_labeled_alt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_labeled_alt(p));
 }
 
-pub fn parse_lexer_rule_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_rule_spec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_rule_spec(p));
 }
 
-pub fn parse_lexer_rule_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_rule_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_rule_block(p));
 }
 
-pub fn parse_lexer_alt_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_alt_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_alt_list(p));
 }
 
-pub fn parse_lexer_alt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_alt(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_alt(p));
 }
 
-pub fn parse_lexer_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_elements(p));
 }
 
-pub fn parse_lexer_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_element(p));
 }
 
-pub fn parse_lexer_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_block(p));
 }
 
-pub fn parse_lexer_commands(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_commands(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_commands(p));
 }
 
-pub fn parse_lexer_command(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_command(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_command(p));
 }
 
-pub fn parse_lexer_command_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_command_name(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_command_name(p));
 }
 
-pub fn parse_lexer_command_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_command_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_command_expr(p));
 }
 
-pub fn parse_alt_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_alt_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_alt_list(p));
 }
 
-pub fn parse_alternative(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_alternative(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_alternative(p));
 }
 
-pub fn parse_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_element(p));
 }
 
-pub fn parse_predicate_options(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_predicate_options(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_predicate_options(p));
 }
 
-pub fn parse_predicate_option(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_predicate_option(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_predicate_option(p));
 }
 
-pub fn parse_labeled_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_labeled_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_labeled_element(p));
 }
 
-pub fn parse_ebnf(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_ebnf(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_ebnf(p));
 }
 
-pub fn parse_block_suffix(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_block_suffix(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_block_suffix(p));
 }
 
-pub fn parse_ebnf_suffix(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_ebnf_suffix(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_ebnf_suffix(p));
 }
 
-pub fn parse_lexer_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_lexer_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lexer_atom(p));
 }
 
-pub fn parse_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_atom(p));
 }
 
-pub fn parse_wildcard(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_wildcard(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_wildcard(p));
 }
 
-pub fn parse_not_set(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_not_set(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_not_set(p));
 }
 
-pub fn parse_block_set(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_block_set(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_block_set(p));
 }
 
-pub fn parse_set_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_set_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_set_element(p));
 }
 
-pub fn parse_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_block(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_block(p));
 }
 
-pub fn parse_ruleref(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_ruleref(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_ruleref(p));
 }
 
-pub fn parse_character_range(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_character_range(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_character_range(p));
 }
 
-pub fn parse_terminal_def(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_terminal_def(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_terminal_def(p));
 }
 
-pub fn parse_element_options(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_element_options(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_element_options(p));
 }
 
-pub fn parse_element_option(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_element_option(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_element_option(p));
 }
 
-pub fn parse_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_identifier(p));
 }
 
-pub fn parse_qualified_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_qualified_identifier(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with LexerAdaptor {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_qualified_identifier(p));
 }
 

@@ -14,9 +14,10 @@
 
 use std::path::PathBuf;
 
-use wado_cli::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
+use wado_cli::compiler_host::FilesystemCompilerHost;
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider, INDEX_FILE};
+use wado_cli::run_cache::RunCache;
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
 use wado_compiler::{CompilerHost, GeneratorInputFile, GeneratorRequest, LogLevel};
 
@@ -840,7 +841,91 @@ fn host_caches_compiled_component_across_run_generator_calls() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// A shared [`KilnComponentCache`] must AOT-compile a generator once even
+/// A generator edited while a run is in flight must not split the run. Every
+/// fixture builds its own provider, so the pin lives in the shared
+/// [`RunCache`]: the first resolution is the one the whole run gets, and the
+/// watch is what tells the user the edit happened.
+#[test]
+fn a_run_cache_pins_the_generator_across_a_mid_run_edit() {
+    let tmp = unique_tmp("kiln-run-cache-pin");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("my_generator.wado");
+    std::fs::write(&gen_path, MINIMAL_GENERATOR).unwrap();
+
+    let run = std::sync::Arc::new(RunCache::new());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+
+    let first_provider = CliGeneratorProvider::new(tmp.clone()).with_run_cache(run.clone());
+    let first = runtime()
+        .block_on(async { first_provider.resolve(&module).await })
+        .expect("first compile should succeed");
+    assert_eq!(first_provider.compile_count(), 1);
+
+    // The edit lands mid-run, exactly as a save during `wado test` would.
+    let edited = format!("{MINIMAL_GENERATOR}\nfn __touched() -> bool {{ return true; }}\n");
+    std::fs::write(&gen_path, edited).unwrap();
+
+    let second_provider = CliGeneratorProvider::new(tmp.clone()).with_run_cache(run.clone());
+    let second = runtime()
+        .block_on(async { second_provider.resolve(&module).await })
+        .expect("second resolve should succeed");
+    assert_eq!(
+        second_provider.compile_count(),
+        0,
+        "a pinned generator must not be rebuilt from the edited source"
+    );
+    assert_eq!(
+        first.source_hash, second.source_hash,
+        "the run must keep one generator identity"
+    );
+    assert_eq!(
+        first.wasm, second.wasm,
+        "the run must keep one generator build"
+    );
+
+    let changed = run.inputs().changed();
+    assert!(
+        changed.iter().any(|p| p.ends_with("my_generator.wado")),
+        "the edited generator source must be reported as changed: {changed:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Without a run cache, a provider keeps per-call resolution: a single-file
+/// `wado compile` re-reads the tree it is given.
+#[test]
+fn a_provider_without_a_run_cache_still_sees_an_edit() {
+    let tmp = unique_tmp("kiln-run-cache-absent");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("my_generator.wado");
+    std::fs::write(&gen_path, MINIMAL_GENERATOR).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+    let first = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("first compile should succeed");
+
+    let edited = format!("{MINIMAL_GENERATOR}\nfn __touched() -> bool {{ return true; }}\n");
+    std::fs::write(&gen_path, edited).unwrap();
+
+    let second = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("second compile should succeed");
+    assert_ne!(
+        first.source_hash, second.source_hash,
+        "an unpinned provider must pick up the edit"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A shared [`RunCache`] must AOT-compile a generator once even
 /// across the separate hosts a `wado test` run builds per fixture.
 #[test]
 fn shared_kiln_cache_compiles_generator_once_across_hosts() {
@@ -872,13 +957,13 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
         },
     };
 
-    let cache = std::sync::Arc::new(KilnComponentCache::new());
+    let cache = std::sync::Arc::new(RunCache::new());
 
     // Two separate hosts, as the per-fixture pipeline builds them.
     let host_a = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off)
-        .with_shared_kiln_cache(cache.clone());
+        .with_shared_run_cache(cache.clone());
     let host_b = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off)
-        .with_shared_kiln_cache(cache.clone());
+        .with_shared_run_cache(cache.clone());
 
     runtime()
         .block_on(async { host_a.run_generator(&resolved.wasm, request()).await })
@@ -888,7 +973,7 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
         .expect("second host generator run");
 
     assert_eq!(
-        cache.compile_count(),
+        cache.components().compile_count(),
         1,
         "shared cache must AOT-compile the generator once across hosts"
     );
@@ -915,11 +1000,11 @@ fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
         .block_on(async { provider.resolve(&module).await })
         .expect("generator compiles");
 
-    let cache = std::sync::Arc::new(KilnComponentCache::new());
+    let cache = std::sync::Arc::new(RunCache::new());
     let hosts: Vec<FilesystemCompilerHost> = (0..HOSTS)
         .map(|_| {
             FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off)
-                .with_shared_kiln_cache(cache.clone())
+                .with_shared_run_cache(cache.clone())
         })
         .collect();
     let barrier = std::sync::Barrier::new(HOSTS);
@@ -951,7 +1036,7 @@ fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
     });
 
     assert_eq!(
-        cache.compile_count(),
+        cache.components().compile_count(),
         1,
         "concurrent first runs must AOT-compile the generator once"
     );

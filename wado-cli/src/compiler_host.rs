@@ -13,6 +13,7 @@ use wado_compiler::{
 };
 
 use crate::kiln_runtime::{self, KilnRunPolicy};
+use crate::run_cache::RunCache;
 use crate::runtime::create_kiln_engine;
 
 /// A slot list and an optional component are structurally valid whatever a
@@ -30,7 +31,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// [`kiln_runtime::compile_component`]), so a generator must be compiled
 /// once, not once per fixture. A `wado test` run shares one cache across
 /// every per-fixture host via
-/// [`FilesystemCompilerHost::with_shared_kiln_cache`]; standalone hosts get
+/// [`FilesystemCompilerHost::with_shared_run_cache`]; standalone hosts get
 /// their own. In-memory only — a disk `.cwasm` cache would be a
 /// trust-the-disk code-injection vector. Every `Component` comes from `engine`.
 #[derive(Default)]
@@ -111,8 +112,8 @@ pub struct FilesystemCompilerHost {
     log_level: LogLevel,
     start_time: Instant,
     /// Per-host by default; a `wado test` run shares one across all
-    /// fixtures via [`Self::with_shared_kiln_cache`].
-    kiln_cache: Arc<KilnComponentCache>,
+    /// fixtures via [`Self::with_shared_run_cache`].
+    run: Arc<RunCache>,
     /// Precomputed `[dependencies]` index. When set, `dependency_index`
     /// returns it instead of having the inner host re-read the manifest —
     /// the caller already parsed it for the Kiln pipeline.
@@ -127,7 +128,7 @@ impl FilesystemCompilerHost {
             print_diagnostics: true,
             log_level: crate::args::DEFAULT_LOG_LEVEL,
             start_time: Instant::now(),
-            kiln_cache: Arc::new(KilnComponentCache::new()),
+            run: Arc::new(RunCache::new()),
             dep_index: None,
         }
     }
@@ -139,7 +140,7 @@ impl FilesystemCompilerHost {
             print_diagnostics: false,
             log_level: LogLevel::Off,
             start_time: Instant::now(),
-            kiln_cache: Arc::new(KilnComponentCache::new()),
+            run: Arc::new(RunCache::new()),
             dep_index: None,
         }
     }
@@ -151,7 +152,7 @@ impl FilesystemCompilerHost {
             print_diagnostics: true,
             log_level,
             start_time: Instant::now(),
-            kiln_cache: Arc::new(KilnComponentCache::new()),
+            run: Arc::new(RunCache::new()),
             dep_index: None,
         }
     }
@@ -164,17 +165,24 @@ impl FilesystemCompilerHost {
         self
     }
 
-    /// Share one [`KilnComponentCache`] across hosts so a generator is
-    /// AOT-compiled once per `wado test` run instead of once per fixture.
+    /// Share one [`RunCache`] across hosts, so a `wado test` run resolves and
+    /// AOT-compiles each generator once instead of once per fixture, and reads
+    /// one view of the source tree.
     #[must_use]
-    pub fn with_shared_kiln_cache(mut self, cache: Arc<KilnComponentCache>) -> Self {
-        self.kiln_cache = cache;
+    pub fn with_shared_run_cache(mut self, cache: Arc<RunCache>) -> Self {
+        self.run = cache;
         self
+    }
+
+    /// The run-scoped state this host shares.
+    #[must_use]
+    pub fn run_cache(&self) -> Arc<RunCache> {
+        Arc::clone(&self.run)
     }
 
     #[must_use]
     pub fn kiln_component_compile_count(&self) -> usize {
-        self.kiln_cache.compile_count()
+        self.run.components().compile_count()
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
@@ -202,7 +210,7 @@ impl FilesystemCompilerHost {
             print_diagnostics: self.print_diagnostics,
             log_level: self.log_level,
             start_time: self.start_time,
-            kiln_cache: Arc::clone(&self.kiln_cache),
+            run: Arc::clone(&self.run),
             dep_index: self.dep_index.clone(),
         }
     }
@@ -262,7 +270,13 @@ impl FilesystemCompilerHost {
 
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        self.inner.load_source(path).await
+        let bytes = self.inner.load_source(path).await?;
+        // Every module and asset a compile reads passes here, which is how the
+        // run learns what tree it is describing.
+        self.run
+            .inputs()
+            .observe(&self.inner.base_path().join(path), &bytes);
+        Ok(bytes)
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
@@ -289,7 +303,7 @@ impl CompilerHost for FilesystemCompilerHost {
         component_wasm: &[u8],
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-        let (engine, component) = self.kiln_cache.get_or_compile(component_wasm)?;
+        let (engine, component) = self.run.components().get_or_compile(component_wasm)?;
         let (outcome, diagnostics) =
             kiln_runtime::run_generator(&engine, &component, request, KilnRunPolicy::default())
                 .await;
