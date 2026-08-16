@@ -1,0 +1,11 @@
+// An embedded wasm asset shares the component's memory, which is not shared,
+// so an asset asking for a shared one cannot be wired to it.
+
+use _ from "./sub/wasm_import_shared_memory.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "a shared memory is not supported"
+}

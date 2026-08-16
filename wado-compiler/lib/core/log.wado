@@ -1,0 +1,899 @@
+#![stdlib("core:log")]
+//! Structured logging and tracing (`docs/wep-2026-06-25-core-log.md`).
+//!
+//! A subscriber is an effect: sinks and layers are handlers of `Log`, so
+//! composition is handler nesting and dispatch stays static. Events carry a
+//! level, a message, structured fields, and the caller's source location;
+//! spans are first-class values entered for a scope.
+//!
+//! Filtering is three gates, cheapest first, each narrowing what the one
+//! before admitted: `-D log.level=info` folds at compile time, `set_log_level`
+//! is one global read, and `Log::enabled` runs the installed layer stack.
+//! `enabled(level)` exposes the same ladder for guarding fields too expensive
+//! to build.
+//!
+//! The facade is `#[ambient]`, so performing `Log` adds no `with Log` to a
+//! caller's signature, and every operation carries a default implementation, so
+//! a program that installs nothing still logs — `Info` and above, one text line
+//! per event on stderr. Installing a sink replaces that for its scope; `NopSink`
+//! is how a program asks for silence.
+
+use { Serialize } from "core:serde";
+use { Value, to_value } from "core:value";
+use { TreeMap } from "core:collections";
+use { to_string } from "core:json";
+use { log_stderr } from "core:rt";
+use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
+use { Instant } from "core:temporal";
+use { SystemClock } from "wasi:clocks";
+
+#[synopsis]
+test {
+    // No sink installed: the default subscriber writes it to stderr.
+    info(`starting up`);
+
+    // An installed sink takes over for its scope. `CaptureSink` is the one a
+    // test reads back; `TextSink` and `JsonSink` write.
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        in_span(&span(Level::Info, `request`), || {
+            info(`user logged in`, { user_id: 7 });
+        });
+    };
+
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "user logged in";
+    assert sink.events[0].meta.level matches { Info };
+    assert sink.events[0].parent matches { Some(1) };
+}
+
+/// Severity, ordered by declaration: a threshold is the lowest level emitted,
+/// so at `Info` both `Trace` and `Debug` are off.
+pub enum Level {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl Level {
+    /// Lowercase wire name (`"info"`) — the JSON spelling and the one
+    /// `parse_directives` and `-D log.level=` accept.
+    pub fn name(&self) -> String {
+        return match self {
+            Trace => "trace",
+            Debug => "debug",
+            Info => "info",
+            Warn => "warn",
+            Error => "error",
+        };
+    }
+
+    /// Uppercase label, as `TextSink` writes it.
+    pub fn label(&self) -> String {
+        return match self {
+            Trace => "TRACE",
+            Debug => "DEBUG",
+            Info => "INFO",
+            Warn => "WARN",
+            Error => "ERROR",
+        };
+    }
+}
+
+impl LenientFromStr for Level {
+    type Err = LenientParseError;
+
+    fn from_str_lenient(s: &String) -> Result<Level, LenientParseError> {
+        return match s.to_ascii_lowercase() {
+            "trace" => Result::Ok(Level::Trace),
+            "debug" => Result::Ok(Level::Debug),
+            "info" => Result::Ok(Level::Info),
+            "warn" => Result::Ok(Level::Warn),
+            "error" => Result::Ok(Level::Error),
+            _ => Result::Err(LenientParseError::new(`unknown log level: ${*s}`)),
+        };
+    }
+}
+
+/// Infallible `LenientFromStr` wrapper: an unrecognized name is `Trace`, so a
+/// typo widens what is logged rather than silencing a program.
+pub fn level_from_str(s: String) -> Level {
+    return match Level::from_str_lenient(&s) {
+        Ok(level) => level,
+        Err(_) => Level::Trace,
+    };
+}
+
+pub type SpanId = u64;
+
+/// Serializes to `{}`; the default field payload, so `info(msg)` needs no
+/// second argument and the default type parameter supplies its type.
+pub struct NoFields {
+}
+
+/// What a callsite says about itself, independent of the payload.
+pub struct Metadata {
+    pub level: Level,
+    /// Category; defaults to the caller's `#function`.
+    pub target: String,
+    /// Span name; `""` for events.
+    pub name: String = "",
+    pub file: String,
+    pub line: i32,
+}
+
+pub struct Event {
+    pub meta: Metadata,
+    pub message: String,
+    pub fields: Value = Value::Null,
+    pub parent: Option<SpanId> = null,
+}
+
+pub struct SpanAttrs {
+    pub meta: Metadata,
+    pub fields: Value = Value::Null,
+}
+
+// Tier 1: the build-time threshold. `-D log.level=info` settles it, and
+// `from_env` reads the build environment rather than the run-time one.
+#[param(name = "log.level", from_env = "WADO_LOG_LEVEL")]
+global LOG_LEVEL: String = "trace";
+
+global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL);
+
+// Tier 2: the process-wide threshold, owned here rather than by the installed
+// sink, so there is no sink contract and no cache to invalidate.
+global mut RUNTIME_LEVEL: Level = Level::Trace;
+
+// Reentrancy backstop: a handler that logs forwards outward and terminates at
+// the outermost sink, but a self-reinstalling one would not. Past this depth an
+// event is dropped rather than chaining without bound.
+global MAX_DEPTH: i32 = 8;
+
+global mut DEPTH: i32 = 0;
+
+/// Set the process-wide threshold (tier 2). A sink or layer narrows further.
+pub fn set_log_level(level: Level) {
+    RUNTIME_LEVEL = level;
+}
+
+/// The process-wide threshold set by [`set_log_level`].
+pub fn log_level() -> Level {
+    return RUNTIME_LEVEL;
+}
+
+fn box_fields<T: Serialize>(fields: T) -> Value {
+    return match to_value(&fields) {
+        Ok(v) => v,
+        Err(_) => Value::Null,
+    };
+}
+
+/// The subscriber. Sinks and layers are handlers of it, so composition is
+/// handler nesting and dispatch stays static. Operations are best-effort: a
+/// handler swallows its own write and serialize errors and never fails the
+/// program.
+///
+/// Every operation carries a default implementation, so a program that installs
+/// no sink logs to stderr rather than trapping — logging is a debugging aid, and
+/// one that crashes the program for want of setup is worse than no logging. The
+/// defaults are a `TextSink` on stderr admitting `Info` and above; installing
+/// any handler replaces them for its scope, and `NopSink` is how a program asks
+/// for silence.
+pub interface Log {
+    fn enabled(level: Level) -> bool {
+        return level >= DEFAULT_LEVEL;
+    }
+
+    fn current_span() -> Option<SpanId> {
+        return DEFAULT_SINK.spans.current();
+    }
+
+    fn new_span(attrs: SpanAttrs) -> SpanId {
+        return DEFAULT_SINK.spans.open();
+    }
+
+    fn record_fields(span: SpanId, fields: Value) {
+    }
+
+    fn follows_from(span: SpanId, cause: SpanId) {
+    }
+
+    fn enter(span: SpanId) {
+        DEFAULT_SINK.spans.enter(span);
+    }
+
+    fn exit(span: SpanId) {
+        DEFAULT_SINK.spans.exit();
+    }
+
+    fn close(span: SpanId) {
+    }
+
+    fn event(event: Event) {
+        if event.meta.level >= DEFAULT_LEVEL {
+            log_stderr(DEFAULT_SINK.render(&event));
+        }
+    }
+}
+
+// The subscriber of last resort, and the level it admits. An application that
+// wants another format, destination or threshold installs a handler; one that
+// wants silence installs `NopSink`. The WEP argues the level.
+global DEFAULT_LEVEL: Level = Level::Info;
+
+global mut DEFAULT_SINK: TextSink = TextSink {};
+
+/// The three tiers, cheapest first, each narrowing what the one before
+/// admitted. Exposed as a predicate too, for guarding fields too expensive to
+/// build:
+///
+/// ```wado
+/// if enabled(Level::Debug) {
+///     debug(`state`, { snapshot: expensive_snapshot() });
+/// }
+/// ```
+#[ambient]
+pub fn enabled(level: Level) -> bool {
+    if level < LOG_STATIC_LEVEL {
+        return false;
+    }
+    if level < RUNTIME_LEVEL {
+        return false;
+    }
+    return Log::enabled(level);
+}
+
+/// Emit an event at a level a caller computes. The level wrappers' three gates
+/// apply here too; only tier 1 comes out weaker, since a level that is not a
+/// literal is not a comparison the optimizer can fold. Location defaults
+/// resolve at the call site.
+#[ambient]
+pub fn event<T: Serialize = NoFields>(
+    level: Level,
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(level) {
+        return;
+    }
+    emit(level, message, fields, target, file, line);
+}
+
+/// Build the event and hand it to the subscriber, gates already passed. The
+/// level wrappers call this rather than [`event`] so an emitted event runs the
+/// tier-3 dispatch once, not twice.
+#[ambient]
+fn emit<T: Serialize = NoFields>(level: Level, message: String, fields: T, target: String, file: String, line: i32) {
+    if DEPTH >= MAX_DEPTH {
+        return;
+    }
+    DEPTH += 1;
+    Log::event(Event {
+        meta: Metadata { level, target, file, line },
+        message,
+        fields: box_fields(fields),
+        parent: Log::current_span(),
+    });
+    DEPTH -= 1;
+}
+
+// One wrapper per level: each knows its level as a literal, which is what lets
+// tier 1 fold the comparison away once a parameter reaches it.
+
+#[ambient]
+pub fn trace<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Trace) {
+        return;
+    }
+    emit(Level::Trace, message, fields, target, file, line);
+}
+
+#[ambient]
+pub fn debug<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Debug) {
+        return;
+    }
+    emit(Level::Debug, message, fields, target, file, line);
+}
+
+#[ambient]
+pub fn info<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Info) {
+        return;
+    }
+    emit(Level::Info, message, fields, target, file, line);
+}
+
+#[ambient]
+pub fn warn<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Warn) {
+        return;
+    }
+    emit(Level::Warn, message, fields, target, file, line);
+}
+
+#[ambient]
+pub fn error<T: Serialize = NoFields>(
+    message: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) {
+    if !enabled(Level::Error) {
+        return;
+    }
+    emit(Level::Error, message, fields, target, file, line);
+}
+
+/// A span is a first-class value, so a caller can carry one and re-enter it.
+pub struct Span {
+    id: SpanId,
+}
+
+impl Span {
+    pub fn id(&self) -> SpanId {
+        return self.id;
+    }
+
+    /// Add fields to an open span.
+    pub fn record<T: Serialize>(&self, fields: T) {
+        Log::record_fields(self.id, box_fields(fields));
+    }
+
+    /// Record a non-parent causal link: this span follows from `cause`.
+    pub fn follows_from(&self, cause: &Span) {
+        Log::follows_from(self.id, cause.id);
+    }
+
+    /// Close a span entered by hand. [`in_span`] closes on every exit path, so
+    /// this is only for a span the caller opened without it.
+    pub fn close(&self) {
+        Log::close(self.id);
+    }
+}
+
+#[ambient]
+pub fn span<T: Serialize = NoFields>(
+    level: Level,
+    name: String,
+    fields: T = NoFields {},
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) -> Span {
+    let id = Log::new_span(SpanAttrs {
+        meta: Metadata { level, target, name, file, line },
+        fields: box_fields(fields),
+    });
+    return Span { id };
+}
+
+/// The innermost entered span, or `null` outside any.
+#[ambient]
+pub fn current() -> Option<Span> {
+    return match Log::current_span() {
+        Some(id) => Option::<Span>::Some(Span { id }),
+        None => null,
+    };
+}
+
+/// Run `body` inside `s`. A closure can't skip the exit/close calls, so they
+/// run on every body exit path, an early `return` included.
+#[ambient]
+pub fn in_span<T, effect E>(s: &Span, mut body: fn mut() -> T with E) -> T with E {
+    Log::enter(s.id());
+    let r = body();
+    Log::exit(s.id());
+    Log::close(s.id());
+    return r;
+}
+
+// === Span bookkeeping shared by the terminal sinks ===
+//
+// `Span` carries only its id, so a sink wanting per-span data keeps its own
+// state keyed by `SpanId`. Every terminal sink needs at least this much: fresh
+// ids and the current-span stack that parents events.
+
+struct SpanStack {
+    next_id: u64 = 0,
+    stack: List<SpanId> = [],
+}
+
+impl SpanStack {
+    fn open(&mut self) -> SpanId {
+        self.next_id += 1;
+        return self.next_id as SpanId;
+    }
+
+    fn enter(&mut self, span: SpanId) {
+        self.stack.push(span);
+    }
+
+    fn exit(&mut self) {
+        self.stack.pop();
+    }
+
+    fn current(&self) -> Option<SpanId> {
+        return self.stack.last();
+    }
+}
+
+/// The current wall-clock time, rendered with millisecond precision.
+///
+/// `#[ambient]` for the same reason the facade is: a sink's operations are
+/// `Log`'s, whose signatures carry no effect, so the clock read cannot be
+/// declared on them. A world without `wasi:clocks` traps here — hence
+/// `timestamp: false` on a sink installed in one.
+#[ambient]
+fn timestamp_now() -> String {
+    return `${Instant::from(SystemClock::now()):#}`;
+}
+
+// === Sinks ===
+//
+// A sink terminates the chain: it answers every operation itself, so one
+// forwarded from an inner layer stops here rather than falling through to the
+// defaults above.
+
+/// One human-readable line per event on stderr:
+///
+/// ```text
+/// 2026-08-08T11:47:08.204Z INFO 42 handle_request: user logged in user_id=7 ip=127.0.0.1
+/// ```
+///
+/// Each part its configuration turns off is omitted; `location` appends
+/// ` at file:line`. Writes through the ambient `log_stderr`, so the sink needs
+/// no `Stderr` in its signature and installs in any world.
+pub struct TextSink {
+    pub timestamp: bool = true,
+    pub seq: bool = true,
+    pub location: bool = false,
+    spans: SpanStack = SpanStack {},
+    next_seq: u64 = 0,
+}
+
+impl TextSink {
+    /// The line this sink would write for `event`, without writing it — the
+    /// hook for sending the same format somewhere other than stderr. Consumes
+    /// a sequence number, so one call is one line.
+    pub fn render(&mut self, event: &Event) -> String {
+        let mut line = String::new();
+        if self.timestamp {
+            line.push_str(&timestamp_now());
+            line.push_str(&" ");
+        }
+        line.push_str(&event.meta.level.label());
+        if self.seq {
+            self.next_seq += 1;
+            line.push_str(&` ${self.next_seq}`);
+        }
+        if let Some(parent) = event.parent {
+            line.push_str(&` span=${parent}`);
+        }
+        line.push_str(&` ${event.meta.target}: ${event.message}`);
+        write_fields_text(&event.fields, &mut line);
+        if self.location {
+            line.push_str(&` at ${event.meta.file}:${event.meta.line}`);
+        }
+        return line;
+    }
+}
+
+impl Log for TextSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume true;
+    }
+
+    fn current_span(&self) -> Option<SpanId> {
+        resume self.spans.current();
+    }
+
+    fn new_span(&mut self, attrs: SpanAttrs) -> SpanId {
+        resume self.spans.open();
+    }
+
+    fn record_fields(&mut self, span: SpanId, fields: Value) {
+    }
+
+    fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+    }
+
+    fn enter(&mut self, span: SpanId) {
+        self.spans.enter(span);
+    }
+
+    fn exit(&mut self, span: SpanId) {
+        self.spans.exit();
+    }
+
+    fn close(&mut self, span: SpanId) {
+    }
+
+    fn event(&mut self, event: Event) {
+        log_stderr(self.render(&event));
+    }
+}
+
+/// One JSON object per line (JSONL) on stderr, through `json::to_string`:
+///
+/// ```json
+/// {"ts":"2026-08-08T11:47:08.204Z","seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
+/// ```
+///
+/// Keys a switch turns off are absent rather than null.
+pub struct JsonSink {
+    pub timestamp: bool = true,
+    pub seq: bool = true,
+    pub location: bool = false,
+    spans: SpanStack = SpanStack {},
+    next_seq: u64 = 0,
+}
+
+impl JsonSink {
+    /// The JSON line this sink would write for `event`, without writing it.
+    /// Consumes a sequence number, so one call is one line. A sink swallows its
+    /// own serialize errors, so an unserializable event renders as `{}` rather
+    /// than aborting the program.
+    pub fn render(&mut self, event: &Event) -> String {
+        let mut obj = TreeMap::<String, Value>::new();
+        if self.timestamp {
+            obj["ts"] = Value::String(timestamp_now());
+        }
+        if self.seq {
+            self.next_seq += 1;
+            obj["seq"] = Value::UInt(self.next_seq);
+        }
+        obj["level"] = Value::String(event.meta.level.name());
+        obj["target"] = Value::String(event.meta.target);
+        obj["message"] = Value::String(event.message);
+        if let Some(parent) = event.parent {
+            obj["span"] = Value::UInt(parent as u64);
+        }
+        if self.location {
+            obj["file"] = Value::String(event.meta.file);
+            obj["line"] = Value::Int(event.meta.line as i64);
+        }
+        obj["fields"] = event.fields;
+        return match to_string(&Value::Object(obj)) {
+            Ok(line) => line,
+            Err(_) => "{}",
+        };
+    }
+}
+
+impl Log for JsonSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume true;
+    }
+
+    fn current_span(&self) -> Option<SpanId> {
+        resume self.spans.current();
+    }
+
+    fn new_span(&mut self, attrs: SpanAttrs) -> SpanId {
+        resume self.spans.open();
+    }
+
+    fn record_fields(&mut self, span: SpanId, fields: Value) {
+    }
+
+    fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+    }
+
+    fn enter(&mut self, span: SpanId) {
+        self.spans.enter(span);
+    }
+
+    fn exit(&mut self, span: SpanId) {
+        self.spans.exit();
+    }
+
+    fn close(&mut self, span: SpanId) {
+    }
+
+    fn event(&mut self, event: Event) {
+        log_stderr(self.render(&event));
+    }
+}
+
+/// Drops everything, cheaply. The sink to install when a program must not log
+/// but its libraries still perform `Log`.
+pub struct NopSink {
+    spans: SpanStack = SpanStack {},
+}
+
+impl Log for NopSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume false;
+    }
+
+    fn current_span(&self) -> Option<SpanId> {
+        resume self.spans.current();
+    }
+
+    fn new_span(&mut self, attrs: SpanAttrs) -> SpanId {
+        resume self.spans.open();
+    }
+
+    fn record_fields(&mut self, span: SpanId, fields: Value) {
+    }
+
+    fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+    }
+
+    fn enter(&mut self, span: SpanId) {
+        self.spans.enter(span);
+    }
+
+    fn exit(&mut self, span: SpanId) {
+        self.spans.exit();
+    }
+
+    fn close(&mut self, span: SpanId) {
+    }
+
+    fn event(&mut self, event: Event) {
+    }
+}
+
+/// Keeps every event and span in memory, for tests: assertions read the
+/// captured values rather than parsing output. `ops` records the span
+/// lifecycle in order — `new:name#id`, `enter:id`, `exit:id`, `close:id`,
+/// `record:id:key`, `follows:id<-cause`.
+pub struct CaptureSink {
+    /// Tier-3 threshold, so a test can exercise the sink's own gate.
+    pub min: Level = Level::Trace,
+    pub events: List<Event> = [],
+    /// Spans in id order: `spans[i]` is the span with id `i + 1`.
+    pub spans: List<SpanAttrs> = [],
+    pub ops: List<String> = [],
+    stack: SpanStack = SpanStack {},
+}
+
+impl Log for CaptureSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume level >= self.min;
+    }
+
+    fn current_span(&self) -> Option<SpanId> {
+        resume self.stack.current();
+    }
+
+    fn new_span(&mut self, attrs: SpanAttrs) -> SpanId {
+        let id = self.stack.open();
+        self.ops.push(`new:${attrs.meta.name}#${id}`);
+        self.spans.push(attrs);
+        resume id;
+    }
+
+    fn record_fields(&mut self, span: SpanId, fields: Value) {
+        if let Object(map) = fields {
+            for let [key, _] of map.entries() {
+                self.ops.push(`record:${span}:${key}`);
+            }
+        }
+    }
+
+    fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+        self.ops.push(`follows:${span}<-${cause}`);
+    }
+
+    fn enter(&mut self, span: SpanId) {
+        self.stack.enter(span);
+        self.ops.push(`enter:${span}`);
+    }
+
+    fn exit(&mut self, span: SpanId) {
+        self.stack.exit();
+        self.ops.push(`exit:${span}`);
+    }
+
+    fn close(&mut self, span: SpanId) {
+        self.ops.push(`close:${span}`);
+    }
+
+    fn event(&mut self, event: Event) {
+        if event.meta.level >= self.min {
+            self.events.push(event);
+        }
+    }
+}
+
+// === Layers ===
+//
+// A layer implements only what it changes and delegates the rest outward with
+// `..forward`, so a layer that changes one operation restates none of the
+// other eight.
+
+/// `slog`'s `With`: prepend fixed fields to every event passing through.
+/// A key the event itself carries wins.
+pub struct Context<T: Serialize> {
+    pub fields: T,
+}
+
+impl<T: Serialize> Log for Context<T> {
+    fn event(&self, event: Event) {
+        let mut merged = TreeMap::<String, Value>::new();
+        if let Object(base) = box_fields(self.fields) {
+            for let [key, value] of base.entries() {
+                merged[key] = value;
+            }
+        }
+        if let Object(extra) = event.fields {
+            for let [key, value] of extra.entries() {
+                merged[key] = value;
+            }
+        }
+        Log::event(Event {
+            meta: event.meta,
+            message: event.message,
+            fields: Value::Object(merged),
+            parent: event.parent,
+        });
+    }
+
+    ..forward
+}
+
+/// One `EnvFilter` directive: the lowest level admitted for targets under
+/// `target`. An empty `target` is the default for unmatched targets.
+///
+/// A target is matched by prefix against the event's, which defaults to the
+/// caller's `#function` — a bare name for a free function (`handle_request`),
+/// `Type::method` for a method, `Log::event` for an operation's default. Pass
+/// `target` explicitly at the call site to group events under a name of your
+/// own (a subsystem, say) rather than the function that emitted them.
+pub struct Directive {
+    pub target: String = "",
+    pub level: Level,
+}
+
+/// Parse an `EnvFilter`-style comma-separated list — `info,Db::query=debug,handle=trace`
+/// — from `WADO_LOG` or any string an application supplies. A bare level is the
+/// default for unmatched targets; `target=level` overrides it for targets under
+/// that prefix. A malformed directive is skipped: a typo in an environment
+/// variable must not stop a program from starting.
+pub fn parse_directives(spec: String) -> List<Directive> {
+    let mut out: List<Directive> = [];
+    for let part of spec.split(",") {
+        let item = part.trim();
+        if item.is_empty() {
+            continue;
+        }
+        match item.find("=") {
+            Some(eq) => {
+                let target = item.substr_bytes(0, eq).trim();
+                let name = item.substr_bytes(eq + 1, item.len()).trim();
+                if let Ok(level) = Level::from_str_lenient(&name) {
+                    if !target.is_empty() {
+                        out.push(Directive { target, level });
+                    }
+                }
+            },
+            None => {
+                if let Ok(level) = Level::from_str_lenient(&item) {
+                    out.push(Directive { level });
+                }
+            },
+        }
+    }
+    return out;
+}
+
+/// Per-target filtering, `EnvFilter`-style: the longest matching target prefix
+/// wins, and a target no directive matches is admitted. See [`Directive`] for
+/// what an event's target is.
+pub struct Filter {
+    pub directives: List<Directive> = [],
+}
+
+impl Filter {
+    /// The lowest level admitted for `target`.
+    pub fn threshold(&self, target: String) -> Level {
+        let mut best = Level::Trace;
+        let mut best_len = -1;
+        for let d of self.directives {
+            let len = d.target.len();
+            if len > best_len && target.starts_with(d.target) {
+                best = d.level;
+                best_len = len;
+            }
+        }
+        return best;
+    }
+
+    /// The lowest level any target could be admitted at. `Log::enabled` sees no
+    /// target, so the gate has to be the floor over every directive — a
+    /// narrower answer would drop events `event` would go on to admit.
+    pub fn floor(&self) -> Level {
+        let mut floor = self.threshold("");
+        for let d of self.directives {
+            if d.level < floor {
+                floor = d.level;
+            }
+        }
+        return floor;
+    }
+}
+
+impl Log for Filter {
+    fn enabled(&self, level: Level) -> bool {
+        resume level >= self.floor() && Log::enabled(level);
+    }
+
+    fn event(&self, event: Event) {
+        if event.meta.level >= self.threshold(event.meta.target) {
+            Log::event(event);
+        }
+    }
+
+    ..forward
+}
+
+// === Field rendering ===
+
+/// Append ` key=value` for each field of an object, matching `TextSink`'s line
+/// format. A non-object payload (a bare scalar, `Null`) contributes nothing:
+/// it has no key to write it under.
+fn write_fields_text(fields: &Value, out: &mut String) {
+    if let Object(map) = fields {
+        for let [key, value] of map.entries() {
+            out.push_str(&` ${key}=`);
+            write_value_text(&value, out);
+        }
+    }
+}
+
+/// Render a field value unquoted, the way a text log line reads: `ip=127.0.0.1`
+/// rather than `ip="127.0.0.1"`. Composites fall back to their JSON form, which
+/// keeps the line on one line.
+fn write_value_text(value: &Value, out: &mut String) {
+    match value {
+        Null => out.push_str(&"null"),
+        Bool(b) => out.push_str(&`${*b}`),
+        Int(n) => out.push_str(&`${*n}`),
+        UInt(n) => out.push_str(&`${*n}`),
+        Int128(n) => out.push_str(&`${*n}`),
+        UInt128(n) => out.push_str(&`${*n}`),
+        Float(f) => out.push_str(&`${*f}`),
+        String(s) => out.push_str(s),
+        Undefined => out.push_str(&"undefined"),
+        _ => {
+            match to_string(value) {
+                Ok(s) => out.push_str(&s),
+                Err(_) => out.push_str(&"?"),
+            }
+        },
+    }
+}

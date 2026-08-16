@@ -210,11 +210,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b6 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b6 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l7;
         };
     };
@@ -318,17 +314,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
     let __iter_2: ref "core:prelude/string.wado//StrCharIter";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: iter.repr, used: iter.used, byte_index: iter.byte_index };
-    b18: block {
-        l19: loop {
+    b17: block {
+        l18: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: char;
             multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if __match_4_mv_0 == 0 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, __match_4_mv_1);
             } else {
-                break b18;
+                break b17;
             }
-            continue l19;
+            continue l18;
         };
     };
     return s;

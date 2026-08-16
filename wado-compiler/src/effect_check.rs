@@ -320,6 +320,13 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                         check_function_effects_sem(sem, src, method, index, out);
                     }
                 }
+                // An operation's default body is ordinary code, so what it
+                // performs is checked like any other function's.
+                Item::Interface(interface_decl) => {
+                    for method in &interface_decl.methods {
+                        check_function_effects_sem(sem, src, method, index, out);
+                    }
+                }
                 _ => {}
             }
         }
@@ -1330,6 +1337,11 @@ impl StoresOracle {
                             record(method, &mut fn_stores);
                         }
                     }
+                    Item::Interface(interface_decl) => {
+                        for method in &interface_decl.methods {
+                            record(method, &mut fn_stores);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1362,6 +1374,7 @@ fn functions_of(item: &Item) -> Vec<&Function> {
         Item::Function(func) => vec![func],
         Item::Impl(impl_block) => impl_block.methods.iter().collect(),
         Item::Trait(trait_decl) => trait_decl.methods.iter().collect(),
+        Item::Interface(interface_decl) => interface_decl.methods.iter().collect(),
         _ => Vec::new(),
     }
 }
@@ -2518,6 +2531,11 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
                     // default's calls leave no `references` edge for the walker
                     // to flag until that annotation lands.
                     for method in &trait_decl.methods {
+                        walk(annotations, src, &method.params, out);
+                    }
+                }
+                Item::Interface(interface_decl) => {
+                    for method in &interface_decl.methods {
                         walk(annotations, src, &method.params, out);
                     }
                 }

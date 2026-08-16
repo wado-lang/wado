@@ -115,7 +115,6 @@ pub enum AstNodeKind {
     EnumCase,
     VariantCase,
     FlagsVariant,
-    InterfaceMethod,
     AssocTypeDecl,
     AssocConst,
     AssocTypeBinding,
@@ -382,10 +381,6 @@ pub trait AstVisitor: Sized {
         walk_function(self, func);
     }
 
-    fn visit_interface_method(&mut self, method: &InterfaceMethod) {
-        walk_interface_method(self, method);
-    }
-
     fn visit_block(&mut self, block: &Block) {
         walk_block(self, block);
     }
@@ -445,7 +440,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         Item::Interface(e) => {
             v.visit_id(e.id, e.span);
             for m in &e.methods {
-                v.visit_interface_method(m);
+                v.visit_function(m);
             }
         }
         Item::Struct(s) => {
@@ -530,7 +525,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_id(r.id, r.span);
             v.visit_generic_params(&r.type_params);
             for m in &r.methods {
-                v.visit_interface_method(m);
+                v.visit_function(m);
             }
         }
         Item::World(w) => v.visit_id(w.id, w.span),
@@ -568,17 +563,6 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     }
     if let Some(body) = &func.body {
         v.visit_block(body);
-    }
-}
-
-pub fn walk_interface_method<V: AstVisitor>(v: &mut V, method: &InterfaceMethod) {
-    v.visit_id(method.id, method.span);
-    for param in &method.params {
-        v.visit_id(param.id, param.span);
-        v.visit_type(&param.ty);
-    }
-    if let Some(ret) = &method.return_type {
-        v.visit_type(ret);
     }
 }
 
@@ -1426,8 +1410,10 @@ pub struct ResourceDecl {
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
-    /// Methods declared within the resource block (reuses `InterfaceMethod` structure)
-    pub methods: Vec<InterfaceMethod>,
+    /// Methods declared within the resource block. Each is a signature only:
+    /// a resource operation is backed by a CM import, so it has no body to
+    /// declare.
+    pub methods: Vec<Function>,
     pub span: Span,
 }
 
@@ -3186,7 +3172,12 @@ impl std::fmt::Display for StoresEntry {
     }
 }
 
-// Placeholder types for future implementation
+/// An effect declaration: an interface whose operations handlers implement.
+///
+/// An interface is a trait with a different dispatch story, so its members are
+/// [`Function`]s parsed exactly as a trait's are. A method with a body declares
+/// the default implementation — what the operation does when no handler is
+/// installed; without one, dispatching it with no handler traps.
 #[derive(Debug, Clone)]
 pub struct InterfaceDecl {
     pub id: AstId,
@@ -3195,20 +3186,7 @@ pub struct InterfaceDecl {
     pub name_span: Span,
     pub visibility: Visibility,
     pub attrs: Vec<Attribute>,
-    pub methods: Vec<InterfaceMethod>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct InterfaceMethod {
-    pub id: AstId,
-    pub name: String,
-    /// Span of the method name identifier.
-    pub name_span: Span,
-    pub is_async: bool,
-    pub attrs: Vec<Attribute>,
-    pub params: Vec<Param>,
-    pub return_type: Option<Type>,
+    pub methods: Vec<Function>,
     pub span: Span,
 }
 

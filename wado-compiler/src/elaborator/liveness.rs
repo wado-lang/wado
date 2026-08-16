@@ -139,6 +139,21 @@ pub(crate) fn compute(
                         graph.seed_export(key);
                     }
                 }
+                Item::Interface(interface_decl) => {
+                    // An operation's default body is a root: the only call
+                    // to it is the dispatch wrapper synthesis emits later, so
+                    // nothing in the AST references it. Unseeded, the body and
+                    // everything only it reaches are dead, and reify drops a
+                    // callee the synthesized call still names.
+                    for method in &interface_decl.methods {
+                        if method.body.is_none() {
+                            continue;
+                        }
+                        let key = method.id;
+                        graph.add_function_edges(method, references, &key);
+                        graph.seed_export(key);
+                    }
+                }
                 Item::Test(test) => {
                     // Test blocks are roots of the `T` (test-reachable) closure
                     // only — never the production `E` closure. A function reached
@@ -186,6 +201,11 @@ fn compute_last_uses(
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
+                        analyze_body(method, references, last_uses, spans);
+                    }
+                }
+                Item::Interface(interface_decl) => {
+                    for method in &interface_decl.methods {
                         analyze_body(method, references, last_uses, spans);
                     }
                 }

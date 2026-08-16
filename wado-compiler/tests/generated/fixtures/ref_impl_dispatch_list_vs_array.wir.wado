@@ -101,10 +101,10 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized: bool = 0;
-global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:ref_impl_dispatch_list_vs_array.wado::__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 };
+global global:core:prelude/primitive.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
-    let xs: ref "core:prelude//List<i32>";
     let c: ref "ref_impl_dispatch_list_vs_array.wado//Counter";
     let a: ref Array<i32>;
     let asum: i32;
@@ -129,9 +129,8 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:ref_impl_dispatch_list_vs_array.wado::__modules_initialized = 1;
     };
-    xs = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4), used: 4 };
     c = struct.new "ref_impl_dispatch_list_vs_array.wado//Counter" { total: 0 };
-    "ref_impl_dispatch_list_vs_array.wado/core:prelude/list.wado/List<i32>^ref_impl_dispatch_list_vs_array.wado/Emit::emit<ref_impl_dispatch_list_vs_array.wado/Counter>"(xs, c);
+    "ref_impl_dispatch_list_vs_array.wado/core:prelude/list.wado/List<i32>^ref_impl_dispatch_list_vs_array.wado/Emit::emit<ref_impl_dispatch_list_vs_array.wado/Counter>"(global:ref_impl_dispatch_list_vs_array.wado::__const_obj_1, c);
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(c.total, __local_8);
@@ -281,11 +280,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b8 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b8 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l9;
         };
     };
@@ -337,13 +332,13 @@ fn "ref_impl_dispatch_list_vs_array.wado/core:prelude/list.wado/List<i32>^ref_im
     end = self.used;
     __sroa___iter_2_repr = self.repr;
     __sroa___iter_2_index = 0;
-    b15: block {
-        l16: loop {
-            break_if b15 __sroa___iter_2_index >= end;
+    b14: block {
+        l15: loop {
+            break_if b14 __sroa___iter_2_index >= end;
             ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(__sroa___iter_2_repr, __sroa___iter_2_index) };
             __sroa___iter_2_index = __sroa___iter_2_index + 1;
             s.total = s.total + ref_val.value;
-            continue l16;
+            continue l15;
         };
     };
 }
@@ -364,17 +359,17 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b18: block {
-            l19: loop {
-                break_if b18 t <= 0_i64;
+        b17: block {
+            l18: loop {
+                break_if b17 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l19;
+                continue l18;
             };
         };
         break __inline_count_digits_i64_0: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_1, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_2, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 

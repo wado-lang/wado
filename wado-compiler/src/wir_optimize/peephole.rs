@@ -370,7 +370,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
     loop {
         let mut changed = false;
         changed |= rewrite_everywhere(instrs, &mut try_fold_comparison);
-        changed |= rewrite_everywhere(instrs, &mut try_eliminate_const_if);
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_eliminate_const_if(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             let folded = try_fold_eqz(instr);
             try_negate_eqz_comparison(instr) || folded
@@ -380,6 +380,11 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut try_relax_gc_operands);
+        // Last in the round: the rules above simplify conditions and arms, and
+        // one that decides the whole `if` (a `ref.test` folding to a constant)
+        // must get there first — a `select` is past the reach of
+        // `try_eliminate_const_if`.
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_select_pure_if(instr, null));
         changed |= fuse_local_tees(instrs);
         if !changed {
             break;
@@ -432,7 +437,27 @@ fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
 }
 
 /// Replace an `If` with a constant condition by the surviving branch.
-fn try_eliminate_const_if(instr: &mut WirInstr) -> bool {
+fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
+    // A `select` is decidable too, and a condition can turn constant a round
+    // after `try_select_pure_if` replaced a branch with one. But `select`
+    // evaluates *both* arms, so the arm not taken has to be droppable on its
+    // own — a `builtin::select(c, 7, 100 / zero)` traps whichever way `c` goes.
+    if let WirInstr::Select {
+        condition,
+        if_true,
+        if_false,
+        ..
+    } = instr
+        && let Some(const_val) = try_fold_wir_to_bool(condition)
+    {
+        let dropped = if const_val { &**if_false } else { &**if_true };
+        if !is_side_effect_free(dropped) || may_trap_in(dropped, null) {
+            return false;
+        }
+        let taken = if const_val { if_true } else { if_false };
+        *instr = std::mem::replace(taken.as_mut(), WirInstr::Nop);
+        return true;
+    }
     let WirInstr::If {
         condition,
         then_body,
@@ -695,6 +720,99 @@ fn try_fold_branchless_increment(instr: &mut WirInstr) -> bool {
     *instr = WirInstr::LocalSet {
         name: name.clone(),
         value: Box::new(WirInstr::I32Add(get, cond)),
+    };
+    true
+}
+
+/// The one value an `if`-arm body yields, ignoring the `Nop`s earlier
+/// sub-passes leave behind.
+fn sole_arm_value(body: &[WirInstr]) -> Option<&WirInstr> {
+    let mut values = body.iter().filter(|s| !matches!(s, WirInstr::Nop));
+    let value = values.next()?;
+    values.next().is_none().then_some(value)
+}
+
+/// Nodes in `instr`'s sub-tree, capped at `budget` — an arm larger than that is
+/// not worth speculating even when it is safe to.
+fn within_node_budget(instr: &WirInstr, budget: u32) -> bool {
+    let mut count = 0;
+    fn walk(instr: &WirInstr, count: &mut u32, budget: u32) -> bool {
+        *count += 1;
+        if *count > budget {
+            return false;
+        }
+        let mut ok = true;
+        instr.for_each_child(&mut |child| {
+            if ok {
+                ok = walk(child, count, budget);
+            }
+        });
+        ok
+    }
+    walk(instr, &mut count, budget)
+}
+
+/// Fold `if c { a } else { b }` → `select(c, a, b)` for two cheap, pure,
+/// trap-free arms — the branchless form of a value-producing `if`.
+///
+/// The WIR dual of `nir/select_lowering`, which cannot see the shape: `&&` /
+/// `||` stay one `Binary` node through NIR and become a value-producing `if`
+/// only when `wir_build::emit_binary_wir` lowers the short-circuit.
+///
+/// `select` evaluates both arms, so both must be observation-free and unable to
+/// trap; the node budget keeps the speculated work smaller than the branch it
+/// replaces. It also evaluates them *before* its condition — Wasm pops the
+/// condition last — so the condition must be observation-free too, or the
+/// reorder is visible. All three pure makes the order immaterial.
+fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
+    const ARM_NODE_BUDGET: u32 = 5;
+    let WirInstr::If {
+        condition,
+        result: Some(ty),
+        then_body,
+        else_body: Some(else_body),
+    } = instr
+    else {
+        return false;
+    };
+    // A `select` operand is one value on the stack: reference results would
+    // need the typed form and buy nothing here, where the win is a straightened
+    // scalar condition.
+    if !matches!(
+        ty,
+        WirType::I32 | WirType::I64 | WirType::F32 | WirType::F64
+    ) {
+        return false;
+    }
+    // A decided condition is `try_eliminate_const_if`'s to fold away entirely.
+    if matches!(condition.peel_hint(), WirInstr::I32Const(_)) {
+        return false;
+    }
+    if !is_side_effect_free(condition.peel_hint()) {
+        return false;
+    }
+    let (Some(a), Some(b)) = (sole_arm_value(then_body), sole_arm_value(else_body)) else {
+        return false;
+    };
+    let arm_ok = |arm: &WirInstr| {
+        is_side_effect_free(arm)
+            && !may_trap_in(arm, null)
+            && within_node_budget(arm, ARM_NODE_BUDGET)
+    };
+    if !arm_ok(a) || !arm_ok(b) {
+        return false;
+    }
+    let ty = ty.clone();
+    let if_true = Box::new(a.clone());
+    let if_false = Box::new(b.clone());
+    let mut cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
+    // The branch is gone, so its hint has nothing left to describe.
+    cond.take_branch_hint();
+    *instr = WirInstr::Select {
+        condition: cond,
+        if_true,
+        if_false,
+        ty: Some(ty),
     };
     true
 }
@@ -1234,7 +1352,10 @@ mod tests {
             then_body: vec![WirInstr::I32Const(1)],
             else_body: Some(vec![WirInstr::I32Const(7)]),
         };
-        assert!(try_eliminate_const_if(&mut instr));
+        assert!(try_eliminate_const_if(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
         match &instr {
             WirInstr::Block { body, .. } => {
                 assert!(matches!(body.as_slice(), [WirInstr::I32Const(7)]));
@@ -1669,6 +1790,94 @@ mod tests {
             panic!("expected folded Block, got {inner:?}");
         };
         assert!(matches!(folded.as_slice(), [WirInstr::I32Const(1)]));
+    }
+
+    /// The shape `emit_binary_wir` gives `b >= 32 && b != 34`.
+    fn short_circuit_and(lhs: WirInstr, rhs: WirInstr) -> WirInstr {
+        WirInstr::If {
+            condition: Box::new(lhs),
+            result: Some(WirType::I32),
+            then_body: vec![rhs],
+            else_body: Some(vec![WirInstr::I32Const(0)]),
+        }
+    }
+
+    #[test]
+    fn peephole_selects_short_circuit_and() {
+        let mut instr = short_circuit_and(
+            WirInstr::I32GeU(
+                Box::new(local_get("b", WirType::I32)),
+                Box::new(WirInstr::I32Const(32)),
+            ),
+            WirInstr::I32Ne(
+                Box::new(local_get("b", WirType::I32)),
+                Box::new(WirInstr::I32Const(34)),
+            ),
+        );
+        assert!(try_select_pure_if(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
+        let WirInstr::Select {
+            if_true, if_false, ..
+        } = &instr
+        else {
+            panic!("expected Select, got {instr:?}");
+        };
+        assert!(matches!(if_true.as_ref(), WirInstr::I32Ne(..)));
+        assert!(matches!(if_false.as_ref(), WirInstr::I32Const(0)));
+    }
+
+    #[test]
+    fn peephole_keeps_branch_for_trapping_arm() {
+        // `select` evaluates both arms, so a divide that the branch guards
+        // against must stay behind it.
+        let mut instr = short_circuit_and(
+            WirInstr::I32Ne(
+                Box::new(local_get("d", WirType::I32)),
+                Box::new(WirInstr::I32Const(0)),
+            ),
+            WirInstr::I32DivS(
+                Box::new(local_get("n", WirType::I32)),
+                Box::new(local_get("d", WirType::I32)),
+            ),
+        );
+        assert!(!try_select_pure_if(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
+    }
+
+    #[test]
+    fn peephole_keeps_branch_for_effectful_condition() {
+        // `select` pops its condition last, so an arm would read `t` before
+        // the condition's tee wrote it.
+        let mut instr = short_circuit_and(
+            WirInstr::LocalTee {
+                name: "t".to_string(),
+                value: Box::new(local_get("c", WirType::I32)),
+            },
+            local_get("t", WirType::I32),
+        );
+        assert!(!try_select_pure_if(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
+    }
+
+    #[test]
+    fn peephole_keeps_branch_for_effectful_arm() {
+        let mut instr = short_circuit_and(
+            local_get("c", WirType::I32),
+            WirInstr::Call {
+                func_id: crate::wir::WirFuncId::new(0, "f".into()),
+                args: vec![],
+            },
+        );
+        assert!(!try_select_pure_if(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
     }
 
     #[test]

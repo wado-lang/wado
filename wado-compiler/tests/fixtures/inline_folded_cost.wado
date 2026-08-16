@@ -1,0 +1,63 @@
+// Inlining priced after the fold a constant argument causes.
+//
+// `emit` is over the `-O2` budget as written: it scans the key byte by byte,
+// and one arm of the branch that decides is long. Every call site passes a
+// constant key, so the scan folds and the long arm is pruned — what the caller
+// pays is the short arm, which fits. Pricing the body as written keeps the
+// call, and with it a scan loop per key at run time.
+//
+// Ordering matters as much as the price. `write_plain` is small enough to
+// inline into `emit`, and doing so first pushes `emit` back over the folded
+// budget — after which nothing below survives. So a callee inlinable only
+// folded receives no inlining itself, which is what a stdlib
+// `#[inline(never)]` on the leaf otherwise applies by hand.
+
+use { println, Stdout } from "core:cli";
+
+fn scan_free(s: &String) -> bool {
+    let n = s.len();
+    for let mut i = 0; i < n; i += 1 {
+        if s.get_byte_unchecked(i) != 0x2E {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+fn write_plain(out: &mut String, key: &String) {
+    out.push('[');
+    out.push_str(key);
+    out.push(']');
+}
+
+fn emit(out: &mut String, key: &String, value: i32) {
+    if scan_free(key) {
+        write_plain(out, key);
+    } else {
+        out.push('<');
+        out.push('?');
+        out.push_str(key);
+        out.push('?');
+        out.push('>');
+        out.push('!');
+    }
+    out.push_display(&value);
+}
+
+export fn run() with Stdout {
+    let mut out = "";
+    emit(&mut out, &"alpha", 1);
+    emit(&mut out, &"be.ta", 2);
+    emit(&mut out, &"gamma", 3);
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "[alpha]1<?be.ta?>!2[gamma]3\n",
+    "wir_not_expect:O2": [
+        "\"inline_folded_cost.wado/emit\"(",
+        "\"inline_folded_cost.wado/scan_free\"("
+    ]
+}

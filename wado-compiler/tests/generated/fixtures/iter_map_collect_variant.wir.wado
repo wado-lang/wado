@@ -241,11 +241,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b3 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b3 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l4;
         };
     };
@@ -310,9 +306,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     i_4 = 0;
     _licm_used_12 = self.used;
     _licm_repr_13 = self.repr;
-    b11: block {
-        l12: loop {
-            break_if b11 i_4 >= _licm_used_12;
+    b10: block {
+        l11: loop {
+            break_if b10 i_4 >= _licm_used_12;
             if i_4 > 0 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(buf_2, separator);
             }
@@ -322,7 +318,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                 break __inline_core_prelude_format_wado_Formatter__pad_spec0_0;
             };
             i_4 = i_4 + 1;
-            continue l12;
+            continue l11;
         };
     };
     return buf_2;
@@ -343,8 +339,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     _licm_end_15 = _licm_inner_13.end;
     _licm_repr_16 = _licm_inner_13.repr;
     __hfs_index_17 = _licm_inner_13.index;
-    b14: block {
-        l15: loop {
+    b13: block {
+        l14: loop {
             __fused___inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_ArrayIter_iter_map_collect_variant_wado_Color__core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_3: block {
                 __fused___inline_core_prelude_slice_wado_ArrayIter_iter_map_collect_variant_wado_Color__core_prelude_traits_wado_Iterator__next_4: block {
                     break_if __fused___inline_core_prelude_slice_wado_ArrayIter_iter_map_collect_variant_wado_Color__core_prelude_traits_wado_Iterator__next_4 __hfs_index_17 >= _licm_end_15;
@@ -359,9 +355,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                     break __fused___inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_ArrayIter_iter_map_collect_variant_wado_Color__core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_3;
                 };
                 _licm_inner_13.index = __hfs_index_17;
-                break b14;
+                break b13;
             };
-            continue l15;
+            continue l14;
         };
     };
     return result;

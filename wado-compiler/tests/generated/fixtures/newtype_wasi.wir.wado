@@ -96,11 +96,7 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
     let rx_42: i32;
     let tx_43: i32;
     t1 = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
-    if (if t1 == t1 -> i32 {
-        t1 == t1;
-    } else {
-        0;
-    }) {
+    if select i32(t1 == t1, t1 == t1, 0) {
         rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
         tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
         handle_12 = "newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
@@ -203,11 +199,7 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
     let tx_31: i32;
     start = "newtype_wasi.wado/__cm_binding__MonotonicClock_now"();
     res = "newtype_wasi.wado/__cm_binding__MonotonicClock_get_resolution"();
-    if (if start >u 0_i64 -> i32 {
-        res >u 0_i64;
-    } else {
-        0;
-    }) {
+    if select i32(start >u 0_i64, res >u 0_i64, 0) {
         rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
         tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
         handle_9 = "newtype_wasi.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
@@ -303,12 +295,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b10: block {
-        l11: loop {
-            break_if b10 i >= len;
+    b8: block {
+        l9: loop {
+            break_if b8 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l11;
+            continue l9;
         };
     };
 }
@@ -332,20 +324,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b12: block {
-        l13: loop {
-            break_if b12 offset >= count;
+    b10: block {
+        l11: loop {
+            break_if b10 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b12 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
-            continue l13;
+            break_if b10 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l11;
         };
     };
 }

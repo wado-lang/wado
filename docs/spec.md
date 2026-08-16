@@ -4599,6 +4599,34 @@ interface Dom {
 }
 ```
 
+#### Default Implementations
+
+An `interface` is a trait with a different dispatch story, and its members are written exactly as a trait's are: an operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation — what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
+
+```wado
+interface Log {
+    fn emit(message: String) {
+        log_stderr(message);          // no handler installed: degrade, don't trap
+    }
+
+    fn level() -> i32;                // no default: unhandled dispatch traps
+}
+```
+
+A default fills a handler that leaves the operation out, and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles — so a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
+
+A default is a handler body, so it runs in the outer scope like every other one (see [Handlers](#handlers)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops — a trait default calling `self.other()` reaches the impl's override, a filled operation's does not.
+
+Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
+
+- a body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method) — its no-handler case is the CM adapter, so the body could never run;
+- a body on an `async` operation — its call site is typed as an `AsyncCall`, which a plain body does not produce;
+- a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
+- a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
+- a `with` clause — an operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared; a default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code;
+- a `stores` clause — nothing checks it on an operation, so it would constrain call sites on a promise the handler never makes;
+- type parameters — dispatch holds one slot per operation, not one per instantiation.
+
 #### Colorless Async
 
 - Effect declarations never use the `async` keyword—Wado is fully colorless

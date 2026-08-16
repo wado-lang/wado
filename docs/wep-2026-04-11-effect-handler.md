@@ -250,10 +250,15 @@ fn test_logging() with Stdout {
 
 ### Handling Granularity: `..forward` and `..trap`
 
-By default, `impl Effect for Type` must implement every operation of the effect (like a complete trait impl); a missing operation is a compile error. A trailing rest clause opts the unimplemented operations into one of two behaviours:
+An `impl Effect for Type` covers the operations it means to answer for. What happens to the rest is decided in this order:
+
+- an operation the interface gave a default implementation runs that default, filling the slot the way a trait's default method fills an impl — except that it runs in the outer scope like every handler body, so an `Effect::op(...)` inside it reaches the next handler out rather than the handler it is filling;
+- otherwise the operation traps if it is ever dispatched.
+
+A trailing rest clause overrides both, for every operation the block leaves out:
 
 - `..forward` — forward each to the outer handler of the same effect (the layer / middleware case).
-- `..trap` — trap if called (the mock / test case).
+- `..trap` — trap if called (the mock / test case), including operations that have a default: a mock that says an operation must not be called means it.
 
 `forward` and `trap` are contextual keywords, recognised only in this rest position. There is no bare `..`: the choice between forwarding and trapping is always explicit, since silently picking either is a footgun (a forwarded mock leaks to the real outer handler; a trapping layer breaks composition).
 
@@ -288,7 +293,7 @@ impl TcpSocket for MinimalTcp {
 }
 ```
 
-`..forward` desugars each missing operation to `fn op(args) { resume Effect::op(args) }`. A handler body runs in the outer scope (see Effect Forwarding), so the call reaches the outer handler, not itself. With no outer handler installed it traps like any unhandled operation — so `..forward` on the outermost handler of an effect behaves like `..trap` for the operations it omits; a leaf sink that wants a no-op must implement that operation explicitly.
+`..forward` desugars each missing operation to `fn op(args) { resume Effect::op(args) }`. A handler body runs in the outer scope (see Effect Forwarding), so the call reaches the outer handler, not itself. With no outer handler installed it reaches the operation's default implementation — the body the `interface` declared for it — and traps only if the declaration gave it none. So `..forward` on the outermost handler is `..trap` for the operations it omits _and_ the interface leaves undefaulted; where a default exists, a layer that decorates one operation is installable on its own.
 
 ### Resume Keyword
 
@@ -852,7 +857,7 @@ Nesting composes naturally — each `with` block links to the previous dispatch 
 
 ### Rest clause: `..trap` / `..forward`
 
-Each unimplemented operation gets a stub funcref in the dispatch record. `..trap` installs a trap stub: `(func $trap (...) (unreachable))`. `..forward` installs a forward stub that calls the operation's wrapper with `outer` already restored, reaching the outer handler — the codegen of `fn op(args) { resume Effect::op(args) }`. With no outer handler the wrapper falls through to the default / CM adapter, or traps if the effect has none.
+Each unimplemented operation gets a stub funcref in the dispatch record. `..trap` installs a trap stub: `(func $trap (...) (unreachable))`. `..forward` installs a forward stub that calls the operation's wrapper with `outer` already restored, reaching the outer handler — the codegen of `fn op(args) { resume Effect::op(args) }`. With no outer handler the wrapper falls through to its no-handler branch: the operation's default implementation (`$effect_default$<Interface>$<op>`, the body the `interface` declared), the CM adapter for a `#[cm]`-backed operation, or a trap when there is neither.
 
 ### Binary Size
 

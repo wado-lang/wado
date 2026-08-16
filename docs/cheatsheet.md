@@ -1171,6 +1171,18 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `stores`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+
+```wado
+interface Log {
+    fn emit(message: String) {
+        log_stderr(message);   // no handler installed: degrade, don't trap
+    }
+
+    fn level() -> i32;         // no default: unhandled dispatch traps
+}
+```
+
 ## Entrypoints
 
 The entrypoint is defined in a world, which requires `export` keyword.
@@ -1421,6 +1433,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time (`Instant`, `ZonedDateTime`)
+- [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)
 - [`core:router`](./stdlib-core-router.md) — HTTP path router
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities

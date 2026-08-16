@@ -150,6 +150,11 @@ fn check_item(
                 check_function(sem, module, method, out);
             }
         }
+        Item::Interface(interface_decl) => {
+            for method in &interface_decl.methods {
+                check_function(sem, module, method, out);
+            }
+        }
         Item::Test(test) => check_block(sem, module, &test.body, out),
         _ => {}
     }

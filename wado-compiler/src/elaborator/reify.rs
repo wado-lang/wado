@@ -682,6 +682,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 Item::Interface(effect_decl) => {
                     tir_module.add_effect(self.reify_effect_decl(effect_decl));
+                    // An operation's default body is an ordinary function under
+                    // a synthesized name; the dispatch wrapper's no-handler
+                    // branch calls it. Never dead-item-filtered: the only call
+                    // to it is synthesized after liveness ran.
+                    for method in default_impl_methods(effect_decl) {
+                        if let Some(tir_func) = self.reify_function(&method) {
+                            tir_module.add_function(tir_func);
+                        }
+                    }
                 }
                 Item::Resource(resource_decl) => {
                     tir_module.add_resource(self.reify_resource_decl(resource_decl));
@@ -9473,12 +9482,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
             ast::Literal::LocationFunction => {
-                // `#function`; in a default, the calling function.
+                // `#function`; in a default, the calling function. Rendered,
+                // so an operation's default body reports the operation rather
+                // than the synthesized name its body is stored under.
                 let name = match &self.call_site_location {
                     Some(loc) => loc.function_name.clone(),
                     None => ctx.function_name.clone(),
                 };
-                TirExprKind::StringLiteral(name)
+                TirExprKind::StringLiteral(crate::name::display_function_name(&name))
             }
             ast::Literal::LocationFile => {
                 // `#file`; in a default, the caller's module.
@@ -10531,4 +10542,22 @@ fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeI
     }
 
     in_expr(body)
+}
+
+/// The operations an interface declares a default implementation for, each
+/// renamed to its synthesized function name.
+///
+/// The rename is what keeps a default out of the module's own namespace: an
+/// operation and a facade function that wraps it share a name by design
+/// (`core:log`'s `Log::event` and `event`), and every fact either pass records
+/// is keyed by the unchanged `AstId`, so resolve and reify still agree.
+pub(crate) fn default_impl_methods(decl: &crate::ast::InterfaceDecl) -> Vec<crate::ast::Function> {
+    decl.methods
+        .iter()
+        .filter(|method| method.body.is_some())
+        .map(|method| crate::ast::Function {
+            name: crate::name::effect_default_impl_name(&decl.name, &method.name),
+            ..method.clone()
+        })
+        .collect()
 }
