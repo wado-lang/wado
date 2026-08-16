@@ -207,8 +207,10 @@ test "highlight example/llm.wado" {
     assert_highlights(&#include_str("../../example/llm.wado"));
 }
 
-test "highlight example/logger_poc.wado" {
-    assert_highlights(&#include_str("../../example/logger_poc.wado"));
+// The stdlib's `core:log`, for the syntax no `example/` file carries:
+// effect handlers with `resume` and `..forward`, `#[ambient]`, `#[param]`.
+test "highlight core:log" {
+    assert_highlights(&#include_str("../../wado-compiler/lib/core/log.wado"));
 }
 
 test "highlight example/mustache.wado" {

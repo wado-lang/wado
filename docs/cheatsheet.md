@@ -1401,6 +1401,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time (`Instant`, `ZonedDateTime`)
+- [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)
 - [`core:router`](./stdlib-core-router.md) — HTTP path router
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities
