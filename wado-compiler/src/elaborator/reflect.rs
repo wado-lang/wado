@@ -222,10 +222,9 @@ struct PackHead {
     index: u32,
 }
 
-/// The dispatch record's per-parameter mutability. A reflect member's single
-/// argument — the subject for `discriminant(&self)` / `bits(&self)`, the raw
-/// scalar for `from_<value>(raw)` — is never `mut`; a metadata member takes no
-/// argument at all.
+/// The dispatch record's per-parameter mutability. A reflect member takes
+/// either one never-`mut` argument — the subject of `discriminant(&self)` /
+/// `bits(&self)`, the raw scalar of `from_<value>(raw)` — or none.
 fn arg_param_is_mut(takes_argument: bool) -> Vec<bool> {
     if takes_argument {
         vec![false]
@@ -1042,9 +1041,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Map the `[..P]` pack `T`'s bound projects through `elem`, rewrapped in
-    /// the `[..X]` tuple shape a member type carries. The single place the
-    /// projected pack is scanned out of the bound; `None` when `T` carries no
-    /// such pack bound.
+    /// the `[..X]` tuple shape a member type carries. `None` when `T` carries
+    /// no such pack bound.
     fn map_bound_pack(
         &mut self,
         type_param_name: &str,

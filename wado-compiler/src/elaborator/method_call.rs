@@ -1322,11 +1322,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         // `Reflect{Struct,Variant,Enum,Flags}::<T>::method()` — a reflect trait
-        // is a (sealed) trait, not a type, so `target_type` would not resolve.
-        // Intercept and route to the concrete `T`'s synthesized
-        // `T^Trait::method` (WEP 2026-06-13 §1 / §3b–d). This is the only
-        // spelling for reflection metadata; a bare `T::members()` never
-        // resolves, so type namespaces stay clean.
+        // is a trait, not a type, so `target_type` would not resolve. Intercept
+        // and route to the concrete `T`'s synthesized `T^Trait::method` (WEP
+        // 2026-06-13 §1 / §3b–d). It is the only spelling: a bare
+        // `T::members()` never resolves, so type namespaces stay clean.
         if let ast::Type::Generic(g) = &static_call.target_type
             && let Some(self_ty_ast) = g.args.first()
         {

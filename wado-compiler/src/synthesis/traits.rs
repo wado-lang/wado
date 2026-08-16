@@ -71,18 +71,9 @@ const KEYED: &str = "a compiler trait item names a declaration";
 /// The `(receiver, module, trait)` triples a demand-driven synthesis was asked
 /// for, and the shape the still-pending ones are accumulated in. The receiver
 /// is [`SynthesisCtx::key`]'s rendered head; the trait is its declaration.
-///
 // TODO(declaration-identity): the receiver half is a spelling used as a set
-// key, which WEP 2026-08-12 §4 / §9 forbid — a declaration is compared to a
-// declaration, never to the spelling that reached it. It cannot become a bare
-// `DefId` either: `SynthesisCtx::instance_has_impl` keys a monomorphized
-// instantiation (`Fn<1,i32>`), which no declaration names. The WEP's own answer
-// is the declaration-or-shape sum, so this becomes
-// `(TypeHead, ModuleSource, DefId)` — `Declared` compared by its `DefId`,
-// `Shape` by its rendering. `FqTypeName::head()` already hands one over;
-// `SynthesisCtx::key` discards it by calling `.rendered()`. Changing it here
-// enumerates every producer and consumer, including
-// `TypeTable::record_bound_driven_synth_request` and its elaborator callers.
+// key, which WEP 2026-08-12 forbids. Its Remaining work says what replaces it
+// and why a bare `DefId` is not it.
 pub(crate) type SynthRequests = IndexSet<(String, ModuleSource, crate::defs::DefId)>;
 
 impl TraitsStdlibNames {
@@ -2151,9 +2142,8 @@ struct ReflectEnumTarget {
     wire_name_policy: Option<String>,
 }
 
-/// Which payload-free kind an env was resolved for. One env type now serves
-/// both, so this is what keeps a flags env out of the enum generator: the
-/// separate env types used to make that a compile error.
+/// Which payload-free kind an env was resolved for: one env type serves both,
+/// so only this keeps a flags env out of the enum generator.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ScalarKind {
     Enum,
