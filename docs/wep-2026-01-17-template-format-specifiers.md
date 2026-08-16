@@ -63,9 +63,15 @@ Where `spec` follows Rust's format specification mini-language.
 | `X`       | UpperHex   | Uppercase hex         | `${x:X}` → `"2A"`     |
 | `e`       | LowerExp   | Lowercase exponential | `${x:e}` → `"4.2e1"`  |
 | `E`       | UpperExp   | Uppercase exponential | `${x:E}` → `"4.2E1"`  |
+| `f`       | Display    | Fixed-point           | `${x:.2f}` → `"3.14"` |
 
 **Notes**:
 
+- `f` selects no separate trait: `Display` already honours `precision`, so
+  `${x:.2f}` and `${x:.2}` render the same. It exists so a float format reads as
+  one.
+- The grammar is closed: any other specifier character is a compile error. A
+  printf-ism like `${x:08d}` does not silently lose its `d`.
 - No `g`/`G` format specifiers. Users must explicitly choose between default `{}` and exponential `${:e}/${:E}`.
 - No `p` (Pointer) format specifier. Wado does not have pointer types.
 - Negative signed integers format as the two's complement bit pattern of the value's own width under `b`/`o`/`x`/`X` (e.g. `${-1 as i32:x}` → `"ffffffff"`), matching Rust.

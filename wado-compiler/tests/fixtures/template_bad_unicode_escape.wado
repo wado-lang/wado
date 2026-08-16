@@ -1,0 +1,11 @@
+// A malformed `\u` escape inside a template must not swallow the closing
+// backtick. The template scanner used to consume four characters unconditionally
+// — delimiter included — so this reported "unterminated template string" from
+// the following line instead of naming the bad escape, as a plain `"\u12"`
+// already did.
+export fn run() {
+    let _ = `\u12`;
+}
+
+__DATA__
+{"compile_error": "expected 4 hex digits after \\u"}

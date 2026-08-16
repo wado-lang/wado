@@ -1,0 +1,11 @@
+// A format specifier the grammar does not accept is a syntax error. It used to
+// be parsed leniently and the unrecognised part silently dropped, so `${n:qq}`
+// compiled and rendered as a bare `${n}` — a typo'd width or fill formatted
+// nothing with no way to notice.
+export fn run() {
+    let n = 42;
+    let _ = `${n:qq}`;
+}
+
+__DATA__
+{"compile_error": "unknown format specifier `q`"}

@@ -2216,6 +2216,7 @@ impl Parser {
             TokenKind::Ident(name) => name,
             _ => unreachable!("parse_labeled_block_stmt called without identifier"),
         };
+        self.check_label_available(&label, start_span)?;
 
         // Consume the colon
         self.expect(&TokenKind::Colon)?;
@@ -3925,6 +3926,7 @@ impl Parser {
                 return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
+                self.check_label_available(&name, start_span)?;
                 self.advance(); // consume ':'
                 let block = self.parse_block()?;
                 let end_span = block.span;
@@ -5947,21 +5949,22 @@ impl Parser {
                     format,
                     origin,
                 } => {
-                    // The lexer already split off the format specifier, so the
-                    // expression source is parsed as-is (trimmed of surrounding
-                    // whitespace). Trimming moves the origin with it, or every
-                    // span inside a `${ x }` would sit one column early.
+                    // The specifier sits one `:` past the expression source the
+                    // lexer split off, so its position follows from the origin.
+                    let spec_origin = advance_position(advance_position(origin, &expr), ":");
+                    // The expression source is parsed as-is (trimmed of
+                    // surrounding whitespace). Trimming moves the origin with
+                    // it, or every span inside a `${ x }` would sit one column
+                    // early.
                     let trimmed = expr.trim_start();
-                    let origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
-                    let parsed = self.parse_interpolation_expr(trimmed.trim_end(), span, origin)?;
+                    let expr_origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
+                    let parsed =
+                        self.parse_interpolation_expr(trimmed.trim_end(), origin, expr_origin)?;
                     let format_spec = match format {
-                        Some(spec) if spec.is_empty() => {
-                            return Err(ParseError {
-                                message: "empty format specifier in template string".to_string(),
-                                span,
-                            });
+                        Some(spec) => {
+                            self.check_format_spec(&spec, spec_origin)?;
+                            Some(FormatSpec { spec })
                         }
-                        Some(spec) => Some(FormatSpec { spec }),
                         None => None,
                     };
                     parts.push(TemplatePart::Interpolation {
@@ -5979,6 +5982,36 @@ impl Parser {
         })))
     }
 
+    /// Reject a label the compiler reserves for its own synthesised blocks.
+    /// Passes recognise those blocks by label, so source must not be able to
+    /// write one.
+    fn check_label_available(&mut self, label: &str, span: Span) -> ParseResult<()> {
+        if crate::name::is_reserved_label(label) {
+            return Err(ParseError {
+                message: format!(
+                    "label `{label}` is reserved for the compiler; a label cannot start with `{}`",
+                    crate::name::SYNTHETIC_LABEL_PREFIX
+                ),
+                span,
+            });
+        }
+        Ok(())
+    }
+
+    /// Reject a malformed format specifier. `origin` is where the specifier
+    /// text starts in the file, so the offset [`crate::format_spec`] reports
+    /// lands on the offending character instead of on the whole template.
+    fn check_format_spec(&mut self, spec: &str, origin: crate::token::Position) -> ParseResult<()> {
+        let Err(error) = crate::format_spec::parse(spec) else {
+            return Ok(());
+        };
+        let at = advance_position(origin, &spec[..error.offset]);
+        Err(ParseError {
+            message: format!("{error} in template string"),
+            span: span_of(at, spec[error.offset..].chars().next().unwrap_or_default()),
+        })
+    }
+
     /// Parse an interpolation expression string.
     ///
     /// `origin` is where `expr_str`'s first byte sits in the file. The fragment
@@ -5986,16 +6019,20 @@ impl Parser {
     /// one is rebased before it can reach the AST, or a node inside `${…}`
     /// would carry an offset that indexes unrelated text and a column measured
     /// from the wrong place.
+    ///
+    /// `open` is where the `${` that introduces the interpolation ends — the
+    /// anchor an empty-expression error points at, since it has no text of its
+    /// own to blame.
     fn parse_interpolation_expr(
         &mut self,
         expr_str: &str,
-        span: Span,
+        open: crate::token::Position,
         origin: crate::token::Position,
     ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
             return Err(ParseError {
                 message: "empty interpolation expression in template string".to_string(),
-                span,
+                span: span_of_open_brace(open),
             });
         }
 
@@ -6170,6 +6207,38 @@ fn advance_position(origin: crate::token::Position, text: &str) -> crate::token:
             None => origin.column + text.chars().count(),
         },
     }
+}
+
+/// A single-character span at `at`. An empty `ch` yields the zero-width span
+/// the end of the text deserves.
+fn span_of(at: crate::token::Position, ch: char) -> Span {
+    let width = ch.len_utf8();
+    Span::with_end(
+        at.offset,
+        at.offset + width,
+        at.line,
+        at.column,
+        at.line,
+        at.column + usize::from(width > 0),
+    )
+}
+
+/// The span of the `${` whose expression starts at `origin`. Both characters
+/// are ASCII and always precede the expression on the same line, so the opening
+/// column is two back.
+fn span_of_open_brace(origin: crate::token::Position) -> Span {
+    assert!(
+        origin.offset >= 2 && origin.column >= 3,
+        "an interpolation origin always follows `${{`"
+    );
+    Span::with_end(
+        origin.offset - 2,
+        origin.offset,
+        origin.line,
+        origin.column - 2,
+        origin.line,
+        origin.column,
+    )
 }
 
 /// Rebase a position produced by lexing a fragment on its own onto the file the
@@ -7278,6 +7347,78 @@ mod tests {
             } else {
                 panic!("expected assert statement");
             }
+        }
+    }
+
+    /// A malformed format specifier is a syntax error, not something the
+    /// compiler silently drops, and the span points at the offending character
+    /// rather than at the whole template.
+    #[test]
+    fn test_template_format_spec_errors_are_reported_precisely() {
+        // `blamed` is the substring the span must cover, located in the source
+        // so the expectation cannot drift with the prefix's length.
+        let cases: [(&str, &str, &str); 4] = [
+            ("`ab${x:zz}`", "unknown format specifier `z`", "zz}`"),
+            ("`ab${x:5:8}`", "unknown format specifier `:`", ":8}`"),
+            ("`ab${x:.}`", "expected digits after `.`", "}`"),
+            ("`ab${x:}`", "empty format specifier", "}`"),
+        ];
+        for (template, expected, blamed) in cases {
+            let source = format!("fn f() {{ let x = 1; let s = {template}; }}");
+            let (_, errors) = parse_recovering(&source);
+            let hit = errors
+                .iter()
+                .find(|e| e.message.contains(expected))
+                .unwrap_or_else(|| panic!("{template}: no `{expected}` in {errors:?}"));
+            let want = source.find(blamed).expect("blamed substring");
+            assert_eq!(hit.span.start, want, "{template}: span {:?}", hit.span);
+            assert_eq!(hit.span.column, want + 1, "{template}: span {:?}", hit.span);
+        }
+    }
+
+    /// A `__`-prefixed label is the compiler's namespace: synthesised blocks
+    /// carry one and passes recognise them by it, so source cannot mint one.
+    #[test]
+    fn test_reserved_label_rejected() {
+        for source in [
+            "fn f() { __tmpl: { break __tmpl; } }",
+            "fn f() { let x = __tmpl: { break __tmpl: 1; }; }",
+        ] {
+            let (_, errors) = parse_recovering(source);
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.message.contains("`__tmpl` is reserved")),
+                "{source}: {errors:?}"
+            );
+        }
+        let (_, errors) = parse_recovering("fn f() { outer: { break outer; } }");
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    /// An empty interpolation points at the `${` that opens it.
+    #[test]
+    fn test_template_empty_interpolation_span() {
+        let source = "fn f() { let s = `ab${}cd`; }";
+        let (_, errors) = parse_recovering(source);
+        let hit = errors
+            .iter()
+            .find(|e| e.message.contains("empty interpolation expression"))
+            .unwrap_or_else(|| panic!("no empty-interpolation error in {errors:?}"));
+        let want = source.find("${}").expect("interpolation");
+        assert_eq!(hit.span.start, want, "span {:?}", hit.span);
+        assert_eq!(hit.span.end, want + 2, "span {:?}", hit.span);
+    }
+
+    /// Every specifier the stdlib and fixtures rely on keeps parsing.
+    #[test]
+    fn test_template_format_specs_accepted() {
+        for spec in [
+            "?", "#?", "x", "#010X", "*^10.2", "+08", ".2f", "0.2f", "-<8", "<15e", " 5 ",
+        ] {
+            let source = format!("fn f() {{ let x = 1; let s = `${{x:{spec}}}`; }}");
+            let (_, errors) = parse_recovering(&source);
+            assert!(errors.is_empty(), "spec `{spec}`: {errors:?}");
         }
     }
 

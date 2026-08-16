@@ -17,6 +17,7 @@ pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
 pub mod flat_package;
+pub mod format_spec;
 pub mod hashmap;
 pub mod intern;
 pub mod kiln;
@@ -116,10 +117,10 @@ fn trait_bound_violation_message(
         ..
     } = violation;
     let mut msg = format!("type `{type_display}` does not implement trait `{trait_display}`");
-    // `Display` has a ready `{x:?}` alternative; `display_trait_name` comes
+    // `Display` has a ready `${x:?}` alternative; `display_trait_name` comes
     // from the registry, not a literal.
     if trait_display == display_trait_name {
-        msg.push_str("; use `{x:?}` for debug output, or add an `impl Display`");
+        msg.push_str("; use `${x:?}` for debug output, or add an `impl Display`");
     }
     msg
 }

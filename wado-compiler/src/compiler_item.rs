@@ -45,6 +45,75 @@ impl SeqField {
     }
 }
 
+/// The fields of `core:prelude/format::Formatter`, in declaration order.
+///
+/// Template expansion builds a `Formatter` literal field by field, and the NIR
+/// template-hoist matches one back apart; both name the fields through this
+/// enum rather than string literals, so reordering or renaming a field on the
+/// Wado side is a one-line change here instead of a silent miscompile.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FormatterField {
+    /// `fill: char` — the padding character.
+    Fill,
+    /// `align: Alignment` — how the value sits within `width`.
+    Align,
+    /// `sign_plus: bool` — render `+` on positive numbers.
+    SignPlus,
+    /// `zero_pad: bool` — pad with `0` rather than `fill`.
+    ZeroPad,
+    /// `width: i32` — minimum field width; [`Self::NO_WIDTH`] for none.
+    Width,
+    /// `precision: i32` — float decimals / sequence cap;
+    /// [`Self::PRECISION_DEFAULT`] for none.
+    Precision,
+    /// `indent: i32` — the pretty-printing depth `InspectAlt` tracks.
+    Indent,
+    /// `buf: &mut String` — the output buffer.
+    Buf,
+}
+
+impl FormatterField {
+    /// Declaration order, which is also the struct's field indexing.
+    pub const ALL: [Self; 8] = [
+        Self::Fill,
+        Self::Align,
+        Self::SignPlus,
+        Self::ZeroPad,
+        Self::Width,
+        Self::Precision,
+        Self::Indent,
+        Self::Buf,
+    ];
+
+    /// `Formatter.width` when the spec sets none — mirrors the Wado-side
+    /// default on `Formatter::new`.
+    pub const NO_WIDTH: i32 = -1;
+    /// `Formatter::PRECISION_DEFAULT` — no precision in the spec, so sequence
+    /// `Inspect` applies its own cap.
+    pub const PRECISION_DEFAULT: i32 = -2;
+
+    /// The Wado-side field name — the single source of truth for it.
+    #[must_use]
+    pub const fn field_name(self) -> &'static str {
+        match self {
+            Self::Fill => "fill",
+            Self::Align => "align",
+            Self::SignPlus => "sign_plus",
+            Self::ZeroPad => "zero_pad",
+            Self::Width => "width",
+            Self::Precision => "precision",
+            Self::Indent => "indent",
+            Self::Buf => "buf",
+        }
+    }
+
+    /// The field's positional index within the struct.
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self as u32
+    }
+}
+
 /// Every compiler-recognized stdlib item. Each variant's canonical
 /// [`CompilerItem::attr_name`] must match the `#[compiler_item("…")]` argument
 /// on the Wado declaration. Names are flat `snake_case`: `<type>_<method>` for a
@@ -213,7 +282,7 @@ pub enum CompilerItem {
     Display,
     /// `core:prelude/traits::DisplayAlt` — `{x:#}` dispatch.
     DisplayAlt,
-    /// `core:prelude/traits::Inspect` — `{x:?}` dispatch.
+    /// `core:prelude/traits::Inspect` — `${x:?}` dispatch.
     Inspect,
     /// `core:prelude/traits::InspectAlt` — `{x:#?}` dispatch.
     InspectAlt,
@@ -354,6 +423,9 @@ pub enum CompilerItem {
     ReflectFlagsMembers,
     /// `ReflectFlags::wire_name_policy` — the flags type's `#[wire(name_policy)]`.
     ReflectFlagsWireNamePolicy,
+    /// `String::with_capacity` — the buffer allocation template expansion
+    /// emits and the NIR template-hoist recognises.
+    StringWithCapacity,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -590,6 +662,7 @@ impl CompilerItem {
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
         Self::ReflectFlagsWireNamePolicy,
+        Self::StringWithCapacity,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
@@ -753,6 +826,7 @@ impl CompilerItem {
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
             Self::ReflectFlagsWireNamePolicy => "reflect_flags_wire_name_policy",
+            Self::StringWithCapacity => "string_with_capacity",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
@@ -872,6 +946,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::ReflectFlagsWireNamePolicy
+            | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
@@ -1070,6 +1145,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::ReflectFlagsWireNamePolicy
+            | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
