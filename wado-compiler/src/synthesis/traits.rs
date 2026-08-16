@@ -2151,11 +2151,21 @@ struct ReflectEnumTarget {
     wire_name_policy: Option<String>,
 }
 
+/// Which payload-free kind an env was resolved for. One env type now serves
+/// both, so this is what keeps a flags env out of the enum generator: the
+/// separate env types used to make that a compile error.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ScalarKind {
+    Enum,
+    Flags,
+}
+
 /// The compiler items one payload-free reflect kind names. `ReflectEnum` and
 /// `ReflectFlags` declare the same five members — differing only in the scalar
 /// they bridge through (`i32` discriminant / `u64` bits) — so one env serves
 /// both, as `ScalarReflectSpec` does on the elaborator side.
 struct ScalarReflectItems {
+    kind: ScalarKind,
     member_struct: CompilerItem,
     type_name: CompilerItem,
     value: CompilerItem,
@@ -2165,6 +2175,7 @@ struct ScalarReflectItems {
 }
 
 const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
+    kind: ScalarKind::Enum,
     member_struct: CompilerItem::ReflectEnumCase,
     type_name: CompilerItem::ReflectEnumTypeName,
     value: CompilerItem::ReflectEnumDiscriminant,
@@ -2174,6 +2185,7 @@ const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
 };
 
 const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
+    kind: ScalarKind::Flags,
     member_struct: CompilerItem::ReflectFlagsBit,
     type_name: CompilerItem::ReflectFlagsTypeName,
     value: CompilerItem::ReflectFlagsBits,
@@ -2185,6 +2197,7 @@ const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every payload-free type's reflect synthesis.
 struct ScalarReflectSynthEnv {
+    kind: ScalarKind,
     string_type: TypeId,
     case_style_type: TypeId,
     member_struct_name: String,
@@ -2207,6 +2220,7 @@ impl ScalarReflectSynthEnv {
         let (member_struct_name, member_struct_def) = resolve_member_struct(tt, kind.member_struct);
         let items = tt.compiler_items();
         Self {
+            kind: kind.kind,
             string_type,
             case_style_type,
             member_struct_name,
@@ -2228,6 +2242,7 @@ fn generate_enum_reflect_methods(
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
 ) -> Vec<TirFunction> {
+    assert_eq!(env.kind, ScalarKind::Enum);
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
@@ -2593,6 +2608,7 @@ fn generate_flags_reflect_methods(
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
 ) -> Vec<TirFunction> {
+    assert_eq!(env.kind, ScalarKind::Flags);
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(

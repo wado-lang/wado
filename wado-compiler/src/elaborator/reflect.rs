@@ -222,10 +222,11 @@ struct PackHead {
     index: u32,
 }
 
-/// The dispatch record's per-parameter mutability. A value-reading member
-/// (`discriminant(&self)` / `bits(&self)` / `from_<value>(raw)`) takes exactly
-/// one non-mut argument; a metadata member takes none.
-fn receiver_param_is_mut(takes_argument: bool) -> Vec<bool> {
+/// The dispatch record's per-parameter mutability. A reflect member's single
+/// argument — the subject for `discriminant(&self)` / `bits(&self)`, the raw
+/// scalar for `from_<value>(raw)` — is never `mut`; a metadata member takes no
+/// argument at all.
+fn arg_param_is_mut(takes_argument: bool) -> Vec<bool> {
     if takes_argument {
         vec![false]
     } else {
@@ -334,7 +335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Record a reflect call's dispatch fact for reify. A reflection member
     /// carries no method-level type args, no parameter defaults and no
-    /// self-in-args, so only the callee and the receiver's mutability vary.
+    /// self-in-args, so only the callee and the argument list vary.
     fn record_reflect_dispatch(
         &mut self,
         call_id: ast::AstId,
@@ -957,11 +958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method,
             module_source,
         );
-        self.record_reflect_dispatch(
-            static_call.id,
-            func_ref,
-            receiver_param_is_mut(is_discriminant),
-        );
+        self.record_reflect_dispatch(static_call.id, func_ref, arg_param_is_mut(is_discriminant));
 
         return_type
     }
@@ -1038,7 +1035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_name,
             method,
             static_call,
-            receiver_param_is_mut(is_discriminant),
+            arg_param_is_mut(is_discriminant),
         );
 
         return_type
@@ -1535,7 +1532,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reflect_scalar_param_is_mut(&self, spec: ScalarReflectSpec, method: &str) -> Vec<bool> {
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        receiver_param_is_mut(
+        arg_param_is_mut(
             method == items.method_name(spec.value_method_item)
                 || method == items.method_name(spec.from_method_item),
         )
