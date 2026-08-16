@@ -750,8 +750,8 @@ fn a_bare_dash_o_is_rejected_by_every_subcommand() {
     );
 }
 
-/// `-f` is the codegen feature flag in every subcommand that compiles —
-/// including `test`, whose `--filter` no longer claims it.
+/// `-f` is the codegen feature flag in every subcommand that compiles, `test`
+/// included; `--filter` is spelled long.
 #[test]
 fn dash_f_is_the_feature_flag_in_test() {
     let parser = Parser::from_args(&["-f", "no-branch-hinting", "a.wado"]);
