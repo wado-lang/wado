@@ -4,22 +4,14 @@
 //! the emitted trait calls resolve there — no post-mono `has_trait_impl` check
 //! or standalone inspect function is needed.
 //!
-//! # The shape this emits is a contract
-//!
-//! `optimize::tmpl_hoist` matches the emitted block back apart to lift a
-//! buffer out of a loop, and `optimize::const_branch_prune` deliberately leaves
-//! the block un-flattened until that pass has run. Everything the two sides
-//! agree on is named, not spelled out twice:
-//!
-//! - the block label and the `__r` / `__f` locals — [`crate::name`], with
-//!   [`crate::name::is_template_block`] as the shared predicate. The `__`
-//!   prefix is reserved in source, so the label cannot come from user code.
-//! - the stdlib symbols the block calls — [`CompilerItem`]
-//! - `String`'s fields — [`crate::compiler_item::SeqField`]
-//! - `Formatter`'s fields — [`FormatterField`], whose order
-//!   `assert_formatter_layout` checks against the Wado declaration. Its
-//!   sentinels are the one thing repeated rather than shared; the e2e fixture
-//!   `template_formatter_sentinels.wado` fails if they drift.
+//! The emitted shape is a contract: `optimize::tmpl_hoist` matches it back
+//! apart, which is why `optimize::const_branch_prune` leaves the block
+//! un-flattened until that pass has run. Both sides name what they agree on
+//! through [`crate::name`], [`CompilerItem`],
+//! [`crate::compiler_item::SeqField`] and [`FormatterField`] rather than
+//! spelling it out twice. `Formatter`'s sentinels are the one exception —
+//! repeated in Rust, and pinned by the e2e fixture
+//! `template_formatter_sentinels.wado`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -37,10 +29,9 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Snapshot of every `core:prelude/format` symbol the template-expansion
-/// synthesiser needs, resolved once through the [`CompilerItem`] registry so
-/// stdlib renames flow without touching synthesis sites. Every format-family
-/// trait is single-method, so each entry pairs a trait with its method name.
+/// Every `core:prelude/format` symbol this synthesiser needs, resolved once
+/// through the [`CompilerItem`] registry so a stdlib rename does not reach
+/// here.
 #[derive(Clone, Debug)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
@@ -48,23 +39,18 @@ pub(super) struct FormatStdlibNames {
     /// embeds. The bare `formatter` stays for type-table lookups, which key a
     /// struct by its simple name plus module.
     pub formatter_fq: FqTypeName,
-    /// `Alignment`'s cases, in the order [`crate::format_spec::Align`] names
-    /// them.
+    /// In the order [`Align`] names them.
     pub alignment_cases: [EnumCase; 3],
-    /// The trait behind each [`FormatKind`], and its alternate (`#`) form when
-    /// the stdlib declares a separate one.
+    /// Keyed by kind and by whether the spec asked for the alternate (`#`) form.
     traits: Vec<(FormatKind, bool, FormatTrait)>,
 }
 
-/// A trait to dispatch a formatted value through, and the single method to call
-/// on it.
 #[derive(Clone, Debug)]
 pub(super) struct FormatTrait {
     pub name: crate::name::FqTraitName,
     pub method: String,
 }
 
-/// One case of the `Alignment` enum.
 #[derive(Clone, Debug)]
 pub(super) struct EnumCase {
     pub name: String,
@@ -85,9 +71,8 @@ impl FormatStdlibNames {
             name: items.trait_fq(item),
             method: items.trait_method_name(item).to_string(),
         };
-        // Every (kind, alternate) pair maps to exactly one trait. A kind with no
-        // separate alternate form — `e` / `E` — resolves to the same trait for
-        // both, so the lookup is total without a fallback arm.
+        // `e` / `E` have no separate alternate form, so both entries name the
+        // same trait and the lookup stays total.
         let traits = vec![
             (
                 FormatKind::Display,
@@ -189,7 +174,6 @@ impl FormatStdlibNames {
         }
     }
 
-    /// The trait that renders a value under `spec`.
     pub fn format_trait(&self, spec: Option<&TemplateFormatSpec>) -> &FormatTrait {
         let (kind, alternate) = match spec {
             Some(spec) => (spec.kind, spec.alternate),
@@ -213,9 +197,8 @@ impl FormatStdlibNames {
     }
 }
 
-/// [`FormatterField`] is the field order this synthesiser builds a `Formatter`
-/// literal in; the Wado declaration is the order it has to match. A reordered
-/// field would otherwise become a silently wrong struct literal.
+/// A field reordered on the Wado side would otherwise turn every `Formatter`
+/// literal built here into a silently wrong one.
 fn assert_formatter_layout(type_table: &TypeTable) {
     let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
     let defs = type_table.defs();
@@ -292,9 +275,8 @@ impl FuncLocalAlloc {
 /// Rewrites every `TemplateString` in a body into its expanded block.
 ///
 /// Traversal goes through [`TirOptVisitor`], whose walk is exhaustive over
-/// `TirExprKind`: a template reachable from any node is expanded, and a node
-/// added to the IR later cannot silently skip one — which would surface as
-/// `lower::translate`'s `unreachable!` rather than a diagnostic.
+/// `TirExprKind`, so a node added later cannot silently skip a template — which
+/// reaches `lower::translate`'s `unreachable!`, not a diagnostic.
 struct TemplateExpander<'a> {
     alloc: FuncLocalAlloc,
     ctx: &'a TemplateCtx<'a>,
@@ -347,9 +329,7 @@ impl crate::tir_visitor::TirOptVisitor for TemplateExpander<'_> {
     }
 }
 
-/// Bytes of buffer reserved per interpolation, on top of the literal segments'
-/// exact length. A guess: too small only costs a growth, too large wastes the
-/// slack for the buffer's lifetime.
+/// Reserved per interpolation, on top of the literal segments' exact length.
 const CAPACITY_PER_INTERPOLATION: i64 = 16;
 
 /// Build the `__tmpl: { ... }` labeled block for a template string.
@@ -440,9 +420,8 @@ fn build_template_block(
                 let formatter_expr = || {
                     build_formatter_expr(&buf, formatter_type, format_spec.as_ref(), tt, ctx.names)
                 };
-                // One `Formatter` local serves the whole block; after the
-                // first interpolation declares it, the rest overwrite it
-                // rather than allocate again.
+                // One `Formatter` local serves the whole block: the first
+                // interpolation declares it, the rest overwrite it.
                 let fmt_index = if let Some(idx) = fmt_local_index {
                     let assign = TirExpr::new(
                         TirExprKind::Assign {

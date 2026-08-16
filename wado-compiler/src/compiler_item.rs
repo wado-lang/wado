@@ -47,28 +47,21 @@ impl SeqField {
 
 /// The fields of `core:prelude/format::Formatter`, in declaration order.
 ///
-/// Template expansion builds a `Formatter` literal field by field, and the NIR
-/// template-hoist matches one back apart; both name the fields through this
-/// enum rather than string literals, so reordering or renaming a field on the
-/// Wado side is a one-line change here instead of a silent miscompile.
+/// Template expansion builds a `Formatter` literal field by field and the NIR
+/// template-hoist matches one back apart; naming the fields here rather than in
+/// string literals makes a Wado-side rename a one-line change instead of a
+/// silent miscompile.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FormatterField {
-    /// `fill: char` — the padding character.
     Fill,
-    /// `align: Alignment` — how the value sits within `width`.
     Align,
-    /// `sign_plus: bool` — render `+` on positive numbers.
     SignPlus,
-    /// `zero_pad: bool` — pad with `0` rather than `fill`.
     ZeroPad,
-    /// `width: i32` — minimum field width; [`Self::NO_WIDTH`] for none.
+    /// [`Self::NO_WIDTH`] when the spec sets none.
     Width,
-    /// `precision: i32` — float decimals / sequence cap;
-    /// [`Self::PRECISION_DEFAULT`] for none.
+    /// [`Self::PRECISION_DEFAULT`] when the spec sets none.
     Precision,
-    /// `indent: i32` — the pretty-printing depth `InspectAlt` tracks.
     Indent,
-    /// `buf: &mut String` — the output buffer.
     Buf,
 }
 
@@ -97,7 +90,7 @@ impl FormatterField {
     /// `Inspect` applies its own cap.
     pub const PRECISION_DEFAULT: i32 = -2;
 
-    /// The Wado-side field name — the single source of truth for it.
+    /// The Wado-side field name.
     #[must_use]
     pub const fn field_name(self) -> &'static str {
         match self {

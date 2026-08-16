@@ -5982,9 +5982,8 @@ impl Parser {
         })))
     }
 
-    /// Reject a label the compiler reserves for its own synthesised blocks.
-    /// Passes recognise those blocks by label, so source must not be able to
-    /// write one.
+    /// Reject a label the compiler reserves for its synthesised blocks — passes
+    /// recognise those by label, so source must not be able to write one.
     fn check_label_available(&mut self, label: &str, span: Span) -> ParseResult<()> {
         if crate::name::is_reserved_label(label) {
             return Err(ParseError {
@@ -5999,8 +5998,8 @@ impl Parser {
     }
 
     /// Reject a malformed format specifier. `origin` is where the specifier
-    /// text starts in the file, so the offset [`crate::format_spec`] reports
-    /// lands on the offending character instead of on the whole template.
+    /// starts in the file, so the offset [`crate::format_spec`] reports lands on
+    /// the offending character.
     fn check_format_spec(&mut self, spec: &str, origin: crate::token::Position) -> ParseResult<()> {
         let Err(error) = crate::format_spec::parse(spec) else {
             return Ok(());
@@ -6020,9 +6019,8 @@ impl Parser {
     /// would carry an offset that indexes unrelated text and a column measured
     /// from the wrong place.
     ///
-    /// `open` is where the `${` that introduces the interpolation ends — the
-    /// anchor an empty-expression error points at, since it has no text of its
-    /// own to blame.
+    /// `open` is where the introducing `${` ends — what an empty-expression
+    /// error points at, having no text of its own to blame.
     fn parse_interpolation_expr(
         &mut self,
         expr_str: &str,
@@ -6209,9 +6207,8 @@ fn advance_position(origin: crate::token::Position, text: &str) -> crate::token:
     }
 }
 
-/// The span of `ch` at `at`, or the zero-width span at `at` when there is no
-/// character left to blame — an error reported past the end of the text must
-/// not claim a byte the source does not have.
+/// The span of `ch` at `at`; zero-width when there is no character left to
+/// blame, so an error past the end of the text claims no byte.
 fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
     let width = ch.map_or(0, char::len_utf8);
     Span::with_end(
@@ -6224,9 +6221,8 @@ fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
     )
 }
 
-/// The span of the `${` whose expression starts at `origin`. Both characters
-/// are ASCII and always precede the expression on the same line, so the opening
-/// column is two back.
+/// The span of the `${` whose expression starts at `origin` — both ASCII, and
+/// always on the expression's own line, so the opening column is two back.
 fn span_of_open_brace(origin: crate::token::Position) -> Span {
     assert!(
         origin.offset >= 2 && origin.column >= 3,
@@ -7351,13 +7347,12 @@ mod tests {
         }
     }
 
-    /// A malformed format specifier is a syntax error, not something the
-    /// compiler silently drops, and the span points at the offending character
-    /// rather than at the whole template.
+    /// A malformed format specifier is a syntax error, and the span points at
+    /// the offending character rather than at the whole template.
     #[test]
     fn test_template_format_spec_errors_are_reported_precisely() {
-        // `blamed` is the substring the span must cover, located in the source
-        // so the expectation cannot drift with the prefix's length.
+        // `blamed` is located in the source, so the expected column cannot
+        // drift with the prefix's length.
         let cases: [(&str, &str, &str); 4] = [
             ("`ab${x:zz}`", "unknown format specifier `z`", "zz}`"),
             ("`ab${x:5:8}`", "unknown format specifier `:`", ":8}`"),
@@ -7377,8 +7372,8 @@ mod tests {
         }
     }
 
-    /// A `__`-prefixed label is the compiler's namespace: synthesised blocks
-    /// carry one and passes recognise them by it, so source cannot mint one.
+    /// `__` is the compiler's label namespace: passes recognise synthesised
+    /// blocks by it, so source cannot mint one.
     #[test]
     fn test_reserved_label_rejected() {
         for source in [

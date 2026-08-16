@@ -13,11 +13,9 @@
 //! does not accept is an error — a spec is silently ignorable otherwise, and a
 //! mistyped one then formats nothing with no way to notice.
 //!
-//! `fill` is any character the interpolation scanner does not read as
-//! structure, which rules out the quote and brace characters (`'`, `"`,
-//! `` ` ``, `{`, `}`): the scanner splits `${…}` before this grammar sees it,
-//! and one of those opens a literal or a nesting level there. None of them is a
-//! sensible thing to pad with.
+//! `fill` is any character the interpolation scanner does not read as structure
+//! when it splits `${…}` — so not `'`, `"`, `` ` ``, `{` or `}`, none of which
+//! is a sensible thing to pad with.
 
 use std::fmt;
 
@@ -52,24 +50,17 @@ impl Align {
 /// Which format trait renders the interpolated value.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum FormatKind {
-    /// No kind character: `Display`.
+    /// No kind character.
     Display,
-    /// `?` — `Inspect`.
     Inspect,
-    /// `b` — `Binary`.
     Binary,
-    /// `o` — `Octal`.
     Octal,
-    /// `x` — `LowerHex`.
     LowerHex,
-    /// `X` — `UpperHex`.
     UpperHex,
-    /// `e` — `LowerExp`.
     LowerExp,
-    /// `E` — `UpperExp`.
     UpperExp,
-    /// `f` — fixed-point. Renders through `Display`, which already honours
-    /// `precision`; the character exists so `${x:.2f}` reads as a float format.
+    /// `f`. Renders through `Display`, which already honours `precision`; the
+    /// character exists so `${x:.2f}` reads as a float format.
     Fixed,
 }
 
@@ -119,8 +110,7 @@ pub struct TemplateFormatSpec {
 }
 
 impl TemplateFormatSpec {
-    /// A spec that only selects `kind`, as `${x:?}` does — the shape a
-    /// synthesised interpolation needs.
+    /// A spec that only selects `kind`, as `${x:?}` does.
     #[must_use]
     pub const fn of_kind(kind: FormatKind) -> Self {
         Self {
@@ -180,8 +170,8 @@ impl fmt::Display for TemplateFormatSpec {
     }
 }
 
-/// Why a spec was rejected. Carries the offset of the offending character
-/// within the spec text so a caller with a span can point at it.
+/// Why a spec was rejected, and where — so a caller holding a span can point at
+/// the offending character.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FormatSpecError {
     pub message: String,
@@ -196,8 +186,8 @@ impl fmt::Display for FormatSpecError {
 }
 
 /// Parse a format specifier. Surrounding whitespace is trimmed, mirroring the
-/// trim applied to the interpolation expression, so `${ x : 5 }` reads the same
-/// as `${x:5}`. A space fill is never lost to the trim: it is also the default.
+/// trim on the interpolation expression, so `${ x : 5 }` reads as `${x:5}`. A
+/// space fill survives it by being the default fill anyway.
 ///
 /// # Errors
 ///

@@ -1,7 +1,6 @@
-// A format specifier the grammar does not accept is a syntax error. It used to
-// be parsed leniently and the unrecognised part silently dropped, so `${n:qq}`
-// compiled and rendered as a bare `${n}` — a typo'd width or fill formatted
-// nothing with no way to notice.
+// A format specifier outside the grammar is a syntax error. Regression: the
+// unrecognised part used to be dropped, so a typo'd spec rendered as a bare
+// `${n}` with no way to notice.
 export fn run() {
     let n = 42;
     let _ = `${n:qq}`;

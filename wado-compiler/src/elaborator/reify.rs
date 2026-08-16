@@ -10421,12 +10421,8 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
     Some((value, ty))
 }
 
-/// Decode a template literal segment.
-///
-/// A module reaches reify only when its body walk logged no errors, and
-/// [`super::Elaborator::resolve_template_string`] is the walk that rejects a
-/// malformed escape — so failing here means that gate was bypassed, not that
-/// the source was bad.
+/// Decode a template literal segment. Only a module whose body walk logged no
+/// errors reaches reify, and that walk is what rejects a malformed escape.
 fn unescape_checked(raw: &str) -> String {
     super::util::unescape_template_string(raw)
         .expect("the body walk rejects a malformed template escape before reify runs")

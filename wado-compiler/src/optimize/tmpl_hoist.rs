@@ -4,11 +4,10 @@
 //! neither the template result nor the inner `__r` escapes the iteration, which
 //! [`EscapeScan`] and [`template_buf_escapes`] decide. Runs as a [`Rule`].
 //!
-//! The block it matches is emitted by `synthesis::template`, whose module docs
-//! list every name the two sides share. Recognition never spells a stdlib name
-//! out: the label goes through [`crate::name::is_template_block`], the callees
-//! through their [`CompilerItem`], and the struct fields through [`SeqField`] /
-//! [`FormatterField`].
+//! The block comes from `synthesis::template`, whose module docs list the names
+//! the two sides share. Recognition spells none of them out: the label goes
+//! through [`crate::name::is_template_block`], the callees through their
+//! [`CompilerItem`], the fields through [`SeqField`] / [`FormatterField`].
 
 use std::cell::{Cell, RefCell};
 
@@ -27,10 +26,9 @@ use super::arena_query::{is_local, stmt_mentions_local};
 use super::gate::{FunctionGate, GatedPass};
 use cranelift_entity::EntityRef;
 
-/// Everything the template-hoist recognizers match a node against, resolved
-/// once per pass run: callee ids so each match is an integer `func_id` compare
-/// (not a name read off the call node's `FunctionRef`), and the stdlib struct
-/// names `synthesis::template` builds its literals from.
+/// Everything the recognizers match a node against, resolved once per pass run:
+/// callee ids, so each match is an integer `func_id` compare rather than a name
+/// read off the call node, plus the stdlib struct names the literals carry.
 ///
 /// Each callee is resolved by exact identity — its compiler item, or the
 /// builtin descriptor (`builtin_name` / `monomorphized_builtin_name`, the

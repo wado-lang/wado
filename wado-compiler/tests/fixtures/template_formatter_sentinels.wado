@@ -1,12 +1,8 @@
-// The Formatter sentinels the compiler writes must match the ones the stdlib's
-// `Formatter::new` writes.
-//
-// A spec that sets any field (here a width, or a precision) makes
-// `synthesis::template` build the `Formatter` literal itself instead of calling
-// `Formatter::new`, filling every *unset* field from
-// `compiler_item::FormatterField`'s constants — the Rust-side copy of
-// `Formatter::NO_WIDTH` / `Formatter::PRECISION_DEFAULT`. If the two copies
-// drift, the unset fields start meaning something else and this fixture fails.
+// A spec that sets any field makes `synthesis::template` build the `Formatter`
+// literal itself rather than call `Formatter::new`, filling every unset field
+// from `compiler_item::FormatterField`'s constants. Those repeat
+// `Formatter::NO_WIDTH` / `PRECISION_DEFAULT`; this fixture fails if the copies
+// drift.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {

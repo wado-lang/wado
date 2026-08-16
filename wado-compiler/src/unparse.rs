@@ -2435,8 +2435,7 @@ impl<'a> Unparser<'a> {
         self.output.push('`');
         for part in &t.parts {
             match part {
-                // Literal segments are stored raw, escapes and all, so they go
-                // back out verbatim.
+                // Literal segments are stored raw, escapes and all.
                 TemplatePart::String(s) => self.output.push_str(s),
                 TemplatePart::Interpolation { expr, format } => {
                     self.output.push_str("${");

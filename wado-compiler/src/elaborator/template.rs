@@ -31,10 +31,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast::TemplatePart::Interpolation { expr, .. } => {
                     self.resolve_expr(expr, ctx, None);
                 }
-                // The gate reify relies on: reify decodes the literal segments
-                // with no diagnostic channel of its own, and only runs for a
-                // module whose body walk was clean. Report a bad escape here,
-                // where a string literal's is reported.
+                // The gate reify relies on: it decodes these segments with no
+                // diagnostic channel of its own.
                 ast::TemplatePart::String(raw) => {
                     if let Err(message) = super::util::unescape_template_string(raw) {
                         let _ = self.emit(TypeError::InvalidLiteral {

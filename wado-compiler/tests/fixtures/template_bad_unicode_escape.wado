@@ -1,8 +1,6 @@
-// A malformed `\u` escape inside a template must not swallow the closing
-// backtick. The template scanner used to consume four characters unconditionally
-// — delimiter included — so this reported "unterminated template string" from
-// the following line instead of naming the bad escape, as a plain `"\u12"`
-// already did.
+// A malformed `\u` escape names itself, as it does in a plain `"\u12"`.
+// Regression: the template scanner consumed four characters unconditionally,
+// swallowing the closing backtick, and reported "unterminated template string".
 export fn run() {
     let _ = `\u12`;
 }

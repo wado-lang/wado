@@ -196,7 +196,6 @@ pub const CLOSURE_FN_TRAIT: &str = "Fn";
 /// by name cannot be fooled by a hand-written block wearing the same label.
 pub const SYNTHETIC_LABEL_PREFIX: &str = "__";
 
-/// Whether `label` is reserved for the compiler and so illegal in source.
 #[must_use]
 pub fn is_reserved_label(label: &str) -> bool {
     label.starts_with(SYNTHETIC_LABEL_PREFIX)
@@ -207,11 +206,8 @@ pub fn is_reserved_label(label: &str) -> bool {
 pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
 
 /// Whether `label` marks the block an expanded template string breaks out of.
-///
-/// The template-hoist optimizer recognises an expansion by this label, and
-/// const-branch-prune keeps the block intact until that pass has run. Producer
-/// (`synthesis::template`) and both consumers share this one predicate rather
-/// than each re-comparing the constant.
+/// Shared by the producer (`synthesis::template`) and the two optimizer passes
+/// that key on it, rather than each re-comparing the constant.
 #[must_use]
 pub fn is_template_block(label: &str) -> bool {
     label == TEMPLATE_BLOCK_LABEL

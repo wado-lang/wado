@@ -52,16 +52,14 @@ enum Scan {
     String,
     Char,
     /// A nested `` `…` `` literal. Backticks strictly alternate open and close,
-    /// and the fragment is re-lexed properly later, so knowing whether we are
-    /// inside one is enough — a depth would count the same characters.
+    /// so a flag counts the same characters a depth would.
     Template,
     LineComment,
     BlockComment,
 }
 
 impl Scan {
-    /// The character that returns the scan to [`Scan::Code`]. Only defined for
-    /// the single-character terminators.
+    /// The character that returns the scan to [`Scan::Code`].
     fn terminator(self) -> char {
         match self {
             Self::String => '"',
@@ -982,11 +980,11 @@ impl<'a> Lexer<'a> {
         it.peek().map(|&(_, c)| c)
     }
 
-    /// Advance past one escape sequence (after the leading `\` has been consumed).
-    /// Only scans — does not validate or interpret escape values; a malformed
-    /// escape stops at the first character that cannot belong to it, so the
-    /// literal's closing delimiter is never swallowed and the unescaper gets to
-    /// report the real error. Shared by string, char, and template literals.
+    /// Advance past one escape sequence (after the leading `\` has been
+    /// consumed), shared by string, char and template literals. Scanning only:
+    /// a malformed escape stops at the first character that cannot belong to
+    /// it, so the closing delimiter is never swallowed and the unescaper is
+    /// left to report the real error.
     fn skip_escape(&mut self) {
         match self.peek_char() {
             Some('x') => {
@@ -1012,7 +1010,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Advance past at most `max` hex digits.
     fn skip_hex_digits(&mut self, max: usize) {
         for _ in 0..max {
             match self.peek_char() {
@@ -1047,9 +1044,8 @@ impl<'a> Lexer<'a> {
                     return TokenKind::TemplateStringLit(parts);
                 }
                 Some((_, '\\')) => {
-                    // Scanned by the shared escape rules, then copied verbatim:
-                    // the segment stays raw and the elaborator's unescaper is
-                    // the one place that judges an escape's validity.
+                    // Scanned by the shared rules, copied verbatim: the
+                    // segment stays raw for the elaborator's unescaper.
                     let escape_start = self.pos;
                     self.advance();
                     self.skip_escape();
@@ -1113,12 +1109,11 @@ impl<'a> Lexer<'a> {
     /// opening `{` and consuming through the closing `}`. A true `hit_eof` in
     /// the result means the template was truncated and an error recorded.
     ///
-    /// This is a brace matcher, not a second lexer: it only has to find where
-    /// the interpolation ends and where its specifier starts, and hands the text
-    /// between verbatim to [`Parser::parse_interpolation_expr`], which lexes it
-    /// properly. What it must get right is which characters are *structural* —
-    /// a `}` inside a string, a char, a nested template, or a comment is not the
-    /// one that closes the interpolation.
+    /// A brace matcher, not a second lexer: it finds where the interpolation
+    /// ends and where its specifier starts, and hands the text between verbatim
+    /// to [`Parser::parse_interpolation_expr`], which lexes it properly. What it
+    /// must get right is which characters are *structural* — a `}` inside a
+    /// string, a char, a nested template or a comment is not the closing one.
     fn collect_interpolation_source(
         &mut self,
         start: usize,
@@ -1134,8 +1129,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        /// Undo the last [`push`] — for a character taken before it turned out
-        /// to be a delimiter rather than content.
+        /// Undo a [`push`] of a character that turned out to be a delimiter.
         fn pop(expr: &mut String, format: &mut Option<String>) {
             match format {
                 Some(f) => f.pop(),
@@ -1217,8 +1211,7 @@ impl<'a> Lexer<'a> {
                 '}' => {
                     brace_depth -= 1;
                     if brace_depth == 0 {
-                        // The `}` closes the interpolation rather than
-                        // belonging to it.
+                        // The `}` is the delimiter, not content.
                         pop(&mut expr, &mut format);
                         return (expr, format, false);
                     }
