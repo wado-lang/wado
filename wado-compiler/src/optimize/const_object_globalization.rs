@@ -763,13 +763,33 @@ fn let_stmt_qualifies(
         return None;
     }
     // Source order: the moved defs must precede the tail in the initializer
-    // block exactly as they did in the function.
+    // block exactly as they did in the function. One already nested inside the
+    // initializer travels with the value, so relisting it would lift it out of
+    // its own scope, ahead of the sibling it reads.
+    let nested = stmts_within_operand(body, value);
     let mut lets: Vec<StmtId> = used_siblings
         .iter()
         .filter_map(|l| siblings.let_stmts.get(l).copied())
+        .filter(|s| !nested.contains(s))
         .collect();
     lets.sort_by_key(|s| s.index());
     Some(lets)
+}
+
+/// The `let` statements sitting inside `value`'s own subtree.
+fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
+    let mut out = IndexSet::default();
+    let Some(e) = value.as_expr() else {
+        return out;
+    };
+    let mut stack = vec![NodeRef::Expr(e)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node {
+            out.insert(s);
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
 }
 
 /// Sibling bindings a candidate initializer may read: declared once, never
