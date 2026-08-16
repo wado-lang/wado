@@ -52,7 +52,7 @@ All 122 free bits come from the cryptographically-secure `Random`
 effect; the version (`0100`) and variant (`10`) bits are then forced
 into place per RFC 9562.
 
-#### `pub fn v7() -> Uuid with Random, SystemClock`
+#### `pub fn v7() -> Uuid with (Random, SystemClock)`
 
 Generate a version-7 (time-ordered) UUID.
 

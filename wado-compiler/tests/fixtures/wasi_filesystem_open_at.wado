@@ -8,7 +8,7 @@
 use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 
-export fn run() with Stdout, Stderr, Preopens {
+export fn run() with (Stdout, Stderr, Preopens) {
     let dirs = Preopens::get_directories();
 
     if dirs.len() == 0 {

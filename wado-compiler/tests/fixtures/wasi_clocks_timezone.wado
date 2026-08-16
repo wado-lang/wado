@@ -8,7 +8,7 @@
 
 use { SystemClock, Instant, Timezone } from "wasi:clocks";
 
-export fn run() with SystemClock, Timezone {
+export fn run() with (SystemClock, Timezone) {
     let now: Instant = SystemClock::now();
     let offset = Timezone::utc_offset(now);
     if let Some(ns) = offset {

@@ -36,7 +36,7 @@ fn count_primes(limit: i32) -> i32 {
     return count;
 }
 
-export fn run() with Stdout, MonotonicClock {
+export fn run() with (Stdout, MonotonicClock) {
     let mut b = Benchmark { name: "primes", work_per_iter: Option::Some(100.0), unit: "n" };
     b.iterations = 1;  // fixed: skip ~1s auto-calibration in the test
     let count = b.run("", || count_primes(100));

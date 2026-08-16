@@ -53,7 +53,7 @@ test "smoke" {
     assert count_points(&back) == 2;
 }
 
-export fn run() with Stdout, MonotonicClock, Preopens {
+export fn run() with (Stdout, MonotonicClock, Preopens) {
     let json_data = read_file_bytes("json_canada/canada.json");
     let json_size = json_data.len();
     let fc = json_from_bytes::<FeatureCollection, _>(json_data).unwrap();

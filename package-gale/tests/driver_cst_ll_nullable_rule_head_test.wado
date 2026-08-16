@@ -1,0 +1,34 @@
+//! An alternative whose head is a rule reference with an all-optional body.
+//!
+//! `fnDecl : mods 'fn' ID ';'` with `mods : 'pub'?`: `FIRST(member)` holds
+//! `'fn'` only if computed *through* the nullable reference. Regression for a
+//! `first_of_alt` that stopped at `mods` on the shallow `is_nullable`, leaving
+//! the `member*` loop unable to enter on a bare `fn`.
+
+use g from "./grammars/ll_nullable_rule_head.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_nullable_rule_head" },
+    };
+
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+}
+
+// Control: the nullable rule matches something, so `FIRST` never has to see
+// past it.
+test "a present modifier reaches the fn" {
+    assert_parses(&"pub fn a;");
+}
+
+test "an absent modifier still reaches the fn" {
+    assert_parses(&"fn a;");
+}
+
+test "the sibling alternative is unaffected" {
+    assert_parses(&"type T;");
+}
+
+test "both members in one file" {
+    assert_parses(&"type T; fn a; pub fn b;");
+}

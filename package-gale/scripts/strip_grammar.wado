@@ -7,7 +7,7 @@ use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "cor
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { strip_action_bodies } from "../src/g4/action_strip.wado";
 
-export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let arguments = args();
     if arguments.len() != 1 {
         eprintln("usage: strip_grammar <path/to/Grammar.g4>");

@@ -1124,7 +1124,7 @@ impl Lexer {
     }
 }
 
-fn try_KW(chars: &List<char>, start: i32) -> i32 with SlBase, stores[chars] {
+fn try_KW(chars: &List<char>, start: i32) -> i32 with (SlBase, stores[chars]) {
     let mut pos = start;
     if !( SlBase::enabled(LexerView { chars, start, pos }) ) { return -1; }
     if pos >= chars.len() { return -1; }

@@ -16,7 +16,7 @@ const SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 
-export fn run() with Stdout, Stdin {
+export fn run() with (Stdout, Stdin) {
     let [stdin_stream, _done] = Stdin::read_via_stream();
     let chunk = stdin_stream.read(16);
     stdin_stream.drop();

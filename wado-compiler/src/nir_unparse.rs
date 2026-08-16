@@ -328,21 +328,11 @@ impl<'a> NirUnparser<'a> {
     }
 
     fn unparse_nir_with_clause(&mut self, effects: &[crate::tir::EffectRef], stores: &[String]) {
-        if effects.is_empty() && stores.is_empty() {
-            return;
-        }
-        self.output.push_str(" with ");
-        if !effects.is_empty() {
-            self.comma_sep(effects, |s, e| s.output.push_str(e.name()));
-            if !stores.is_empty() {
-                self.output.push_str(", ");
-            }
-        }
+        let mut items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
         if !stores.is_empty() {
-            self.output.push_str("stores[");
-            self.output.push_str(&stores.join(", "));
-            self.output.push(']');
+            items.push(format!("stores[{}]", stores.join(", ")));
         }
+        crate::unparse::unparse_with_row_into(&items, &mut self.output);
     }
 
     fn unparse_param(&mut self, param: &NirParam) {

@@ -21,9 +21,9 @@ fn with_effect<effect E>(x: i32, mut f: fn mut() with E,) -> i32 with E {
     return x;
 }
 
-// A comma inside the clause still continues it: this declares one parameter
-// carrying two effects, not two parameters.
-fn two_effects<effect E>(mut f: fn mut() with E, Stdout,) -> i32 with E, Stdout {
+// A parenthesized effect row keeps the comma inside the clause: this declares
+// one parameter carrying two effects, not two parameters.
+fn two_effects<effect E>(mut f: fn mut() with (E, Stdout),) -> i32 with (E, Stdout) {
     f();
     return 1;
 }

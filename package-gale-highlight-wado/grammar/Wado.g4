@@ -1,10 +1,5 @@
-// Partial ANTLR4 grammar for Wado, consumed by Gale. Covers the syntax used
-// by every example under `example/*.wado` (declarations, statements,
-// expressions, patterns, generics, attributes, traits/impls, globals, type
-// aliases, `if let` / `while let` let-chains, `task return`, map literals,
-// turbofish associated calls, and effect-handler installation via
-// `with E => h do { ... }` / `resume`, and template strings with interpolation.
-// Effect *declarations* (`effect E { ... }`) are not yet modeled.
+// ANTLR4 grammar for Wado, consumed by Gale.
+// Checked against the compiler's parser by `mise run check-grammar`.
 
 grammar Wado;
 
@@ -13,20 +8,14 @@ sourceFile
     ;
 
 item
-    : attribute* itemKind
+    : attribute* itemModifiers itemKind
+    ;
+
+itemModifiers
+    : 'internal'? 'pub'? 'export'? 'async'?
     ;
 
 itemKind
-    : implBlock
-    | testDecl
-    | functionDecl
-    | ('pub' | 'internal')? pubItem
-    ;
-
-// Item kinds that take an optional `pub` / `internal` (plus plain `fn`). The
-// leading modifier is left-factored into `itemKind` so the dispatch is
-// token-led. `use` lives here so `pub use` re-exports parse.
-pubItem
     : useDecl
     | globalDecl
     | typeAliasDecl
@@ -38,6 +27,9 @@ pubItem
     | interfaceDecl
     | worldDecl
     | resourceDecl
+    | implBlock
+    | testDecl
+    | 'fn' funcSig
     ;
 
 globalDecl
@@ -45,11 +37,10 @@ globalDecl
     ;
 
 typeAliasDecl
-    : 'type' IDENTIFIER genericParams? ('=' typeRef)? ';'
-    | 'type' '[' '..' IDENTIFIER ']' ';'
+    : 'type' identifier genericParams? ('=' typeRef)? ';'
+    | 'type' typeRef ';'
     ;
 
-// `test` is a contextual keyword; modeled as a literal here for simplicity.
 testDecl
     : 'test' STRING_LITERAL? block
     ;
@@ -78,7 +69,7 @@ attrValue
     ;
 
 useDecl
-    : 'use' importGroup 'from' STRING_LITERAL ('with' mapLiteral)? ';'
+    : 'use' importGroup 'from' STRING_LITERAL ('with' braceLiteral)? ';'
     ;
 
 importGroup
@@ -92,24 +83,24 @@ importList
     ;
 
 importItem
-    : IDENTIFIER ('as' IDENTIFIER)?
+    : IDENTIFIER '::' '{' importList? '}'
+    | IDENTIFIER ('as' IDENTIFIER)?
     ;
 
 functionDecl
-    : ('pub' | 'internal' | 'export')? 'async'? 'fn' funcSig
+    : itemModifiers 'fn' funcSig
     ;
 
 funcSig
     : identifier genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
     ;
 
-// A binding name: a plain identifier or one of the contextual keywords that
-// may also name a function / field / parameter (`fn from`, `type: T`).
 identifier
     : IDENTIFIER
     | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
+    | 'test' | 'do' | 'task'
     ;
 
 paramList
@@ -131,16 +122,17 @@ returnType
     ;
 
 withClause
-    : 'with' withItem (',' withItem)*
+    : 'with' ('(' (withItem (',' withItem)*)? ')' | withItem)
     ;
 
 withItem
     : IDENTIFIER
-    | 'stores' '[' (storesItem (',' storesItem)*)? ']'
+    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
     ;
 
 storesItem
     : IDENTIFIER
+    | INTEGER
     | 'self'
     ;
 
@@ -153,7 +145,7 @@ fieldList
     ;
 
 fieldDecl
-    : attribute* 'pub'? identifier ':' typeRef ('=' expression)?
+    : attribute* ('pub' | 'internal')? identifier ':' typeRef ('=' expression)?
     ;
 
 enumDecl
@@ -193,26 +185,22 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' IDENTIFIER genericParams? '{' traitMember* '}'
+    : 'trait' IDENTIFIER genericParams? (':' traitBounds)? '{' traitMember* '}'
     ;
 
-// A WIT-style interface: a named set of function signatures (and associated
-// types), modeled with the same members as a trait.
 interfaceDecl
     : 'interface' IDENTIFIER genericParams? '{' traitMember* '}'
     ;
 
-// A WIT-style world: a set of `import` / `export` items naming interfaces.
 worldDecl
     : 'world' IDENTIFIER '{' worldItem* '}'
     ;
 
 worldItem
-    : ('import' | 'export') IDENTIFIER ';'
+    : 'import' IDENTIFIER ';'
+    | 'export' ('async'? 'fn' identifier genericParams? '(' paramList? ')' returnType? | IDENTIFIER) ';'
     ;
 
-// A WIT-style resource: an opaque handle with method / static-function
-// signatures (or a bodyless unit resource `resource X;`).
 resourceDecl
     : 'resource' IDENTIFIER genericParams? ('{' resourceMember* '}' | ';')
     ;
@@ -245,8 +233,6 @@ implMemberBody
     | ('pub' | 'internal')? implPubMember
     ;
 
-// `const` / `fn` members share an optional `pub`, left-factored here so the
-// dispatch is token-led (`const` vs `fn`) instead of a tournament.
 implPubMember
     : 'const' IDENTIFIER ':' typeRef '=' expression ';'
     | 'fn' funcSig
@@ -269,26 +255,22 @@ typeRef
     | '!'
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
-    | '[' ('..' typeRef | (typeRef (',' typeRef)*)?) ']'
-    | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? fnTypeWithClause?
+    | '[' (typeElement (',' typeElement)*)? ']'
+    | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? withClause?
     | path typeArgs?
     ;
 
-// A fn-*type*'s effect clause takes a single effect: a comma there would be
-// ambiguous with an enclosing list (e.g. the next parameter), and real fn
-// types never carry a comma-separated effect row (those appear only on
-// function *declarations*, where a trailing block/`;` disambiguates).
-fnTypeWithClause
-    : 'with' withItem
+typeElement
+    : '..'? typeRef
     ;
 
 typeArgs
     : '<' typeArg (',' typeArg)* '>'
     ;
 
-// A type argument, optionally an associated-type binding (`Iterator<Item = T>`).
 typeArg
     : IDENTIFIER '=' typeRef
+    | IDENTIFIER ':' traitBounds
     | typeRef
     ;
 
@@ -296,7 +278,6 @@ path
     : IDENTIFIER ('::' IDENTIFIER)*
     ;
 
-// Any keyword may be a field/method name after `.` (e.g. `entry.type`).
 memberName
     : IDENTIFIER
     | 'use' | 'from' | 'as' | 'fn' | 'with' | 'let' | 'mut' | 'return'
@@ -306,33 +287,31 @@ memberName
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
+    | 'test' | 'do' | 'task'
     ;
 
-// Optional trailing expression with no `;` is the block's value (`{ 1 }`).
 block
-    : '{' statement* expression? '}'
+    : '{' (statement | ';')* '}'
     ;
 
 statement
-    : letStatement
-    | returnStatement
-    | taskReturnStatement
-    | resumeStatement
-    | ifStatement
+    : ifStatement
     | forStatement
     | whileStatement
     | loopStatement
-    | breakStatement
-    | continueStatement
-    | assertStatement
     | matchStatement
+    | withStatement
     | labeledBlock
     | localItem
-    | exprStatement
+    | letStatement ';'?
+    | returnStatement ';'?
+    | taskReturnStatement ';'?
+    | breakStatement ';'?
+    | continueStatement ';'?
+    | assertStatement ';'?
+    | exprStatement ';'?
     ;
 
-// Item declarations nested in a block (e.g. a helper `struct` / `fn` inside a
-// `test` block or function body).
 localItem
     : attribute* localItemKind
     ;
@@ -348,42 +327,39 @@ localItemKind
     | 'fn' funcSig
     ;
 
-// A labeled block `label: { ... }`, exited with `break label` (optionally
-// yielding a value: `break label: expr`). Also usable in expression position.
 labeledBlock
     : IDENTIFIER ':' block
     ;
 
 letStatement
-    : 'let' pattern (':' typeRef)? '=' expression ('else' block)? ';'
+    : 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
     ;
 
 assertStatement
-    : 'assert' expression (',' expression)? ';'
+    : 'assert' expression (',' expression)?
     ;
 
 returnStatement
-    : 'return' expression? ';'
+    : 'return' expression?
     ;
 
-// `task return` yields from a Wasm async function.
 taskReturnStatement
-    : 'task' 'return' expression? ';'
+    : 'task' 'return' expression?
     ;
 
-// `resume` yields a value from an effect handler back to the suspended call.
-resumeStatement
-    : 'resume' expression? ';'
+resumeExpr
+    : 'resume' expression
     ;
 
 ifStatement
     : 'if' condition block ('else' (ifStatement | block))?
     ;
 
-// `if`/`while` headers admit an optional `let` binding (and let-chains via
-// `&&`, folded into the trailing expression). `exprNoStruct` keeps a bare `{`
-// reserved for the body.
 condition
+    : conditionTerm ('&&' conditionTerm)*
+    ;
+
+conditionTerm
     : 'let' pattern '=' exprNoStruct
     | exprNoStruct
     ;
@@ -392,8 +368,6 @@ forStatement
     : 'for' forHead block
     ;
 
-// `for let x of expr`, or a C-style `for [init]; [cond]; [step]` whose init
-// (`let ...`), condition, and step are each optional (`for ; cond; step`).
 forHead
     : 'let' pattern forTail
     | ';' condition? ';' exprNoStruct?
@@ -413,27 +387,32 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' (IDENTIFIER (':' expression)?)? ';'
+    : 'break' (IDENTIFIER (':' expression)?)?
     ;
 
 continueStatement
-    : 'continue' ';'
+    : 'continue'
     ;
 
 matchStatement
     : matchExpr
     ;
 
-exprStatement
-    : expression ';'
+withStatement
+    : withExpr
     ;
 
-// Precedence by left recursion, lowest to highest.
+exprStatement
+    : expression
+    ;
+
 expression
     : expression ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') expression
     | expression ('..<' | '..=') expression
     | expression '||' expression
     | expression '&&' expression
+    | '!' expression
+    | expression 'matches' '{' pattern ('&&' expression)? '}'
     | expression '|' expression
     | expression '^' expression
     | expression '&' expression
@@ -447,7 +426,7 @@ expression
     ;
 
 unary
-    : ('-' | '!' | '~' | '&' '&'? 'mut'? | '*') unary
+    : ('-' | '~' | '&' '&'? 'mut'? | '*') unary
     | postfix
     ;
 
@@ -460,7 +439,6 @@ postfixOp
     | '::' typeArgs '(' argumentList? ')'
     | '.' (memberName ('::' typeArgs)? ('(' argumentList? ')')? | INTEGER | FLOAT)
     | '[' expression ']'
-    | 'matches' '{' pattern ('&&' expression)? '}'
     | '?'
     ;
 
@@ -472,8 +450,9 @@ primary
     : literal
     | 'self'
     | compileTimeExpr
+    | resumeExpr
     | structLiteral
-    | mapLiteral
+    | braceLiteral
     | block
     | exprPath
     | tupleOrArrayLiteral
@@ -485,9 +464,6 @@ primary
     | '(' expression? ')'
     ;
 
-// Effect-handler installation: `with Effect => handler do { ... }` (one or
-// more bindings). The `do` block is the handled scope, and the whole form is
-// an expression whose value is the block's value.
 withExpr
     : 'with' withBinding (',' withBinding)* 'do' block
     ;
@@ -497,38 +473,25 @@ withBinding
     | expression
     ;
 
-// Key-value (map) literal: `{}` or `{ key: value, ... }`. Inferred to
-// `TreeMap<String, V>` by context. Excluded from `primaryNoStruct` because a
-// `{` after an `if`/`while`/`for` header opens the body.
-mapLiteral
-    : '{' (mapEntry (',' mapEntry)* ','?)? '}'
+braceLiteral
+    : '{' fieldInitList? '}'
     ;
 
-mapEntry
-    : (identifier | STRING_LITERAL) ':' expression
-    ;
-
-// Expression-position path, supporting interspersed turbofish segments:
-// `Stream::<u8>::new`, `Future::<Result<(), E>>::new`, `JsonValue::Bool`.
-// A `::` segment may be any `memberName` (not just `IDENTIFIER`) so that a
-// keyword method name resolves there, e.g. `Instant::from(x)` — mirroring how
-// `.from` is already accepted after `.`.
 exprPath
     : identifier ('::' (typeArgs | memberName))*
     ;
 
-// Compile-time literals and macros: `#file`, `#include_str("...")`.
 compileTimeExpr
     : '#' IDENTIFIER ('(' argumentList? ')')?
     ;
 
-// `expression` minus struct literals, for `if` / `while` / `for` headers
-// where a `{` opens the body. Mirrors the chain with a struct-free leaf.
 exprNoStruct
     : exprNoStruct ('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>=') exprNoStruct
     | exprNoStruct ('..<' | '..=') exprNoStruct
     | exprNoStruct '||' exprNoStruct
     | exprNoStruct '&&' exprNoStruct
+    | '!' exprNoStruct
+    | exprNoStruct 'matches' '{' pattern ('&&' expression)? '}'
     | exprNoStruct '|' exprNoStruct
     | exprNoStruct '^' exprNoStruct
     | exprNoStruct '&' exprNoStruct
@@ -542,7 +505,7 @@ exprNoStruct
     ;
 
 unaryNoStruct
-    : ('-' | '!' | '~' | '&' '&'? 'mut'? | '*') unaryNoStruct
+    : ('-' | '~' | '&' '&'? 'mut'? | '*') unaryNoStruct
     | postfixNoStruct
     ;
 
@@ -554,6 +517,7 @@ primaryNoStruct
     : literal
     | 'self'
     | compileTimeExpr
+    | resumeExpr
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -571,7 +535,7 @@ fieldInitList
     ;
 
 fieldInit
-    : identifier (':' expression)?
+    : (memberName | STRING_LITERAL) (':' expression)?
     | '..' expression
     ;
 
@@ -586,7 +550,7 @@ arrayElement
     ;
 
 closure
-    : ('||' | '|' closureParamList? '|') (block | expression)
+    : ('||' | '|' closureParamList? '|') returnType? (block | expression)
     ;
 
 closureParamList
@@ -594,27 +558,41 @@ closureParamList
     ;
 
 closureParam
-    : 'mut'? IDENTIFIER (':' typeRef)?
+    : 'mut'? ('_' | IDENTIFIER) closureParamType?
+    ;
+
+closureParamType
+    : ':' typeRef ('=' closureDefault)?
+    ;
+
+closureDefault
+    : closureDefault '^' closureDefault
+    | closureDefault '&' closureDefault
+    | closureDefault ('==' | '!=') closureDefault
+    | closureDefault ('<' | '<=' | '>' | '>=') closureDefault
+    | closureDefault ('<<' | '>' '>') closureDefault
+    | closureDefault ('+' | '-') closureDefault
+    | closureDefault 'as' typeRef
+    | closureDefault ('*' | '/' | '%') closureDefault
+    | unary
     ;
 
 ifExpr
-    : 'if' condition block 'else' (ifExpr | block)
+    : 'if' condition block ('else' (ifExpr | block))?
     ;
 
 matchExpr
-    : 'match' exprNoStruct '{' (matchArm (',' matchArm)* ','?)? '}'
+    : 'match' exprNoStruct '{' (matchArm ','?)* '}'
     ;
 
 matchArm
     : pattern ('&&' expression)? '=>' (block | ifStatement | 'return' expression? | expression)
     ;
 
-// Or-patterns: `A | B | C`, as used in `match` arms and `matches { ... }`.
 pattern
     : patternRange ('|' patternRange)*
     ;
 
-// Range sub-patterns: `10..=20`, `'0'..='9'`.
 patternRange
     : patternPrimary (('..<' | '..=') patternPrimary)?
     ;
@@ -624,10 +602,14 @@ patternPrimary
     | 'mut'? identifier
     | literal
     | '-' INTEGER
-    | path ('(' (pattern (',' pattern)*)? ')')?
+    | 'mut'? patternPath ('(' (pattern (',' pattern)*)? ')')?
     | 'mut'? path? '{' patternFieldList? '}'
-    | '(' (pattern (',' pattern)*)? ')'
-    | '[' patternElements? ']'
+    | 'mut'? '(' (pattern (',' pattern)*)? ')'
+    | 'mut'? '[' patternElements? ']'
+    ;
+
+patternPath
+    : identifier typeArgs? ('::' (typeArgs | identifier))*
     ;
 
 patternElements
@@ -640,7 +622,7 @@ patternFieldList
     ;
 
 patternField
-    : identifier (':' pattern)?
+    : (memberName | STRING_LITERAL) (':' pattern)?
     ;
 
 literal
@@ -654,9 +636,6 @@ literal
     | 'null'
     ;
 
-// A template string alternates literal text with `${ ... }` interpolations. An
-// interpolation's expression is lexed in the default mode (see mode TEMPLATE),
-// so it highlights as real code, not string text.
 templateString
     : BACKTICK templatePart* BACKTICK
     ;
@@ -670,8 +649,6 @@ interpolation
     : INTERP_OPEN expression (':' formatSpec)? '}'
     ;
 
-// A format specifier follows Rust's mini-language; its pieces are lexed as
-// ordinary tokens and muted by the highlight query.
 formatSpec
     : formatSpecAtom*
     ;
@@ -697,8 +674,6 @@ STRING_LITERAL
     : 'b'? '"' ('\\' . | ~["\\])* '"'
     ;
 
-// Brace tokens carry the mode commands that inline `'{'` / `'}'` inherit, so a
-// template interpolation's nested braces balance via the mode stack.
 LBRACE
     : '{' -> pushMode(DEFAULT_MODE)
     ;
@@ -712,7 +687,11 @@ BACKTICK
     ;
 
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    ;
+
+fragment HEX_ESCAPE
+    : '\\' 'x' [0-9a-fA-F] [0-9a-fA-F]
     ;
 
 fragment UNICODE_ESCAPE
@@ -724,16 +703,10 @@ IDENTIFIER
     : [a-zA-Z_] [a-zA-Z0-9_]*
     ;
 
-// Shebang line; the negated `[` keeps `#![...]` inner attributes separate.
 SHEBANG
     : '#!' ~[[\r\n] ~[\r\n]* -> channel(HIDDEN)
     ;
 
-// The `__DATA__` marker ends the source code; everything after it is the
-// module's raw data section (spec.md: "Data Sections"), reachable at runtime
-// via the `#data` literal. It is not Wado code, so it is lexed as a single
-// hidden-channel token rather than parsed — hidden (not skipped) so tooling
-// such as the highlighter can still see it and render it muted, like a comment.
 DATA_SECTION
     : '__DATA__' .*? EOF -> channel(HIDDEN)
     ;
@@ -750,9 +723,6 @@ WS
     : [ \t\r\n]+ -> skip
     ;
 
-// Template-string body; whitespace is significant, so this mode skips nothing.
-// Only `${` opens an interpolation, so bare `{` / `}` are literal text; a `$`
-// not followed by `{` is literal too.
 mode TEMPLATE;
 
 TEMPLATE_TEXT

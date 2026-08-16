@@ -155,7 +155,10 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         return FollowArg::NoFollow;
     }
     let mut visiting: List<String> = [];
-    let [deep, _consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
+    let [deep, consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
+    // A mask stopping short of the suffix proves only that the caller's
+    // continuation could *start* here, not that it can complete.
+    let covers_suffix = i + 1 + consumed >= elements.len();
     // Effective caller-continuation mask. Prefer the multi-depth deep
     // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
     // `RuleRef` at the suffix head, e.g. `a b?`), fall back to the
@@ -171,6 +174,17 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         mask.push(one_tok);
     }
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
+        // Nothing is appended at runtime, so this mask is the whole check: it
+        // proves completion only if it spans the suffix or opens on an element
+        // the caller must match. Short *and* optional-headed, a tail-greedy
+        // callee yielding on it gives up a token the caller cannot use — the
+        // nested `if` losing its `else` to a caller ending in the same
+        // `('else' block)?`.
+        let mut head_visiting: List<String> = [];
+        let head_nullable = ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting);
+        if head_nullable && !covers_suffix {
+            return FollowArg::NoFollow;
+        }
         if let Some(id) = ctx.intern_follow_mask(&mask) {
             return FollowArg::Mask(id);
         }
@@ -2338,9 +2352,11 @@ fn lower_scan_optional_lookahead_group(
         sigs.push(sig);
         bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
     }
+    let scan_guarded = shape_signatures_collide(&sigs);
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
         sigs: sigs,
         bodies: bodies,
+        scan_guarded: scan_guarded,
     });
 }
 
@@ -2442,21 +2458,75 @@ pub fn shape_lookahead_signature_for_alt(
 ) -> List<List<String>> {
     let mut sig: List<List<String>> = [];
     for let mut si = 0; si < shape.len(); si += 1 {
-        let idx = shape[si];
-        let actual = surface_unwrap_optional(&elements[idx]);
-        if let Group(g) = actual {
-            if g.alternatives.len() == 1 {
-                for let mut j = 0; j < g.alternatives[0].elements.len(); j += 1 {
-                    let mut visiting: List<String> = [];
-                    sig.push(ctx.first_of_element(&g.alternatives[0].elements[j], &mut visiting));
-                }
-                continue;
-            }
+        let actual = surface_unwrap_optional(&elements[shape[si]]);
+        let [part, aligned] = shape_signature_positions(actual, ctx);
+        for let position of &part {
+            sig.push(*position);
         }
-        let mut visiting: List<String> = [];
-        sig.push(ctx.first_of_element(actual, &mut visiting));
+        if !aligned {
+            return sig;
+        }
     }
     return sig;
+}
+
+/// The per-position kind sets `elem` contributes, and whether the position
+/// counter still lines up after it.
+///
+/// `sig[d]` guards `peek_at(d)`, so only a one-token element keeps the
+/// alignment. A longer one contributes its position and stops the signature:
+/// in `( '=' expr ('else' block)? )`, `peek_at(2)` would name whatever `expr`
+/// left there, not `else`.
+fn shape_signature_positions(elem: &Element, ctx: &mut GenContext) -> [List<List<String>>, bool] {
+    if let Group(g) = elem {
+        if g.alternatives.len() == 1 {
+            let mut out: List<List<String>> = [];
+            for let inner of &g.alternatives[0].elements {
+                let [part, aligned] = shape_signature_positions(inner, ctx);
+                for let position of &part {
+                    out.push(*position);
+                }
+                if !aligned {
+                    return [out, false];
+                }
+            }
+            return [out, true];
+        }
+    }
+    let mut visiting: List<String> = [];
+    let first = ctx.first_of_element(elem, &mut visiting);
+    let mut single_visiting: List<String> = [];
+    let aligned = ctx.element_is_single_token(elem, &mut single_visiting);
+    return [
+        [first],
+        aligned,
+    ];
+}
+
+/// True when two signatures can both match one input: their kind sets overlap
+/// at every shared position. A shorter one constrains nothing past its end, so
+/// a prefix is compatible. Emit renders shapes as an `if … else if …` chain,
+/// so a compatible pair can commit to a shape whose body does not match.
+fn signatures_can_both_match(a: &List<List<String>>, b: &List<List<String>>) -> bool {
+    let shared = if a.len() < b.len() { a.len() } else { b.len() };
+    for let mut i = 0; i < shared; i += 1 {
+        if !sets_overlap(&a[i], &b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// True when any two of `sigs` can match the same input.
+fn shape_signatures_collide(sigs: &List<List<List<String>>>) -> bool {
+    for let mut i = 0; i < sigs.len(); i += 1 {
+        for let mut j = i + 1; j < sigs.len(); j += 1 {
+            if signatures_can_both_match(&sigs[i], &sigs[j]) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Build the `RuleHeader` shared by every `Rule` variant. The cached
@@ -3715,21 +3785,27 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
         }
         let shapes = compute_shapes_for_alt(elements);
         let mut shape_entries: List<OptionalLookaheadShape> = [];
+        let mut signatures: List<List<List<String>>> = [];
         for let shape of &shapes {
             let sig = shape_lookahead_signature_for_alt(shape, elements, ctx);
             if sig.is_empty() {
                 continue;
             }
+            signatures.push(sig);
             shape_entries.push(OptionalLookaheadShape {
                 positions: *shape,
                 sig: sig,
+                scan_body: lower_scan_shape_body(shape, elements, ctx),
             });
         }
         if shape_entries.is_empty() {
             return null;
         }
         return Option::Some(RepeatStrategy::OptionalShapeLookahead(
-            OptionalShapeLookaheadStrategy { shapes: shape_entries },
+            OptionalShapeLookaheadStrategy {
+                shapes: shape_entries,
+                scan_guarded: shape_signatures_collide(&signatures),
+            },
         ));
     }
     return null;

@@ -36,7 +36,7 @@ fn read_all(file: &Descriptor) -> List<u8> with Descriptor {
     return result;
 }
 
-export fn run() with Stdout, Stderr, Preopens, Descriptor {
+export fn run() with (Stdout, Stderr, Preopens, Descriptor) {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("no preopened directories available");

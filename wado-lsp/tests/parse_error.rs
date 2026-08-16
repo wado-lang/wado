@@ -243,3 +243,60 @@ fn body_error_node_does_not_panic_semantics() {
         );
     });
 }
+
+/// `parse_diagnostics` answers from the document text alone.
+#[test]
+fn parse_diagnostics_is_empty_for_a_clean_source() {
+    let src = "export fn f() -> i32 {\n    return 1;\n}\n";
+    let mut engine = Engine::new();
+    engine.open_document(&uri(), src.to_string());
+    assert_eq!(engine.parse_diagnostics(&uri()), Vec::new());
+}
+
+/// The syntax error surfaces with the same `parse error: …` wire format the
+/// full `diagnostics` path uses.
+#[test]
+fn parse_diagnostics_reports_syntax_errors() {
+    let (engine, _host) = engine_with_broken_source();
+    let diags = engine.parse_diagnostics(&uri());
+    assert!(
+        diags.iter().any(|d| d.message.starts_with("parse error:")),
+        "expected a parse-error diagnostic, got {diags:?}",
+    );
+    assert!(
+        diags
+            .iter()
+            .all(|d| d.severity == Severity::Error && d.code == "INVALID_SYNTAX"),
+        "every parse diagnostic is an INVALID_SYNTAX error, got {diags:?}",
+    );
+}
+
+/// A lexer error is reported too, so the check covers the whole syntax layer.
+#[test]
+fn parse_diagnostics_reports_lexer_errors() {
+    let src = "export fn f() -> i32 {\n    let s = \"unterminated;\n}\n";
+    let mut engine = Engine::new();
+    engine.open_document(&uri(), src.to_string());
+    let diags = engine.parse_diagnostics(&uri());
+    assert!(
+        diags.iter().any(|d| d.message.starts_with("lexer error:")),
+        "expected a lexer-error diagnostic, got {diags:?}",
+    );
+}
+
+/// An unresolvable import is a *semantic* failure, so `parse_diagnostics`
+/// stays silent — which is what makes it an oracle over a broken corpus.
+#[test]
+fn parse_diagnostics_ignores_unresolvable_imports() {
+    let src = "use { nope } from \"./missing.wado\";\n\nexport fn f() -> i32 {\n    return 1;\n}\n";
+    let mut engine = Engine::new();
+    engine.open_document(&uri(), src.to_string());
+    assert_eq!(engine.parse_diagnostics(&uri()), Vec::new());
+}
+
+/// A closed document has no text to parse.
+#[test]
+fn parse_diagnostics_is_empty_for_an_unknown_document() {
+    let engine = Engine::new();
+    assert_eq!(engine.parse_diagnostics("file:///absent.wado"), Vec::new());
+}

@@ -52,7 +52,7 @@ test "smoke" {
     assert back.search_metadata.count == 0;
 }
 
-export fn run() with Stdout, MonotonicClock, Preopens {
+export fn run() with (Stdout, MonotonicClock, Preopens) {
     let json_data = read_file_bytes("json_twitter/twitter.json");
     let json_size = json_data.len();
     let resp = from_bytes::<TwitterResponse, _>(json_data).unwrap();

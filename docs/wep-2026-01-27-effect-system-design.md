@@ -25,7 +25,7 @@ fn pure_add(a: i32, b: i32) -> i32 {
 Multiple effects use comma separation:
 
 ```wado
-fn process() with Stdout, Stderr, FileSystem {
+fn process() with (Stdout, Stderr, FileSystem) {
     // ...
 }
 ```
@@ -189,7 +189,7 @@ fn get_count() with counter -> i32 {
     return counter;  // reading mutable global also requires effect
 }
 
-fn reset_and_print() with counter, Stdout {
+fn reset_and_print() with (counter, Stdout) {
     counter = 0;
     println(`Counter reset`);
 }
@@ -354,7 +354,7 @@ See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for the full handl
 The `stores` annotation shares syntax with effects:
 
 ```wado
-fn register(data: &Data) -> Handle with Stdout, stores[data] {
+fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
     // ...
 }
 ```

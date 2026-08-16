@@ -387,10 +387,12 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             let module_path = symbol.module_source().to_string();
             let kind_str = match &symbol.kind {
                 wado_compiler::symbol::SymbolKind::Function(f) => {
-                    let effects = if f.effects.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" with {}", f.effects.join(", "))
+                    // Same row shape the parser reads back: one effect bare,
+                    // more than one parenthesized.
+                    let effects = match f.effects.as_slice() {
+                        [] => String::new(),
+                        [only] => format!(" with {only}"),
+                        many => format!(" with ({})", many.join(", ")),
                     };
                     let ret = f
                         .return_type

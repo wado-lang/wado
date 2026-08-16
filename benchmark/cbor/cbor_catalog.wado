@@ -53,7 +53,7 @@ test "smoke" {
     assert event_count(&back) == 0;
 }
 
-export fn run() with Stdout, MonotonicClock, Preopens {
+export fn run() with (Stdout, MonotonicClock, Preopens) {
     let json_data = read_file_bytes("json_catalog/citm_catalog.json");
     let json_size = json_data.len();
     let catalog = json_from_bytes::<CitmCatalog, _>(json_data).unwrap();

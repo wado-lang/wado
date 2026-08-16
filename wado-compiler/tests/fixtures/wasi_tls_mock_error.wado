@@ -8,7 +8,7 @@
 use { println, Stdout } from "core:cli";
 use { Connector, Error } from "wasi:tls";
 
-export fn run() with Stdout, Connector, Error {
+export fn run() with (Stdout, Connector, Error) {
     let conn = Connector::new();
 
     let [data_rx, data_tx] = Stream::<u8>::new();

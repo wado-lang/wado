@@ -1,0 +1,41 @@
+//! An optional group ending in another optional.
+//!
+//! `stmt : 'let' ID ('=' expr ('else' block)?)? ';'` selects the 2^n
+//! shape-lookahead strategy, where `sig[d]` guards `peek_at(d)`. Regression
+//! for a signature that pushed one position per element and so walked past the
+//! multi-token `expr`, guarding `peek_at(2)` on `else`.
+//!
+//! The signature now stops at the first element that may consume more than one
+//! token, which leaves both shapes here sharing a guard — and shapes sharing a
+//! signature switch to scanning each body, longest-first. SQLite's
+//! `( ( database_name '.' )? table_name '.' )? column_name` is the same shape,
+//! and its oracle tests pin the resolution.
+
+use g from "./grammars/ll_nested_optional_tail.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_nested_optional_tail" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// Control: a single-token initializer leaves nothing for the scan to trip on.
+test "single-token initializer with else" {
+    assert_tree(&"let x = 1 else { } ;", &"(prog (stmt let x = (expr 1) else (block { }) ;))");
+}
+
+test "multi-token initializer with else" {
+    assert_tree(&"let v = at ( i ) else { } ;", &"(prog (stmt let v = (expr at ( i )) else (block { }) ;))");
+}
+
+test "multi-token initializer without else" {
+    assert_tree(&"let v = at ( i ) ;", &"(prog (stmt let v = (expr at ( i )) ;))");
+}
+
+test "no initializer at all" {
+    assert_tree(&"let x ;", &"(prog (stmt let x ;))");
+}
