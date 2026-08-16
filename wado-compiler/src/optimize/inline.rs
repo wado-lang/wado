@@ -789,19 +789,19 @@ fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
 struct Verdict {
     /// Splice it at its call sites.
     inline: bool,
-    /// Do not splice anything *into* it. Set when the body is over budget as
-    /// written and under it with its parameters assumed constant: bottom-up
-    /// order would otherwise fill it with its own leaves and put it back over,
-    /// costing every caller the fold — and the constant deciding that fold can
-    /// arrive rounds later than the leaves do, so the hold has to precede the
-    /// decision it protects. That hold is what an `#[inline(never)]` on each
-    /// leaf otherwise applies by hand.
+    /// Keep it as a template: splice nothing *into* it.
+    ///
+    /// A body whose parameters, were they constant, delete a loop from it is
+    /// worth more as something callers copy than as something callers call.
+    /// Growing it destroys that — it passes the budget, and every caller loses
+    /// the fold with it — and growth is one-way. The two roles need two bodies,
+    /// and the cheapest second body is the one nobody wrote into.
+    ///
+    /// This is what an `#[inline(never)]` on each leaf otherwise applies by
+    /// hand.
     hold: bool,
 }
 
-/// Decide a callee's fate: whether to splice it, and whether to leave it
-/// alone so it stays spliceable. Both answers come from here so they cannot
-/// disagree about the budget or about which callees are eligible at all.
 /// Decide a callee's fate: whether to splice it, and whether to leave it
 /// alone so it stays spliceable. Both answers come from here so they cannot
 /// disagree about the budget or about which callees are eligible at all.
@@ -907,26 +907,33 @@ fn classify_callee(
     // reaching a two-line `peek`. A loop the fold deletes is the option worth
     // holding open.
     //
-    // This half is a guess, and known to be one. `inline` above reads a fact —
-    // which parameters arrive constant at every call site — while the hold
-    // reads what *would* be true if they all did. That asymmetry is not a
-    // design choice; it is the pass order showing through, and it has already
-    // cost one bug (taking `folded * 2 <= plain` as evidence held half the
-    // program, so `String::get_byte_unchecked` stopped reaching a two-line
-    // `peek`).
+    // The two questions are asked of different things on purpose. `inline`
+    // reads the call sites, because splicing has to pay at the sites that
+    // exist. The hold reads the body alone, because it protects an option
+    // whose evidence has not arrived yet: every `field<T>` in a derived
+    // serializer is admitted at plain=18 against a budget of 13, on a folded
+    // price that only exists once the reflection walk has unrolled its keys
+    // into literals — several rounds after the leaves would have been spliced
+    // in. Waiting for the fact means never seeing it.
     //
-    // The fix that would remove the guess is to make the fact available in
-    // time: fold before inlining. Measured, on json-twitter ser —
+    // Three ways of not guessing were measured on json-twitter ser, against
+    // 375 MB/s / 167 KB for the reading below:
     //
-    //     const_fold after inline (today)     383 MB/s, 167 KB
-    //     const_fold before inline            341 MB/s, 205 KB
-    //     ditto with the hold deleted         335 MB/s, 204 KB
+    //     hold only what the call sites already admit  288 MB/s, 174 KB
+    //     hold every candidate                         293 MB/s, 179 KB
+    //     hold nothing                                 287 MB/s, 174 KB
     //
-    // — folding ahead of the inliner works on bodies the inliner has not
-    // opened yet, and the duplicate specialization it leaves behind costs more
-    // than the round of blindness it buys. The hold still earns its 2% even
-    // there, so the order is not what makes it necessary. Until a pass order
-    // exists that pays, this stays a guess with its reasoning written down.
+    // The first is byte-identical to the last: on the real view these bodies
+    // are never candidates at all, which is the point.
+    //
+    // Keeping a frozen copy to splice from instead — the honest form of "two
+    // bodies for two roles" — was also built and measured: 306 MB/s alone, and
+    // 340 MB/s alongside the hold, i.e. worse than the hold by itself. A
+    // detached copy is code no other pass can reach, so `sroa_param` and `dae`
+    // rewrite a signature under it and it has to be thrown away — on exactly
+    // the functions this is about, and by then the live body has already grown.
+    // A copy that stayed current would have to be walked by every pass that
+    // rewrites a body. Not growing the original costs nothing and gets there.
     let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
