@@ -563,3 +563,52 @@ test "negative i64 base formats print the two's complement bits" {
     assert `${min:b}` == "1000000000000000000000000000000000000000000000000000000000000000";
     assert `${min:#o}` == "0o1000000000000000000000";
 }
+
+test "i64 decimal formatting at every digit-count boundary" {
+    // `count_digits_i64` sizes the buffer and `write_decimal_digits` fills it
+    // backwards, so an off-by-one in either shows up as a lost or stray digit
+    // exactly at a power of ten.
+    let mut p: i64 = 10;
+    let mut digits = 2;
+    while digits <= 18 {
+        assert `${p - 1}`.len() == digits - 1;
+        assert `${p}`.len() == digits;
+        p = p * 10;
+        digits += 1;
+    }
+    assert `${0 as i64}` == "0";
+    assert `${9 as i64}` == "9";
+    assert `${10 as i64}` == "10";
+    assert `${99 as i64}` == "99";
+    assert `${100 as i64}` == "100";
+    assert `${999999999 as i64}` == "999999999";
+    assert `${1000000000 as i64}` == "1000000000";
+    assert `${1728000000000 as i64}` == "1728000000000";
+}
+
+test "i64 decimal formatting at the type's extremes" {
+    let max: i64 = 9223372036854775807;
+    assert `${max}` == "9223372036854775807";
+    let min: i64 = -9223372036854775808;
+    assert `${min}` == "-9223372036854775808";
+    let near_min: i64 = -9223372036854775807;
+    assert `${near_min}` == "-9223372036854775807";
+}
+
+test "i64 negative decimal formatting keeps the sign out of the digit count" {
+    assert `${-1 as i64}` == "-1";
+    assert `${-9 as i64}` == "-9";
+    assert `${-10 as i64}` == "-10";
+    assert `${-100 as i64}` == "-100";
+    assert `${-1000000000000 as i64}` == "-1000000000000";
+}
+
+test "i32 and u32 decimal formatting at their extremes" {
+    assert `${0}` == "0";
+    assert `${2147483647}` == "2147483647";
+    let min: i32 = -2147483648;
+    assert `${min}` == "-2147483648";
+    assert `${0 as u32}` == "0";
+    assert `${4294967295 as u32}` == "4294967295";
+    assert `${1000000 as u32}` == "1000000";
+}
