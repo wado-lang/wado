@@ -486,6 +486,25 @@ removed mechanism takes one fix.
       receiver the elaborator rewrote to a concrete spelling that no source
       segment names. Giving the static-call chain the receiver's own site is
       what removes it.
+- [x] A struct pattern's qualifier is a reference site. `Pattern::Struct`
+      carried only the spelling, and both consumers of it compared strings:
+      reify re-resolved the qualifier through the module scope for its field
+      indices, so `let Pair { a, b } = imported()` bound a same-named local
+      declaration's field order, and annotate compared it against
+      `struct_rendered_name`, which mangles a function-local `struct`, so
+      `let Local { .. }` failed as `expected 'Local', found 'Local'`. The
+      qualifier has its own `AstId` and the walk answers for it; annotate
+      compares that answer with the scrutinee's head, and reify takes its field
+      indices from the head alone — which fields exist is a fact about the value
+      being destructured, not about the qualifier.
+
+      `every_reference_bearing_node_carries_an_ast_id` did not catch the missing
+      id, because it scanned `pub struct` declarations only and a name-bearing
+      *enum variant* was invisible to it — half the AST's reference positions,
+      `Pattern::Struct` among them. It scans variants too now, and would have
+      flagged this one. `UseItem::InterfaceFunctions` is the only variant the
+      widened scan exempts; `StructLiteralField` stopped needing its exemption,
+      since a node whose name carries a `name_id` does record a resolution.
 - [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
