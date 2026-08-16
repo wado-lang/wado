@@ -1,0 +1,14 @@
+// The component's memory must cover what an asset asks for even when the asset
+// imports `env.memory` rather than defining one — here 17 pages, with a store
+// past the first page.
+
+use { println, Stdout } from "core:cli";
+use { high_store, high_load } from "./sub/wasm_import_big_memory.wat" with { type: "wat" };
+
+export fn run() with Stdout {
+    high_store(7);
+    println(`high_load() = ${high_load()}`);
+}
+
+__DATA__
+{"stdout": "high_load() = 7\n"}

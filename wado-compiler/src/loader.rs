@@ -226,7 +226,7 @@ impl From<SourceError> for LoadError {
     }
 }
 
-/// A core wasm value type, in the subset Phase 1 supports.
+/// A core wasm value type, in the subset that can cross into Wado.
 ///
 /// Maps 1:1 to a Wado primitive at TIR synthesis time. Other core
 /// types (reference types, etc.) are not yet permitted in imported
@@ -260,7 +260,7 @@ pub struct WasmExportSig {
     pub name: String,
     /// Parameter types.
     pub params: Vec<WasmCoreValType>,
-    /// Result types. Phase 1 accepts 0 or 1 results; multi-return is rejected.
+    /// Result types. 0 or 1 is accepted; multi-return is rejected.
     pub results: Vec<WasmCoreValType>,
 }
 
@@ -281,14 +281,26 @@ pub struct WasmAsset {
 }
 
 impl WasmAsset {
-    /// The asset's own memory section minimum, in pages; 1 when it defines no
-    /// memory. Read by `wir_build` to size the memory the component shares.
+    /// The minimum, in pages, of the memory the asset asks for — defined or
+    /// imported; 1 when it has neither. Read by `wir_build` to size the memory
+    /// the component shares, so an asset written against `env.memory` counts
+    /// just as much as one defining its own.
     pub fn min_memory_pages(&self) -> u64 {
         for payload in wasmparser::Parser::new(0).parse_all(&self.bytes) {
-            if let Ok(wasmparser::Payload::MemorySection(mems)) = payload
-                && let Some(mem) = mems.into_iter().flatten().next()
-            {
-                return mem.initial;
+            match payload {
+                Ok(wasmparser::Payload::ImportSection(reader)) => {
+                    for import in reader.into_imports().flatten() {
+                        if let wasmparser::TypeRef::Memory(mem) = import.ty {
+                            return mem.initial;
+                        }
+                    }
+                }
+                Ok(wasmparser::Payload::MemorySection(mems)) => {
+                    if let Some(mem) = mems.into_iter().flatten().next() {
+                        return mem.initial;
+                    }
+                }
+                _ => {}
             }
         }
         1
@@ -569,7 +581,47 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
     out
 }
 
-/// Walk a core wasm module: validate Phase 1 constraints (no `start`,
+/// Log2 of the default wasm page size, 64 KiB.
+const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
+
+/// An embedded asset is wired to the component's memory, so its own memory
+/// must have that memory's shape: 32-bit, unshared, default page size. Its
+/// maximum needs no check — the rewrite to an import drops it, since the
+/// component's memory is the one that sets the ceiling.
+fn check_shared_memory_shape(
+    source: &ModuleSource,
+    mem: wasmparser::MemoryType,
+) -> Result<(), LoadError> {
+    if mem.memory64 {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "a 64-bit memory is not supported: the asset shares the component's \
+                      32-bit memory"
+                .to_string(),
+        });
+    }
+    if mem.shared {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "a shared memory is not supported: the asset shares the component's \
+                      unshared memory"
+                .to_string(),
+        });
+    }
+    // `None` and an explicit 64 KiB are the same shape; only a custom one is
+    // a memory the component cannot hand over.
+    if mem.page_size_log2.unwrap_or(DEFAULT_PAGE_SIZE_LOG2) != DEFAULT_PAGE_SIZE_LOG2 {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "a custom page size is not supported: the asset shares the component's \
+                      memory, which uses the default 64 KiB page"
+                .to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// Walk a core wasm module: validate what an embedded asset must be (no `start`,
 /// ≤1 memory, only `env.memory` may be imported) and extract the
 /// signatures of every function export so the elaborator can synthesise
 /// Wado declarations from them.
@@ -622,6 +674,12 @@ fn parse_wasm_module_exports(
                     if !allowed {
                         disallowed_imports.push(format!("{}.{}", import.module, import.name));
                     }
+                    if let wasmparser::TypeRef::Memory(mem) = import.ty {
+                        check_shared_memory_shape(source, mem)?;
+                        // Counted with the defined ones: only one memory can be
+                        // wired to the component's.
+                        memory_count += 1;
+                    }
                     if let wasmparser::TypeRef::Func(_) = import.ty {
                         imported_func_count += 1;
                     }
@@ -650,10 +708,11 @@ fn parse_wasm_module_exports(
             Payload::StartSection { .. } => had_start = true,
             Payload::MemorySection(reader) => {
                 for mem in reader {
-                    let _ = mem.map_err(|e| LoadError::WasmImport {
+                    let mem = mem.map_err(|e| LoadError::WasmImport {
                         module_source: source.clone(),
                         message: format!("failed to read memories: {e}"),
                     })?;
+                    check_shared_memory_shape(source, mem)?;
                     memory_count += 1;
                 }
             }
@@ -664,24 +723,38 @@ fn parse_wasm_module_exports(
     if had_start {
         return Err(LoadError::WasmImport {
             module_source: source.clone(),
-            message: "Phase 1 wasm import does not allow start sections".to_string(),
+            message: "a start section is not supported: the component instantiates the asset \
+                      and never runs one"
+                .to_string(),
         });
     }
     if memory_count > 1 {
         return Err(LoadError::WasmImport {
             module_source: source.clone(),
-            message: format!("Phase 1 wasm import allows at most one memory, found {memory_count}"),
+            message: format!(
+                "at most one memory is supported, found {memory_count}: the asset shares the \
+                 component's memory"
+            ),
         });
     }
     if !disallowed_imports.is_empty() {
         return Err(LoadError::WasmImport {
             module_source: source.clone(),
             message: format!(
-                "Phase 1 wasm import only allows the `env.memory` import; found: {}",
+                "only the `env.memory` import is supported; found: {}",
                 disallowed_imports.join(", ")
             ),
         });
     }
+    // The asset is embedded in the component the compiler emits and codegen
+    // walks its index spaces, so a module that only assembles is rejected here
+    // rather than left to fail as an internal error later.
+    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+        .validate_all(bytes)
+        .map_err(|e| LoadError::WasmImport {
+            module_source: source.clone(),
+            message: format!("failed to validate wasm: {e}"),
+        })?;
 
     // Build the export signature list. `export.index` indexes into the
     // module's combined function space (imported funcs first, then
@@ -719,7 +792,7 @@ fn parse_wasm_module_exports(
                     module_source: source.clone(),
                     message: format!(
                         "export {name:?} has an unsupported parameter type ({ty:?}); \
-                         Phase 1 only supports i32/i64/f32/f64/v128"
+                         only i32/i64/f32/f64/v128 are supported"
                     ),
                 }
             })?);
@@ -731,7 +804,7 @@ fn parse_wasm_module_exports(
                     module_source: source.clone(),
                     message: format!(
                         "export {name:?} has an unsupported result type ({ty:?}); \
-                         Phase 1 only supports i32/i64/f32/f64/v128"
+                         only i32/i64/f32/f64/v128 are supported"
                     ),
                 }
             })?);
@@ -740,7 +813,7 @@ fn parse_wasm_module_exports(
             return Err(LoadError::WasmImport {
                 module_source: source.clone(),
                 message: format!(
-                    "export {name:?} has {} results; Phase 1 only supports 0 or 1 results",
+                    "export {name:?} has {} results; only 0 or 1 is supported",
                     results.len()
                 ),
             });
@@ -1320,10 +1393,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Handle a `use ... from "<path>" with { type: "wat"|"wasm" }`
-    /// declaration: validate Phase 1 constraints, resolve the asset path
-    /// to a `ModuleSource::Wasm`, and load + record the bytes.
+    /// declaration: validate what an embedded asset must be, resolve the asset
+    /// path to a `ModuleSource::Wasm`, and load + record the bytes.
     ///
-    /// Phase 1 only supports the wildcard form (`use _ from "..."`); named
+    /// Only the wildcard form (`use _ from "..."`) is handled here; named
     /// imports are rejected with a pointed diagnostic so users get a clear
     /// message instead of a downstream elaborator failure.
     async fn handle_wasm_import(

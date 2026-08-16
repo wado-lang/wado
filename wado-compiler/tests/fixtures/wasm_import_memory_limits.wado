@@ -1,0 +1,14 @@
+// An asset that bounds its own memory and names the default page size still
+// embeds: the rewrite asks the component only for the minimum it needs, so the
+// import matches the memory it is wired to.
+
+use { println, Stdout } from "core:cli";
+use { peek, poke } from "./sub/wasm_import_memory_limits.wat" with { type: "wat" };
+
+export fn run() with Stdout {
+    poke(42);
+    println(`peek() = ${peek()}`);
+}
+
+__DATA__
+{"stdout": "peek() = 42\n"}

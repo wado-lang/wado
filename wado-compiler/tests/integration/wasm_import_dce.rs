@@ -5,8 +5,8 @@
 //! turbofish lookups don't depend on which exports the user happens to
 //! mention). The codegen then prunes the embedded core module down to
 //! the union of exports that actually survive DCE — see
-//! `embed_imported_wasm_modules` and `postprocess::eliminate_dead_code`
-//! in `wado-compiler/src/codegen/`.
+//! `embed_imported_wasm_modules` in `wado-compiler/src/codegen/` and the
+//! `wado-wasm-embed` crate it calls.
 //!
 //! This test holds that contract honest by inspecting the compiled
 //! component bytes: it walks the embedded core wasm module's export
@@ -166,4 +166,60 @@ export fn run() with Stdout {
             );
         }
     }
+}
+
+/// The bundled `core:libm.wat` is the largest asset the prune ever sees: 87
+/// functions, of which a program calling one math function needs a handful.
+/// This holds the win honest against the real asset, not a toy fixture.
+#[test]
+fn the_bundled_libm_is_pruned_to_what_the_program_calls() {
+    let full = wat::parse_bytes(wado_compiler::stdlib::CORE_LIBM_WAT).expect("libm.wat parses");
+    let full_functions = code_entry_count(&full);
+
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`${f64::sin(builtin::black_box(0.5))}`);
+}
+"#;
+    let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let result = crate::common::compile_source_with_opts(
+        &fixture_dir.join("__libm_dce_entry__.wado"),
+        source,
+        wado_compiler::OptLevel::default(),
+    )
+    .expect("compile should succeed");
+
+    let mut libm = None;
+    for payload in Parser::new(0).parse_all(&result.wasm) {
+        if let Ok(Payload::ModuleSection {
+            unchecked_range, ..
+        }) = payload
+        {
+            let module = &result.wasm[unchecked_range.start..unchecked_range.end];
+            if module_has_export(module, "libm_sin") {
+                libm = Some(module.to_vec());
+            }
+        }
+    }
+    let libm = libm.expect("the component embeds libm");
+
+    assert_eq!(
+        function_exports(&libm),
+        ["libm_sin"],
+        "only the called export survives"
+    );
+    let kept = code_entry_count(&libm);
+    assert!(
+        kept < full_functions / 4,
+        "libm should shrink sharply: kept {kept} of {full_functions} functions"
+    );
+}
+
+fn code_entry_count(module_bytes: &[u8]) -> usize {
+    Parser::new(0)
+        .parse_all(module_bytes)
+        .filter(|p| matches!(p, Ok(Payload::CodeSectionEntry(_))))
+        .count()
 }
