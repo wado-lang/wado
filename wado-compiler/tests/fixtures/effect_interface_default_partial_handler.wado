@@ -8,8 +8,12 @@ interface Calc {
         return 1;
     }
 
+    // A default is a handler body, so it runs in the outer scope: this
+    // `Calc::one()` reaches the next handler out — nothing, here, so the
+    // default `one` — rather than the `Only::one` whose slot it sits beside.
+    // That is the same rule that stops a `..forward` recursing into itself.
     fn two() -> i32 {
-        return 2;
+        return Calc::one() + 100;
     }
 
     // `#function` inside a default reports the operation, not the synthesized
@@ -63,5 +67,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "10\n2\nCalc::who\n100\n"
+    "stdout": "10\n101\nCalc::who\n100\n"
 }

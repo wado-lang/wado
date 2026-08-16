@@ -4577,7 +4577,11 @@ interface Log {
 }
 ```
 
-A default runs in the caller's scope, like any function call. It fills a handler that leaves the operation out — the way a trait's default method does — and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles, so a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
+A default fills a handler that leaves the operation out, and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles — so a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
+
+A default is a handler body, so it runs in the outer scope like every other one (see [Handlers](#handlers)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops — a trait default calling `self.other()` reaches the impl's override, a filled operation's does not.
+
+An operation also gives no parameter a default value: a call site is a dispatch wrapper taking the arguments as declared, so a declared default could never be omitted at the call.
 
 An operation backed by a Component Model import — one carrying `#[cm(...)]`, and every `resource` method — cannot carry a default: its no-handler case is the CM adapter, so a body there could never run and is rejected.
 

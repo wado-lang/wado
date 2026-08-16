@@ -1815,6 +1815,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: receiver.span,
                 });
             }
+            // A call site is rewritten to the dispatch wrapper, and nothing
+            // pads it with a declared default, so `op()` on `fn op(x: T = e)`
+            // fails as a missing argument. Reject the default rather than let
+            // a declaration promise an argument a caller can never omit.
+            if let Some(param) = method.params.iter().find(|p| p.default.is_some()) {
+                let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    detail: "cannot give a parameter a default: an operation's call site is a \
+                             dispatch wrapper, which takes the arguments as declared",
+                    span: param.span,
+                });
+            }
             if method.is_async && method.body.is_some() {
                 let _ = self.emit(TypeError::OperationClauseNotAllowed {
                     owner: owner.to_string(),

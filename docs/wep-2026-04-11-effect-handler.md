@@ -252,7 +252,7 @@ fn test_logging() with Stdout {
 
 An `impl Effect for Type` covers the operations it means to answer for. What happens to the rest is decided in this order:
 
-- an operation the interface gave a default implementation runs that default, exactly as a trait's default method fills an impl that leaves it out;
+- an operation the interface gave a default implementation runs that default, filling the slot the way a trait's default method fills an impl — except that it runs in the outer scope like every handler body, so an `Effect::op(...)` inside it reaches the next handler out rather than the handler it is filling;
 - otherwise the operation traps if it is ever dispatched.
 
 A trailing rest clause overrides both, for every operation the block leaves out:

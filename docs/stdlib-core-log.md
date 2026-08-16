@@ -105,10 +105,11 @@ run on every body exit path, an early `return` included.
 
 ### `pub fn parse_directives(spec: String) -> List<Directive>`
 
-Parse an `EnvFilter`-style comma-separated list — `info,core:json=debug,app::db=trace`
-— from `WADO_LOG` or any string an application supplies. A malformed
-directive is skipped: a typo in an environment variable must not stop a
-program from starting.
+Parse an `EnvFilter`-style comma-separated list — `info,Db::query=debug,handle=trace`
+— from `WADO_LOG` or any string an application supplies. A bare level is the
+default for unmatched targets; `target=level` overrides it for targets under
+that prefix. A malformed directive is skipped: a typo in an environment
+variable must not stop a program from starting.
 
 ## Effects
 
@@ -379,6 +380,12 @@ A key the event itself carries wins.
 One `EnvFilter` directive: the lowest level admitted for targets under
 `target`. An empty `target` is the default for unmatched targets.
 
+A target is matched by prefix against the event's, which defaults to the
+caller's `#function` — a bare name for a free function (`handle_request`),
+`Type::method` for a method, `Log::event` for an operation's default. Pass
+`target` explicitly at the call site to group events under a name of your
+own (a subsystem, say) rather than the function that emitted them.
+
 #### `target: String`
 
 #### `level: Level`
@@ -386,7 +393,8 @@ One `EnvFilter` directive: the lowest level admitted for targets under
 ### `pub struct Filter`
 
 Per-target filtering, `EnvFilter`-style: the longest matching target prefix
-wins, and a target no directive matches is admitted.
+wins, and a target no directive matches is admitted. See [`Directive`] for
+what an event's target is.
 
 #### `directives: List<Directive>`
 

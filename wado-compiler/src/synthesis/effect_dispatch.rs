@@ -203,6 +203,11 @@ pub struct DispatchPlan {
     /// Module the effect is declared in — where an operation's default
     /// implementation lives.
     pub decl_module: ModuleSource,
+    /// Operations answered by the consumer's implementation across the CM
+    /// boundary. A handler that leaves one out keeps the wrapper's routing
+    /// rather than falling to a local default, which would shadow the real
+    /// implementation on the other side.
+    pub open_boundary_ops: IndexSet<String>,
 }
 
 /// Build the mangled instantiation label for naming dispatch
@@ -404,6 +409,9 @@ fn synthesize_dispatch_struct(
         field_indices,
         operations: meta.operations.clone(),
         decl_module: key.0.clone(),
+        // Filled by `synthesize_dispatch_wrappers`, which is where the
+        // open-and-registered test already runs.
+        open_boundary_ops: IndexSet::default(),
     }
 }
 
@@ -453,7 +461,7 @@ fn synthesize_dispatch_wrappers(
     entry_source: &ModuleSource,
     key: &InstantiationKey,
     meta: &EffectMeta,
-    plan: &DispatchPlan,
+    plan: &mut DispatchPlan,
     open_effects: &IndexSet<(ModuleSource, String)>,
 ) {
     let (effect_module, base_name, type_args) = key;
@@ -478,6 +486,13 @@ fn synthesize_dispatch_wrappers(
                     ))
                     .is_some()
         })
+        .collect();
+    plan.open_boundary_ops = plan
+        .operations
+        .iter()
+        .zip(&open_and_registered)
+        .filter(|(_, is_open_import)| **is_open_import)
+        .map(|(op, _)| op.name.clone())
         .collect();
     let entry_module = project
         .tir_modules
@@ -1651,11 +1666,16 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 )
             } else if impl_info.rest == Some(crate::ast::RestClause::Forward) {
                 build_forward_closure(op, plan, &env.entry_source, &env.type_table)
-            } else if impl_info.rest.is_none() && op.has_default {
+            } else if impl_info.rest.is_none()
+                && op.has_default
+                && !plan.open_boundary_ops.contains(&op.name)
+            {
                 // No rest clause and the interface declared what the operation
-                // does unhandled: run that, the way a trait's default method
-                // fills an impl that leaves it out. An explicit `..trap` still
-                // wins — a mock says "this must not be called" and means it.
+                // does unhandled: run that. An explicit `..trap` still wins — a
+                // mock says "this must not be called" and means it — and an
+                // operation open at the CM boundary is answered by the
+                // consumer's implementation, which the trap stub's absence
+                // would shadow, so it keeps the wrapper's routing.
                 build_default_closure(op, plan, &interface_name, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)
@@ -2302,15 +2322,13 @@ fn build_trap_closure(
     )
 }
 
-/// Build the stub for an operation a `..forward` block leaves out: call the
-/// operation's own dispatch wrapper, which by then has installed `outer`, so
-/// the call lands on the next handler out. Named directly rather than emitted
-/// as `E::op(...)` because call-site rewriting has already run.
-/// A closure calling the operation's default implementation directly — the
-/// stub for an operation a handler leaves out with no rest clause. Unlike the
-/// forward stub it does not consult the outer handler: the default is what the
-/// declaration says the operation does when this handler does not answer for
-/// it.
+/// The stub for an operation a handler leaves out with no rest clause: call the
+/// operation's default implementation directly, so the slot behaves as the
+/// declaration says the operation behaves when nothing answers for it.
+///
+/// Like every handler body, it runs in the outer scope — the wrapper installs
+/// `outer` before calling any slot — so an `E::op(...)` inside the default
+/// reaches the next handler out, not the handler this default is filling.
 fn build_default_closure(
     op: &TirEffectOp,
     plan: &DispatchPlan,
@@ -2377,6 +2395,10 @@ fn build_default_closure(
     )
 }
 
+/// Build the stub for an operation a `..forward` block leaves out: call the
+/// operation's own dispatch wrapper, which by then has installed `outer`, so
+/// the call lands on the next handler out. Named directly rather than emitted
+/// as `E::op(...)` because call-site rewriting has already run.
 fn build_forward_closure(
     op: &TirEffectOp,
     plan: &DispatchPlan,
@@ -3037,7 +3059,7 @@ fn synthesize_dispatch_infrastructure(
     for plan in plans.values() {
         synthesize_dispatch_global(project, &entry_source, plan);
     }
-    for (key, plan) in &plans {
+    for (key, plan) in &mut plans {
         let meta = substituted_metas
             .get(key)
             .expect("substituted meta must exist for every active instantiation");
