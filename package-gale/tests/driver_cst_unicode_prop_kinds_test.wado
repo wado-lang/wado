@@ -1,5 +1,5 @@
-//! `\p{...}` beyond the general categories: script, block and binary
-//! property, through the generated lexer.
+//! `\p{...}` beyond the general categories: script, block, binary property
+//! and an enumerated `Property=Value` name, through the generated lexer.
 
 use g from "./grammars/unicode_prop_kinds.g4"
     with {
@@ -38,4 +38,9 @@ test "a non-Greek letter falls through to the catch-all" {
 test "a binary property matches its own code points" {
     assert_kinds(&"+", &["PATSYN"]);
     assert_kinds(&"α + a", &["GREEK", "PATSYN", "OTHER"]);
+}
+
+test "an enumerated property reaches the generated lexer" {
+    assert_kinds(&"漢", &["WIDE"]);
+    assert_kinds(&"α 漢 a", &["GREEK", "WIDE", "OTHER"]);
 }
