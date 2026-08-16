@@ -127,10 +127,7 @@ fn a_defined_memory_becomes_an_import() {
     let memory = memory_import(&pruned).expect("memory import");
     assert_eq!(memory.initial, 2);
     assert_eq!(memory.maximum, Some(4), "the shape survives the rewrite");
-    assert!(
-        !section_ids(&pruned).contains(&5),
-        "the definition is gone",
-    );
+    assert!(!section_ids(&pruned).contains(&5), "the definition is gone",);
     assert_eq!(exports(&pruned), ["f"], "the memory export is dropped");
 }
 
@@ -199,7 +196,10 @@ fn indirect_call_targets_survive() {
     let pruned = prune(source, &["dispatch"]);
     assert_eq!(function_count(&pruned), 3, "dispatch, a and b");
     assert!(section_ids(&pruned).contains(&4), "table section survives");
-    assert!(section_ids(&pruned).contains(&9), "element section survives");
+    assert!(
+        section_ids(&pruned).contains(&9),
+        "element section survives"
+    );
 }
 
 #[test]
