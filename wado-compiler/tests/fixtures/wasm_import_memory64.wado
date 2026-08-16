@@ -1,0 +1,12 @@
+// An embedded wasm asset shares the component's 32-bit memory, so a 64-bit
+// memory in the asset cannot be wired to it. The loader rejects it with a
+// diagnostic rather than emitting a component that fails validation.
+
+use _ from "./sub/wasm_import_memory64.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "Phase 1 wasm import does not allow a 64-bit memory"
+}

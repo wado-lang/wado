@@ -1,0 +1,12 @@
+// An embedded wasm asset shares the component's memory, which has the
+// default 64 KiB page. An asset that customises its page size cannot be
+// wired to it, so the loader rejects it with a diagnostic.
+
+use _ from "./sub/wasm_import_page_size.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "Phase 1 wasm import requires the default page size"
+}

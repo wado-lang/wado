@@ -1,0 +1,12 @@
+// An asset is embedded in the component the compiler emits, so it has to be a
+// valid module. One that only assembles — here a call to a function index that
+// does not exist — is a compile error, not a codegen panic.
+
+use _ from "./sub/wasm_import_invalid_call.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "failed to validate wasm"
+}

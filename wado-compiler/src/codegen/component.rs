@@ -4,7 +4,6 @@
 //! for world exports.
 
 use super::component_context::{CmTypeKey, ComponentModelContext};
-use super::postprocess;
 use crate::ast::Type;
 use crate::canonical::{
     CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload,
@@ -880,12 +879,17 @@ fn embed_imported_wasm_modules(
         let env_instance_label = format!("wasm-env-{stem}-instance");
         let instance_label = format!("wasm-{stem}");
 
-        let imported = postprocess::convert_memory_to_import(&asset.bytes, "env", "memory")
-            .unwrap_or_else(|e| panic!("failed to process wasm asset {namespace:?}: {e}"));
-        let kept = postprocess::eliminate_dead_code(&imported, used_exports);
+        let pruned = wado_wasm_prune::rewrite(
+            &asset.bytes,
+            &wado_wasm_prune::Rewrite {
+                memory_import: ("env", "memory"),
+                keep_export: &|name| used_exports.contains(name),
+            },
+        )
+        .unwrap_or_else(|e| panic!("failed to process wasm asset {namespace:?}: {e}"));
 
         ctx.register_core_module(&module_label);
-        builder.core_module_raw(Some(&module_label), &kept);
+        builder.core_module_raw(Some(&module_label), &pruned);
 
         // Order matters: builder.core_instantiate{,_exports}() each create a
         // new core instance and bump the builder's instance counter. We

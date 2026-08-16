@@ -569,6 +569,31 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
     out
 }
 
+/// An embedded asset is wired to the component's memory, so its own memory
+/// must have that memory's shape: 32-bit, default page size.
+fn check_shared_memory_shape(
+    source: &ModuleSource,
+    mem: wasmparser::MemoryType,
+) -> Result<(), LoadError> {
+    if mem.memory64 {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "Phase 1 wasm import does not allow a 64-bit memory; the asset shares the \
+                      component's 32-bit memory"
+                .to_string(),
+        });
+    }
+    if mem.page_size_log2.is_some() {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "Phase 1 wasm import requires the default page size; the asset shares the \
+                      component's memory"
+                .to_string(),
+        });
+    }
+    Ok(())
+}
+
 /// Walk a core wasm module: validate Phase 1 constraints (no `start`,
 /// ≤1 memory, only `env.memory` may be imported) and extract the
 /// signatures of every function export so the elaborator can synthesise
@@ -622,6 +647,9 @@ fn parse_wasm_module_exports(
                     if !allowed {
                         disallowed_imports.push(format!("{}.{}", import.module, import.name));
                     }
+                    if let wasmparser::TypeRef::Memory(mem) = import.ty {
+                        check_shared_memory_shape(source, mem)?;
+                    }
                     if let wasmparser::TypeRef::Func(_) = import.ty {
                         imported_func_count += 1;
                     }
@@ -650,10 +678,11 @@ fn parse_wasm_module_exports(
             Payload::StartSection { .. } => had_start = true,
             Payload::MemorySection(reader) => {
                 for mem in reader {
-                    let _ = mem.map_err(|e| LoadError::WasmImport {
+                    let mem = mem.map_err(|e| LoadError::WasmImport {
                         module_source: source.clone(),
                         message: format!("failed to read memories: {e}"),
                     })?;
+                    check_shared_memory_shape(source, mem)?;
                     memory_count += 1;
                 }
             }
@@ -682,6 +711,15 @@ fn parse_wasm_module_exports(
             ),
         });
     }
+    // The asset is embedded in the component the compiler emits and codegen
+    // walks its index spaces, so a module that only assembles is rejected here
+    // rather than left to fail as an internal error later.
+    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+        .validate_all(bytes)
+        .map_err(|e| LoadError::WasmImport {
+            module_source: source.clone(),
+            message: format!("failed to validate wasm: {e}"),
+        })?;
 
     // Build the export signature list. `export.index` indexes into the
     // module's combined function space (imported funcs first, then

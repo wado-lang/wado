@@ -195,7 +195,7 @@ CM canonical operations (stream / future read + write, waitable-set, error-conte
 
 1. `emit.rs` emits core Wasm bytes from WIR, including the branch-hint section.
 2. `component.rs` wraps the core module in a Component Model envelope (imports, exports, adapters, optional WIT bundling, embedded data).
-3. `postprocess.rs` rewrites an embedded wasm asset's memory definition into an import and prunes it to its used exports.
+3. `wado-wasm-prune` rewrites an embedded wasm asset's memory definition into an import and prunes it to the exports the component uses.
 
 Output is validated with `wasmparser` unless `--no-validate` is set.
 

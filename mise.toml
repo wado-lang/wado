@@ -68,10 +68,9 @@ set -e -o pipefail
 # The wasm-tools family is pinned to wasmtime's generation in
 # [workspace.dependencies], so cargo dedupes instead of compiling parallel 0.x
 # trees. `allow` holds the duplicates from transitive deps we cannot pin:
-#   wasmparser / wasm-encoder 0.245.1  <- walrus 0.26
 #   wast 35.0.2                        <- witx <- wasmtime-wasi (wiggle)
 family='wasm-encoder|wasmparser|wasmprinter|wasm-metadata|wat|wast|wit-parser|wit-component'
-allow='wasmparser v0.245.1|wasm-encoder v0.245.1|wast v35.0.2'
+allow='wast v35.0.2'
 
 offenders=$(cargo tree -d 2>/dev/null \
     | awk '{print $1, $2}' \
