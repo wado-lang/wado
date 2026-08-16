@@ -1,4 +1,4 @@
-//! Rewrite an embedded core wasm asset so a component can host it.
+//! Prepare a core wasm asset for embedding in a component.
 //!
 //! Two transformations, one pass:
 //!
@@ -7,26 +7,35 @@
 //! - every function, global, table, tag, type and segment unreachable from the
 //!   exports the component actually uses is dropped.
 //!
-//! Custom sections do not survive: the asset's own DWARF describes the
-//! pre-prune index space, and only the `name` section is rebuilt (filtered and
-//! remapped) because stack traces read it.
+//! A custom section survives only where the prune leaves it true. The `name`
+//! section is rebuilt against the functions that remain; `producers` and
+//! `target_features` name no index and pass through untouched. Everything else
+//! goes: DWARF, `linking` and `reloc.*` describe an index space that no longer
+//! exists, branch hints carry byte offsets that renumbering moves (a narrower
+//! index encodes shorter), and an unknown section cannot be shown to have
+//! survived at all. `strip_custom_sections` drops even the ones that did.
 
 mod emit;
 mod reach;
 
 use std::fmt;
 
-/// How to rewrite an asset.
-pub struct Rewrite<'a> {
+/// How to embed an asset.
+pub struct Embed<'a> {
     /// `(module, name)` the memory is imported under.
     pub memory_import: (&'a str, &'a str),
     /// The exports to keep. Everything unreachable from them is dropped.
     pub keep_export: &'a dyn Fn(&str) -> bool,
+    /// Drop every custom section, the `name` section included (`-Os`).
+    pub strip_custom_sections: bool,
 }
+
+/// Custom sections that name no index, so the prune cannot make them lie.
+pub(crate) const INDEX_FREE_CUSTOM_SECTIONS: [&str; 2] = ["producers", "target_features"];
 
 #[derive(Debug)]
 pub enum Error {
-    /// The asset is not a core wasm module this rewrite can read.
+    /// The asset is not a core wasm module this pass can read.
     Parse(wasmparser::BinaryReaderError),
     /// The asset has a shape a component cannot host.
     Unsupported(&'static str),
@@ -67,18 +76,18 @@ impl From<wasm_encoder::reencode::Error> for Error {
     }
 }
 
-/// Rewrite `wasm`, keeping only what `opts` asks for.
+/// Embed `wasm`, keeping only what `opts` asks for.
 ///
 /// `wasm` must be a valid core module: indices are taken at face value, so an
 /// out-of-range one panics rather than producing a module that only looks
 /// right. Validate before calling.
-pub fn rewrite(wasm: &[u8], opts: &Rewrite<'_>) -> Result<Vec<u8>, Error> {
+pub fn embed(wasm: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     let asset = Asset::collect(wasm)?;
     let live = reach::live(&asset, opts.keep_export)?;
-    emit::encode(&asset, &live, opts.keep_export, opts.memory_import)
+    emit::encode(&asset, &live, opts)
 }
 
-/// Everything the rewrite needs from the asset, in its original index space.
+/// Everything the pass needs from the asset, in its original index space.
 #[derive(Default)]
 pub(crate) struct Asset<'a> {
     pub types: Vec<wasmparser::RecGroup>,
@@ -96,6 +105,8 @@ pub(crate) struct Asset<'a> {
     pub datas: Vec<wasmparser::Data<'a>>,
     pub bodies: Vec<wasmparser::FunctionBody<'a>>,
     pub names: Option<wasmparser::NameSectionReader<'a>>,
+    /// The custom sections that outlive the prune, in section order.
+    pub customs: Vec<(&'a str, &'a [u8])>,
 }
 
 /// How many of each index space the imports occupy. Imports are kept whole, so
@@ -190,6 +201,11 @@ impl<'a> Asset<'a> {
                         wasmparser::BinaryReader::new(reader.data(), reader.data_offset()),
                     ));
                 }
+                Payload::CustomSection(reader)
+                    if INDEX_FREE_CUSTOM_SECTIONS.contains(&reader.name()) =>
+                {
+                    asset.customs.push((reader.name(), reader.data()));
+                }
                 // A start section runs at instantiation time, which the
                 // embedding cannot honour; the loader rejects it before here.
                 Payload::StartSection { .. } => {
@@ -198,8 +214,9 @@ impl<'a> Asset<'a> {
                 Payload::UnknownSection { .. } => {
                     return Err(Error::Unsupported("unknown section"));
                 }
-                // Section headers, the module envelope, other custom sections,
-                // and component payloads: nothing to carry over.
+                // Section headers, the module envelope, the custom sections the
+                // prune invalidates, and component payloads: nothing to carry
+                // over.
                 _ => {}
             }
         }

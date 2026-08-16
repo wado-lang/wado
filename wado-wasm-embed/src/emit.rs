@@ -8,7 +8,7 @@ use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind};
 
 use crate::reach::Live;
-use crate::{Asset, Error};
+use crate::{Asset, Embed, Error};
 
 /// What an asset with no memory of its own is given, so every embedded module
 /// ends up with the same shape.
@@ -20,12 +20,7 @@ const DEFAULT_MEMORY: wasm_encoder::MemoryType = wasm_encoder::MemoryType {
     page_size_log2: None,
 };
 
-pub(crate) fn encode(
-    asset: &Asset<'_>,
-    live: &Live,
-    keep_export: &dyn Fn(&str) -> bool,
-    memory_import: (&str, &str),
-) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     assert_eq!(
         asset.funcs.len(),
         asset.bodies.len(),
@@ -57,7 +52,7 @@ pub(crate) fn encode(
             Some(memory) => remap.memory_type(memory)?,
             None => DEFAULT_MEMORY,
         };
-        imports.import(memory_import.0, memory_import.1, memory);
+        imports.import(opts.memory_import.0, opts.memory_import.1, memory);
     }
     module.section(&imports);
 
@@ -103,7 +98,7 @@ pub(crate) fn encode(
 
     let mut exports = wasm_encoder::ExportSection::new();
     for export in &asset.exports {
-        if keep_export(export.name) {
+        if (opts.keep_export)(export.name) {
             remap.parse_export(&mut exports, *export)?;
         }
     }
@@ -161,10 +156,18 @@ pub(crate) fn encode(
         module.section(&datas);
     }
 
-    if let Some(names) = &asset.names
-        && let Some(section) = name_section(names.clone(), &remap)?
-    {
-        module.section(&section);
+    if !opts.strip_custom_sections {
+        if let Some(names) = &asset.names
+            && let Some(section) = name_section(names.clone(), &remap)?
+        {
+            module.section(&section);
+        }
+        for (name, data) in &asset.customs {
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(name),
+                data: Cow::Borrowed(data),
+            });
+        }
     }
 
     Ok(module.finish())

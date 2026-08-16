@@ -1,15 +1,20 @@
-use wado_wasm_prune::{Error, Rewrite, rewrite};
+use wado_wasm_embed::{Embed, Error, embed};
 
 fn prune(source: &str, keep: &[&str]) -> Vec<u8> {
+    prune_with(source, keep, false)
+}
+
+fn prune_with(source: &str, keep: &[&str], strip: bool) -> Vec<u8> {
     let wasm = wat::parse_str(source).expect("fixture must parse");
-    let out = rewrite(
+    let out = embed(
         &wasm,
-        &Rewrite {
+        &Embed {
             memory_import: ("env", "memory"),
             keep_export: &|name| keep.contains(&name),
+            strip_custom_sections: strip,
         },
     )
-    .expect("rewrite");
+    .expect("embed");
     wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
         .validate_all(&out)
         .unwrap_or_else(|e| panic!("pruned module must validate: {e}"));
@@ -127,7 +132,7 @@ fn a_defined_memory_becomes_an_import() {
     let memory = memory_import(&pruned).expect("memory import");
     assert_eq!(memory.initial, 2);
     assert_eq!(memory.maximum, Some(4), "the shape survives the rewrite");
-    assert!(!section_ids(&pruned).contains(&5), "the definition is gone",);
+    assert!(!section_ids(&pruned).contains(&5), "the definition is gone");
     assert_eq!(exports(&pruned), ["f"], "the memory export is dropped");
 }
 
@@ -152,11 +157,12 @@ fn an_existing_memory_import_is_left_alone() {
 fn two_memories_are_rejected() {
     let wasm = wat::parse_str(r#"(module (import "env" "memory" (memory 1)) (memory 1))"#)
         .expect("fixture must parse");
-    let err = rewrite(
+    let err = embed(
         &wasm,
-        &Rewrite {
+        &Embed {
             memory_import: ("env", "memory"),
             keep_export: &|_| true,
+            strip_custom_sections: false,
         },
     )
     .expect_err("two memories cannot share one component memory");
@@ -166,11 +172,12 @@ fn two_memories_are_rejected() {
 #[test]
 fn a_start_section_is_rejected() {
     let wasm = wat::parse_str(r#"(module (func $init) (start $init))"#).expect("fixture");
-    let err = rewrite(
+    let err = embed(
         &wasm,
-        &Rewrite {
+        &Embed {
             memory_import: ("env", "memory"),
             keep_export: &|_| true,
+            strip_custom_sections: false,
         },
     )
     .expect_err("a start section cannot run inside the embedding");
@@ -303,4 +310,42 @@ fn declared_segments_shrink_to_the_surviving_functions() {
     "#;
     let pruned = prune(source, &["f"]);
     assert_eq!(function_count(&pruned), 2, "f and referenced");
+}
+
+fn custom_sections(wasm: &[u8]) -> Vec<String> {
+    let mut names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(wasm) {
+        if let Ok(wasmparser::Payload::CustomSection(reader)) = payload {
+            names.push(reader.name().to_string());
+        }
+    }
+    names
+}
+
+const WITH_CUSTOM_SECTIONS: &str = r#"
+    (module
+      (@custom "producers" "\00")
+      (@custom "target_features" "\00")
+      (@custom ".debug_info" "stale")
+      (@custom "metadata.code.branch_hint" "stale")
+      (@custom "something.unknown" "stale")
+      (memory 1)
+      (func $dead (result i32) (i32.const 0))
+      (func $live (export "live") (result i32) (i32.const 1)))
+"#;
+
+/// The prune renumbers everything, so only the sections that name no index
+/// survive it — plus the `name` section, which is rebuilt.
+#[test]
+fn only_the_custom_sections_that_stay_true_survive() {
+    let pruned = prune(WITH_CUSTOM_SECTIONS, &["live"]);
+    let mut sections = custom_sections(&pruned);
+    sections.sort();
+    assert_eq!(sections, ["name", "producers", "target_features"]);
+}
+
+#[test]
+fn stripping_drops_every_custom_section() {
+    let pruned = prune_with(WITH_CUSTOM_SECTIONS, &["live"], true);
+    assert!(custom_sections(&pruned).is_empty());
 }

@@ -96,6 +96,7 @@ pub fn build_component(
         &mut ctx,
         &imported_wasm_module_uses,
         &project.wasm_assets,
+        project.strip_names,
     );
 
     // Canonical intrinsics are discovered lazily during WIR translation via ensure_canonical().
@@ -862,6 +863,7 @@ fn embed_imported_wasm_modules(
     ctx: &mut ComponentModelContext,
     imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
     wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
+    strip_names: bool,
 ) {
     if imported_wasm_uses.is_empty() {
         return;
@@ -879,17 +881,18 @@ fn embed_imported_wasm_modules(
         let env_instance_label = format!("wasm-env-{stem}-instance");
         let instance_label = format!("wasm-{stem}");
 
-        let pruned = wado_wasm_prune::rewrite(
+        let embedded = wado_wasm_embed::embed(
             &asset.bytes,
-            &wado_wasm_prune::Rewrite {
+            &wado_wasm_embed::Embed {
                 memory_import: ("env", "memory"),
                 keep_export: &|name| used_exports.contains(name),
+                strip_custom_sections: strip_names,
             },
         )
         .unwrap_or_else(|e| panic!("failed to process wasm asset {namespace:?}: {e}"));
 
         ctx.register_core_module(&module_label);
-        builder.core_module_raw(Some(&module_label), &pruned);
+        builder.core_module_raw(Some(&module_label), &embedded);
 
         // Order matters: builder.core_instantiate{,_exports}() each create a
         // new core instance and bump the builder's instance counter. We
