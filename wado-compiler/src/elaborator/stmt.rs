@@ -989,13 +989,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if found != written {
             return plain();
         }
-        let Some(def) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site)) else {
+        let Some(def) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
+        else {
             return plain();
         };
         let defs = self.tysys.resolutions.defs();
         let expected =
             crate::symbol_notation::render(&defs.module(def).to_string(), defs.name(def));
-        let qualified = self.tysys.type_table.borrow().type_name_qualified(scrutinee);
+        let qualified = self
+            .tysys
+            .type_table
+            .borrow()
+            .type_name_qualified(scrutinee);
         if expected == qualified {
             return plain();
         }
