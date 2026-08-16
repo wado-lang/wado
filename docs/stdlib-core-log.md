@@ -10,16 +10,6 @@ composition is handler nesting and dispatch stays static. Events carry a
 level, a message, structured fields, and the caller's source location;
 spans are first-class values entered for a scope.
 
-```wado
-use { info, span, in_span, Level, TextSink } from "core:log";
-
-with Log => &mut TextSink {} do {
-    in_span(&span(Level::Info, `request`), || {
-        info(`user logged in`, { user_id: 7, ip: "127.0.0.1" });
-    });
-}
-```
-
 Filtering is three gates, cheapest first, each narrowing what the one
 before admitted: `-D log.level=info` folds at compile time, `set_log_level`
 is one global read, and `Log::enabled` runs the installed layer stack.
@@ -35,6 +25,11 @@ is how a program asks for silence.
 ## Synopsis
 
 ```wado
+// No sink installed: the default subscriber writes it to stderr.
+info(`starting up`);
+
+// An installed sink takes over for its scope. `CaptureSink` is the one a
+// test reads back; `TextSink` and `JsonSink` write.
 let mut sink = CaptureSink {};
 with Log => &mut sink do {
     in_span(&span(Level::Info, `request`), || {
