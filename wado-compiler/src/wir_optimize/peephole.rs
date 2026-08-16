@@ -370,7 +370,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
     loop {
         let mut changed = false;
         changed |= rewrite_everywhere(instrs, &mut try_fold_comparison);
-        changed |= rewrite_everywhere(instrs, &mut try_eliminate_const_if);
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_eliminate_const_if(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             let folded = try_fold_eqz(instr);
             try_negate_eqz_comparison(instr) || folded
@@ -437,10 +437,11 @@ fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
 }
 
 /// Replace an `If` with a constant condition by the surviving branch.
-fn try_eliminate_const_if(instr: &mut WirInstr) -> bool {
-    // A `select` this pass produced is decidable too, and a condition can
-    // become constant a round after the select replaced the branch — the arms
-    // are pure and trap-free by construction, so dropping one is free.
+fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
+    // A `select` is decidable too, and a condition can turn constant a round
+    // after `try_select_pure_if` replaced a branch with one. But `select`
+    // evaluates *both* arms, so the arm not taken has to be droppable on its
+    // own — a `builtin::select(c, 7, 100 / zero)` traps whichever way `c` goes.
     if let WirInstr::Select {
         condition,
         if_true,
@@ -449,6 +450,10 @@ fn try_eliminate_const_if(instr: &mut WirInstr) -> bool {
     } = instr
         && let Some(const_val) = try_fold_wir_to_bool(condition)
     {
+        let dropped = if const_val { &**if_false } else { &**if_true };
+        if !is_side_effect_free(dropped) || may_trap_in(dropped, null) {
+            return false;
+        }
         let taken = if const_val { if_true } else { if_false };
         *instr = std::mem::replace(taken.as_mut(), WirInstr::Nop);
         return true;
@@ -1347,7 +1352,10 @@ mod tests {
             then_body: vec![WirInstr::I32Const(1)],
             else_body: Some(vec![WirInstr::I32Const(7)]),
         };
-        assert!(try_eliminate_const_if(&mut instr));
+        assert!(try_eliminate_const_if(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
         match &instr {
             WirInstr::Block { body, .. } => {
                 assert!(matches!(body.as_slice(), [WirInstr::I32Const(7)]));

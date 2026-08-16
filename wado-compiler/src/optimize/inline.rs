@@ -876,10 +876,11 @@ fn classify_callee(
     // Over budget as written. It may still be worth splicing once the caller's
     // constants have folded it — and if it might be, it has to be protected
     // from its own leaves in the meantime.
-    let pays_off = |view: &ConstView<'_>| {
+    // `(fits, drops a loop)` for one reading of the body.
+    let weigh = |view: &ConstView<'_>| {
         let folded = inline_cost_folded(body, type_table, descriptors, view);
         if folded > effective_threshold {
-            return false;
+            return (false, false);
         }
         let walk = CostWalk {
             body,
@@ -892,21 +893,33 @@ fn classify_callee(
         // paying. The fold must also delete a loop — the model prices one at
         // three instructions, and it is worth however many times it spins — or
         // halve the body.
-        folded * 2 <= plain || fold_drops_loop(body, view, &walk)
+        (folded * 2 <= plain, fold_drops_loop(body, view, &walk))
     };
 
-    // The hold asks optimistically, with every parameter assumed constant: a
-    // derivation computes its wire key with a compile-time call, so the key is
-    // a literal only after several rounds of folding, and by the time the real
-    // view exists the leaves have already been spliced in.
+    // The hold asks optimistically, with every parameter assumed constant,
+    // because the constant can arrive late: a derivation computes its wire key
+    // with a compile-time call, so the key is a literal only after several
+    // rounds of folding, by which time the leaves are already spliced in.
+    //
+    // Only the loop counts here. Assuming the receiver constant halves almost
+    // any body, so admitting the hold on that would suppress bottom-up
+    // inlining across the whole program — it stopped `String::get_byte_unchecked`
+    // reaching a two-line `peek`. A loop the fold deletes is the option worth
+    // holding open.
     let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
-    let hold = pays_off(&ConstView {
+    let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
         foldable,
         loopy,
     });
-    let inline = const_view.is_some_and(pays_off);
-    Verdict { inline, hold }
+    let inline = const_view.is_some_and(|view| {
+        let (halves, drops_loop) = weigh(view);
+        halves || drops_loop
+    });
+    Verdict {
+        inline,
+        hold: optimistic_loop,
+    }
 }
 
 /// Detect recursive functions using call graph analysis.
