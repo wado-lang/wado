@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786872916622,
+  "lastUpdate": 1786873787465,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48677,6 +48677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/417c38179676436b9a24bdb60a477ccc2ecc5aca"
         },
         "date": 1786872916228,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf989730d4519a56797c23f135efde8271c92783",
+          "message": "Merge pull request #1830 from wado-lang/claude/core-log-implementation-got5nt\n\nfeat(stdlib): core:log, on default implementations for interface operations",
+          "timestamp": "2026-08-16T18:31:22+09:00",
+          "tree_id": "62593cb20cb12774c7ecfc89c722dd294a414d8a",
+          "url": "https://github.com/wado-lang/wado/commit/bf989730d4519a56797c23f135efde8271c92783"
+        },
+        "date": 1786873786979,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
