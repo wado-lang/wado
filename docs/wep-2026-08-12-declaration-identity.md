@@ -398,7 +398,7 @@ Nothing a name is built from is stored as text. `FqTraitName::args` and
 `trait_env::written_type_args` builds one per argument off the argument's own
 reference site — so an `impl Index<K>` header and a call site reach the same
 head, and a `From<Foo>` segment names the module that declares `Foo`. There is
-one renderer for a type argument: `TypeTable::mangle_type_arg_for_generic` *is*
+one renderer for a type argument: `TypeTable::mangle_type_arg_for_generic` _is_
 `FqTypeName::to_mangled`, so a definition's name and a lookup's name cannot be
 spelled by two functions that drift.
 
@@ -507,9 +507,10 @@ removed mechanism takes one fix.
       answer anyway; the tier itself stays, inside the walk, where a value
       site is what consults it.
 
-      `declaration_named` has five callers left, and they are the hard tail —
-      each is a pass that genuinely has no site, rather than one that mislaid
-      it:
+      `declaration_named` has five call sites left, and they are the hard tail
+      — each is a pass that genuinely has no site, rather than one that mislaid
+      it. Every remaining by-name chain in the elaborator funnels through one
+      of them:
 
       - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
         family. Every *written* type reference now reaches the family through
@@ -532,9 +533,9 @@ removed mechanism takes one fix.
       - `symbol_named` (8 callers) reads the symbol row behind a name. The four
         that held an identifier now read its site through `symbol_at`; what is
         left is reached from a mangled name or a synthesis target.
-      - `find_struct_module_source` answers which module a spelling means, for
-        a synthesised lookup that never had a site. It reaches the scope
-        through `decl_key_or_local` alone now.
+        `find_struct_module_source` — which module a spelling means, for a
+        synthesised lookup that never had a site — reaches the scope through
+        this chain and nothing else now.
       - `static_receiver_keys` files a static call under two vantages, because
         a receiver that arrived through a namespace prefix lost its qualifier.
         The call site's path still names the receiver with its owner segment,

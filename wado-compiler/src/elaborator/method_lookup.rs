@@ -2132,11 +2132,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name: crate::name::FqTraitName::declared(&defs, trait_decl)
-                    .with_args(super::trait_env::written_type_args(
+                trait_name: crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
+                    super::trait_env::written_type_args(
                         &trait_type_for_name,
                         &scope.tysys.resolutions,
-                    )),
+                    ),
+                ),
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2187,11 +2188,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: crate::name::FqTraitName::declared(&defs, trait_decl)
-                        .with_args(super::trait_env::written_type_args(
-                        &trait_type_for_name,
-                        &scope.tysys.resolutions,
-                    )),
+                    trait_name: crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
+                        super::trait_env::written_type_args(
+                            &trait_type_for_name,
+                            &scope.tysys.resolutions,
+                        ),
+                    ),
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
