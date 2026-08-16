@@ -15,6 +15,7 @@ use super::instantiate::Instantiation;
 use super::scope::Scope;
 use super::sem::decls::FunctionSig;
 use super::sig::MethodSig;
+use super::trait_env;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
@@ -131,6 +132,26 @@ impl CalleeIdentKind<'_> {
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
+        }
+    }
+
+    /// The reference site of a qualified callee's receiver segment — the `Type`
+    /// of `Type::method`, which the walk answered for in the module that wrote
+    /// it.
+    ///
+    /// Two segments exactly, because the consumers pair this site with the
+    /// prefix they split off `effective_name`, and only here are the two the
+    /// same segment. `ns::Type::method` splits to the *namespace*, which the
+    /// namespace dispatch path resolves from the receiver's own type instead.
+    /// `None` likewise for an unqualified call and for `Rewritten`, whose
+    /// spelling no longer belongs to any segment the walk saw.
+    fn receiver_site(&self) -> Option<ast::AstId> {
+        match self {
+            Self::AsIs(ident) => match ident.segments.as_slice() {
+                [receiver, _method] => Some(receiver.id),
+                _ => None,
+            },
+            _ => None,
         }
     }
 }
@@ -460,6 +481,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let effective_name = callee_kind.effective_name();
+        // The receiver of `Type::method` is named at its own segment, and the
+        // walk answered for it. Every receiver lookup below goes through that
+        // site, so the spelling is never split back into an identity.
+        let receiver_site = callee_kind.receiver_site();
 
         // First, determine expected parameter types to handle coercion.
         let (mut param_types, callee_slots) = self.lookup_function_signature(effective_name);
@@ -631,7 +656,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Static method call (Type::method). Static methods are
             // registered with mangled names "Type::method".
-            else if self.is_static_method(prefix, suffix) {
+            else if self.is_static_method_at(receiver_site, prefix, suffix) {
                 // Record the receiver-type segment (prefix) as a reference to
                 // the type's decl. After `Self::` / `T::` rewriting, `prefix`
                 // is the concrete type name and the segment's AstId is the
@@ -1182,10 +1207,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `lookup_static_method_*` from the AST alone. Carry the
                     // parameter defaults so reify pads omitted trailing
                     // arguments, matching the unqualified `Type::method()` path.
+                    // Keyed by the namespace member, not by the bare spelling:
+                    // the importing module never names `Type` on its own, so a
+                    // name-only key would reach nothing and the defaults would
+                    // come back empty — reify then pads nothing and codegen
+                    // emits a call short an argument.
+                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                    });
                     let param_defaults = self.lookup_static_method_param_defaults_keyed(
                         type_name,
                         method_name,
-                        None,
+                        ns_key.as_ref(),
                     );
                     let param_types =
                         self.lookup_static_method_param_types_keyed(type_name, method_name, None);
@@ -2583,7 +2616,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.impl_target(struct_name);
+        self.static_method_sig_at(None, struct_name, method_name)
+    }
+
+    /// [`Self::static_method_sig`] for a receiver written at a reference site.
+    /// The site decides which declaration `struct_name` names; see
+    /// [`Elaborator::impl_target_at`].
+    pub(super) fn static_method_sig_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let key = self.impl_target_at(site, struct_name);
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index

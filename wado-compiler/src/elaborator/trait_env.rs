@@ -1390,9 +1390,7 @@ impl TraitEnv {
     /// it takes no vantage — the caller filters for the module it means.
     pub(crate) fn decls_named<'n>(&'n self, name: &'n str) -> impl Iterator<Item = DefId> + 'n {
         // The indexes overlap — a struct is in the struct-like map and in the
-        // type index both — so one declaration must not read as two: a
-        // duplicate would make `unique_decl_named` decline a name that in fact
-        // picks out one declaration.
+        // type index both — so one declaration must not read as two.
         let mut seen: IndexSet<DefId> = IndexSet::default();
         self.struct_like_decl_modules
             .get(name)
@@ -1405,21 +1403,6 @@ impl TraitEnv {
             .chain(&self.resource_decl_index)
             .copied()
             .filter(move |def| self.defs.name(*def) == name && seen.insert(*def))
-    }
-
-    /// The one declaration written under `name` anywhere in the program, for a
-    /// caller that must produce *some* bucket for a name its own module cannot
-    /// see — a struct-like type reached only through a return type, a stdlib
-    /// trait a bodiless derive names. Several modules declaring it leaves the
-    /// name unresolved rather than guessing.
-    ///
-    /// Not a tier of the frame derivation: a *written* reference that reaches
-    /// nothing through a module's own three tiers is unresolved, and this would
-    /// resolve it. Only keying may fall through to here.
-    pub(crate) fn unique_decl_named(&self, name: &str) -> Option<DefId> {
-        let mut hits = self.decls_named(name);
-        let first = hits.next()?;
-        hits.next().is_none().then_some(first)
     }
 
     /// Declaring module of a struct-like type (struct / resource / variant /

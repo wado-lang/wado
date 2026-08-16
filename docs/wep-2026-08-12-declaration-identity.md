@@ -502,13 +502,14 @@ The three are the module's own reach, so a declaration the module cannot see
 stays unseen here — the derivation never widens to the whole program, and a name
 no module brought into scope is unresolved, the same answer the walk gives.
 
-`TraitEnv::unique_decl_named` — the one declaration written under the name
-anywhere, declining when several modules write it — sits _outside_ the
-derivation, and only impl-target keying may fall through to it. A key must name
-some bucket: a receiver reached only through a return type, or a trait a
-bodiless derive names, would otherwise key to the call site and split one
-declaration's impls across modules. Widening a bucket is not widening scope, and
-nothing that decides whether a written name resolves reads it.
+There is no fourth tier, and the derivation is not what a qualified call uses.
+`Type::method` names its receiver at its own path segment, which the resolve
+pass answered for like any other reference, so `impl_target_at` reads that site
+and the spelling is never split back into an identity. Before it did, the
+receiver of a default argument spliced into a caller keyed to whatever the
+_caller_ called `Type` — a caller declaring its own same-named type silently
+took the impl bucket, and a whole-program unique-name lookup was what covered
+the gap. A site answers where that lookup guessed, so the guess is gone.
 
 Nor does any tier take a vantage it could get wrong: `decls_named` takes no
 module at all, and the caller that knows which module it means filters the

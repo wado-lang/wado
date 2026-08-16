@@ -3320,6 +3320,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Get the operator trait and method name for a binary operator.
     pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
+        self.is_static_method_at(None, struct_name, method_name)
+    }
+
+    /// [`Self::is_static_method`] for a receiver written at a reference site.
+    /// The site decides which declaration `struct_name` names; see
+    /// [`Elaborator::impl_target_at`].
+    pub(super) fn is_static_method_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        struct_name: &str,
+        method_name: &str,
+    ) -> bool {
         let mangled_name = MethodName::format_local(
             &self.qualified_receiver_name(struct_name),
             None,
@@ -3339,7 +3351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // O(1) lookup via pre-built static method index (impl blocks).
         // Canonicalise so a same-named struct in another module doesn't
         // accidentally claim this name.
-        let static_key = self.impl_target(struct_name);
+        let static_key = self.impl_target_at(site, struct_name);
         if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
             && methods.iter().any(|e| e.name == method_name)
         {
@@ -3352,7 +3364,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self
                 .tysys
                 .trait_env
-                .all_impl_keys(&self.impl_target(struct_name)),
+                .all_impl_keys(&self.impl_target_at(site, struct_name)),
             method_name,
         ) {
             return true;
