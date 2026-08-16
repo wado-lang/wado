@@ -16,8 +16,10 @@
 //!   prefix is reserved in source, so the label cannot come from user code.
 //! - the stdlib symbols the block calls — [`CompilerItem`]
 //! - `String`'s fields — [`crate::compiler_item::SeqField`]
-//! - `Formatter`'s fields and sentinels — [`FormatterField`], checked against
-//!   the Wado declaration by [`assert_formatter_layout`]
+//! - `Formatter`'s fields — [`FormatterField`], whose order
+//!   `assert_formatter_layout` checks against the Wado declaration. Its
+//!   sentinels are the one thing repeated rather than shared; the e2e fixture
+//!   `template_formatter_sentinels.wado` fails if they drift.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -211,10 +213,9 @@ impl FormatStdlibNames {
     }
 }
 
-/// [`FormatterField`] is the schema this synthesiser builds a `Formatter`
-/// literal against; the Wado declaration is the schema it has to match. Check
-/// them against each other once per module rather than let a reordered field
-/// become a silently wrong struct literal.
+/// [`FormatterField`] is the field order this synthesiser builds a `Formatter`
+/// literal in; the Wado declaration is the order it has to match. A reordered
+/// field would otherwise become a silently wrong struct literal.
 fn assert_formatter_layout(type_table: &TypeTable) {
     let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
     let defs = type_table.defs();

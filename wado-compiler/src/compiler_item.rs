@@ -85,10 +85,15 @@ impl FormatterField {
         Self::Buf,
     ];
 
-    /// `Formatter.width` when the spec sets none — mirrors the Wado-side
-    /// default on `Formatter::new`.
+    /// What an unset field carries. These repeat `impl Formatter`'s Wado-side
+    /// constants of the same name, because template expansion writes the struct
+    /// literal itself instead of calling `Formatter::new`; the e2e fixture
+    /// `template_formatter_sentinels.wado` fails if the copies drift.
+    ///
+    /// `NO_WIDTH` is `Formatter::NO_WIDTH`: no minimum width, so every padding
+    /// path is a no-op.
     pub const NO_WIDTH: i32 = -1;
-    /// `Formatter::PRECISION_DEFAULT` — no precision in the spec, so sequence
+    /// `Formatter::PRECISION_DEFAULT`: no precision in the spec, so sequence
     /// `Inspect` applies its own cap.
     pub const PRECISION_DEFAULT: i32 = -2;
 
@@ -277,34 +282,34 @@ pub enum CompilerItem {
     /// `core:prelude/traits::KeyValueLiteral` — the marker separating a
     /// key-value literal's map target from a struct composition.
     KeyValueLiteral,
-    /// `core:prelude/traits::Display` — anchor for `{x}` template-string
+    /// `core:prelude/traits::Display` — anchor for `${x}` template-string
     /// dispatch and the auto-derive Display→Inspect fallback.
     Display,
-    /// `core:prelude/traits::DisplayAlt` — `{x:#}` dispatch.
+    /// `core:prelude/traits::DisplayAlt` — `${x:#}` dispatch.
     DisplayAlt,
     /// `core:prelude/traits::Inspect` — `${x:?}` dispatch.
     Inspect,
-    /// `core:prelude/traits::InspectAlt` — `{x:#?}` dispatch.
+    /// `core:prelude/traits::InspectAlt` — `${x:#?}` dispatch.
     InspectAlt,
-    /// `core:prelude/traits::Binary` — `{x:b}` dispatch.
+    /// `core:prelude/traits::Binary` — `${x:b}` dispatch.
     Binary,
-    /// `core:prelude/traits::BinaryAlt` — `{x:#b}` dispatch.
+    /// `core:prelude/traits::BinaryAlt` — `${x:#b}` dispatch.
     BinaryAlt,
-    /// `core:prelude/traits::Octal` — `{x:o}` dispatch.
+    /// `core:prelude/traits::Octal` — `${x:o}` dispatch.
     Octal,
-    /// `core:prelude/traits::OctalAlt` — `{x:#o}` dispatch.
+    /// `core:prelude/traits::OctalAlt` — `${x:#o}` dispatch.
     OctalAlt,
-    /// `core:prelude/traits::LowerHex` — `{x:x}` dispatch.
+    /// `core:prelude/traits::LowerHex` — `${x:x}` dispatch.
     LowerHex,
-    /// `core:prelude/traits::LowerHexAlt` — `{x:#x}` dispatch.
+    /// `core:prelude/traits::LowerHexAlt` — `${x:#x}` dispatch.
     LowerHexAlt,
-    /// `core:prelude/traits::UpperHex` — `{x:X}` dispatch.
+    /// `core:prelude/traits::UpperHex` — `${x:X}` dispatch.
     UpperHex,
-    /// `core:prelude/traits::UpperHexAlt` — `{x:#X}` dispatch.
+    /// `core:prelude/traits::UpperHexAlt` — `${x:#X}` dispatch.
     UpperHexAlt,
-    /// `core:prelude/traits::LowerExp` — `{x:e}` dispatch.
+    /// `core:prelude/traits::LowerExp` — `${x:e}` dispatch.
     LowerExp,
-    /// `core:prelude/traits::UpperExp` — `{x:E}` dispatch.
+    /// `core:prelude/traits::UpperExp` — `${x:E}` dispatch.
     UpperExp,
 
     // ── Format types (structs / enums) ─────────────────────────────────

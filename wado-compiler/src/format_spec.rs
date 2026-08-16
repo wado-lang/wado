@@ -12,6 +12,12 @@
 //! [`TemplateFormatSpec`] the template synthesiser reads. Anything the grammar
 //! does not accept is an error — a spec is silently ignorable otherwise, and a
 //! mistyped one then formats nothing with no way to notice.
+//!
+//! `fill` is any character the interpolation scanner does not read as
+//! structure, which rules out the quote and brace characters (`'`, `"`,
+//! `` ` ``, `{`, `}`): the scanner splits `${…}` before this grammar sees it,
+//! and one of those opens a literal or a nesting level there. None of them is a
+//! sensible thing to pad with.
 
 use std::fmt;
 

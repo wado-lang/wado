@@ -6008,7 +6008,7 @@ impl Parser {
         let at = advance_position(origin, &spec[..error.offset]);
         Err(ParseError {
             message: format!("{error} in template string"),
-            span: span_of(at, spec[error.offset..].chars().next().unwrap_or_default()),
+            span: span_of(at, spec[error.offset..].chars().next()),
         })
     }
 
@@ -6209,17 +6209,18 @@ fn advance_position(origin: crate::token::Position, text: &str) -> crate::token:
     }
 }
 
-/// A single-character span at `at`. An empty `ch` yields the zero-width span
-/// the end of the text deserves.
-fn span_of(at: crate::token::Position, ch: char) -> Span {
-    let width = ch.len_utf8();
+/// The span of `ch` at `at`, or the zero-width span at `at` when there is no
+/// character left to blame — an error reported past the end of the text must
+/// not claim a byte the source does not have.
+fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
+    let width = ch.map_or(0, char::len_utf8);
     Span::with_end(
         at.offset,
         at.offset + width,
         at.line,
         at.column,
         at.line,
-        at.column + usize::from(width > 0),
+        at.column + usize::from(ch.is_some()),
     )
 }
 

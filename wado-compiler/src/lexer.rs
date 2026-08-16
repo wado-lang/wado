@@ -1153,12 +1153,12 @@ impl<'a> Lexer<'a> {
 
         loop {
             let Some((_, ch)) = self.peek() else {
-                if scan != Scan::LineComment {
-                    self.errors.push(LexError {
-                        kind: LexErrorKind::UnterminatedTemplateString,
-                        span: self.span_from(start, start_line, start_column),
-                    });
-                }
+                // EOF anywhere in here — a line comment's own end included —
+                // means the interpolation, and so the template, never closed.
+                self.errors.push(LexError {
+                    kind: LexErrorKind::UnterminatedTemplateString,
+                    span: self.span_from(start, start_line, start_column),
+                });
                 return (expr, format, true);
             };
             self.advance();
@@ -1771,6 +1771,16 @@ test data";
         assert_eq!(
             interpolation("`${ a // } :\n + b }`"),
             (" a // } :\n + b ".to_string(), None)
+        );
+        // A comment running to EOF still leaves the template unterminated.
+        let truncated = lex("`${ a // no newline");
+        assert!(
+            truncated
+                .errors
+                .iter()
+                .any(|e| e.kind == LexErrorKind::UnterminatedTemplateString),
+            "got {:?}",
+            truncated.errors
         );
         // The specifier still splits when the `:` is real.
         assert_eq!(

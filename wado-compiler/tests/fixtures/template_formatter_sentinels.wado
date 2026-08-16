@@ -1,0 +1,34 @@
+// The Formatter sentinels the compiler writes must match the ones the stdlib's
+// `Formatter::new` writes.
+//
+// A spec that sets any field (here a width, or a precision) makes
+// `synthesis::template` build the `Formatter` literal itself instead of calling
+// `Formatter::new`, filling every *unset* field from
+// `compiler_item::FormatterField`'s constants — the Rust-side copy of
+// `Formatter::NO_WIDTH` / `Formatter::PRECISION_DEFAULT`. If the two copies
+// drift, the unset fields start meaning something else and this fixture fails.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "";
+    for let mut i = 0; i < 300; i += 1 {
+        s.push('a');
+    }
+
+    // Width set, precision not: Inspect still applies DEFAULT_SEQ_LIMIT, so the
+    // output is `"` + 256 chars + `"` + `...`, exactly as the un-widthed
+    // `${s:?}` in `template_inspect_default_cap.wado`. A precision of 0 would
+    // truncate to nothing; PRECISION_INFINITE would render all 300.
+    println(`${`${s:<1?}`.len()}`);
+
+    // Precision set, width not: no padding may appear. A width of 0 or -1 both
+    // mean "no minimum"; anything positive would pad.
+    println(`[${3.14159:.2}]`);
+
+    // Both unset except the fill-bearing alignment: the width sentinel still
+    // disables padding, so the fill character never appears.
+    println(`[${7:*^}]`);
+}
+
+__DATA__
+{"stdout": "261\n[3.14]\n[7]\n"}

@@ -3,7 +3,7 @@
 // Format Infrastructure
 //
 // This module defines the Formatter and Alignment types that
-// back template string format specifiers (`{x:spec}`).
+// back template string format specifiers (`${x:spec}`).
 //
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
@@ -55,9 +55,11 @@ internal struct Formatter {
     pub buf: &mut String,
 }
 
-// The compiler builds this struct in `synthesis::template` and reads these
-// sentinels back as `compiler_item::FormatterField`'s associated constants.
-// Both sides are pinned by `test "sentinels match the compiler"` below.
+// `synthesis::template` writes `Formatter` literals for `${x:SPEC}` directly
+// rather than calling `Formatter::new`, so it repeats these sentinels in Rust as
+// `compiler_item::FormatterField`'s associated constants. The e2e fixture
+// `tests/fixtures/template_formatter_sentinels.wado` renders through that path
+// and fails if the two copies drift.
 impl Formatter {
     /// No width given: every padding path is a no-op.
     pub const NO_WIDTH: i32 = -1;
@@ -148,7 +150,7 @@ impl Formatter {
     /// Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
     /// The fill character must be ASCII (single byte); non-ASCII fill is not supported.
     pub fn apply_padding(&mut self, start_pos: i32) {
-        // No width set is the default and covers every JSON/CBOR/plain `{x}`
+        // No width set is the default and covers every JSON/CBOR/plain `${x}`
         // value, so this wrapper stays tiny and inlines to one field compare.
         // When a width IS set the slow path runs every time — it is not a cold
         // branch — so the padding logic is merely kept out-of-line via
@@ -457,12 +459,4 @@ impl<T: InspectAlt> InspectAlt for &mut T {
         let inner: &mut T = *self;
         (*inner).inspect_alt(f);
     }
-}
-
-/// The compiler hard-codes these in `compiler_item::FormatterField`: it builds
-/// `Formatter` literals for `${x:SPEC}` without going through `Formatter::new`.
-/// Changing a value here means changing it there.
-test "sentinels match the compiler" {
-    assert Formatter::NO_WIDTH == -1;
-    assert Formatter::PRECISION_DEFAULT == -2;
 }

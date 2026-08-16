@@ -4657,11 +4657,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a template string `"…{expr}…"`: no interpolations concatenates to a
-    /// `StringLiteral` at reify time, a lone `String` interpolation with no
+    /// Reify a template string `` `…${expr}…` ``: no interpolations concatenates
+    /// to a `StringLiteral` at reify time, a lone `String` interpolation with no
     /// format spec forwards its expression unchanged, and everything else builds
-    /// `Vec<TirTemplatePart>` with specs from
-    /// [`super::template::parse_format_spec`].
+    /// `Vec<TirTemplatePart>` with specs from [`crate::format_spec::parse`].
     fn reify_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,
