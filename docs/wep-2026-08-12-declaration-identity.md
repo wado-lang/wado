@@ -188,14 +188,28 @@ impl Resolutions {
 
 Every node that names a declaration carries an `AstId`, and the walk records an
 answer for every one; `ast.rs`'s
-`every_reference_bearing_node_carries_an_ast_id` scans its own source and fails on
-a name-bearing node with no id unless `NAMED_WITHOUT_ID` registers the reason it
-needs none.
+`every_reference_bearing_node_carries_an_ast_id` scans its own source — struct
+declarations and struct-like enum variants alike, since half the reference
+positions are variants — and fails on a name-bearing node with no id unless
+`NAMED_WITHOUT_ID` registers the reason it needs none. A struct pattern's
+qualifier is such a position: naming a type in pattern position is naming a
+declaration.
 
 `get` is total. A site the walk missed is a bug in the walk, not an absent answer a
 consumer improvises around, so it panics rather than returning `None`. The three
 cases stay distinct on purpose: reading `Unresolved` as `Binder` loses the
-diagnostic a name that reaches nothing deserves.
+diagnostic a name that reaches nothing deserves. `walked` keeps a fourth case
+apart from all three — a node no walk saw, which synthesis mints — because that
+is the only one for which some other source of truth is honest.
+
+Type resolution is the largest consumer and takes the site with it: `resolve_type`
+hands the head's `AstId` to `resolve_named_type` / `resolve_generic_type`, which
+read the declaration off this table rather than re-running a scope lookup from
+wherever the walk stands. An alias, a namespace prefix and a function-local
+`struct` reach their own declarations with no vantage supplied. One entry point
+declines a site — `resolve_unsited_type_name`, for a `Self::` / `T::` receiver
+the elaborator rewrote to a spelling no source segment names; giving the
+static-call chain the receiver's own site is what removes it.
 
 `Unresolved` is not a synonym for "error", but an `impl` header's trait position
 is: implementing a trait is naming it. `impl Deserialize for Point;` written in a
@@ -450,8 +464,7 @@ them is a ratchet rather than an absolute, and says so.
 
 The design above is implemented far enough that the whole suite passes and the
 class of bug in Context is not reachable by any program the repository builds.
-It is not yet _unwritable_, which is what the design asks for. What stands
-between the two is one step, and everything else here follows from it.
+It is not yet _unwritable_, which is what the design asks for.
 
 What still prevents some collisions by convention rather than by key is
 `name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
@@ -463,58 +476,6 @@ lookup key, template admission, template lookup, the registration name, and the
 instantiation scan. Each was a distinct caller of the same first-wins index. A
 removed mechanism takes one fix.
 
-- [x] A _type_ head carries a `DefId`, not a `(module, name)` pair.
-      `name::TypeHead::Declared` carries a `DeclaredHead` — the declaration,
-      plus the module and the two spellings its one constructor reads off the
-      table — and equality compares the `DefId`. A head that names no
-      declaration is `TypeHead::Shape`, whose rendering _is_ its identity.
-- [x] `TypeTable::decl_named_in` deleted. Every stdlib type it was reached for
-      — `Future`, `Stream`, `AsyncCall`, `ByteList`, `ByteSlice`, `ArraySlice`
-      — is a `compiler_item.rs` registry entry, and the registry now records a
-      declaring node for every kind that names a type of its own (`enum`,
-      `resource`, `type X = Y`, the tuple family, a builtin type), so
-      `TypeTable::compiler_item_def` answers for all of them. The rest carry
-      the identity their site already resolved. What is left of the index is
-      `TypeTable::cm_decl_in`, reachable only from `synthesis::cm_binding` and
-      permanent: see §9's third bullet.
-- [x] The tables a module's walk builds as it goes are keyed by declaration,
-      not by spelling — see §5. The `local_item_*` maps that existed to keep
-      function-local items out of the resulting collision are gone with it, an
-      anonymous shape's fields are filed under its `AnonStructId`, and
-      `with_module_perspective_for` no longer hides any of them before entering
-      another module.
-- [x] Type resolution takes the reference site. `resolve_type` hands the head's
-      `AstId` to `resolve_named_type` / `resolve_generic_type`, which read the
-      declaration off `Resolutions` rather than re-running a scope lookup from
-      wherever the walk stands; `Resolutions::walked` keeps "names a binder",
-      "names nothing" and "no walk saw this node" apart, so only the last falls
-      back to the spelling. This is what carries an alias, a namespace prefix
-      and a function-local `struct` to their own declarations without the
-      elaborator supplying a vantage, and it makes `TypeLookup`'s
-      `fn_local_items` tier redundant for every written site. One entry point
-      declines a site — `resolve_unsited_type_name`, for a `Self::` / `T::`
-      receiver the elaborator rewrote to a concrete spelling that no source
-      segment names. Giving the static-call chain the receiver's own site is
-      what removes it.
-- [x] A struct pattern's qualifier is a reference site. `Pattern::Struct`
-      carried only the spelling, and both consumers of it compared strings:
-      reify re-resolved the qualifier through the module scope for its field
-      indices, so `let Pair { a, b } = imported()` bound a same-named local
-      declaration's field order, and annotate compared it against
-      `struct_rendered_name`, which mangles a function-local `struct`, so
-      `let Local { .. }` failed as `expected 'Local', found 'Local'`. The
-      qualifier has its own `AstId` and the walk answers for it; annotate
-      compares that answer with the scrutinee's head, and reify takes its field
-      indices from the head alone — which fields exist is a fact about the value
-      being destructured, not about the qualifier.
-
-      `every_reference_bearing_node_carries_an_ast_id` did not catch the missing
-      id, because it scanned `pub struct` declarations only and a name-bearing
-      *enum variant* was invisible to it — half the AST's reference positions,
-      `Pattern::Struct` among them. It scans variants too now, and would have
-      flagged this one. `UseItem::InterfaceFunctions` is the only variant the
-      widened scan exempts; `StructLiteralField` stopped needing its exemption,
-      since a node whose name carries a `name_id` does record a resolution.
 - [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
@@ -571,6 +532,8 @@ removed mechanism takes one fix.
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and
       `LocalMethodName::method_type_args` are still `Vec<String>` — rendered
-      arguments stored as text. Blocked by the first item: `written_type_args`
-      renders an `ast::Type` by spelling because the arguments' own reference
-      sites are not resolved where it stands.
+      arguments stored as text. `written_type_args` can now build a structured
+      head for each argument, since the arguments' own reference sites are
+      resolved; what it costs is that `mangle_type_name` and
+      `FqTypeName::mangled` are two renderers, so the mangles have to be brought
+      together rather than assumed to agree.

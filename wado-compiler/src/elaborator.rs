@@ -348,16 +348,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().newtype_of(def)
     }
 
-    /// The declaration a *type* reference names.
-    ///
-    /// The walk answered for every site a module wrote, from the module that
-    /// wrote it — which is how a default re-resolved at a caller and a
-    /// function-local `struct` both reach their own declaration without the
-    /// elaborator supplying a vantage. A binder is not a declaration and gets
-    /// none. `name` answers only where the walk left nothing: `None` for a
-    /// spelling the elaborator itself produced, and `Unresolved` for one the
-    /// walk could not place — where the module scope is the same scope, and so
-    /// the same answer.
+    /// The declaration a *type* reference names; see
+    /// [`TypeLookup::declaration_at`].
     pub(super) fn type_decl_at(
         &self,
         site: Option<crate::ast::AstId>,

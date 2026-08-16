@@ -1,10 +1,6 @@
-// A struct pattern's qualifier names a declaration, so it is checked against
-// the scrutinee's own head rather than by spelling. This module declares its
-// own `Pair` with the fields reversed; naming it in a pattern whose scrutinee
-// is the *imported* `Pair` is a mismatch, not a silent rebinding of `a` and `b`
-// onto the local declaration's field order.
-//
-// Both sides spell `Pair`, so each takes its module (issue #1807).
+// A struct pattern's qualifier names a declaration, checked against the
+// scrutinee's own head. This module's `Pair` is not the imported one, so the
+// pattern is a mismatch rather than a rebinding onto the local field order.
 
 use { make } from "./sub/cross_module_same_name_pattern_dep.wado";
 

@@ -3611,9 +3611,7 @@ mod ast_id_tests {
     /// same-named declarations compare equal — the shape of #1785.
     /// The struct-like variants of `pub enum X { … }`, as `X::Variant` paired
     /// with the variant's own body. A variant names things exactly as a struct
-    /// does, and half this file's reference positions are variants — a scan
-    /// that skips them is why `Pattern::Struct`'s qualifier went years without
-    /// an id to record its resolution under.
+    /// does, and half this file's reference positions are variants.
     fn enum_variants(source: &str) -> Vec<(String, String)> {
         let mut out = Vec::new();
         for decl in source.split("\npub enum ").skip(1) {
@@ -3675,9 +3673,8 @@ mod ast_id_tests {
         out
     }
 
-    /// Whether `body` declares a field whose name is a spelling of something,
-    /// and whether it declares an id to record that something's resolution
-    /// under.
+    /// Whether `body` spells a name it declares no id for — a reference site
+    /// with nowhere to record which declaration it means.
     fn names_without_id(body: &str) -> bool {
         let names = body.lines().any(|l| {
             let l = l.trim_start();

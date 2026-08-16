@@ -8458,10 +8458,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> (u32, String, Option<TypeId>) {
         use crate::tir::ResolvedType;
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        // The receiver's own head answers, so same-named structs in different
-        // modules (a local `Pair` vs an imported `helper::Pair`) resolve their
-        // fields against the right one, and an anonymous shape — which no
-        // spelling names — resolves against itself.
+        // The receiver's own head answers: same-named structs in different
+        // modules reach their own fields, and an anonymous shape — which no
+        // spelling names — reaches its own.
         let (head, type_args): (Option<crate::tir::StructDef>, Vec<TypeId>) = match resolved {
             ResolvedType::Struct { def, .. } => (Some(def), vec![]),
             ResolvedType::GenericInstance { type_args, .. } => {
@@ -10150,14 +10149,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // struct decl resolves (fields inherit the reference kind below).
         let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
 
-        // Struct info for the field-name → (index, type) lookup, asked of the
-        // scrutinee's own head. A field index is a fact about the value being
-        // destructured, so the pattern's qualifier — checked against this same
-        // head by annotate — has no say in it: resolving one by spelling picks
-        // whichever same-named struct the module sees first, and picks nothing
-        // at all for an anonymous shape or a function-local `struct`. Falls
-        // back to UNKNOWN-typed sub-patterns for an unresolved scrutinee,
-        // matching annotate's recovery shape.
+        // A field index is a fact about the value being destructured, so the
+        // scrutinee's head answers and the pattern's qualifier — which annotate
+        // checked against this same head — has no say. An unresolved scrutinee
+        // falls back to UNKNOWN-typed sub-patterns, matching annotate.
         let scrutinee_head = match self.tysys.type_table.borrow().get(peeled_scrutinee) {
             ResolvedType::Struct { def, .. } => Some(*def),
             ResolvedType::GenericInstance { .. } => self

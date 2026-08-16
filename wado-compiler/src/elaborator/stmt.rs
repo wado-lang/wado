@@ -954,12 +954,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether a struct pattern's qualifier names the scrutinee's own head.
     ///
-    /// Declaration against declaration: the two spellings differ whenever an
-    /// import alias, a namespace prefix or a function-local item's `@AstId`
-    /// mangle is in play, and they agree for two modules' unrelated structs of
-    /// the same name. A shape names no declaration, so no qualifier matches
-    /// one. A qualifier the walk could not place is left to the diagnostics
-    /// the unresolved name earns elsewhere.
+    /// Declaration against declaration, never spelling against spelling. A
+    /// shape names no declaration, so no qualifier matches one; a qualifier the
+    /// walk could not place is left to the diagnostic its unresolved name earns
+    /// elsewhere.
     fn pattern_qualifier_matches(
         &self,
         site: Option<crate::ast::AstId>,
@@ -1094,16 +1092,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
-                // The scrutinee's head is what every lookup below asks: an
-                // anonymous shape renders a name that names nothing, and a
-                // function-local `struct` renders a mangled one that names
-                // nothing either.
+                // Every lookup below asks the scrutinee's head, which an
+                // anonymous shape and a function-local `struct` both have and
+                // neither of them can be reached by spelling.
                 let struct_head = match self.tysys.type_table.borrow().get(type_id) {
                     ResolvedType::Struct { def, .. } => Some(*def),
                     _ => None,
                 };
 
-                // A named pattern must name the scrutinee's own declaration.
                 let type_name_matches = match (type_name, struct_head) {
                     (Some(written), Some(head)) => {
                         let matches = self.pattern_qualifier_matches(*type_name_id, head);
@@ -1755,7 +1751,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
-                // A named pattern must name the scrutinee's own declaration.
                 let mut type_name_matches = true;
                 if let Some(expected_name) = type_name {
                     let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();

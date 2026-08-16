@@ -3278,11 +3278,9 @@ impl TypeTable {
     /// [`Self::type_name`] with every declared head written in the spec's
     /// `MODULE#SYMBOL` notation.
     ///
-    /// For the one message a bare name cannot settle: two declarations that
-    /// share a name render identically, so a mismatch reads `expected 'Point',
-    /// found 'Point'`. The module is what separates them. Ask
-    /// [`Self::type_names_for_mismatch`] rather than this directly — qualifying
-    /// a name that was already unambiguous only makes the message longer.
+    /// Ask [`Self::type_names_for_mismatch`] rather than this directly:
+    /// qualifying a name that was already unambiguous only makes the message
+    /// longer.
     #[must_use]
     pub fn type_name_qualified(&self, id: TypeId) -> String {
         self.render_type_name(id, true)
