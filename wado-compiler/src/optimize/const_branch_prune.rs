@@ -119,7 +119,7 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
     if let ExprKind::LabeledBlock { label, block, .. } = &engine.body.exprs[id].kind {
         let label = label.clone();
         let block = *block;
-        let go = (mode == PruneMode::PostFixpoint || label != crate::name::TEMPLATE_BLOCK_LABEL)
+        let go = (mode == PruneMode::PostFixpoint || !crate::name::is_template_block(&label))
             && engine.body.blocks[block].stmts.last().is_some_and(|&last| {
                 matches!(
                     &engine.body.stmts[last].kind,
@@ -175,7 +175,7 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
         let label = label.clone();
         let block = *block;
         let single_break = (mode == PruneMode::PostFixpoint
-            || label != crate::name::TEMPLATE_BLOCK_LABEL)
+            || !crate::name::is_template_block(&label))
             && engine.body.blocks[block].stmts.len() == 1
             && matches!(
                 &engine.body.stmts[engine.body.blocks[block].stmts[0]].kind,
@@ -224,7 +224,7 @@ fn is_tail_break_only_labeled_block(body: &Body, stmt: StmtId, mode: PruneMode) 
         return false;
     };
     let inner = *inner;
-    if mode == PruneMode::Fixpoint && label == crate::name::TEMPLATE_BLOCK_LABEL {
+    if mode == PruneMode::Fixpoint && crate::name::is_template_block(label) {
         return false;
     }
     let Some(&last) = body.blocks[inner].stmts.last() else {
@@ -255,7 +255,7 @@ fn ends_with_terminator_stmt(body: &Body, stmts: &[StmtId]) -> bool {
 }
 
 fn unused_label_flattenable(body: &Body, label: &str, inner: BlockId, mode: PruneMode) -> bool {
-    (mode == PruneMode::PostFixpoint || label != crate::name::TEMPLATE_BLOCK_LABEL)
+    (mode == PruneMode::PostFixpoint || !crate::name::is_template_block(label))
         && (body.blocks[inner].stmts.is_empty() || !block_has_break_to(body, inner, label))
 }
 

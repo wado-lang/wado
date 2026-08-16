@@ -266,19 +266,30 @@ fn test_template_double_colon_not_format() {
 #[test]
 fn test_template_colon_alone_is_format() {
     // Single colon should start a format spec
-    let module = parse_expr("`${x:d}`").expect("parse failed");
+    let module = parse_expr("`${x:x}`").expect("parse failed");
     let expr = extract_expr(&module).expect("no expression found");
 
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => match &template.parts[0] {
             wado_compiler::ast::TemplatePart::Interpolation { format, .. } => {
                 let format_spec = format.as_ref().expect("expected format spec");
-                assert_eq!(format_spec.spec, "d");
+                assert_eq!(format_spec.spec, "x");
             }
             other => panic!("expected Interpolation, got {other:?}"),
         },
         other => panic!("expected TemplateString, got {other:?}"),
     }
+}
+
+#[test]
+fn test_template_format_spec_grammar_is_closed() {
+    // A specifier outside the grammar is a syntax error, not silently dropped:
+    // `d` is a printf-ism with no Wado meaning.
+    let err = parse_expr("`${x:08d}`").expect_err("expected a parse error");
+    assert!(
+        format!("{err:?}").contains("unknown format specifier `d`"),
+        "got {err:?}"
+    );
 }
 
 #[test]

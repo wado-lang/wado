@@ -3229,16 +3229,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
             parts.push(TirTemplatePart::Interpolation {
                 expr: Box::new(local_ref),
-                format_spec: Some(crate::tir::TemplateFormatSpec {
-                    fill: None,
-                    align: None,
-                    sign_plus: false,
-                    alternate: false,
-                    zero_pad: false,
-                    width: None,
-                    precision: None,
-                    type_char: Some('?'),
-                }),
+                format_spec: Some(crate::format_spec::TemplateFormatSpec::of_kind(
+                    crate::format_spec::FormatKind::Inspect,
+                )),
             });
             parts.push(TirTemplatePart::Literal("\n".to_string()));
         }
@@ -4673,11 +4666,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a template string `"…{expr}…"`: no interpolations concatenates to a
-    /// `StringLiteral` at reify time, a lone `String` interpolation with no
+    /// Reify a template string `` `…${expr}…` ``: no interpolations concatenates
+    /// to a `StringLiteral` at reify time, a lone `String` interpolation with no
     /// format spec forwards its expression unchanged, and everything else builds
-    /// `Vec<TirTemplatePart>` with specs from
-    /// [`super::template::parse_format_spec`].
+    /// `Vec<TirTemplatePart>` with specs from [`crate::format_spec::parse`].
     fn reify_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,
@@ -4702,8 +4694,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mut combined = String::new();
             for part in &template.parts {
                 if let ast::TemplatePart::String(s) = part {
-                    let unescaped = super::util::unescape_template_string(s).unwrap_or_default();
-                    combined.push_str(&unescaped);
+                    combined.push_str(&unescape_checked(s));
                 }
             }
             return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
@@ -4722,19 +4713,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for part in &template.parts {
             match part {
                 ast::TemplatePart::String(s) => {
-                    if !s.is_empty() {
-                        let unescaped =
-                            super::util::unescape_template_string(s).unwrap_or_default();
-                        if !unescaped.is_empty() {
-                            parts.push(TirTemplatePart::Literal(unescaped));
-                        }
+                    let unescaped = unescape_checked(s);
+                    if !unescaped.is_empty() {
+                        parts.push(TirTemplatePart::Literal(unescaped));
                     }
                 }
                 ast::TemplatePart::Interpolation { expr, format } => {
                     let resolved = self.reify_expr(expr, ctx, None);
-                    let format_spec = format
-                        .as_ref()
-                        .map(|f| super::template::parse_format_spec(&f.spec));
+                    let format_spec = format.as_ref().map(|f| {
+                        crate::format_spec::parse(&f.spec)
+                            .expect("the parser rejects a malformed format specifier")
+                    });
                     parts.push(TirTemplatePart::Interpolation {
                         expr: Box::new(resolved),
                         format_spec,
@@ -10441,6 +10430,13 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
         _ => return None,
     };
     Some((value, ty))
+}
+
+/// Decode a template literal segment. Only a module whose body walk logged no
+/// errors reaches reify, and that walk is what rejects a malformed escape.
+fn unescape_checked(raw: &str) -> String {
+    super::util::unescape_template_string(raw)
+        .expect("the body walk rejects a malformed template escape before reify runs")
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {

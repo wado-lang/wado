@@ -2408,15 +2408,16 @@ impl<'a> Unparser<'a> {
         self.unparse_expr(&c.body);
     }
 
+    /// Twin of [`unparse_template_string_into`], which prints the same shape
+    /// without comment tracking; keep the two in step.
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
         use crate::ast::TemplatePart;
 
         self.output.push('`');
         for part in &t.parts {
             match part {
-                TemplatePart::String(s) => {
-                    escape_template_literal_into(s, &mut self.output);
-                }
+                // Literal segments are stored raw, escapes and all.
+                TemplatePart::String(s) => self.output.push_str(s),
                 TemplatePart::Interpolation { expr, format } => {
                     self.output.push_str("${");
                     self.unparse_expr(expr);
@@ -3146,36 +3147,6 @@ fn escape_char(c: char) -> String {
     }
 }
 
-fn format_spec_to_string(spec: &crate::tir::TemplateFormatSpec) -> String {
-    let mut s = String::new();
-    if let Some(fill) = spec.fill {
-        s.push(fill);
-    }
-    if let Some(align) = spec.align {
-        s.push(align);
-    }
-    if spec.sign_plus {
-        s.push('+');
-    }
-    if spec.alternate {
-        s.push('#');
-    }
-    if spec.zero_pad {
-        s.push('0');
-    }
-    if let Some(w) = spec.width {
-        s.push_str(&w.to_string());
-    }
-    if let Some(p) = spec.precision {
-        s.push('.');
-        s.push_str(&p.to_string());
-    }
-    if let Some(t) = spec.type_char {
-        s.push(t);
-    }
-    s
-}
-
 /// Unparse an AST expression to a string without comments.
 /// Used by the desugar phase for generating error messages.
 pub fn unparse_expr_simple(expr: &Expr) -> String {
@@ -3400,20 +3371,14 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
     unparse_expr_into(&c.body, output);
 }
 
-fn escape_template_literal_into(s: &str, output: &mut String) {
-    // Template literal parts are stored as raw text (escape sequences preserved).
-    // Just output as-is — escapes like \n, \{, \} are already in raw form.
-    output.push_str(s);
-}
-
+/// Twin of [`Unparser::unparse_template_string`]; keep the two in step.
 fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
     use crate::ast::TemplatePart;
     output.push('`');
     for part in &t.parts {
         match part {
-            TemplatePart::String(s) => {
-                escape_template_literal_into(s, output);
-            }
+            // Literal segments are stored raw, escapes and all.
+            TemplatePart::String(s) => output.push_str(s),
             TemplatePart::Interpolation { expr, format } => {
                 output.push_str("${");
                 unparse_expr_into(expr, output);
@@ -5012,11 +4977,11 @@ impl<'a> TirUnparser<'a> {
                             expr: inner,
                             format_spec,
                         } => {
-                            self.output.push('{');
+                            self.output.push_str("${");
                             self.unparse_expr(inner);
                             if let Some(spec) = format_spec {
                                 self.output.push(':');
-                                self.output.push_str(&format_spec_to_string(spec));
+                                self.output.push_str(&spec.to_string());
                             }
                             self.output.push('}');
                         }

@@ -43,6 +43,36 @@ pub struct LexResult {
     pub data_section: Option<String>,
 }
 
+/// What [`Lexer::collect_interpolation_source`] is currently inside of. Only
+/// [`Scan::Code`] has structural characters; everywhere else a `}` or a `:` is
+/// just text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Scan {
+    Code,
+    String,
+    Char,
+    /// A nested `` `…` `` literal. Backticks strictly alternate open and close,
+    /// so a flag counts the same characters a depth would.
+    Template,
+    LineComment,
+    BlockComment,
+}
+
+impl Scan {
+    /// The character that returns the scan to [`Scan::Code`].
+    fn terminator(self) -> char {
+        match self {
+            Self::String => '"',
+            Self::Char => '\'',
+            Self::Template => '`',
+            Self::LineComment => '\n',
+            Self::Code | Self::BlockComment => {
+                unreachable!("no single-character terminator")
+            }
+        }
+    }
+}
+
 pub(crate) struct Lexer<'a> {
     input: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
@@ -950,47 +980,44 @@ impl<'a> Lexer<'a> {
         it.peek().map(|&(_, c)| c)
     }
 
-    /// Advance past one escape sequence (after the leading `\` has been consumed).
-    /// Only scans — does not validate or interpret escape values.
+    /// Advance past one escape sequence (after the leading `\` has been
+    /// consumed), shared by string, char and template literals. Scanning only:
+    /// a malformed escape stops at the first character that cannot belong to
+    /// it, so the closing delimiter is never swallowed and the unescaper is
+    /// left to report the real error.
     fn skip_escape(&mut self) {
         match self.peek_char() {
             Some('x') => {
                 self.advance();
-                for _ in 0..2 {
-                    match self.peek_char() {
-                        Some(c) if c.is_ascii_hexdigit() => {
-                            self.advance();
-                        }
-                        _ => break,
-                    }
-                }
+                self.skip_hex_digits(2);
             }
             Some('u') => {
                 self.advance();
                 if self.peek_char() == Some('{') {
                     self.advance();
-                    while let Some((_, c)) = self.peek() {
+                    self.skip_hex_digits(usize::MAX);
+                    if self.peek_char() == Some('}') {
                         self.advance();
-                        if c == '}' {
-                            break;
-                        }
                     }
                 } else {
-                    // \uHHHH — skip up to 4 hex digits
-                    for _ in 0..4 {
-                        match self.peek_char() {
-                            Some(c) if c.is_ascii_hexdigit() => {
-                                self.advance();
-                            }
-                            _ => break,
-                        }
-                    }
+                    self.skip_hex_digits(4);
                 }
             }
             Some(_) => {
                 self.advance();
             }
             None => {}
+        }
+    }
+
+    fn skip_hex_digits(&mut self, max: usize) {
+        for _ in 0..max {
+            match self.peek_char() {
+                Some(c) if c.is_ascii_hexdigit() => {
+                    self.advance();
+                }
+                _ => break,
+            }
         }
     }
 
@@ -1017,49 +1044,12 @@ impl<'a> Lexer<'a> {
                     return TokenKind::TemplateStringLit(parts);
                 }
                 Some((_, '\\')) => {
-                    current_literal.push('\\');
+                    // Scanned by the shared rules, copied verbatim: the
+                    // segment stays raw for the elaborator's unescaper.
+                    let escape_start = self.pos;
                     self.advance();
-                    match self.peek_char() {
-                        Some(
-                            ch @ ('{' | '}' | '$' | '\\' | '`' | 'n' | 'r' | 't' | '0' | '"' | '\''
-                            | 'b' | 'f'),
-                        ) => {
-                            current_literal.push(ch);
-                            self.advance();
-                        }
-                        Some('u') => {
-                            current_literal.push('u');
-                            self.advance();
-                            if self.peek_char() == Some('{') {
-                                current_literal.push('{');
-                                self.advance();
-                                while let Some(c) = self.peek_char() {
-                                    if c == '}' {
-                                        current_literal.push('}');
-                                        self.advance();
-                                        break;
-                                    }
-                                    current_literal.push(c);
-                                    self.advance();
-                                }
-                            } else {
-                                // \uXXXX form
-                                for _ in 0..4 {
-                                    if let Some(c) = self.peek_char() {
-                                        current_literal.push(c);
-                                        self.advance();
-                                    }
-                                }
-                            }
-                        }
-                        _ => {
-                            // Unknown escape — preserve as-is, let elaborator report the error
-                            if let Some(c) = self.peek_char() {
-                                current_literal.push(c);
-                                self.advance();
-                            }
-                        }
-                    }
+                    self.skip_escape();
+                    current_literal.push_str(&self.input[escape_start..self.pos]);
                 }
                 Some((_, '$')) => {
                     self.advance(); // consume `$`
@@ -1116,9 +1106,14 @@ impl<'a> Lexer<'a> {
 
     /// Collect an interpolation, split into expression source and optional format
     /// specifier — the text after the first top-level `:`. Called after the
-    /// opening `{` and consuming through the closing `}`. Nesting, literals and
-    /// `::` are tracked, so only a top-level `:` separates. A true `hit_eof` in
+    /// opening `{` and consuming through the closing `}`. A true `hit_eof` in
     /// the result means the template was truncated and an error recorded.
+    ///
+    /// A brace matcher, not a second lexer: it finds where the interpolation
+    /// ends and where its specifier starts, and hands the text between verbatim
+    /// to [`Parser::parse_interpolation_expr`], which lexes it properly. What it
+    /// must get right is which characters are *structural* — a `}` inside a
+    /// string, a char, a nested template or a comment is not the closing one.
     fn collect_interpolation_source(
         &mut self,
         start: usize,
@@ -1134,18 +1129,26 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        /// Undo a [`push`] of a character that turned out to be a delimiter.
+        fn pop(expr: &mut String, format: &mut Option<String>) {
+            match format {
+                Some(f) => f.pop(),
+                None => expr.pop(),
+            };
+        }
+
         let mut expr = String::new();
         let mut format: Option<String> = None;
         let mut brace_depth = 1u32;
         let mut paren_depth = 0u32;
         let mut bracket_depth = 0u32;
-        let mut in_string = false;
-        let mut in_char = false;
-        let mut backtick_depth = 0u32;
+        let mut scan = Scan::Code;
         let mut escape_next = false;
 
         loop {
             let Some((_, ch)) = self.peek() else {
+                // EOF anywhere in here — a line comment's own end included —
+                // means the interpolation, and so the template, never closed.
                 self.errors.push(LexError {
                     kind: LexErrorKind::UnterminatedTemplateString,
                     span: self.span_from(start, start_line, start_column),
@@ -1153,82 +1156,86 @@ impl<'a> Lexer<'a> {
                 return (expr, format, true);
             };
             self.advance();
+            push(&mut expr, &mut format, ch);
 
             if escape_next {
-                push(&mut expr, &mut format, ch);
                 escape_next = false;
                 continue;
             }
 
-            // Structural characters only matter outside string/char/template literals.
-            let structural = !in_string && !in_char && backtick_depth == 0;
+            match scan {
+                Scan::String | Scan::Char | Scan::Template => {
+                    if ch == '\\' {
+                        escape_next = true;
+                    } else if ch == scan.terminator() {
+                        scan = Scan::Code;
+                    }
+                    continue;
+                }
+                Scan::LineComment => {
+                    if ch == '\n' {
+                        scan = Scan::Code;
+                    }
+                    continue;
+                }
+                Scan::BlockComment => {
+                    if ch == '*' && self.peek_char() == Some('/') {
+                        self.advance();
+                        push(&mut expr, &mut format, '/');
+                        scan = Scan::Code;
+                    }
+                    continue;
+                }
+                Scan::Code => {}
+            }
 
             match ch {
-                '\\' => {
-                    push(&mut expr, &mut format, ch);
-                    if in_string || in_char || backtick_depth > 0 {
-                        escape_next = true;
-                    }
-                }
-                '"' if !in_char && backtick_depth == 0 => {
-                    push(&mut expr, &mut format, ch);
-                    in_string = !in_string;
-                }
+                '"' => scan = Scan::String,
                 // Wado has no lifetimes, so `'` always delimits a char literal.
-                '\'' if !in_string && backtick_depth == 0 => {
-                    push(&mut expr, &mut format, ch);
-                    in_char = !in_char;
-                }
-                '`' if !in_string && !in_char => {
-                    push(&mut expr, &mut format, ch);
-                    backtick_depth = u32::from(backtick_depth == 0);
-                }
-                '{' if structural => {
-                    push(&mut expr, &mut format, ch);
-                    brace_depth += 1;
-                }
-                '}' if structural => {
+                '\'' => scan = Scan::Char,
+                '`' => scan = Scan::Template,
+                '/' => match self.peek_char() {
+                    Some('/') => {
+                        self.advance();
+                        push(&mut expr, &mut format, '/');
+                        scan = Scan::LineComment;
+                    }
+                    Some('*') => {
+                        self.advance();
+                        push(&mut expr, &mut format, '*');
+                        scan = Scan::BlockComment;
+                    }
+                    _ => {}
+                },
+                '{' => brace_depth += 1,
+                '}' => {
                     brace_depth -= 1;
                     if brace_depth == 0 {
+                        // The `}` is the delimiter, not content.
+                        pop(&mut expr, &mut format);
                         return (expr, format, false);
                     }
-                    push(&mut expr, &mut format, ch);
                 }
-                '(' if structural => {
-                    push(&mut expr, &mut format, ch);
-                    paren_depth += 1;
-                }
-                ')' if structural => {
-                    push(&mut expr, &mut format, ch);
-                    paren_depth = paren_depth.saturating_sub(1);
-                }
-                '[' if structural => {
-                    push(&mut expr, &mut format, ch);
-                    bracket_depth += 1;
-                }
-                ']' if structural => {
-                    push(&mut expr, &mut format, ch);
-                    bracket_depth = bracket_depth.saturating_sub(1);
-                }
-                ':' if structural
-                    && format.is_none()
+                '(' => paren_depth += 1,
+                ')' => paren_depth = paren_depth.saturating_sub(1),
+                '[' => bracket_depth += 1,
+                ']' => bracket_depth = bracket_depth.saturating_sub(1),
+                ':' if format.is_none()
                     && brace_depth == 1
                     && paren_depth == 0
                     && bracket_depth == 0 =>
                 {
-                    if self.peek().is_some_and(|(_, c)| c == ':') {
+                    if self.peek_char() == Some(':') {
                         // `::` scope resolution, not a specifier separator.
                         self.advance();
                         expr.push(':');
-                        expr.push(':');
                     } else {
                         // Everything after this top-level `:` is the specifier.
+                        expr.pop();
                         format = Some(String::new());
                     }
                 }
-                _ => {
-                    push(&mut expr, &mut format, ch);
-                }
+                _ => {}
             }
         }
     }
@@ -1659,6 +1666,153 @@ test data";
 
         // Should parse # as Hash token, not skip as shebang
         assert!(matches!(tokens[0].kind, TokenKind::Hash));
+    }
+
+    /// A malformed escape must not consume the delimiter that follows it: the
+    /// literal still terminates and the bad escape is reported where a plain
+    /// string's is — by the unescaper, not as "unterminated".
+    #[test]
+    fn test_template_malformed_unicode_escape_keeps_delimiter() {
+        let short = tokens(r"`\u12`");
+        assert!(
+            matches!(&short[0].kind, TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())]),
+            "got {:?}",
+            short[0].kind
+        );
+
+        // `\u{…}` scans hex digits only, so an unclosed brace stops at the
+        // backtick instead of running to EOF.
+        let unclosed = tokens(r"`\u{12` + 1");
+        assert!(
+            matches!(&unclosed[0].kind, TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())]),
+            "got {:?}",
+            unclosed[0].kind
+        );
+        assert!(matches!(unclosed[1].kind, TokenKind::Plus));
+
+        // A plain string behaves the same way.
+        let plain = tokens(r#""\u{12" + 1"#);
+        assert!(
+            matches!(&plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12"),
+            "got {:?}",
+            plain[0].kind
+        );
+        assert!(matches!(plain[1].kind, TokenKind::Plus));
+    }
+
+    /// The expression source and format specifier the interpolation scanner
+    /// splits out, for a template holding exactly one `${…}`.
+    fn interpolation(source: &str) -> (String, Option<String>) {
+        let t = tokens(source);
+        let TokenKind::TemplateStringLit(parts) = &t[0].kind else {
+            panic!("expected a template, got {:?}", t[0].kind)
+        };
+        parts
+            .iter()
+            .find_map(|p| match p {
+                TemplateTokenPart::Interpolation { expr, format, .. } => {
+                    Some((expr.clone(), format.clone()))
+                }
+                TemplateTokenPart::Literal(_) => None,
+            })
+            .expect("an interpolation")
+    }
+
+    /// A `}` or a specifier `:` inside a comment, a literal, or a nested
+    /// bracket is not the one that ends the interpolation.
+    #[test]
+    fn test_interpolation_scan_ignores_non_structural_delimiters() {
+        assert_eq!(interpolation("`${ a }`"), (" a ".to_string(), None));
+        assert_eq!(
+            interpolation("`${ f(a, b) }`"),
+            (" f(a, b) ".to_string(), None)
+        );
+        assert_eq!(
+            interpolation("`${ m[\"}\"] }`"),
+            (" m[\"}\"] ".to_string(), None)
+        );
+        assert_eq!(interpolation("`${ '}' }`"), (" '}' ".to_string(), None));
+        assert_eq!(
+            interpolation("`${ P { x: 1 } }`"),
+            (" P { x: 1 } ".to_string(), None)
+        );
+        assert_eq!(
+            interpolation("`${ M::f() }`"),
+            (" M::f() ".to_string(), None)
+        );
+        // A nested template, and one carrying its own specifier.
+        assert_eq!(
+            interpolation("`${ `a${b}` }`"),
+            (" `a${b}` ".to_string(), None)
+        );
+        assert_eq!(
+            interpolation("`${ `${x:>3}` }`"),
+            (" `${x:>3}` ".to_string(), None)
+        );
+    }
+
+    /// A comment inside `${…}` is source, not structure: the `}` and `:` it
+    /// contains belong to the comment.
+    #[test]
+    fn test_interpolation_scan_skips_comments() {
+        assert_eq!(
+            interpolation("`${ a /* } : */ + b }`"),
+            (" a /* } : */ + b ".to_string(), None)
+        );
+        assert_eq!(
+            interpolation("`${ a // } :\n + b }`"),
+            (" a // } :\n + b ".to_string(), None)
+        );
+        // A comment running to EOF still leaves the template unterminated.
+        let truncated = lex("`${ a // no newline");
+        assert!(
+            truncated
+                .errors
+                .iter()
+                .any(|e| e.kind == LexErrorKind::UnterminatedTemplateString),
+            "got {:?}",
+            truncated.errors
+        );
+        // The specifier still splits when the `:` is real.
+        assert_eq!(
+            interpolation("`${ a /* : */ :>5}`"),
+            (" a /* : */ ".to_string(), Some(">5".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_interpolation_scan_splits_the_specifier() {
+        assert_eq!(
+            interpolation("`${x:?}`"),
+            ("x".to_string(), Some("?".to_string()))
+        );
+        assert_eq!(
+            interpolation("`${f(a, b):>10}`"),
+            ("f(a, b)".to_string(), Some(">10".to_string()))
+        );
+        // A `:` inside parens or brackets belongs to the expression.
+        assert_eq!(
+            interpolation("`${f(|x: i32| x)}`"),
+            ("f(|x: i32| x)".to_string(), None)
+        );
+    }
+
+    /// Template escapes are preserved verbatim, including the template-only
+    /// `\{` / `\}` / `\$` / `` \` `` forms and well-formed unicode escapes.
+    #[test]
+    fn test_template_escapes_preserved_raw() {
+        let t = tokens(r"`a\`b\{c\$d\u{1F600}eAf`");
+        assert!(
+            matches!(&t[0].kind, TokenKind::TemplateStringLit(parts)
+            if parts.as_slice()
+                == [TemplateTokenPart::Literal(
+                    r"a\`b\{c\$d\u{1F600}eAf".to_string()
+                )]),
+            "got {:?}",
+            t[0].kind
+        );
     }
 
     #[test]

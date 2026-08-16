@@ -1,0 +1,37 @@
+// Every shape the format-specifier grammar accepts, rendered.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = 42;
+
+    // Fill and alignment; a bare alignment fills with a space.
+    assert `${n:*^7}` == "**42***";
+    assert `${n:<5}|` == "42   |";
+    assert `${n:>5}` == "   42";
+    // `-` is a fill character, not a sign: only `+` is a sign.
+    assert `${n:-<4}` == "42--";
+
+    // Flags, width, precision, kind.
+    assert `${n:+}` == "+42";
+    assert `${n:05}` == "00042";
+    assert `${n:#06x}` == "0x002a";
+    assert `${n:b}` == "101010";
+    assert `${n:o}` == "52";
+    assert `${n:X}` == "2A";
+
+    // `f` is fixed-point: it renders through Display, which honours precision.
+    let pi = 3.14159;
+    assert `${pi:.2f}` == "3.14";
+    assert `${pi:.2}` == "3.14";
+    // A leading `0` is the zero-pad flag, not a width of zero.
+    assert `${pi:0.2f}` == "3.14";
+
+    // Whitespace around the specifier is trimmed, as it is around the
+    // expression, so `${ n : 5 }` reads the same as `${n:5}`.
+    assert `${ n : 5 }` == "   42";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

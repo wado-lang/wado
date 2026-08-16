@@ -8,7 +8,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TemplateFormatSpec, TypeId};
+use crate::tir::TypeId;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -31,10 +31,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast::TemplatePart::Interpolation { expr, .. } => {
                     self.resolve_expr(expr, ctx, None);
                 }
-                // Reify decodes the literal segments and has no diagnostic
-                // channel, so a bad escape there would drop the segment
-                // silently. Report it here, where a string literal's is
-                // reported.
+                // The gate reify relies on: it decodes these segments with no
+                // diagnostic channel of its own.
                 ast::TemplatePart::String(raw) => {
                     if let Err(message) = super::util::unescape_template_string(raw) {
                         let _ = self.emit(TypeError::InvalidLiteral {
@@ -47,94 +45,5 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         string_type
-    }
-}
-
-/// Parse a format specifier string like "05", "<10", "#x", ".2" etc.
-/// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
-pub fn parse_format_spec(spec: &str) -> TemplateFormatSpec {
-    let chars: Vec<char> = spec.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-
-    let mut fill = None;
-    let mut align = None;
-    let mut sign_plus = false;
-    let mut alternate = false;
-    let mut zero_pad = false;
-    let mut width = None;
-    let mut precision = None;
-    let mut type_char = None;
-
-    // Parse [fill][align]: fill is any char, align is '<', '^', '>'
-    if i + 1 < len && matches!(chars[i + 1], '<' | '^' | '>') {
-        fill = Some(chars[i]);
-        align = Some(chars[i + 1]);
-        i += 2;
-    } else if i < len && matches!(chars[i], '<' | '^' | '>') {
-        align = Some(chars[i]);
-        i += 1;
-    }
-
-    // Parse [sign]: '+'
-    if i < len && chars[i] == '+' {
-        sign_plus = true;
-        i += 1;
-    }
-
-    // Parse [#]: alternate form
-    if i < len && chars[i] == '#' {
-        alternate = true;
-        i += 1;
-    }
-
-    // Parse [0]: zero-pad
-    if i < len && chars[i] == '0' && (i + 1 >= len || chars[i + 1].is_ascii_digit()) {
-        zero_pad = true;
-        i += 1;
-    }
-
-    // Parse [width]: digits
-    let width_start = i;
-    while i < len && chars[i].is_ascii_digit() {
-        i += 1;
-    }
-    if i > width_start {
-        let w: String = chars[width_start..i].iter().collect();
-        width = w.parse().ok();
-    }
-
-    // Parse [.precision]: '.' followed by digits. A `None` precision lowers to
-    // PRECISION_DEFAULT (sequence Inspect applies its default cap).
-    // TODO: add a spec form (e.g. `.!`) for PRECISION_INFINITE so `{x:?}` can
-    // opt out of the default cap — there is no surface syntax for it yet.
-    if i < len && chars[i] == '.' {
-        i += 1;
-        let prec_start = i;
-        while i < len && chars[i].is_ascii_digit() {
-            i += 1;
-        }
-        if i > prec_start {
-            let p: String = chars[prec_start..i].iter().collect();
-            precision = p.parse().ok();
-        } else {
-            precision = Some(0);
-        }
-    }
-
-    // Parse type: b, o, x, X, e, E, ?
-    if i < len && matches!(chars[i], 'b' | 'o' | 'x' | 'X' | 'e' | 'E' | '?') {
-        type_char = Some(chars[i]);
-    }
-
-    TemplateFormatSpec {
-        fill,
-        align,
-        sign_plus,
-        alternate,
-        zero_pad,
-        width,
-        precision,
-        type_char,
     }
 }

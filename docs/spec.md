@@ -730,6 +730,8 @@ println(`x = ${x}`);  // prints "x = 10" (outer x unchanged)
 `LABEL: { ... }`
 
 - The label must be a valid identifier followed by a colon
+- A label cannot start with `__`, which is reserved for the blocks the compiler
+  synthesises (an expanded template string, a desugared `for`, an inlined call)
 - The block creates a new variable scope
 - Variables declared inside are not accessible outside
 - Shadowing is allowed within the block

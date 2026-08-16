@@ -45,6 +45,73 @@ impl SeqField {
     }
 }
 
+/// The fields of `core:prelude/format::Formatter`, in declaration order.
+///
+/// Template expansion builds a `Formatter` literal field by field and the NIR
+/// template-hoist matches one back apart; naming the fields here rather than in
+/// string literals makes a Wado-side rename a one-line change instead of a
+/// silent miscompile.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FormatterField {
+    Fill,
+    Align,
+    SignPlus,
+    ZeroPad,
+    /// [`Self::NO_WIDTH`] when the spec sets none.
+    Width,
+    /// [`Self::PRECISION_DEFAULT`] when the spec sets none.
+    Precision,
+    Indent,
+    Buf,
+}
+
+impl FormatterField {
+    /// Declaration order, which is also the struct's field indexing.
+    pub const ALL: [Self; 8] = [
+        Self::Fill,
+        Self::Align,
+        Self::SignPlus,
+        Self::ZeroPad,
+        Self::Width,
+        Self::Precision,
+        Self::Indent,
+        Self::Buf,
+    ];
+
+    /// What an unset field carries. These repeat `impl Formatter`'s Wado-side
+    /// constants of the same name, because template expansion writes the struct
+    /// literal itself instead of calling `Formatter::new`; the e2e fixture
+    /// `template_formatter_sentinels.wado` fails if the copies drift.
+    ///
+    /// `NO_WIDTH` is `Formatter::NO_WIDTH`: no minimum width, so every padding
+    /// path is a no-op.
+    pub const NO_WIDTH: i32 = -1;
+    /// `Formatter::PRECISION_DEFAULT`: no precision in the spec, so sequence
+    /// `Inspect` applies its own cap.
+    pub const PRECISION_DEFAULT: i32 = -2;
+
+    /// The Wado-side field name.
+    #[must_use]
+    pub const fn field_name(self) -> &'static str {
+        match self {
+            Self::Fill => "fill",
+            Self::Align => "align",
+            Self::SignPlus => "sign_plus",
+            Self::ZeroPad => "zero_pad",
+            Self::Width => "width",
+            Self::Precision => "precision",
+            Self::Indent => "indent",
+            Self::Buf => "buf",
+        }
+    }
+
+    /// The field's positional index within the struct.
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self as u32
+    }
+}
+
 /// Every compiler-recognized stdlib item. Each variant's canonical
 /// [`CompilerItem::attr_name`] must match the `#[compiler_item("…")]` argument
 /// on the Wado declaration. Names are flat `snake_case`: `<type>_<method>` for a
@@ -208,34 +275,34 @@ pub enum CompilerItem {
     /// `core:prelude/traits::KeyValueLiteral` — the marker separating a
     /// key-value literal's map target from a struct composition.
     KeyValueLiteral,
-    /// `core:prelude/traits::Display` — anchor for `{x}` template-string
+    /// `core:prelude/traits::Display` — anchor for `${x}` template-string
     /// dispatch and the auto-derive Display→Inspect fallback.
     Display,
-    /// `core:prelude/traits::DisplayAlt` — `{x:#}` dispatch.
+    /// `core:prelude/traits::DisplayAlt` — `${x:#}` dispatch.
     DisplayAlt,
-    /// `core:prelude/traits::Inspect` — `{x:?}` dispatch.
+    /// `core:prelude/traits::Inspect` — `${x:?}` dispatch.
     Inspect,
-    /// `core:prelude/traits::InspectAlt` — `{x:#?}` dispatch.
+    /// `core:prelude/traits::InspectAlt` — `${x:#?}` dispatch.
     InspectAlt,
-    /// `core:prelude/traits::Binary` — `{x:b}` dispatch.
+    /// `core:prelude/traits::Binary` — `${x:b}` dispatch.
     Binary,
-    /// `core:prelude/traits::BinaryAlt` — `{x:#b}` dispatch.
+    /// `core:prelude/traits::BinaryAlt` — `${x:#b}` dispatch.
     BinaryAlt,
-    /// `core:prelude/traits::Octal` — `{x:o}` dispatch.
+    /// `core:prelude/traits::Octal` — `${x:o}` dispatch.
     Octal,
-    /// `core:prelude/traits::OctalAlt` — `{x:#o}` dispatch.
+    /// `core:prelude/traits::OctalAlt` — `${x:#o}` dispatch.
     OctalAlt,
-    /// `core:prelude/traits::LowerHex` — `{x:x}` dispatch.
+    /// `core:prelude/traits::LowerHex` — `${x:x}` dispatch.
     LowerHex,
-    /// `core:prelude/traits::LowerHexAlt` — `{x:#x}` dispatch.
+    /// `core:prelude/traits::LowerHexAlt` — `${x:#x}` dispatch.
     LowerHexAlt,
-    /// `core:prelude/traits::UpperHex` — `{x:X}` dispatch.
+    /// `core:prelude/traits::UpperHex` — `${x:X}` dispatch.
     UpperHex,
-    /// `core:prelude/traits::UpperHexAlt` — `{x:#X}` dispatch.
+    /// `core:prelude/traits::UpperHexAlt` — `${x:#X}` dispatch.
     UpperHexAlt,
-    /// `core:prelude/traits::LowerExp` — `{x:e}` dispatch.
+    /// `core:prelude/traits::LowerExp` — `${x:e}` dispatch.
     LowerExp,
-    /// `core:prelude/traits::UpperExp` — `{x:E}` dispatch.
+    /// `core:prelude/traits::UpperExp` — `${x:E}` dispatch.
     UpperExp,
 
     // ── Format types (structs / enums) ─────────────────────────────────
@@ -354,6 +421,9 @@ pub enum CompilerItem {
     ReflectFlagsMembers,
     /// `ReflectFlags::wire_name_policy` — the flags type's `#[wire(name_policy)]`.
     ReflectFlagsWireNamePolicy,
+    /// `String::with_capacity` — the buffer allocation template expansion
+    /// emits and the NIR template-hoist recognises.
+    StringWithCapacity,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -590,6 +660,7 @@ impl CompilerItem {
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
         Self::ReflectFlagsWireNamePolicy,
+        Self::StringWithCapacity,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
@@ -753,6 +824,7 @@ impl CompilerItem {
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
             Self::ReflectFlagsWireNamePolicy => "reflect_flags_wire_name_policy",
+            Self::StringWithCapacity => "string_with_capacity",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
@@ -872,6 +944,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::ReflectFlagsWireNamePolicy
+            | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
@@ -1070,6 +1143,7 @@ impl CompilerItem {
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
             | Self::ReflectFlagsWireNamePolicy
+            | Self::StringWithCapacity
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii

@@ -216,12 +216,29 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 /// anchor shape.
 pub const CLOSURE_FN_TRAIT: &str = "Fn";
 
+/// Prefix every compiler-synthesised block label carries.
+///
+/// Reserved in source — the parser rejects a label that starts with it — so a
+/// label is a sound marker for a synthesised block: a pass that recognises one
+/// by name cannot be fooled by a hand-written block wearing the same label.
+pub const SYNTHETIC_LABEL_PREFIX: &str = "__";
+
+#[must_use]
+pub fn is_reserved_label(label: &str) -> bool {
+    label.starts_with(SYNTHETIC_LABEL_PREFIX)
+}
+
 /// Label the template-string synthesiser stamps on the block wrapping an
-/// expanded `` `...` `` literal. The template-hoist and const-branch-prune
-/// optimizers key on it to recognise template expansions, so the producer
-/// (`synthesis::template`) and those consumers share this one definition
-/// instead of re-hardcoding the literal — compiler-internal, hence a `const`.
+/// expanded `` `...` `` literal.
 pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
+
+/// Whether `label` marks the block an expanded template string breaks out of.
+/// Shared by the producer (`synthesis::template`) and the two optimizer passes
+/// that key on it, rather than each re-comparing the constant.
+#[must_use]
+pub fn is_template_block(label: &str) -> bool {
+    label == TEMPLATE_BLOCK_LABEL
+}
 
 /// Name of the result accumulator local in an expanded template block.
 /// Recognised by the template-hoist optimizer; single-sourced here.
