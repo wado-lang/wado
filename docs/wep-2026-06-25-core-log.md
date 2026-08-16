@@ -348,17 +348,8 @@ only.
 - Automatic span propagation is single-scope; cross-task is explicit until the
   async story settles.
 
-### Prerequisites
+### Open work
 
-- [x] `core:value::to_value` (direct `Value`-building serializer).
-- [x] Anonymous structs with bound-driven `Serialize` derivation.
-- [x] `#[param]` with compile-time constant folding and DCE.
-- [x] Span scoping via the `in_span` closure.
-- [x] `..forward` effect forwarding.
-- [x] A remark when a compile-time parameter still decides a branch.
-- [x] `core:log` itself — see [Module surface](#module-surface).
-- [x] Default implementations on `interface` operations, so an uninstalled
-      `Log` degrades to the default subscriber instead of trapping.
 - [ ] Seeding the default threshold from `WADO_LOG` — see
       [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
 - [ ] Forwarding a local bound to a constant global read.

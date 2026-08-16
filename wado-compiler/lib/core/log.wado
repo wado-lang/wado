@@ -226,12 +226,7 @@ pub interface Log {
 
 // The subscriber of last resort, and the level it admits. An application that
 // wants another format, destination or threshold installs a handler; one that
-// wants silence installs `NopSink`.
-//
-// `Info` rather than `Trace`: a program nobody configured should say what it is
-// doing, not everything it is thinking. `Warn` would be quieter still, but then
-// a `debug`/`info` added while debugging prints nothing, which is the papercut
-// this whole default exists to avoid.
+// wants silence installs `NopSink`. The WEP argues the level.
 global DEFAULT_LEVEL: Level = Level::Info;
 
 global mut DEFAULT_SINK: TextSink = TextSink {};
@@ -472,8 +467,9 @@ fn timestamp_now() -> String {
 
 // === Sinks ===
 //
-// A sink terminates the chain: it implements every operation, so an operation
-// forwarded from an inner layer ends here instead of trapping.
+// A sink terminates the chain: it answers every operation itself, so one
+// forwarded from an inner layer stops here rather than falling through to the
+// defaults above.
 
 /// One human-readable line per event on stderr:
 ///

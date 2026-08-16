@@ -1777,15 +1777,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Interface(effect_decl) => {
                     // Records `effect_ops`; reify reads them.
                     self.resolve_effect_decl(effect_decl);
-                    self.reject_cm_operation_bodies(
-                        &effect_decl.name,
-                        &effect_decl.methods,
-                        |method| method.attrs.iter().any(|a| a.cm_boundary.is_some()),
-                    );
                     self.reject_unsupported_operation_clauses(
                         &effect_decl.name,
                         &effect_decl.methods,
-                        false,
+                        crate::elaborator::item::OperationOwner::Interface,
                     );
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
@@ -1796,17 +1791,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 Item::Resource(resource_decl) => {
                     self.resolve_resource_decl(resource_decl);
-                    // A resource operation is a CM import in every case, so it
-                    // has no no-handler case for a default to serve.
-                    self.reject_cm_operation_bodies(
-                        &resource_decl.name,
-                        &resource_decl.methods,
-                        |_| true,
-                    );
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
                         &resource_decl.methods,
-                        true,
+                        crate::elaborator::item::OperationOwner::Resource,
                     );
                 }
                 // Other items will be added as needed

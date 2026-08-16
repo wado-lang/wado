@@ -741,13 +741,10 @@ fn build_dispatch_wrapper_function(
     let mut else_stmts: Vec<TirStmt> = Vec::new();
     if !is_resource && op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
         // The declaration gave the operation a body: that is what "no handler
-        // installed" does — but only where nothing else answers for the
-        // operation. An effect open at the CM boundary has a real
-        // implementation on the other side, supplied by the consumer, and that
-        // is the handler; a local default must not shadow it. (A `#[cm]`-backed
-        // operation cannot declare a default at all — the elaborator rejects
-        // one — but a boundary-open effect is a property of the world, not of
-        // the declaration, so the ordering here is what settles it.)
+        // installed" does, where nothing else answers for the operation. Being
+        // open at the CM boundary is a property of the world rather than of the
+        // declaration, so this ordering is what keeps a local default from
+        // shadowing the consumer's implementation.
         assert!(
             type_args.is_empty(),
             "a default implementation is one monomorphic function, so only a \
@@ -1670,12 +1667,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 && op.has_default
                 && !plan.open_boundary_ops.contains(&op.name)
             {
-                // No rest clause and the interface declared what the operation
-                // does unhandled: run that. An explicit `..trap` still wins — a
-                // mock says "this must not be called" and means it — and an
-                // operation open at the CM boundary is answered by the
-                // consumer's implementation, which the trap stub's absence
-                // would shadow, so it keeps the wrapper's routing.
+                // No rest clause, and the interface said what the operation
+                // does unhandled. `..trap` above wins over that — a mock means
+                // it — and a boundary-open operation keeps the wrapper's
+                // routing to the consumer's implementation.
                 build_default_closure(op, plan, &interface_name, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)

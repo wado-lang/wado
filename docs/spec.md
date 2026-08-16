@@ -4565,7 +4565,7 @@ interface Dom {
 
 #### Default Implementations
 
-An `interface` is a trait with a different dispatch story, and its members are written exactly as a trait's are: an operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's **default implementation** — what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
+An `interface` is a trait with a different dispatch story, and its members are written exactly as a trait's are: an operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation — what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
 
 ```wado
 interface Log {
@@ -4581,11 +4581,15 @@ A default fills a handler that leaves the operation out, and it is what `..forwa
 
 A default is a handler body, so it runs in the outer scope like every other one (see [Handlers](#handlers)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops — a trait default calling `self.other()` reaches the impl's override, a filled operation's does not.
 
-An operation also gives no parameter a default value: a call site is a dispatch wrapper taking the arguments as declared, so a declared default could never be omitted at the call.
+Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
 
-An operation backed by a Component Model import — one carrying `#[cm(...)]`, and every `resource` method — cannot carry a default: its no-handler case is the CM adapter, so a body there could never run and is rejected.
-
-An operation also declares no effects and no type parameters. An operation's effects are not required at its call sites, so a `with` clause would let a default perform a capability its caller never declared — a default must be performable wherever it is dispatched, which means pure or `#[ambient]` code. Type parameters have nowhere to go either: dispatch holds one slot per operation, not one per instantiation. Both are compile errors.
+- a body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method) — its no-handler case is the CM adapter, so the body could never run;
+- a body on an `async` operation — its call site is typed as an `AsyncCall`, which a plain body does not produce;
+- a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
+- a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
+- a `with` clause — an operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared; a default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code;
+- a `stores` clause — nothing checks it on an operation, so it would constrain call sites on a promise the handler never makes;
+- type parameters — dispatch holds one slot per operation, not one per instantiation.
 
 #### Colorless Async
 

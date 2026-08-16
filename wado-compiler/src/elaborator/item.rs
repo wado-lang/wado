@@ -1759,116 +1759,86 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ops
     }
 
-    /// Reject a default body on an operation whose dispatch has no no-handler
-    /// case: `is_cm` marks the ones a Component Model import backs, where the
-    /// wrapper's fallback is the CM adapter and a body could never run.
-    pub(super) fn reject_cm_operation_bodies(
-        &mut self,
-        owner: &str,
-        methods: &[ast::Function],
-        is_cm: impl Fn(&ast::Function) -> bool,
-    ) {
-        for method in methods {
-            let Some(body) = &method.body else {
-                continue;
-            };
-            if is_cm(method) {
-                let _ = self.emit(TypeError::OperationBodyNotAllowed {
-                    owner: owner.to_string(),
-                    operation: method.name.clone(),
-                    span: body.span,
-                });
-            }
-        }
-    }
-
-    /// Reject the clauses on an operation that dispatch cannot honour, so a
-    /// declaration says only what the language delivers.
-    ///
-    /// An operation's effects reach no call site — the requirement to perform
-    /// `E` is `with E` at the handler, not per operation — so a `with` clause
-    /// here would let a default body perform a capability its caller never
-    /// declared. Type parameters have nowhere to go either: the dispatch record
-    /// holds one funcref slot per operation, not one per instantiation.
+    /// Reject what an operation declares that dispatch cannot honour, so a
+    /// declaration says only what the language delivers. Each row pairs the
+    /// offending shape with the message explaining why it cannot work.
     pub(super) fn reject_unsupported_operation_clauses(
         &mut self,
         owner: &str,
         methods: &[ast::Function],
-        allows_receiver: bool,
+        kind: OperationOwner,
     ) {
+        let is_resource = matches!(kind, OperationOwner::Resource);
         for method in methods {
-            // An effect operation is called as `E::op(args)` — there is no
-            // receiver to bind `self` to, and a body that names one resolves
-            // `Self` to nothing. A resource method is the opposite: its `&self`
-            // becomes the CM adapter's first parameter.
-            if !allows_receiver
-                && let Some(receiver) = method
-                    .params
-                    .iter()
-                    .find(|p| p.self_kind != ast::SelfKind::None)
-            {
+            // A resource operation is a CM import in every case; an effect
+            // operation only when it carries the attribute.
+            let cm_backed =
+                is_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
+            // A resource method's `&self` becomes the CM adapter's first
+            // parameter; an effect operation is called as `E::op(args)`.
+            let receiver = (!is_resource)
+                .then(|| {
+                    method
+                        .params
+                        .iter()
+                        .find(|p| p.self_kind != ast::SelfKind::None)
+                })
+                .flatten();
+            let rejections: [(Option<Span>, &'static str); 7] = [
+                (
+                    method.body.as_ref().filter(|_| cm_backed).map(|b| b.span),
+                    "cannot carry a default implementation: a Component Model import backs it, \
+                     so it has no no-handler case for a default to serve",
+                ),
+                (
+                    (method.is_async && method.body.is_some()).then_some(method.span),
+                    "cannot carry a default implementation: an async operation's call site is \
+                     typed as an `AsyncCall`, which a plain body does not produce",
+                ),
+                (
+                    receiver.map(|p| p.span),
+                    "cannot take a `self` receiver: an operation is called as \
+                     `Effect::op(args)`, with no receiver to bind it to",
+                ),
+                (
+                    method
+                        .params
+                        .iter()
+                        .find(|p| p.default.is_some())
+                        .map(|p| p.span),
+                    "cannot give a parameter a default: an operation's call site is a dispatch \
+                     wrapper, which takes the arguments as declared",
+                ),
+                (
+                    (!method.effects.is_empty()).then_some(method.span),
+                    "cannot declare effects: an operation's effects are not required at its \
+                     call sites, so a default implementation must be performable wherever it \
+                     is dispatched — reach for an `#[ambient]` function",
+                ),
+                (
+                    (!method.stores.is_empty()).then_some(method.span),
+                    "cannot declare `stores`: nothing checks the clause on an operation, so it \
+                     would constrain call sites on a promise the handler never makes",
+                ),
+                (
+                    method
+                        .type_params
+                        .iter()
+                        .any(ast::GenericParam::is_real_type_param)
+                        .then_some(method.span),
+                    "cannot declare type parameters: dispatch holds one slot per operation, \
+                     not one per instantiation",
+                ),
+            ];
+            for (span, detail) in rejections {
+                let Some(span) = span else {
+                    continue;
+                };
                 let _ = self.emit(TypeError::OperationClauseNotAllowed {
                     owner: owner.to_string(),
                     operation: method.name.clone(),
-                    detail: "cannot take a `self` receiver: an operation is called as \
-                             `Effect::op(args)`, with no receiver to bind it to",
-                    span: receiver.span,
-                });
-            }
-            // A call site is rewritten to the dispatch wrapper, and nothing
-            // pads it with a declared default, so `op()` on `fn op(x: T = e)`
-            // fails as a missing argument. Reject the default rather than let
-            // a declaration promise an argument a caller can never omit.
-            if let Some(param) = method.params.iter().find(|p| p.default.is_some()) {
-                let _ = self.emit(TypeError::OperationClauseNotAllowed {
-                    owner: owner.to_string(),
-                    operation: method.name.clone(),
-                    detail: "cannot give a parameter a default: an operation's call site is a \
-                             dispatch wrapper, which takes the arguments as declared",
-                    span: param.span,
-                });
-            }
-            if method.is_async && method.body.is_some() {
-                let _ = self.emit(TypeError::OperationClauseNotAllowed {
-                    owner: owner.to_string(),
-                    operation: method.name.clone(),
-                    detail: "cannot carry a default implementation: an async operation's call \
-                             site is typed as an `AsyncCall`, which a plain body does not \
-                             produce",
-                    span: method.span,
-                });
-            }
-            if !method.stores.is_empty() {
-                let _ = self.emit(TypeError::OperationClauseNotAllowed {
-                    owner: owner.to_string(),
-                    operation: method.name.clone(),
-                    detail: "cannot declare `stores`: nothing checks the clause on an \
-                             operation, so it would constrain call sites on a promise the \
-                             handler never makes",
-                    span: method.span,
-                });
-            }
-            if !method.effects.is_empty() {
-                let _ = self.emit(TypeError::OperationClauseNotAllowed {
-                    owner: owner.to_string(),
-                    operation: method.name.clone(),
-                    detail: "cannot declare effects: an operation's effects are not required at \
-                             its call sites, so a default implementation must be performable \
-                             wherever it is dispatched — reach for an `#[ambient]` function",
-                    span: method.span,
-                });
-            }
-            if method
-                .type_params
-                .iter()
-                .any(ast::GenericParam::is_real_type_param)
-            {
-                let _ = self.emit(TypeError::OperationClauseNotAllowed {
-                    owner: owner.to_string(),
-                    operation: method.name.clone(),
-                    detail: "cannot declare type parameters: dispatch holds one slot per \
-                             operation, not one per instantiation",
-                    span: method.span,
+                    detail,
+                    span,
                 });
             }
         }
@@ -2736,4 +2706,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // is all `resolve_module` needs.
         Some(placeholder_function(func.name.clone(), func.span))
     }
+}
+
+/// Which declaration an operation belongs to. A resource's operations are
+/// Component Model imports with a `&self` receiver; an effect's are neither.
+#[derive(Clone, Copy)]
+pub(super) enum OperationOwner {
+    Interface,
+    Resource,
 }

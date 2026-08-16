@@ -140,12 +140,11 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Interface(interface_decl) => {
-                    // An operation's default body is a root: the only call to
-                    // it is the dispatch wrapper the synthesis emits later, so
-                    // nothing in the AST references it. Without the seed the
-                    // body is dead, and everything only it reaches goes with
-                    // it — reify drops the callee and WIR build then finds an
-                    // unresolved call.
+                    // An operation's default body is a root: the only call
+                    // to it is the dispatch wrapper synthesis emits later, so
+                    // nothing in the AST references it. Unseeded, the body and
+                    // everything only it reaches are dead, and reify drops a
+                    // callee the synthesized call still names.
                     for method in &interface_decl.methods {
                         if method.body.is_none() {
                             continue;
