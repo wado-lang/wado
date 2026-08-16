@@ -91,5 +91,4 @@ fi
 
 java -cp "$JAR_PATH:$WORK_DIR" PropertyOracle > "$WORK_DIR/table.tsv"
 
-# Strip the `V_` that made each value a legal rule name.
 sed 's/^V_//' "$WORK_DIR/table.tsv"

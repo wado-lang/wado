@@ -150,8 +150,8 @@ struct EnumeratedProperty {
     gc_default: bool,
 }
 
-/// One emitted `<property>_ranges` table: the folded property names that
-/// select it, and one entry per value.
+/// One emitted `<property>_ranges` table; `keys` are the folded property names
+/// that select it.
 struct EnumeratedTable {
     name: String,
     fn_name: String,
@@ -241,7 +241,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     );
 }
 
-/// `Bidi_Class` -> `bidi_class_ranges`.
 fn table_fn_name(property: &String) -> String {
     let mut out = String::with_capacity(property.len() + 7);
     for let c of property.chars() {
@@ -340,7 +339,6 @@ fn parse_prop_runs_at(content: &String, field: i32) -> List<PropRun> {
     return runs;
 }
 
-/// `START` or `START..END` in hex.
 fn parse_bounds(text: &String) -> [i32, i32] {
     let mut bounds = text.split("..");
     let start = i32::from_str_hex(&bounds.next().unwrap()).unwrap();

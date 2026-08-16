@@ -15,8 +15,6 @@ use { CharClass, CharRange, LexerElement } from "../src/ir.wado";
 global SURROGATE_FIRST: i32 = 0xD800;
 global SURROGATE_LAST: i32 = 0xDFFF;
 
-/// One value of the property and the ranges the oracle gave it, in the order
-/// the table first named it.
 struct ValueRanges {
     value: String,
     ranges: List<[i32, i32]>,
@@ -55,9 +53,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     println(`${property}: ${entries.len()} values match the jar exactly`);
 }
 
-/// Gale's own answer, taken through the real parser so the comparison covers
-/// escape parsing and lookup, not just the table. Null when Gale rejects the
-/// escape — unsupported is a different finding from a set that disagrees.
+/// Taken through the real parser, so the comparison covers escape parsing and
+/// lookup rather than the table alone. Null when Gale rejects the escape —
+/// unsupported is a different finding from a set that disagrees.
 fn gale_ranges(property: &String, value: &String) -> Option<List<[i32, i32]>> {
     let source = `lexer grammar T;\nX : [\\p{${*property}=${*value}}] ;`;
     let parsed = parse(source);

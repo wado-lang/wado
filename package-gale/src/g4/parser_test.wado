@@ -2197,8 +2197,6 @@ X : [\\p{vo=R}] ;"), 'A');
 }
 
 test "a script or block with no code points of its own is still a value" {
-    // Each is its property's @missing default rather than a listed line, and
-    // ANTLR4 answers both.
     let no_script = class_of(&"grammar Test;
 X : [\\p{sc=Zzzz}] ;");
     assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";
