@@ -106,12 +106,123 @@ struct CostWalk<'a> {
     body: &'a Body,
     type_table: &'a TypeTable,
     descriptors: &'a [FunctionRef],
+    /// The constants this walk prices the body under, or `None` to price it as
+    /// written. See [`ConstView`].
+    consts: Option<&'a ConstView<'a>>,
+}
+
+/// What the caller's constant arguments make of a callee's body: which of its
+/// parameters arrive constant, which callees fold away on constant arguments,
+/// and which of those spin a loop while doing it.
+pub(super) struct ConstView<'a> {
+    params: &'a IndexSet<u32>,
+    foldable: &'a [bool],
+    loopy: &'a [bool],
 }
 
 /// Promoted values already charged by one walk.
 type SeenValues = IndexSet<ValueId>;
 
 impl CostWalk<'_> {
+    /// Whether `op` is a constant once the caller's constant arguments are
+    /// substituted, so constant folding decides whatever reads it. Only the
+    /// shapes `const_folding` itself folds are admitted.
+    fn folds(&self, op: Operand) -> bool {
+        let Some(view) = self.consts else {
+            return false;
+        };
+        match op {
+            Operand::Value(v) => self.value_folds(view, v),
+            Operand::Expr(e) => self.expr_folds(view, e),
+        }
+    }
+
+    fn value_folds(&self, view: &ConstView<'_>, v: ValueId) -> bool {
+        let kind = self.body.values.kind(v);
+        if kind.is_operand_constant() {
+            return true;
+        }
+        match kind {
+            ValueKind::Binary { lhs, rhs, .. } => {
+                self.value_folds(view, *lhs) && self.value_folds(view, *rhs)
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.value_folds(view, *operand)
+            }
+            ValueKind::Opaque(oid) => matches!(
+                self.body.values.opaque_source(*oid),
+                Some(crate::nir_value_graph::OpaqueSource::Local(l)) if view.params.contains(&l)
+            ),
+            ValueKind::Const(..) => true,
+            ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+            | ValueKind::Select { .. }
+            | ValueKind::LoopPhi { .. }
+            | ValueKind::FieldAccess { .. } => false,
+        }
+    }
+
+    fn expr_folds(&self, view: &ConstView<'_>, id: ExprId) -> bool {
+        match &self.body.exprs[id].kind {
+            ExprKind::Local { index, .. } => view.params.contains(index),
+            ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
+            ExprKind::Binary { left, right, .. } => self.folds(*left) && self.folds(*right),
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::FieldAccess { expr, .. }
+            | ExprKind::VariantTag { expr }
+            | ExprKind::VariantTest { expr, .. }
+            | ExprKind::VariantPayload { expr, .. } => self.folds(*expr),
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                elements.iter().all(|&e| self.folds(e))
+            }
+            ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| self.folds(f.value)),
+            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(|p| self.folds(p)),
+            // A call the compile-time engine runs on constant arguments leaves
+            // a literal behind, so it costs the caller nothing.
+            ExprKind::Call { func_id, args, .. } => {
+                view.foldable.get(func_id.index()).copied().unwrap_or(false)
+                    && args.iter().all(|a| self.folds(a.expr))
+            }
+            ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::Dead => false,
+        }
+    }
+
+    /// [`Self::block`] over a copy of `seen`, for weighing one arm of a decided
+    /// branch against another without either charging the other's values.
+    fn block_cloned(&self, block: BlockId, seen: &SeenValues) -> (usize, SeenValues) {
+        let mut s = seen.clone();
+        let c = self.block(block, &mut s);
+        (c, s)
+    }
+
+    /// The cost of the one arm a decided branch keeps. The rest are pruned
+    /// before the caller sees them, so only the survivor is charged — which one
+    /// that is takes running the condition, so the cheapest stands in.
+    fn decided_arms(&self, costs: Vec<(usize, SeenValues)>, seen: &mut SeenValues) -> usize {
+        let Some((cost, won)) = costs.into_iter().min_by_key(|(c, _)| *c) else {
+            return 0;
+        };
+        *seen = won;
+        cost
+    }
+
     /// Cost of a NIR block, stopping once the rest of it becomes cold or
     /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
     /// `cold_path()` marker drops the marker and everything after it, while a
@@ -151,6 +262,14 @@ impl CostWalk<'_> {
                 else_block,
                 ..
             } => {
+                if self.folds(*condition) {
+                    let mut arms = vec![self.block_cloned(*then_block, seen)];
+                    arms.push(match else_block {
+                        Some(b) => self.block_cloned(*b, seen),
+                        None => (0, seen.clone()),
+                    });
+                    return self.decided_arms(arms, seen);
+                }
                 weight::BRANCH
                     + self.operand(*condition, seen)
                     + self.block(*then_block, seen)
@@ -267,8 +386,12 @@ impl CostWalk<'_> {
                 weight::OP + payload.map_or(0, |p| self.operand(p, seen))
             }
 
-            // A call is an ABI edge, not an operation.
+            // A call is an ABI edge, not an operation — unless the compile-time
+            // engine runs it on constant arguments, leaving a literal.
             ExprKind::Call { args, .. } => {
+                if self.folds(Operand::Expr(id)) {
+                    return 0;
+                }
                 weight::CALL
                     + args
                         .iter()
@@ -294,6 +417,14 @@ impl CostWalk<'_> {
                 then_branch,
                 else_branch,
             } => {
+                if self.folds(*condition) {
+                    let mut arms = vec![self.block_cloned(*then_branch, seen)];
+                    arms.push(match else_branch {
+                        Some(b) => self.block_cloned(*b, seen),
+                        None => (0, seen.clone()),
+                    });
+                    return self.decided_arms(arms, seen);
+                }
                 weight::BRANCH
                     + self.operand(*condition, seen)
                     + self.block(*then_branch, seen)
@@ -302,6 +433,18 @@ impl CostWalk<'_> {
             // One branch for the dispatch, and an arm apiece: each is a block
             // spliced into the caller however cheap its body is.
             ExprKind::Match { expr, arms } => {
+                if self.folds(*expr) {
+                    let costs = arms
+                        .iter()
+                        .map(|arm| {
+                            let mut s = seen.clone();
+                            let c = arm.guard.map_or(0, |g| self.operand(g, &mut s))
+                                + self.operand(arm.body, &mut s);
+                            (c, s)
+                        })
+                        .collect();
+                    return self.decided_arms(costs, seen);
+                }
                 weight::BRANCH
                     + arms.len() * weight::OP
                     + self.operand(*expr, seen)
@@ -319,6 +462,14 @@ impl CostWalk<'_> {
                 default,
                 ..
             } => {
+                if self.folds(*scrutinee) {
+                    let costs = arms
+                        .iter()
+                        .chain(std::iter::once(default))
+                        .map(|&b| self.block_cloned(b, seen))
+                        .collect();
+                    return self.decided_arms(costs, seen);
+                }
                 weight::BRANCH
                     + (arms.len() + 1) * weight::OP
                     + self.operand(*scrutinee, seen)
@@ -349,6 +500,30 @@ fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef])
         body,
         type_table,
         descriptors,
+        consts: None,
+    };
+    walk.block(body.root, &mut SeenValues::default())
+}
+
+/// What the caller pays for `body` once constant folding has run on it, given
+/// the parameters in `view` arrive constant at every call site.
+///
+/// Pricing the body as written is what a constant argument makes wrong: the
+/// branch it decides keeps one arm, and the pure call over it becomes a
+/// literal. A reflection bridge dispatching on a constant index, or a writer
+/// whose constant key decides an escape check, prices as its whole body and
+/// stays out of line for a cost it will not pay.
+fn inline_cost_folded(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    view: &ConstView<'_>,
+) -> usize {
+    let walk = CostWalk {
+        body,
+        type_table,
+        descriptors,
+        consts: Some(view),
     };
     walk.block(body.root, &mut SeenValues::default())
 }
@@ -374,28 +549,292 @@ fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<Stri
     }
 }
 
+/// Whether the folds `view` licenses delete a loop — directly, or inside a
+/// call they turn into a literal.
+///
+/// Size alone cannot tell a worthwhile fold from a trivial one: the model
+/// prices a loop at three instructions, and what it is worth is however many
+/// times it spins. Deleting one is the evidence that inlining a body over
+/// budget pays for itself; deleting two operations is not.
+fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bool {
+    for node in arena_query::reachable_nodes(body) {
+        let decided_arms: Vec<BlockId> = match node {
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Call { func_id, args, .. } => {
+                    if view.loopy.get(func_id.index()).copied().unwrap_or(false)
+                        && args.iter().all(|a| walk.folds(a.expr))
+                    {
+                        return true;
+                    }
+                    continue;
+                }
+                ExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                } if walk.folds(*condition) => {
+                    let mut v = vec![*then_branch];
+                    v.extend(else_branch);
+                    v
+                }
+                ExprKind::Switch {
+                    scrutinee,
+                    arms,
+                    default,
+                    ..
+                } if walk.folds(*scrutinee) => {
+                    let mut v = arms.clone();
+                    v.push(*default);
+                    v
+                }
+                _ => continue,
+            },
+            NodeRef::Stmt(st) => match &body.stmts[st].kind {
+                StmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } if walk.folds(*condition) => {
+                    let mut v = vec![*then_block];
+                    v.extend(else_block);
+                    v
+                }
+                _ => continue,
+            },
+            NodeRef::Block(_) | NodeRef::Pat(_) => continue,
+        };
+        // Every arm but the survivor is deleted, so a loop in any of them is a
+        // loop the caller may stop running. Which one survives takes evaluating
+        // the condition; one loop among them is evidence enough.
+        if decided_arms
+            .iter()
+            .any(|&b| arena_query::block_contains_loop(body, b))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether `body` runs a loop.
+fn body_has_loop(body: &Body) -> bool {
+    arena_query::block_contains_loop(body, body.root)
+}
+
+/// Locals a body binds once, to a constant, and never writes — the shape a
+/// literal argument wears by the time it reaches a call (`let name = "id";
+/// f(&name)`), which is otherwise indistinguishable from a runtime value.
+fn constant_locals(body: &Body) -> IndexSet<u32> {
+    let mut bound: IndexMap<u32, bool> = IndexMap::default();
+    let mut written: IndexSet<u32> = IndexSet::default();
+    for node in arena_query::reachable_nodes(body) {
+        match node {
+            NodeRef::Stmt(st) => {
+                if let StmtKind::Let {
+                    local_index, value, ..
+                } = &body.stmts[st].kind
+                {
+                    let is_const = is_constant_arg(body, *value, &IndexSet::default());
+                    match bound.get_mut(local_index) {
+                        // A second binding of the same slot: keep it only if
+                        // both are constant, since either may reach the call.
+                        Some(prev) => *prev &= is_const,
+                        None => {
+                            bound.insert(*local_index, is_const);
+                        }
+                    }
+                }
+            }
+            NodeRef::Expr(e) => {
+                if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+                    && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                {
+                    written.insert(*index);
+                }
+            }
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+    }
+    bound
+        .into_iter()
+        .filter(|&(idx, is_const)| is_const && !written.contains(&idx))
+        .map(|(idx, _)| idx)
+        .collect()
+}
+
+/// Whether an argument reaches the callee as a compile-time constant — the
+/// shapes `const_folding` reads as one, plus the `&` a borrowed literal wears
+/// and the local it may be bound to first.
+fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
+    match op {
+        // `Const` covers the aggregate a string / list literal becomes once
+        // `promote_pure_values_early` freezes it — the very shape a wire key
+        // arrives in, and the one this scan exists for.
+        Operand::Value(v) => {
+            let kind = body.values.kind(v);
+            kind.is_operand_constant() || matches!(kind, ValueKind::Const(..))
+        }
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
+            ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => {
+                is_constant_arg(body, *expr, const_locals)
+            }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                elements.iter().all(|&e| is_constant_arg(body, e, const_locals))
+            }
+            ExprKind::StructLiteral { fields, .. } => fields
+                .iter()
+                .all(|f| is_constant_arg(body, f.value, const_locals)),
+            ExprKind::VariantConstruct { payload, .. } => {
+                payload.is_none_or(|pl| is_constant_arg(body, pl, const_locals))
+            }
+            ExprKind::Local { index, .. } => const_locals.contains(index),
+            ExprKind::Dead
+            | ExprKind::Binary { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::VariantPayload { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::Call { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. } => false,
+        },
+    }
+}
+
+/// For each callee, the parameter positions *every* call site in the program
+/// fills with a compile-time constant.
+///
+/// Whole-program rather than per-site on purpose: admission stays a property of
+/// the callee, so a body taken on its folded cost is never spliced at a site
+/// that would not fold it. A callee nothing calls is absent.
+fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
+    let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let const_locals = constant_locals(body);
+        for node in arena_query::reachable_nodes(body) {
+            let NodeRef::Expr(e) = node else {
+                continue;
+            };
+            let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+                continue;
+            };
+            let here: IndexSet<u32> = args
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| !a.is_mut && is_constant_arg(body, a.expr, &const_locals))
+                .map(|(i, _)| i as u32)
+                .collect();
+            match out.get_mut(func_id) {
+                Some(prev) => prev.retain(|q| here.contains(q)),
+                None => {
+                    out.insert(*func_id, here);
+                }
+            }
+        }
+    }
+    out.retain(|_, params| !params.is_empty());
+    out
+}
+
+/// Whether this body is only ever inlinable *folded* — over budget as written,
+/// under it once its parameters arrive constant, and shrinking by a loop when
+/// they do.
+///
+/// Its constant may not have arrived yet: a `Serialize` derivation computes its
+/// wire key with a compile-time call, so the key is a literal only after a few
+/// rounds of folding. Until then the body reads as an ordinary over-budget
+/// callee, and bottom-up inlining fills it with its own leaves — after which it
+/// is over budget folded too, and every caller loses the fold. Answering this
+/// optimistically is what lets the engine hold the option open, and is the job
+/// a stdlib `#[inline(never)]` on each leaf otherwise does by hand.
+fn is_fold_sensitive(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    inline_threshold: usize,
+    descriptors: &[FunctionRef],
+    foldable: &[bool],
+    loopy: &[bool],
+) -> bool {
+    if func.inline_hint == InlineHint::Never {
+        return false;
+    }
+    let Some(body) = &func.body else {
+        return false;
+    };
+    if inline_cost(body, type_table, descriptors) <= inline_threshold {
+        return false;
+    }
+    let params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
+    let view = ConstView {
+        params: &params,
+        foldable,
+        loopy,
+    };
+    if inline_cost_folded(body, type_table, descriptors, &view) > inline_threshold {
+        return false;
+    }
+    let walk = CostWalk {
+        body,
+        type_table,
+        descriptors,
+        consts: Some(&view),
+    };
+    fold_drops_loop(body, &view, &walk)
+}
+
+/// Why a callee was admitted, which decides whether it may itself receive
+/// inlining this round. See [`Admission::WhenFolded`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Admission {
+    /// Its body fits the budget as written.
+    AsWritten,
+    /// Only its *folded* body fits. Splicing anything into it first pushes it
+    /// back over and costs every caller the fold, so the engine leaves it alone
+    /// this round; its own callees reach the copies it leaves behind instead.
+    /// Bottom-up inlining is what an `#[inline(never)]` on the leaf otherwise
+    /// has to prevent by hand.
+    WhenFolded,
+}
+
 /// Check if a function is eligible for inlining.
 fn is_inline_eligible(
     func: &NirFunction,
+    const_view: Option<&ConstView<'_>>,
     recursive_functions: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
     descriptors: &[FunctionRef],
-) -> bool {
+) -> Option<Admission> {
     // #[inline(never)] unconditionally prevents inlining
     if func.inline_hint == InlineHint::Never {
-        return false;
+        return None;
     }
 
     // Must have a body
     let Some(body) = &func.body else {
-        return false;
+        return None;
     };
 
     // Don't inline CM binding functions - they are ABI bridges between
     // Wado GC types and CM linear memory that must remain as separate functions
     if func.is_cm_binding {
-        return false;
+        return None;
     }
 
     // Not recursive — keyed on the function's `FuncId` (its store position),
@@ -406,19 +845,19 @@ fn is_inline_eligible(
     // and expand without bound (a compiler stack overflow at higher iteration
     // counts).
     if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
-        return false;
+        return None;
     }
 
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body, a non-adapter, and non-recursion, all checked above)
     if func.inline_hint == InlineHint::Always {
-        return true;
+        return Some(Admission::AsWritten);
     }
 
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if type_table.is_never(func.return_type) {
-        return false;
+        return None;
     }
 
     // The threshold applies even at a single call site: if that site sits inside
@@ -432,7 +871,28 @@ fn is_inline_eligible(
         inline_threshold
     };
 
-    inline_cost(body, type_table, descriptors) <= effective_threshold
+    let plain = inline_cost(body, type_table, descriptors);
+    if plain <= effective_threshold {
+        return Some(Admission::AsWritten);
+    }
+    // Second chance on the cost the caller actually pays: a body whose branches
+    // a constant argument decides, or whose sub-call it folds, is smaller once
+    // spliced than as written. Admitting on that alone licenses every marginal
+    // fold, which measured -9% on cbor-twitter — so the fold must also be worth
+    // the duplication, which is what deleting a loop, or half the body, says.
+    let view = const_view?;
+    let folded = inline_cost_folded(body, type_table, descriptors, view);
+    if folded > effective_threshold {
+        return None;
+    }
+    let walk = CostWalk {
+        body,
+        type_table,
+        descriptors,
+        consts: Some(view),
+    };
+    let worthwhile = folded * 2 <= plain || fold_drops_loop(body, view, &walk);
+    worthwhile.then_some(Admission::WhenFolded)
 }
 
 /// Detect recursive functions using call graph analysis.
@@ -574,16 +1034,60 @@ pub fn inline_functions(
     // map each candidate's strings onto its `FuncId` here.
     let mut candidate_strings: IndexMap<FuncId, Vec<String>> = IndexMap::default();
 
+    // Inputs for the folded-cost second chance: which parameters arrive
+    // constant everywhere, which callees the compile-time engine runs on
+    // constant arguments, and which of those spin a loop while doing it.
+    let const_params = constant_params(project);
+    let fn_effects =
+        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let foldable: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(&fn_effects)
+        .map(|(f, e)| e.is_pure() && crate::niri::is_ctfe_eligible(&f.borrow()))
+        .collect();
+    let loopy: Vec<bool> = project
+        .functions
+        .iter()
+        .map(|f| f.borrow().body.as_ref().is_some_and(body_has_loop))
+        .collect();
+
+    // Callees admitted only on their folded cost, which must not receive
+    // inlining this round — see `Admission::WhenFolded`.
+    let mut frozen: IndexSet<FuncId> = IndexSet::default();
+
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if is_inline_eligible(
+        let view = func
+            .id
+            .and_then(|id| const_params.get(&id))
+            .map(|params| ConstView {
+                params,
+                foldable: &foldable,
+                loopy: &loopy,
+            });
+        if let Some(id) = func.id
+            && is_fold_sensitive(
+                &func,
+                &type_table,
+                inline_threshold,
+                &descriptors,
+                &foldable,
+                &loopy,
+            )
+        {
+            frozen.insert(id);
+        }
+        let admission = is_inline_eligible(
             &func,
+            view.as_ref(),
             &recursive_functions,
             &type_table,
             inline_threshold,
             &descriptors,
-        ) {
+        );
+        if admission.is_some() {
             let id = func.id.expect("func_id assigned at lower");
             let string_key = (func.module_source.clone(), func.name.clone());
             // Get the strings used by this function
@@ -618,6 +1122,9 @@ pub fn inline_functions(
 
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
+        if frozen.contains(&fid) {
+            continue;
+        }
         let caller_idx = fid.index();
         let func_rc = project.functions[caller_idx].clone();
         let mut func = func_rc.borrow_mut();

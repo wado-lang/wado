@@ -94,7 +94,6 @@ fn json_escape_free(s: &String) -> bool {
     return true;
 }
 
-#[inline(never)]
 fn write_escaped_string_slow(buf: &mut String, s: &String) {
     buf.push('"');
     let n = s.len();
@@ -310,12 +309,6 @@ impl SerializeMap for JsonMapSerializer {
 }
 
 /// Writes `"name":`, preceded by `,` when the struct already has a field.
-///
-/// Out of line, and the three below with it: `field` is inlined into every
-/// `Serialize` derivation so its constant key folds, and what it carries in is
-/// copied to every field of every derived type. One call per key rather than a
-/// run of buffer appends is 2 KB against 42 KB on json-twitter.
-#[inline(never)]
 fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
         buf.push(',');
@@ -325,7 +318,6 @@ fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     buf.push_str(&"\":");
 }
 
-#[inline(never)]
 fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
         buf.push(',');
@@ -335,7 +327,6 @@ fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
 }
 
 /// The indented twins, on the same split so a constant key folds there too.
-#[inline(never)]
 fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
     if count > 0 {
         buf.push(',');
@@ -346,7 +337,6 @@ fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &
     buf.push_str(&"\": ");
 }
 
-#[inline(never)]
 fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
     if count > 0 {
         buf.push(',');
@@ -357,13 +347,6 @@ fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent
 }
 
 impl SerializeStruct for JsonStructSerializer {
-    // Inlined so a derivation's constant wire key reaches `json_escape_free`,
-    // which folds at compile time and leaves only `write_plain_key`. The
-    // inliner cannot reach that on its own: it prices `field` as written,
-    // before the constant deletes the check. Pricing it folded instead does
-    // let the hint go, but licenses enough other inlining to cost cbor-twitter
-    // 9% — the benefit a fold unlocks is not in the model, only the size.
-    #[inline]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if json_escape_free(name) {
             write_plain_key(self.buf, name, self.count);
@@ -602,7 +585,6 @@ impl SerializeMap for PrettyJsonMapSerializer {
 }
 
 impl SerializeStruct for PrettyJsonStructSerializer {
-    #[inline]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if json_escape_free(name) {
             write_pretty_plain_key(self.buf, name, self.count, self.indent, self.depth);
