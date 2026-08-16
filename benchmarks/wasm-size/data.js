@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786888500118,
+  "lastUpdate": 1786889807226,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48809,6 +48809,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b287254d909878c50fc13ae151b14f27510261af"
         },
         "date": 1786888499511,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aaef7ebb01d36ed725a5cd3ba3bcd69ff0124acf",
+          "message": "Merge pull request #1833 from wado-lang/claude/wado-compiler-string-template-smell-1unzgr\n\nfix(template): close the format-specifier grammar and single-source the `__tmpl` contract",
+          "timestamp": "2026-08-16T23:03:16+09:00",
+          "tree_id": "df822642151145bd6af418c2f690d121609b54c8",
+          "url": "https://github.com/wado-lang/wado/commit/aaef7ebb01d36ed725a5cd3ba3bcd69ff0124acf"
+        },
+        "date": 1786889806568,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
