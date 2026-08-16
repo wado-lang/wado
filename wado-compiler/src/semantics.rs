@@ -520,8 +520,9 @@ impl Semantics {
 
     /// AST [`Function`](crate::ast::Function) node declaring `key` — free
     /// functions and `impl` / `trait` methods, which share that AST shape.
-    /// `None` for interface and resource methods, which are `InterfaceMethod`
-    /// nodes reached through the symbol table. O(1): the per-module [`AstIndex`]
+    /// `None` for interface and resource methods: they are `Function` nodes
+    /// like any other, but the index deliberately skips them, so they are
+    /// reached through the symbol table. O(1): the per-module [`AstIndex`]
     /// holds each function's address, so nothing scans the AST at query time.
     #[must_use]
     pub fn function_at(&self, id: AstId) -> Option<&crate::ast::Function> {

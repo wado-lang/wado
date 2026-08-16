@@ -5,8 +5,8 @@
 //! builder rather than every consumer. The semantic facts live elsewhere.
 
 use crate::ast::{
-    AstId, AstVisitor, Expr, Function, ImplBlock, InterfaceMethod, Item, Module, Pattern,
-    walk_expr, walk_function, walk_interface_method, walk_item, walk_pattern,
+    AstId, AstVisitor, Expr, Function, ImplBlock, Item, Module, Pattern, walk_expr, walk_function,
+    walk_item, walk_pattern,
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -52,11 +52,10 @@ pub struct AstIndex {
     write_targets: IndexSet<AstId>,
     /// Address of every `Function`-shaped declaration in the module,
     /// keyed by the function's own `AstId`. Covers top-level free
-    /// functions and methods inside `Item::Impl` / `Item::Trait` (both
-    /// of which carry `methods: Vec<Function>`). Interface and resource
-    /// methods carry the `InterfaceMethod` shape and live elsewhere; the
-    /// analyzer registers them as `SymbolKind::Function` entries, so
-    /// consumers reach them through the symbol table rather than here.
+    /// functions and methods inside `Item::Impl` / `Item::Trait`. Interface
+    /// and resource methods are `Function`s too, but the analyzer registers
+    /// them as `SymbolKind::Function` entries, so consumers reach them
+    /// through the symbol table rather than here.
     function_locations: IndexMap<AstId, FunctionLocation>,
 }
 
@@ -187,14 +186,6 @@ impl AstVisitor for IndexBuilder {
         walk_function(self, func);
     }
 
-    fn visit_interface_method(&mut self, method: &InterfaceMethod) {
-        self.record_name_span(method.id, method.name_span);
-        for p in &method.params {
-            self.record_name_span(p.id, p.name_span);
-        }
-        walk_interface_method(self, method);
-    }
-
     fn visit_pattern(&mut self, pat: &Pattern) {
         if let Pattern::Ident { id, span, .. } | Pattern::MutIdent { id, span, .. } = pat {
             self.record_name_span(*id, *span);
@@ -283,7 +274,7 @@ fn record_item_name_spans(index: &mut AstIndex, item: &Item) {
         Item::Interface(i) => {
             index.name_spans.insert(i.id, i.name_span);
             // Interface method name_spans are recorded by the
-            // `visit_interface_method` override.
+            // `visit_function` override, which every member goes through.
         }
         Item::Resource(r) => {
             // ResourceDecl has no `name_span`; the table simply has no
@@ -343,10 +334,9 @@ fn record_function_locations(index: &mut AstIndex, items: &[Item]) {
                     );
                 }
             }
-            // Interface and resource declarations carry `InterfaceMethod`
-            // entries, not `Function` — the analyzer registers those as
-            // symbol-table entries, and consumers route through the symbol
-            // table for them.
+            // Interface and resource methods are registered as
+            // symbol-table entries by the analyzer, and consumers route
+            // through the symbol table for them.
             _ => {}
         }
     }
@@ -870,10 +860,9 @@ mod tests {
         }
     }
 
-    /// Interface methods carry `InterfaceMethod` rather than `Function`,
-    /// so the function-location index intentionally skips them. The
-    /// analyzer registers interface methods as `SymbolKind::Function`
-    /// entries; consumers use the symbol table for those.
+    /// The function-location index intentionally skips interface methods.
+    /// The analyzer registers them as `SymbolKind::Function` entries;
+    /// consumers use the symbol table for those.
     #[test]
     fn function_location_skips_interface_methods() {
         let module = parse(concat!(

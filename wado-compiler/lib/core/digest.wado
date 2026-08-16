@@ -6,17 +6,6 @@
 //! [`Sha256`] (SHA-256, FIPS 180-4 / RFC 6234) is provided; the trait keeps
 //! the module name stable as more algorithms are added.
 //!
-//! The synopsis covers the one-shot `sha256`. Incremental hashing via the trait:
-//!
-//! ```wado
-//! use { Sha256, Digest } from "core:digest";
-//!
-//! let mut h = Sha256::new();
-//! h.update(&first_chunk);
-//! h.update(&second_chunk);
-//! let digest = h.finalize();
-//! ```
-//!
 //! Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
 //! `ByteList`, `ByteArray`, or a `String` (its UTF-8 bytes).
 
@@ -35,8 +24,15 @@ pub trait Digest {
 
 #[synopsis]
 test {
+    // One shot, when the whole message is in hand.
     let digest = sha256(&"wado");
     assert digest.to_hex() == "fe3d12dc082eed509c3869ed16f0c209f2fbaeee3a41aa09f0033798efd67052";
+
+    // Incremental, through the trait, when it arrives in pieces.
+    let mut h = Sha256::new();
+    h.update(&"wa");
+    h.update(&"do");
+    assert h.finalize() == digest;
 }
 
 // SHA-256 round constants: the first 32 bits of the fractional parts of the

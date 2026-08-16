@@ -1,0 +1,14 @@
+// A call site is a dispatch wrapper taking the arguments as declared, so a
+// declared default could never be omitted at the call.
+interface Greet {
+    fn hello(name: String = "world");
+}
+
+export fn run() {
+    Greet::hello(`there`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot give a parameter a default"
+}

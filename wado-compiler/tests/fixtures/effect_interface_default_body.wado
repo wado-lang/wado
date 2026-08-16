@@ -1,0 +1,78 @@
+// An interface operation may carry a body: what it does when dispatched with
+// no handler installed. An interface is a trait with a different dispatch
+// story, so the body is written and parsed exactly as a trait's default is.
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn label() -> String {
+        return "default";
+    }
+
+    fn emit(message: String) {
+        LINES.push(`default:${message}`);
+    }
+
+    // No body: dispatching this with no handler installed still traps.
+    fn required(level: i32) -> bool;
+}
+
+global mut LINES: List<String> = [];
+
+struct Collect {
+    tag: String,
+}
+
+impl Log for Collect {
+    fn label(&self) -> String {
+        resume self.tag;
+    }
+
+    fn emit(&self, message: String) {
+        LINES.push(`${self.tag}:${message}`);
+    }
+
+    fn required(&self, level: i32) -> bool {
+        resume level > 0;
+    }
+}
+
+// A layer implementing nothing: `..forward` on the outermost handler reaches
+// the default rather than trapping, so a partial layer is installable alone.
+struct Passthrough {
+}
+
+impl Log for Passthrough {
+    ..forward
+}
+
+export fn run() with Stdout {
+    // No handler at all: both operations run their defaults.
+    Log::emit(`one`);
+    println(Log::label());
+
+    let c = Collect { tag: "handler" };
+    with Log => &c do {
+        Log::emit(`two`);
+        println(Log::label());
+        println(`${Log::required(1)}`);
+    };
+
+    // Outside the block the default is back.
+    Log::emit(`three`);
+    println(Log::label());
+
+    let p = Passthrough {};
+    with Log => &p do {
+        Log::emit(`four`);
+        println(Log::label());
+    };
+
+    for let line of LINES {
+        println(line);
+    }
+}
+
+__DATA__
+{
+    "stdout": "default\nhandler\ntrue\ndefault\ndefault\ndefault:one\nhandler:two\ndefault:three\ndefault:four\n"
+}

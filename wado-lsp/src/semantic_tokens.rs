@@ -282,13 +282,10 @@ fn visit_item(spans: &mut TypeSpans, item: &Item) {
             }
         }
         Item::Interface(e) => {
+            // An operation is a `Function` like a trait's, default body and
+            // all, so it takes the same walk.
             for method in &e.methods {
-                for param in &method.params {
-                    visit_type(spans, &param.ty);
-                }
-                if let Some(ret) = &method.return_type {
-                    visit_type(spans, ret);
-                }
+                visit_function(spans, method);
             }
         }
         Item::Global(g) => {

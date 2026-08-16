@@ -7,13 +7,12 @@ use crate::ast::{
     BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr,
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
     ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl,
-    InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WorldDecl, WorldExport,
+    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item,
+    LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
+    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl,
+    TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind};
 use crate::hashmap::IndexSet;
@@ -1121,28 +1120,10 @@ impl<'a> Unparser<'a> {
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
                 this.emit_leading_for(method.id);
                 this.emit_blank_lines_to(effective_line);
-                this.unparse_interface_method(method);
+                this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
         });
-    }
-
-    fn unparse_interface_method(&mut self, m: &InterfaceMethod) {
-        self.emit_outer_attrs(&m.attrs);
-        self.emit_kw_if(m.is_async, "async ");
-
-        self.output.push_str("fn ");
-        self.output.push_str(&m.name);
-        self.delimited_params(&m.params, |s| {
-            if let Some(ret) = &m.return_type
-                && !is_unit_type(ret)
-            {
-                s.output.push_str(" -> ");
-                s.unparse_type(ret);
-            }
-        });
-
-        self.output.push_str(";\n");
     }
 
     fn unparse_resource(&mut self, r: &ResourceDecl) {
@@ -1161,7 +1142,7 @@ impl<'a> Unparser<'a> {
         self.with_braced_body(r.span, |this| {
             for method in &r.methods {
                 this.emit_leading_for(method.id);
-                this.unparse_interface_method(method);
+                this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
         });

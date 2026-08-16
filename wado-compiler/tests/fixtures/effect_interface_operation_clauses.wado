@@ -1,0 +1,15 @@
+// An operation's effects reach no call site, so a `with` clause here would let
+// a default implementation perform a capability its caller never declared.
+// Rejected rather than dropped.
+interface Noisy {
+    fn shout(message: String) with Stdout;
+}
+
+export fn run() {
+    Noisy::shout(`hi`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot declare effects"
+}

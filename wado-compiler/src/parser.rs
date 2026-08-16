@@ -8,15 +8,15 @@ use crate::ast::{
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
     ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl,
-    InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
+    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -4840,14 +4840,14 @@ impl Parser {
         })
     }
 
-    fn parse_interface_method(&mut self) -> ParseResult<InterfaceMethod> {
-        // Parse any attributes on the method (e.g., #[cm("...")])
+    /// Parse one member of an `interface` or `resource` block. An interface is
+    /// a trait with a different dispatch story, so a member is parsed exactly
+    /// as a trait method is: a signature terminated by `;`, or a signature
+    /// followed by a block — the operation's default implementation.
+    fn parse_interface_method(&mut self) -> ParseResult<Function> {
+        // Attributes on the method (e.g. `#[cm("...")]`) carry through.
         let attrs = self.parse_attributes()?;
 
-        let id = self.alloc_ast_id();
-        let start_span = self.peek().span;
-
-        // Check for async keyword
         let is_async = if self.check(&TokenKind::Async) {
             self.advance();
             true
@@ -4855,36 +4855,9 @@ impl Parser {
             false
         };
 
-        self.expect(&TokenKind::Fn)?;
-        let (name, name_span) = self.consume_ident_with_span()?;
-
-        let _type_params = self.parse_generic_params()?;
-
-        self.expect(&TokenKind::LParen)?;
-        let params = self.parse_param_list()?;
-        self.expect(&TokenKind::RParen)?;
-
-        let return_type = self.parse_optional_return_type()?;
-
-        self.expect(&TokenKind::Semicolon)?;
-
-        // Span must cover through the terminating `;`, not just the `fn`
-        // keyword line. The formatter's blank-line accounting keys off
-        // `span.end_line()`; a single-line span would drift once the
-        // signature is reflowed across multiple lines, manufacturing blank
-        // lines between members on the next format pass (idempotency break).
-        let end_span = self.tokens[self.pos.saturating_sub(1)].span;
-
-        Ok(InterfaceMethod {
-            id,
-            name,
-            name_span,
-            is_async,
-            attrs,
-            params,
-            return_type,
-            span: start_span.merge(&end_span),
-        })
+        // Visibility comes from the interface itself, and an operation is
+        // never exported at the CM boundary on its own.
+        self.parse_function(Visibility::Private, false, is_async, attrs, true)
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
@@ -9094,5 +9067,51 @@ line 2
             "unexpected message: {}",
             err.message
         );
+    }
+
+    fn parse_interface(source: &str) -> InterfaceDecl {
+        let module = parse(source).unwrap();
+        let Item::Interface(decl) = &module.items[0] else {
+            panic!("expected an interface declaration");
+        };
+        decl.clone()
+    }
+
+    #[test]
+    fn interface_method_parses_without_a_body() {
+        let decl = parse_interface("interface Log { fn emit(message: String); }");
+        assert_eq!(decl.methods.len(), 1);
+        assert_eq!(decl.methods[0].name, "emit");
+        assert!(decl.methods[0].body.is_none());
+    }
+
+    #[test]
+    fn interface_method_parses_with_a_default_body() {
+        let decl = parse_interface(
+            "interface Log {
+                fn enabled(level: i32) -> bool;
+                fn emit(message: String) { log_stderr(message); }
+            }",
+        );
+        assert_eq!(decl.methods.len(), 2);
+        assert!(decl.methods[0].body.is_none());
+        assert_eq!(decl.methods[1].name, "emit");
+        assert!(
+            decl.methods[1].body.is_some(),
+            "a default body makes the operation optional for a handler"
+        );
+    }
+
+    #[test]
+    fn interface_method_parses_the_whole_trait_member_grammar() {
+        // The grammar is the trait grammar, so a `with` clause and type
+        // parameters parse here rather than erroring out of the parser. Both
+        // are then rejected by the elaborator with a diagnostic that says why
+        // (`reject_unsupported_operation_clauses`) — the parser's job is to
+        // read the member, not to decide what dispatch can honour.
+        let decl = parse_interface("interface Run { fn go<T>(v: T) -> T with Stdout; }");
+        let method = &decl.methods[0];
+        assert_eq!(method.type_params.len(), 1);
+        assert_eq!(method.effects, ["Stdout"]);
     }
 }

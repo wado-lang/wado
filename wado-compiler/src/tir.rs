@@ -5382,6 +5382,11 @@ pub struct TirEffectOp {
     /// `MethodInfo` — back to the right per-monomorphisation wrapper.
     pub cm_name: Option<String>,
     pub is_async: bool,
+    /// Set when the declaration gave the operation a body: what it does when
+    /// dispatched with no handler installed. The dispatch wrapper calls
+    /// [`crate::name::effect_default_impl_name`] in that case instead of
+    /// trapping.
+    pub has_default: bool,
 }
 
 /// Resource declaration captured in TIR for effect propagation.
