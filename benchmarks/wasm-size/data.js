@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786847754324,
+  "lastUpdate": 1786850767709,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48545,6 +48545,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d2a2d6e85a3af1e40776913883b7c490963bea12"
         },
         "date": 1786847753631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1975,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6493,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16648,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283820,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5feffb362cb74c05b265cf380b32ab1b449c284b",
+          "message": "Merge pull request #1827 from wado-lang/claude/identity-declaration-wep-mg7juw\n\nfix(elaborator): resolve declarations by reference site, not by spelling",
+          "timestamp": "2026-08-16T12:13:04+09:00",
+          "tree_id": "50a3af56e12e17d280322996b9e0b8e9ce4ece8b",
+          "url": "https://github.com/wado-lang/wado/commit/5feffb362cb74c05b265cf380b32ab1b449c284b"
+        },
+        "date": 1786850767260,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
