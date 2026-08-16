@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786850767709,
+  "lastUpdate": 1786863495921,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48589,6 +48589,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5feffb362cb74c05b265cf380b32ab1b449c284b"
         },
         "date": 1786850767260,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1975,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6493,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16648,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283820,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dee2255111156f7323bcd1bfb4c27cde9d270f14",
+          "message": "Merge pull request #1828 from wado-lang/claude/wado-cli-smell-fixes-9r53so\n\nrefactor(cli): give each duplicated policy in wado-cli one home",
+          "timestamp": "2026-08-16T15:45:40+09:00",
+          "tree_id": "b90aa7740da18440bf70c427d4a6d172079a516a",
+          "url": "https://github.com/wado-lang/wado/commit/dee2255111156f7323bcd1bfb4c27cde9d270f14"
+        },
+        "date": 1786863495361,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
