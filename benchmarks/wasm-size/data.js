@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786845919245,
+  "lastUpdate": 1786847754324,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48521,6 +48521,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 284956,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2a2d6e85a3af1e40776913883b7c490963bea12",
+          "message": "Merge pull request #1826 from wado-lang/claude/wado-g4-parser-alignment-iysmod\n\nfeat(lang)!: parenthesize multi-effect `with` rows, make `;` a statement separator, and hold Wado.g4 to the compiler",
+          "timestamp": "2026-08-16T11:22:41+09:00",
+          "tree_id": "14fe5519a7a1281747aa1604ac943d755fc4aa01",
+          "url": "https://github.com/wado-lang/wado/commit/d2a2d6e85a3af1e40776913883b7c490963bea12"
+        },
+        "date": 1786847753631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1975,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6493,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16648,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283820,
             "unit": "bytes"
           }
         ]
