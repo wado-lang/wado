@@ -261,14 +261,20 @@ fn write_pretty_newline_and_indent(buf: &mut String, indent: &String, depth: i32
     }
 }
 
+/// Serializes one nested value into `buf`. The compact container writers all
+/// wrapped the buffer in a `JsonSerializer` and unwrapped it again around the
+/// call; this is that, once.
+fn serialize_into<T: Serialize>(buf: &mut String, value: &T) -> Result<(), SerializeError> {
+    let mut ser = JsonSerializer { buf: buf };
+    return value.serialize(&mut ser);
+}
+
 impl SerializeSeq for JsonSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.buf.push_str(&",");
         }
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         self.count += 1;
         return r;
     }
@@ -284,18 +290,14 @@ impl SerializeMap for JsonMapSerializer {
         if self.count > 0 {
             self.buf.push_str(&",");
         }
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = key.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, key);
         self.buf.push_str(&":");
         self.need_value = true;
         return r;
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         self.count += 1;
         self.need_value = false;
         return r;
@@ -308,8 +310,11 @@ impl SerializeMap for JsonMapSerializer {
 }
 
 /// Writes `"name":`, preceded by `,` when the struct already has a field.
-/// Out of line so the `field` body that inlines into a `Serialize` derivation
-/// stays one call per key rather than a run of buffer appends.
+///
+/// Out of line, and the three below with it: `field` is inlined into every
+/// `Serialize` derivation so its constant key folds, and what it carries in is
+/// copied to every field of every derived type. One call per key rather than a
+/// run of buffer appends is 2 KB against 42 KB on json-twitter.
 #[inline(never)]
 fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
@@ -353,7 +358,11 @@ fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent
 
 impl SerializeStruct for JsonStructSerializer {
     // Inlined so a derivation's constant wire key reaches `json_escape_free`,
-    // which folds at compile time and leaves only `write_plain_key`.
+    // which folds at compile time and leaves only `write_plain_key`. The
+    // inliner cannot reach that on its own: it prices `field` as written,
+    // before the constant deletes the check. Pricing it folded instead does
+    // let the hint go, but licenses enough other inlining to cost cbor-twitter
+    // 9% — the benefit a fold unlocks is not in the model, only the size.
     #[inline]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if json_escape_free(name) {
@@ -361,9 +370,7 @@ impl SerializeStruct for JsonStructSerializer {
         } else {
             write_escaping_key(self.buf, name, self.count);
         }
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         self.count += 1;
         return r;
     }
@@ -376,9 +383,7 @@ impl SerializeStruct for JsonStructSerializer {
 
 impl SerializeVariant for JsonVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         return r;
     }
 
