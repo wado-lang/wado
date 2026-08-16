@@ -27,8 +27,10 @@ is one global read, and `Log::enabled` runs the installed layer stack.
 to build.
 
 The facade is `#[ambient]`, so performing `Log` adds no `with Log` to a
-caller's signature — but an operation with no handler traps, so a program
-that logs must install a sink.
+caller's signature, and every operation carries a default implementation, so
+a program that installs nothing still logs — `Info` and above, one text line
+per event on stderr. Installing a sink replaces that for its scope; `NopSink`
+is how a program asks for silence.
 
 ## Synopsis
 
@@ -65,12 +67,20 @@ The process-wide threshold set by [`set_log_level`].
 
 The three tiers, cheapest first, each narrowing what the one before
 admitted. Exposed as a predicate too, for guarding fields too expensive to
-build: `if enabled(Level::Debug) { debug(`state`, { snapshot: dump() }); }`.
+build:
+
+```wado
+if enabled(Level::Debug) {
+    debug(`state`, { snapshot: expensive_snapshot() });
+}
+```
 
 ### `pub fn event<T: Serialize = NoFields>(level: Level, message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
-Emit an event at a run-time level, skipping the static gate the level
-wrappers apply. Location defaults resolve at the call site.
+Emit an event at a level a caller computes. The level wrappers' three gates
+apply here too; only tier 1 comes out weaker, since a level that is not a
+literal is not a comparison the optimizer can fold. Location defaults
+resolve at the call site.
 
 ### `pub fn trace<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
@@ -108,6 +118,13 @@ The subscriber. Sinks and layers are handlers of it, so composition is
 handler nesting and dispatch stays static. Operations are best-effort: a
 handler swallows its own write and serialize errors and never fails the
 program.
+
+Every operation carries a default implementation, so a program that installs
+no sink logs to stderr rather than trapping — logging is a debugging aid, and
+one that crashes the program for want of setup is worse than no logging. The
+defaults are a `TextSink` on stderr admitting `Info` and above; installing
+any handler replaces them for its scope, and `NopSink` is how a program asks
+for silence.
 
 #### `fn enabled(level: Level) -> bool`
 

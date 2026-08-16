@@ -184,8 +184,9 @@ fn box_fields<T: Serialize>(fields: T) -> Value {
 /// Every operation carries a default implementation, so a program that installs
 /// no sink logs to stderr rather than trapping — logging is a debugging aid, and
 /// one that crashes the program for want of setup is worse than no logging. The
-/// defaults are the [`DEFAULT_SINK`] below; installing any handler replaces them
-/// for its scope.
+/// defaults are a `TextSink` on stderr admitting `Info` and above; installing
+/// any handler replaces them for its scope, and `NopSink` is how a program asks
+/// for silence.
 pub interface Log {
     fn enabled(level: Level) -> bool {
         return level >= DEFAULT_LEVEL;
@@ -255,9 +256,9 @@ pub fn enabled(level: Level) -> bool {
     return Log::enabled(level);
 }
 
-/// Emit an event at a level a caller computes. Every gate `trace` … `error`
-/// apply applies here too; only tier 1 comes out weaker, since a level that is
-/// not a literal is not a comparison the optimizer can fold. Location defaults
+/// Emit an event at a level a caller computes. The level wrappers' three gates
+/// apply here too; only tier 1 comes out weaker, since a level that is not a
+/// literal is not a comparison the optimizer can fold. Location defaults
 /// resolve at the call site.
 #[ambient]
 pub fn event<T: Serialize = NoFields>(
