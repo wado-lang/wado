@@ -722,6 +722,15 @@ mod tests {
 #[cfg(test)]
 const NAME_TO_IDENTITY: &[(&str, &str)] = &[
     (
+        "resolve",
+        "`Scopes::resolve` is the one scope, so it is the one place this shape \
+         belongs. Every other entry here exists because it is *not* this.",
+    ),
+    (
+        "resolve_value",
+        "`Scopes::resolve` in the value namespace; see above.",
+    ),
+    (
         "imported_as",
         "answers the import tier alone, for a caller to whom the *aliasing* is \
          the question — the one import fact that is not a scope lookup",
@@ -754,6 +763,30 @@ mod enforcement {
 
     /// Whether `signature` takes a module and a name and hands back a
     /// declaration.
+    /// The parameter types of `params`, split on the commas between them —
+    /// not on the ones inside `IndexMap<(ModuleSource, AstId), _>`, whose
+    /// spelling would otherwise read as a module parameter beside a name one.
+    fn param_types(params: &str) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut depth = 0usize;
+        let mut start = 0usize;
+        for (i, c) in params.char_indices() {
+            match c {
+                '<' | '(' | '[' => depth += 1,
+                '>' | ')' | ']' => depth = depth.saturating_sub(1),
+                ',' if depth == 0 => {
+                    out.push(&params[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(&params[start..]);
+        out.into_iter()
+            .filter_map(|p| p.split_once(':').map(|(_, ty)| ty.trim()))
+            .collect()
+    }
+
     fn maps_a_name_to_an_identity(signature: &str) -> bool {
         let Some((params, ret)) = signature.split_once("->") else {
             return false;
@@ -761,9 +794,10 @@ mod enforcement {
         let Some(params) = params.split_once('(').map(|(_, p)| p) else {
             return false;
         };
-        ret.contains("DefId")
-            && params.contains("ModuleSource")
-            && (params.contains("&str") || params.contains("String"))
+        let types = param_types(params.trim_end().trim_end_matches(')'));
+        let is_module = |ty: &&str| matches!(*ty, "ModuleSource" | "&ModuleSource");
+        let is_name = |ty: &&str| matches!(*ty, "&str" | "String" | "&String");
+        ret.contains("DefId") && types.iter().any(is_module) && types.iter().any(is_name)
     }
 
     fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -795,11 +829,11 @@ mod enforcement {
             let source = source
                 .split_once("\n#[cfg(test)]\nmod tests {")
                 .map_or(source.as_str(), |(before, _)| before);
+            // Every function, whatever its visibility. A private helper of this
+            // shape is reachable by everything in its module and hands out the
+            // same wrong answer, so exempting it would let the class grow
+            // wherever the module is large.
             for (offset, _) in source.match_indices("fn ") {
-                let line_start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
-                if !source[line_start..offset].trim_start().starts_with("pub") {
-                    continue;
-                }
                 let Some(signature) = signature_at(source, offset) else {
                     continue;
                 };

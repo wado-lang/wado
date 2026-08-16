@@ -471,14 +471,17 @@ Each mechanism states what it makes impossible, not what it discourages.
 - `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
   node without an id, so a new reference position cannot be added silently.
 - `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
-  for a reachable function taking a module and a name and handing back a
-  declaration. That is the shape of the chain this design removes, and the one
-  property the type system cannot state. Two remain, listed in
-  `NAME_TO_IDENTITY` with the reason each belongs there: `imported_as`, which
-  answers what a module imported under a local name rather than what a spelling
-  means, and `cm_decl_in`, the Component Model boundary. The test fails on a
-  third, and equally on a stale entry, so neither the class nor the list can
-  grow.
+  for a function taking a module parameter and a name parameter and handing back
+  a declaration. That is the shape of the chain this design removes, and the one
+  property the type system cannot state. Visibility is not part of the shape:
+  the scan reads every `fn`, because a private helper of that shape answers the
+  same way for everything in its module, and a module is as large as it grows.
+  Four are listed in `NAME_TO_IDENTITY` with the reason each belongs there:
+  `Scopes::resolve` and `resolve_value`, which are the one scope and so the one
+  place the shape belongs; `imported_as`, which answers what a module imported
+  under a local name rather than what a spelling means; and `cm_decl_in`, the
+  Component Model boundary. The test fails on a fifth, and equally on a stale
+  entry, so neither the class nor the list can grow.
 
 ## The frame derivation
 
@@ -498,23 +501,32 @@ order:
    The prelude tier alone, and it takes no vantage because it cannot be given
    one: the prelude is in scope in every module.
 
-The three are the module's own reach, so a declaration the module cannot see
-stays unseen here — the derivation never widens to the whole program, and a name
-no module brought into scope is unresolved, the same answer the walk gives.
+The three are a module's own reach, so a declaration it cannot see stays unseen
+here — the derivation never widens to the whole program, and a name no module
+brought into scope is unresolved, the same answer the walk gives.
 
-There is no fourth tier, and the derivation is not what a qualified call uses.
-`Type::method` names its receiver at its own path segment, which the resolve
-pass answered for like any other reference, so `impl_target_at` reads that site
-and the spelling is never split back into an identity. Before it did, the
-receiver of a default argument spliced into a caller keyed to whatever the
-_caller_ called `Type` — a caller declaring its own same-named type silently
-took the impl bucket, and a whole-program unique-name lookup was what covered
-the gap. A site answers where that lookup guessed, so the guess is gone.
+Which module is "this" one is the walk's position, and the walk is not always
+standing where the name was written: a parameter or field default is read at the
+call site and written in the declaring module. The writing module is then the
+frame, and it answers first — the module the walk stands in is not a second
+opinion about what the author meant. Trying the standing frame first is how a
+caller that declares its own same-named type takes the answer away from the
+module that wrote the name, which is this WEP's defect class arriving by the
+back door. Both frames come from the walk's own position; the derivation takes a
+name and no module, so no caller can supply a vantage to it.
+
+There is no fourth tier, and a qualified call does not reach the derivation at
+all where it can avoid it. `Type::method` names its receiver at its own path
+segment, which the resolve pass answered for like any other reference, so
+`impl_target_at` reads that site and the spelling is never split back into an
+identity. Reading the site is what keeps the gate and the resolution naming one
+declaration; where a caller holds only a mangled spelling and has no site to
+give, the derivation above answers, in the frame that wrote the name.
 
 Nor does any tier take a vantage it could get wrong: `decls_named` takes no
-module at all, and the caller that knows which module it means filters the
-iterator itself. That is why the derivation cannot be mistaken for a scope, and
-why `no_reachable_function_turns_a_name_into_an_identity` is a statement about
+module at all, and the derivation filters it by a frame of the walk's own. That
+is why it cannot be mistaken for a scope, and why
+`no_reachable_function_turns_a_name_into_an_identity` is a statement about
 production code rather than a ratchet over it.
 
 What still prevents some collisions by convention rather than by key is

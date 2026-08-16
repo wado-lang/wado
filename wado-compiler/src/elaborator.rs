@@ -917,10 +917,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// than picking one — guessing between them is the mis-identification this
     /// design exists to prevent.
     ///
-    /// Both frames are tried where the walk stands in one module reading an
-    /// expression another wrote — a parameter or field default. The writing
-    /// module is a frame like any other, not a guess: it is where the spelling
-    /// was written and where the walk already answered for it.
+    /// Where the walk stands in one module reading an expression another wrote
+    /// — a parameter or field default — the *writing* module answers first. It
+    /// is the module the spelling was written in, so it is the frame; the
+    /// module the walk happens to stand in is not a second opinion about what
+    /// the author meant. Trying the standing frame first is how a caller that
+    /// declares its own same-named type takes the answer away from the module
+    /// that wrote the name.
+    ///
+    /// The frames come from the walk's own position, never from a caller: this
+    /// takes a name and no module, so no vantage can be supplied to it.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
         // A type parameter in scope shadows every declaration of that name, so
         // a frame writing `T` means its own binder even where a `struct T`
@@ -929,30 +935,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        self.decl_key_in(&self.current_module_source, name)
-            .or_else(|| {
-                let writing = self.annotate_ctx.default_scope_module.as_ref()?;
-                (writing != &self.current_module_source)
-                    .then(|| self.decl_key_in(writing, name))
-                    .flatten()
-            })
-            .or_else(|| self.tysys.resolutions.prelude_decl(name))
-    }
-
-    /// What `module` imported under `name`, else what it declares under it.
-    /// The two tiers of the frame derivation that take a module; the prelude
-    /// tier takes none and is applied once, by the caller.
-    fn decl_key_in(&self, module: &ModuleSource, name: &str) -> Option<crate::defs::DefId> {
-        self.tysys
-            .resolutions
-            .imported_as(module, name)
-            .or_else(|| {
-                let defs = self.tysys.resolutions.defs();
+        let defs = self.tysys.resolutions.defs();
+        let frames = self
+            .annotate_ctx
+            .default_scope_module
+            .iter()
+            .chain(std::iter::once(&self.current_module_source));
+        for frame in frames {
+            let found = self.tysys.resolutions.imported_as(frame, name).or_else(|| {
                 self.tysys
                     .trait_env
                     .decls_named(name)
-                    .find(|def| defs.module(*def) == module)
-            })
+                    .find(|def| defs.module(*def) == frame)
+            });
+            if found.is_some() {
+                return found;
+            }
+        }
+        self.tysys.resolutions.prelude_decl(name)
     }
 
     /// The trait a bound's reference site names. `written` supplies the type

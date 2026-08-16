@@ -2616,24 +2616,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The canonical signature of the receiver-less method `method_name` on
     /// `struct_name` — declared by an `impl` block or by a `resource`.
+    ///
+    /// Both callers reach this holding a name split out of a mangled spelling
+    /// with no reference site behind it, so there is no site to take. The
+    /// receiver still keys through [`Elaborator::decl_key_or_local`], which
+    /// derives in the frame that wrote the name rather than the one the walk
+    /// stands in.
     pub(super) fn static_method_sig(
         &self,
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        self.static_method_sig_at(None, struct_name, method_name)
-    }
-
-    /// [`Self::static_method_sig`] for a receiver written at a reference site.
-    /// The site decides which declaration `struct_name` names; see
-    /// [`Elaborator::impl_target_at`].
-    pub(super) fn static_method_sig_at(
-        &self,
-        site: Option<crate::ast::AstId>,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        let key = self.impl_target_at(site, struct_name);
+        let key = self.impl_target(struct_name);
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index

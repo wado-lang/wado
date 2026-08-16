@@ -11,12 +11,21 @@
 
 use { process } from "./sub/default_arg_unimported_type_lib.wado";
 
+// Same name *and* same static method, so the caller's frame can answer the
+// whole of `Ctx::new()` with the wrong declaration rather than merely failing
+// to answer it. A gate that reads the site while the resolution reads the name
+// passes the first check and returns this `Ctx`.
 struct Ctx { count: i32 }
+
+impl Ctx {
+    fn new() -> Ctx {
+        return Ctx { count: 1 };
+    }
+}
 
 export fn run() {
     assert process() == 7;
-    let mine = Ctx { count: 1 };
-    assert mine.count == 1;
+    assert Ctx::new().count == 1;
 }
 
 __DATA__
