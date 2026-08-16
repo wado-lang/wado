@@ -26,8 +26,8 @@ pub enum OutputFormat {
 impl OutputFormat {
     fn from_str(s: &str) -> Option<Self> {
         match s {
-            "wasm" => Some(OutputFormat::Wasm),
-            "wat" => Some(OutputFormat::Wat),
+            "wasm" => Some(Self::Wasm),
+            "wat" => Some(Self::Wat),
             _ => None,
         }
     }
@@ -35,11 +35,7 @@ impl OutputFormat {
     fn from_extension(path: &Path) -> Option<Self> {
         path.extension()
             .and_then(|ext| ext.to_str())
-            .and_then(|ext| match ext {
-                "wasm" => Some(OutputFormat::Wasm),
-                "wat" => Some(OutputFormat::Wat),
-                _ => None,
-            })
+            .and_then(Self::from_str)
     }
 }
 
@@ -106,6 +102,17 @@ impl CompileOptions {
             .or(self.target_world.as_deref())
             .unwrap_or(DEFAULT_WORLD)
     }
+
+    #[must_use]
+    pub fn flags(&self) -> CompileFlags {
+        CompileFlags {
+            knobs: self.knobs.clone(),
+            target_world: self.target_world.clone(),
+            lib_world: self.lib_world.clone(),
+            lib_interface_export: self.lib_interface_export,
+            ..CompileFlags::default()
+        }
+    }
 }
 
 /// The world `wado compile` targets when neither `--world` nor `--lib` is given.
@@ -141,19 +148,6 @@ pub struct CompileFlags {
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
     /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
-}
-
-impl CompileOptions {
-    #[must_use]
-    pub fn flags(&self) -> CompileFlags {
-        CompileFlags {
-            knobs: self.knobs.clone(),
-            target_world: self.target_world.clone(),
-            lib_world: self.lib_world.clone(),
-            lib_interface_export: self.lib_interface_export,
-            ..CompileFlags::default()
-        }
-    }
 }
 
 #[derive(Clone, Copy)]

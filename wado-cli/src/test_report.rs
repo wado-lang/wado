@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use wado_compiler::hashmap::IndexMap;
 
+use crate::sync::lock;
 use crate::test::{
     self, CompileFailure, LoadFailure, PackageRun, PackageTotals, TestOutcome, TestResult,
     TodoCompileError,
@@ -57,24 +58,17 @@ struct FailureRecap {
 }
 
 impl FailureRecap {
-    fn lock(
-        vec: &Mutex<Vec<(String, Option<String>)>>,
-    ) -> std::sync::MutexGuard<'_, Vec<(String, Option<String>)>> {
-        vec.lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
     fn record_compile(&self, path: &str, detail: Option<&str>) {
-        Self::lock(&self.compile).push((path.to_owned(), detail.map(str::to_owned)));
+        lock(&self.compile).push((path.to_owned(), detail.map(str::to_owned)));
     }
 
     fn record_load(&self, path: &str, detail: Option<&str>) {
-        Self::lock(&self.load).push((path.to_owned(), detail.map(str::to_owned)));
+        lock(&self.load).push((path.to_owned(), detail.map(str::to_owned)));
     }
 
     fn lines(&self) -> Vec<String> {
-        let compile = Self::lock(&self.compile);
-        let load = Self::lock(&self.load);
+        let compile = lock(&self.compile);
+        let load = lock(&self.load);
         let compile_entries: Vec<(&str, Option<&str>)> = compile
             .iter()
             .map(|(p, m)| (p.as_str(), m.as_deref()))
@@ -363,11 +357,7 @@ impl HeartbeatReporter {
     }
 
     fn finish_file_if_done(&self, path: &str) {
-        let mut pending = self
-            .state
-            .pending_tests
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut pending = lock(&self.state.pending_tests);
         if let Some(remaining) = pending.get_mut(path) {
             *remaining -= 1;
             if *remaining == 0 {
@@ -406,11 +396,7 @@ impl TestReporter for HeartbeatReporter {
                 self.state.skip_files.fetch_add(1, Ordering::Relaxed);
             }
             LoadEvent::Ok { test_count } => {
-                let mut pending = self
-                    .state
-                    .pending_tests
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut pending = lock(&self.state.pending_tests);
                 pending.insert(path.to_string(), test_count);
             }
             LoadEvent::Failed { detail } => {
@@ -678,9 +664,7 @@ impl TapReporter {
     }
 
     fn doc(&self) -> std::sync::MutexGuard<'_, TapDoc> {
-        self.doc
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        lock(&self.doc)
     }
 }
 

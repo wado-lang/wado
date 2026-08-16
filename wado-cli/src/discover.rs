@@ -11,6 +11,7 @@
 
 use std::fs;
 use std::io;
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use wado_compiler::hashmap::IndexSet;
 
@@ -20,33 +21,71 @@ use glob::{Pattern, PatternError};
 /// workspace-member matching and test discovery interpret patterns identically.
 pub use wado_lsp::workspace::WALK_MATCH_OPTIONS;
 
-/// Compiled set of `[test].exclude` / `--exclude` glob patterns.
+/// Which filter layer a [`GlobSet`] belongs to. Only affects how an
+/// uncompilable pattern is reported.
+pub trait GlobRole {
+    fn invalid(pattern: String, source: PatternError) -> WalkError;
+}
+
+/// `[test].exclude` / `[format].exclude` / `--exclude`: patterns that drop a
+/// path from discovery.
+#[derive(Debug)]
+pub struct Exclude;
+
+/// `[test].include` / `[format].include`: positive overrides that keep files
+/// visible even when they match the exclude layer.
+#[derive(Debug)]
+pub struct Include;
+
+impl GlobRole for Exclude {
+    fn invalid(pattern: String, source: PatternError) -> WalkError {
+        WalkError::InvalidExclude { pattern, source }
+    }
+}
+
+impl GlobRole for Include {
+    fn invalid(pattern: String, source: PatternError) -> WalkError {
+        WalkError::InvalidInclude { pattern, source }
+    }
+}
+
+/// Compiled set of glob patterns for one filter layer.
 ///
 /// Owns the [`Pattern`]s once and exposes a single matching entry point so
 /// the walker, the discovery driver, and any explicit-arg filtering all
 /// interpret patterns identically — including the `dir/**` augmentation
 /// (`glob`'s `**` requires at least one trailing path component, so `dir/**`
-/// alone would not stop the walker from descending into `dir`).
-#[derive(Debug, Default)]
-pub struct ExcludeSet {
+/// alone would not stop the walker from descending into `dir`). Both layers
+/// share this one matcher so exclude and include can never drift apart.
+#[derive(Debug)]
+pub struct GlobSet<R> {
     patterns: Vec<Pattern>,
+    role: PhantomData<R>,
 }
 
-impl ExcludeSet {
+impl<R> Default for GlobSet<R> {
+    fn default() -> Self {
+        Self {
+            patterns: Vec::new(),
+            role: PhantomData,
+        }
+    }
+}
+
+impl<R: GlobRole> GlobSet<R> {
     /// Compile every glob in `patterns`. Errors carry the user-supplied
-    /// source string so the CLI can surface "invalid exclude pattern …".
+    /// source string and the layer's name so the CLI can surface
+    /// "invalid exclude pattern …" / "invalid include pattern …".
     pub fn compile<S: AsRef<str>>(patterns: &[S]) -> Result<Self, WalkError> {
         let compiled = patterns
             .iter()
             .flat_map(|raw| augmented_patterns(raw.as_ref()))
-            .map(|(pattern, source)| {
-                Pattern::new(&pattern).map_err(|e| WalkError::InvalidExclude {
-                    pattern: source,
-                    source: e,
-                })
-            })
+            .map(|(pattern, source)| Pattern::new(&pattern).map_err(|e| R::invalid(source, e)))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { patterns: compiled })
+        Ok(Self {
+            patterns: compiled,
+            role: PhantomData,
+        })
     }
 
     /// True when `path` (relative to the matching root) matches any pattern.
@@ -71,40 +110,8 @@ impl ExcludeSet {
     }
 }
 
-/// Compiled set of `[test].include` glob patterns: positive overrides that
-/// keep files visible to `wado test` even when they match `[test].exclude`.
-/// Sharing the same compile pipeline as [`ExcludeSet`] keeps the matcher
-/// semantics identical between the two layers.
-#[derive(Debug, Default)]
-pub struct IncludeSet {
-    patterns: Vec<Pattern>,
-}
-
-impl IncludeSet {
-    pub fn compile<S: AsRef<str>>(patterns: &[S]) -> Result<Self, WalkError> {
-        let compiled = patterns
-            .iter()
-            .flat_map(|raw| augmented_patterns(raw.as_ref()))
-            .map(|(pattern, source)| {
-                Pattern::new(&pattern).map_err(|e| WalkError::InvalidInclude {
-                    pattern: source,
-                    source: e,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { patterns: compiled })
-    }
-
-    pub fn matches(&self, path: &Path) -> bool {
-        self.patterns
-            .iter()
-            .any(|p| p.matches_path_with(path, WALK_MATCH_OPTIONS))
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.patterns.is_empty()
-    }
-}
+pub type ExcludeSet = GlobSet<Exclude>;
+pub type IncludeSet = GlobSet<Include>;
 
 /// Yield the patterns we actually compile for one user-supplied glob.
 /// `dir/**` becomes `[dir/**, dir]` so the walker also drops the bare `dir`

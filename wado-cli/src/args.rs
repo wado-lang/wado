@@ -365,3 +365,40 @@ pub fn parse_dir_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
         Ok((dir_spec.clone(), dir_spec))
     }
 }
+
+/// Accumulated `--dir` / `--no-dir` grants for the subcommands that launch a
+/// guest from the developer's own shell (`run`, `test`).
+///
+/// Both preopen the current directory by default, and both let either flag
+/// suppress that default — the grant set is exactly what the user asked for
+/// once any `--dir` is given, so an absolute path never opens outside it.
+#[derive(Default)]
+pub struct DirGrants {
+    dirs: Vec<(String, String)>,
+    explicit: bool,
+    suppressed: bool,
+}
+
+impl DirGrants {
+    /// Handle `--dir`, consuming its value from the parser.
+    pub fn add(&mut self, parser: &mut Parser) -> Result<(), CliExit> {
+        self.dirs.push(parse_dir_arg(parser)?);
+        self.explicit = true;
+        Ok(())
+    }
+
+    /// Handle `--no-dir`.
+    pub fn suppress_default(&mut self) {
+        self.suppressed = true;
+    }
+
+    /// The final `(host_path, guest_path)` preopens, defaulting to the current
+    /// directory when neither flag was given.
+    #[must_use]
+    pub fn finish(mut self) -> Vec<(String, String)> {
+        if !self.explicit && !self.suppressed {
+            self.dirs.push((".".to_owned(), ".".to_owned()));
+        }
+        self.dirs
+    }
+}

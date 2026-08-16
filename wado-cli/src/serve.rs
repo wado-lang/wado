@@ -36,6 +36,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobs, KnobOpt};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, WasiState};
+use crate::sync::lock;
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.
@@ -261,7 +262,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
-                    profile = crate::run::parse_profile(&spec)?;
+                    profile = runtime::parse_profile(&spec)?;
                     if !matches!(profile, ProfileMode::Guest { .. }) {
                         return Err(CliExit::error(
                             "wado serve supports only --profile guest".to_string(),
@@ -724,7 +725,7 @@ async fn worker_loop(
             let profiler = Arc::clone(&handle.profiler);
             let interval = handle.interval;
             store.epoch_deadline_callback(move |store_ctx| {
-                if let Some(ref mut p) = *profiler.lock().unwrap() {
+                if let Some(ref mut p) = *lock(&profiler) {
                     p.sample(&store_ctx, interval);
                 }
                 Ok(UpdateDeadline::Continue(1))
@@ -959,10 +960,12 @@ async fn run_http_server(
         let engine = engine.clone();
         let epoch_stop = Arc::clone(&epoch_stop);
         std::thread::spawn(move || {
-            let (lock, cvar) = &*epoch_stop;
-            let mut stop = lock.lock().unwrap();
+            let (stop_flag, cvar) = &*epoch_stop;
+            let mut stop = lock(stop_flag);
             while !*stop {
-                let (next, wait) = cvar.wait_timeout(stop, epoch_tick).unwrap();
+                let (next, wait) = cvar
+                    .wait_timeout(stop, epoch_tick)
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 stop = next;
                 if wait.timed_out() {
                     engine.increment_epoch();
@@ -1086,8 +1089,8 @@ async fn run_http_server(
         let _ = tokio::time::timeout(drain_deadline, engine_task).await;
     }
     {
-        let (lock, cvar) = &*epoch_stop;
-        *lock.lock().unwrap() = true;
+        let (stop_flag, cvar) = &*epoch_stop;
+        *lock(stop_flag) = true;
         cvar.notify_all();
     }
     let _ = epoch_ticker.join();
@@ -1095,7 +1098,7 @@ async fn run_http_server(
     // Every worker has stopped, so no further samples can land: finish the
     // guest profile and write it out.
     if let (Some(handle), ProfileMode::Guest { path, .. }) = (profiler_handle, &profile)
-        && let Some(profiler) = handle.profiler.lock().unwrap().take()
+        && let Some(profiler) = lock(&handle.profiler).take()
     {
         match std::fs::File::create(path) {
             Ok(file) => match profiler.finish(std::io::BufWriter::new(file)) {

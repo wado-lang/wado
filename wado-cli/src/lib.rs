@@ -42,6 +42,7 @@ pub mod run;
 pub mod run_cache;
 pub mod runtime;
 pub mod serve;
+pub mod sync;
 pub mod syntax;
 pub mod test;
 mod test_report;

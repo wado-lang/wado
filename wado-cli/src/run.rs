@@ -14,6 +14,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobs, KnobOpt};
 use crate::manifest;
 use crate::runtime::{self, ProfileMode};
+use crate::sync::lock;
 
 pub struct RunOptions {
     pub input: String,
@@ -130,49 +131,12 @@ fn format_usage() -> String {
     buf
 }
 
-/// Parse `--profile`. Shared by `run` and `serve`.
-pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
-    if s == "jitdump" {
-        return Ok(ProfileMode::JitDump);
-    }
-    if s == "perfmap" {
-        return Ok(ProfileMode::PerfMap);
-    }
-    if s == "guest" {
-        return Ok(ProfileMode::Guest {
-            path: "profile.json".to_owned(),
-            interval_ms: 10,
-        });
-    }
-    if let Some(rest) = s.strip_prefix("guest,") {
-        let parts: Vec<&str> = rest.splitn(2, ',').collect();
-        let path = if parts[0].is_empty() {
-            "profile.json".to_owned()
-        } else {
-            parts[0].to_owned()
-        };
-        let interval_ms = if parts.len() > 1 {
-            parts[1]
-                .parse::<u64>()
-                .map_err(|_| CliExit::error(format!("invalid profiling interval '{}'", parts[1])))?
-        } else {
-            10
-        };
-        return Ok(ProfileMode::Guest { path, interval_ms });
-    }
-    Err(CliExit::error(format!(
-        "unknown profile mode '{s}'. Use guest, jitdump, or perfmap"
-    )))
-}
-
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
     let mut profile = ProfileMode::None;
-    let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut dirs = args::DirGrants::default();
     let mut program_args: Vec<String> = Vec::new();
-    let mut explicit_dirs = false;
-    let mut no_dir = false;
     let mut collector = runtime::DEFAULT_COLLECTOR;
     let mut knobs = CompileKnobs::default();
 
@@ -183,18 +147,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             knobs.params.apply(p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
-                Opt::Dir => {
-                    preopened_dirs.push(args::parse_dir_arg(&mut parser)?);
-                    explicit_dirs = true;
-                }
-                Opt::NoDir => no_dir = true,
+                Opt::Dir => dirs.add(&mut parser)?,
+                Opt::NoDir => dirs.suppress_default(),
                 Opt::Collector => {
                     let spec = args::require_string(&mut parser)?;
                     collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
                 }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
-                    profile = parse_profile(&spec)?;
+                    profile = runtime::parse_profile(&spec)?;
                 }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -212,16 +173,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         }
     }
 
-    // Default: preopen the current directory unless --dir or --no-dir was given.
-    if !explicit_dirs && !no_dir {
-        preopened_dirs.push((".".to_owned(), ".".to_owned()));
-    }
-
     Ok(RunOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?,
         knobs,
         profile,
-        preopened_dirs,
+        preopened_dirs: dirs.finish(),
         program_args,
         collector,
     })
@@ -255,7 +211,7 @@ async fn run_cli_component(
         let deadline_cb = deadline.clone();
         let profiler_for_cb = profiler.clone();
         store.epoch_deadline_callback(move |store_ctx| {
-            if let Some(ref mut p) = *profiler_for_cb.lock().unwrap() {
+            if let Some(ref mut p) = *lock(&profiler_for_cb) {
                 p.sample(&store_ctx, interval);
             }
             if deadline_cb.load(Ordering::Relaxed) {
@@ -305,7 +261,7 @@ async fn run_cli_component(
         stop.store(true, Ordering::Relaxed);
 
         if let ProfileMode::Guest { path, .. } = profile {
-            let guest_profiler = profiler_arc.lock().unwrap().take().unwrap();
+            let guest_profiler = lock(&profiler_arc).take().unwrap();
             let file = std::fs::File::create(path)?;
             guest_profiler.finish(BufWriter::new(file))?;
             eprintln!("Profile written to {path}");
