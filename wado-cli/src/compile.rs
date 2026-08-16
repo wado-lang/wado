@@ -17,7 +17,6 @@ use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
 use crate::manifest;
 use crate::run_cache::RunCache;
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
     Wasm,

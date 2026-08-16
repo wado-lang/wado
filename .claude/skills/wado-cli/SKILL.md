@@ -41,8 +41,10 @@ Global options:
   --version  Show version information
 ```
 
-`build` works from a `wado.toml` and writes `build/<world>.wasm`; `compile`,
-`run`, `serve`, and `dump` take a single source file.
+`build` works from a `wado.toml` and writes `build/<world>.wasm`. `compile` and
+`check` take exactly one source file; `dump`, `doc`, and `format` take several.
+`run`, `serve`, and `wit` fall back to the manifest's entry point when given no
+path.
 
 ## Target World
 
@@ -51,9 +53,11 @@ default), the HTTP service (`wasi:http/service`, run via `wado serve`), or the
 synthetic test world (selected with `--world test`, used by E2E tests). Several
 defaults — including the allocator — depend on the target world.
 
-`--world <name>` overrides it. `--world test` exports the entry module's `test`
-blocks and drops everything else. `compile` and `check` accept it; `serve` and
-`test` pick their world automatically.
+`--world <name>` overrides it on `compile`, `check`, `dump`, and `wit`.
+`--world test` exports the entry module's `test` blocks and drops everything
+else. `run`, `serve`, and `test` pick their world automatically. `build --world
+<fq>` is a different flag: it selects which of `wado.toml`'s declared worlds to
+build.
 
 ```sh
 wado compile --world test file.wado  # compile against the test world
