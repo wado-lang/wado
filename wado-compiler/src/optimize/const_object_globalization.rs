@@ -1386,7 +1386,7 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
-    projection_alias_roots(body, idx, gate)
+    projection_alias_roots(body, idx, gate, AliasRoots::Declared)
         .into_iter()
         .filter(|&root| root != idx)
         .all(|root| !written_through(body, root, gate))
@@ -1429,7 +1429,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// own copy is legitimate and even counts as owned, a premise hoisting
 /// invalidates. A borrow or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    let roots = projection_alias_roots(body, idx, gate);
+    let roots = projection_alias_roots(body, idx, gate, AliasRoots::WithReassigned);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -1519,7 +1519,25 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// scrutinee. All name the same storage, so an escape through any is an escape of
 /// the parameter. The source need only *contain* a reference-typed projection:
 /// `let r = if c { s.a } else { s.b };` binds one of two and nothing says which.
-fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
+/// Which aliases [`projection_alias_roots`] collects.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AliasRoots {
+    /// Only locals *declared* from a projection. A local an assignment fills is
+    /// left out because the assignment filling it reads, to
+    /// [`written_through`], as a write of the storage it names — true of the
+    /// tracked binding, false of a mere alias.
+    Declared,
+    /// Also locals an assignment fills, which name the same storage as a
+    /// declared alias and so must be walked for escapes.
+    WithReassigned,
+}
+
+fn projection_alias_roots(
+    body: &Body,
+    idx: u32,
+    gate: &Gate<'_>,
+    which: AliasRoots,
+) -> Vec<u32> {
     let mut roots = vec![idx];
     let mut i = 0;
     while i < roots.len() {
@@ -1562,7 +1580,8 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
                     // storage as one bound by `let` — the shape `licm` leaves
                     // when it hoists a field read out of a loop and refreshes
                     // it after each call that could have changed it.
-                    if let ExprKind::Assign { target, value } = &body.exprs[e].kind
+                    if which == AliasRoots::WithReassigned
+                        && let ExprKind::Assign { target, value } = &body.exprs[e].kind
                         && let Some(local) = assign_target_local(body, *target)
                         && yields_projection_of(body, *value, root, gate)
                         && !roots.contains(&local)
