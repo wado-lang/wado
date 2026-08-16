@@ -4070,7 +4070,7 @@ pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &
 
 /// The shared row shape. `items` are the already-rendered effect names and
 /// `stores[...]` group; an empty row emits nothing.
-fn unparse_with_row_into(items: &[String], output: &mut String) {
+pub(crate) fn unparse_with_row_into(items: &[String], output: &mut String) {
     match items {
         [] => {}
         [only] => {
@@ -4440,18 +4440,7 @@ impl<'a> TirUnparser<'a> {
         if !stores.is_empty() {
             items.push(format!("stores[{}]", stores.join(", ")));
         }
-        match items.as_slice() {
-            [] => {}
-            [only] => {
-                self.output.push_str(" with ");
-                self.output.push_str(only);
-            }
-            many => {
-                self.output.push_str(" with (");
-                self.output.push_str(&many.join(", "));
-                self.output.push(')');
-            }
-        }
+        unparse_with_row_into(&items, &mut self.output);
     }
 
     fn unparse_param(&mut self, param: &TirParam) {

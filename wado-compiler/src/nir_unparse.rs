@@ -332,18 +332,7 @@ impl<'a> NirUnparser<'a> {
         if !stores.is_empty() {
             items.push(format!("stores[{}]", stores.join(", ")));
         }
-        match items.as_slice() {
-            [] => {}
-            [only] => {
-                self.output.push_str(" with ");
-                self.output.push_str(only);
-            }
-            many => {
-                self.output.push_str(" with (");
-                self.output.push_str(&many.join(", "));
-                self.output.push(')');
-            }
-        }
+        crate::unparse::unparse_with_row_into(&items, &mut self.output);
     }
 
     fn unparse_param(&mut self, param: &NirParam) {

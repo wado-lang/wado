@@ -1,24 +1,18 @@
 //! A greedy `?` competing with an identical one in the caller.
 //!
-//! `ifExpr` ends with `('else' block)?` and the enclosing `stmt` ends with its
-//! own `('else' block)?`. ANTLR4 resolves a greedy subrule in favour of the
-//! innermost, so `if z { 1 } else { 2 } / 3` is one expression: the `else`
-//! belongs to `ifExpr` and `/ 3` continues the left-recursive chain.
-//! Regression for the runtime caller-FOLLOW yield gate. It fired here on a
-//! 1-deep mask — `stmt`'s own `('else' block)?` halted the mask walk, so all
-//! the mask said was "an `else` could start my continuation" — and `ifExpr`
-//! yielded on that, leaving nothing to parse the `/`.
+//! `ifExpr` ends with `('else' block)?` and so does the enclosing `stmt`.
+//! ANTLR4 favours the innermost, so `if z { 1 } else { 2 } / 3` is one
+//! expression. Regression for the runtime caller-FOLLOW yield gate: it fired
+//! on a 1-deep mask — `stmt`'s own `('else' block)?` halted the walk — and
+//! `ifExpr` yielded, leaving nothing to parse the `/`.
 //!
-//! Greediness is not the discriminator, viability is:
-//! `driver_cst_ll_basic_test` pins `r : (a b | a) EOF ; a : X Y? ; b : Y ;`,
-//! where ANTLR4 *does* yield the `Y` to `b`. There the mask spans the
-//! caller's whole suffix (`b` then EOF), so it is evidence the caller
-//! completes. A mask that stops short is not, and is no longer threaded.
+//! Greediness is not the discriminator, viability is. `driver_cst_ll_basic_test`
+//! pins `r : (a b | a) EOF ; a : X Y? ; b : Y ;`, where ANTLR4 *does* yield the
+//! `Y`: there the mask spans the caller's whole suffix. A mask that stops short
+//! is not evidence, and is no longer threaded.
 //!
-//! `driver_cst_ll_empty_alt_group_test` pins the opposite resolution for the
-//! empty-alt spelling `('else' block |)`, and
-//! `driver_cst_lr_dangling_else_test` the non-greedy `??`. This is the plain
-//! greedy `?`, across a rule boundary.
+//! `driver_cst_ll_empty_alt_group_test` pins `('else' block |)` and
+//! `driver_cst_lr_dangling_else_test` the non-greedy `??`.
 
 use g from "./grammars/ll_greedy_optional_cross_rule.g4"
     with {

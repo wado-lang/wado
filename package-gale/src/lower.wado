@@ -156,12 +156,8 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
     }
     let mut visiting: List<String> = [];
     let [deep, consumed] = ctx.deep_position_first_sets_from(elements, i + 1, FOLLOW_MASK_MAX_K, &mut visiting);
-    // Whether the walk reached the end of the suffix. A mask that stops short
-    // says only that the caller's continuation could *start* at this token,
-    // not that the caller can complete; a tail-greedy callee that yields on
-    // that evidence gives up a token the caller then cannot use. Only the
-    // `Mask` branch below cares — `Combined` and `Forward` have the caller's
-    // own runtime follow appended, which carries the check to the end.
+    // A mask stopping short of the suffix proves only that the caller's
+    // continuation could *start* here, not that it can complete.
     let covers_suffix = i + 1 + consumed >= elements.len();
     // Effective caller-continuation mask. Prefer the multi-depth deep
     // walk; when it halts immediately (a `Repeat` / `Group` / multi-alt
@@ -178,12 +174,11 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         mask.push(one_tok);
     }
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
-        // Nothing is appended to this mask at runtime, so it is the whole
-        // check — and it is only evidence that the caller can complete when
-        // it either spans the suffix or opens on an element the caller must
-        // match. A mask that stops short *and* opens on an optional says only
-        // that the caller's continuation could start here, which is what took
-        // the `else` from a nested `if` whose caller also ended in
+        // Nothing is appended at runtime, so this mask is the whole check: it
+        // proves completion only if it spans the suffix or opens on an element
+        // the caller must match. Short *and* optional-headed, a tail-greedy
+        // callee yielding on it gives up a token the caller cannot use — the
+        // nested `if` losing its `else` to a caller ending in the same
         // `('else' block)?`.
         let mut head_visiting: List<String> = [];
         let head_nullable = ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting);
@@ -2476,13 +2471,12 @@ pub fn shape_lookahead_signature_for_alt(
 }
 
 /// The per-position kind sets `elem` contributes, and whether the position
-/// counter still lines up with the input after it.
+/// counter still lines up after it.
 ///
-/// `sig[d]` guards `peek_at(d)`, so the alignment survives only an element
-/// that consumes exactly one token. A multi-token element contributes its own
-/// position and then stops the signature: in `( '=' expr ('else' block)? )`,
-/// guarding `peek_at(2)` on `else` would name whatever token `expr` left
-/// there.
+/// `sig[d]` guards `peek_at(d)`, so only a one-token element keeps the
+/// alignment. A longer one contributes its position and stops the signature:
+/// in `( '=' expr ('else' block)? )`, `peek_at(2)` would name whatever `expr`
+/// left there, not `else`.
 fn shape_signature_positions(elem: &Element, ctx: &mut GenContext) -> [List<List<String>>, bool] {
     if let Group(g) = elem {
         if g.alternatives.len() == 1 {
@@ -2509,14 +2503,10 @@ fn shape_signature_positions(elem: &Element, ctx: &mut GenContext) -> [List<List
     ];
 }
 
-/// True when two shapes' signatures can both match one input: at every
-/// position they share, their kind sets overlap. The shorter signature
-/// constrains nothing past its end, so one that is a prefix of another — the
-/// shape it names truncated at a multi-token element — is compatible with it.
-///
-/// Emit renders the shapes as an `if sig0 … else if sig1 …` chain, so a
-/// compatible pair means the chain can commit to a shape whose body does not
-/// match and never reach the one that does.
+/// True when two signatures can both match one input: their kind sets overlap
+/// at every shared position. A shorter one constrains nothing past its end, so
+/// a prefix is compatible. Emit renders shapes as an `if … else if …` chain,
+/// so a compatible pair can commit to a shape whose body does not match.
 fn signatures_can_both_match(a: &List<List<String>>, b: &List<List<String>>) -> bool {
     let shared = if a.len() < b.len() { a.len() } else { b.len() };
     for let mut i = 0; i < shared; i += 1 {

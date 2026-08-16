@@ -1734,12 +1734,9 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
     if ole.sigs.is_empty() {
         return;
     }
-    // Shapes are ordered longest-first. When two signatures can match the same
-    // input a shape falls through to the next as its body fails, rather than
-    // skipping the whole optional — the same longest-match resolution the
-    // parse side reaches by scanning each shape. When the signatures separate
-    // the shapes, both sides commit to the first that matches, so the chain
-    // must not fall through or the two would pick differently.
+    // Shapes are longest-first. On colliding signatures a failing shape falls
+    // through to the next, matching how the parse side scans each shape;
+    // otherwise both sides commit to the first match, so no fall-through.
     let outer = ctx.next_scan_group();
     let chain_done = `osl_${outer}_done`;
     w.begin(&`${chain_done}:`);
@@ -3647,19 +3644,9 @@ fn gen_op_optional_entry_cond(
     };
 }
 
-/// Shape-lookahead Optional under the op-only walker: one branch per shape,
-/// longest-first, each gated on that shape's own signature and emitting only the
-/// positions the shape contains. The op-only analogue of
-/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
-/// peel it shares — the shape already decided that a present nested optional
-/// fires.
-/// One entry condition per shape, longest-first.
-///
-/// Normally the shape's lookahead signature. When the strategy is
-/// `scan_guarded` two shapes share a signature, so each shape is instead
-/// selected by scanning its own body: the scans are emitted up front (a
-/// condition cannot carry statements) and the chain tests the resulting
-/// positions in order, which is the same longest-first resolution.
+/// One entry condition per shape, in `s.shapes` order: the shape's lookahead
+/// signature, or — when `scan_guarded` — a scan of its own body, emitted up
+/// front because a condition cannot carry statements.
 fn gen_shape_entry_conditions(
     w: &mut CodeWriter,
     s: &OptionalShapeLookaheadStrategy,
@@ -3692,6 +3679,12 @@ fn gen_shape_entry_conditions(
     return conditions;
 }
 
+/// Shape-lookahead Optional under the op-only walker: one branch per shape,
+/// longest-first, each gated on that shape's own entry condition and emitting
+/// only the positions the shape contains. The op-only analogue of
+/// `gen_op_optional_with_shape_lookahead_transparent`, whose `unwrap_optional_op`
+/// peel it shares — the shape already decided that a present nested optional
+/// fires.
 fn gen_op_optional_shape_lookahead(
     w: &mut CodeWriter,
     r: &RepeatOp,

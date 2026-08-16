@@ -495,7 +495,7 @@ However, in capability-based systems, storing is closely related to effects:
 
 Wado treats `stores` as a **separate mechanism** from effects:
 
-- Effects (`with Stdout, FileSystem`) = authority to interact with external world
+- Effects (`with (Stdout, FileSystem)`) = authority to interact with external world
 - Stores (`with stores[data]`) = authority to retain references
 
 Both use the `with` keyword for consistency, but they are orthogonal concerns.

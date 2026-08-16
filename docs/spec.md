@@ -139,12 +139,13 @@ for let of of arr {
 
 - `expr;` makes a statement.
 - `return expr;` is necessary for a function to return a value.
-- Control flow statements do not need to be followed by a semicolon.
 
 #### Semicolons
 
-A semicolon separates statements. It does not terminate them, so a block's
-last statement may drop it — whatever kind of statement it is:
+`;` separates statements; it does not terminate them. A block's last statement
+may drop it, whatever kind of statement it is — but dropping it does not make
+the statement an expression, so a value-returning function still needs
+`return`.
 
 ```wado
 fn f() -> i32 {
@@ -153,23 +154,19 @@ fn f() -> i32 {
 }
 ```
 
-Dropping it does not make the statement an expression: a function that
-returns a value still needs `return`.
-
-A newline never separates statements. There is no automatic semicolon
-insertion, so two statements always need a `;` between them however they are
-laid out:
+A newline never separates. There is no automatic semicolon insertion, so two
+statements always need a `;` between them:
 
 ```wado
 let x = 1 let y = 2    // error: expected `;`
 ```
 
-Consecutive semicolons enclose empty statements, which mean nothing and leave
-nothing behind. `wado format` removes them.
+Consecutive semicolons enclose empty statements, which mean nothing. `wado
+format` removes them.
 
-A block's value is its last expression, whether or not a `;` follows it —
-unlike Rust, a trailing semicolon does not turn the value into `()`. Write
-`()` to mean `()`:
+A block's value is its last expression whether or not a `;` follows it —
+unlike Rust, a trailing `;` does not turn it into `()`. Write `()` to mean
+`()`:
 
 ```wado
 let a = if c { 1 } else { 2 };         // 1 or 2
@@ -178,8 +175,8 @@ let u = if c { g(); () } else { () };  // ()
 ```
 
 Only `if`, `match`, `loop` and labelled blocks produce a block value. A brace
-in value position is a struct literal, not a block: `let x = { 1 };` is an
-error, and `let p = { x: 1, y: 2 };` is an implicit struct literal.
+in value position is a struct literal: `let x = { 1 };` is an error, and
+`let p = { x: 1, y: 2 };` is an implicit struct literal.
 
 ### Variable Mutability
 
@@ -4647,10 +4644,9 @@ fn add(a: i32, b: i32) -> i32 {
 }
 ```
 
-A row of one goes bare; a row of more than one is parenthesized. The rule is
-the same wherever a `with` row appears — a declaration, a `fn` type, a
-closure-type bound — so a comma after a bare effect always belongs to the
-enclosing list and never to the row:
+A row of one goes bare; a row of more than one is parenthesized, wherever the
+row appears. So a comma after a bare effect always belongs to the enclosing
+list, never to the row:
 
 ```wado
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { ... }

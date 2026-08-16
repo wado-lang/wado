@@ -244,8 +244,7 @@ fn body_error_node_does_not_panic_semantics() {
     });
 }
 
-/// `parse_diagnostics` answers from the document text alone — no loader, no
-/// semantics pipeline. A clean source is clean.
+/// `parse_diagnostics` answers from the document text alone.
 #[test]
 fn parse_diagnostics_is_empty_for_a_clean_source() {
     let src = "export fn f() -> i32 {\n    return 1;\n}\n";
@@ -285,9 +284,8 @@ fn parse_diagnostics_reports_lexer_errors() {
     );
 }
 
-/// An unresolvable import is a *semantic* failure. `parse_diagnostics` must
-/// stay silent about it — that separation is what makes it usable as a
-/// syntax-only oracle over a corpus whose dependencies may not resolve.
+/// An unresolvable import is a *semantic* failure, so `parse_diagnostics`
+/// stays silent — which is what makes it an oracle over a broken corpus.
 #[test]
 fn parse_diagnostics_ignores_unresolvable_imports() {
     let src = "use { nope } from \"./missing.wado\";\n\nexport fn f() -> i32 {\n    return 1;\n}\n";

@@ -95,7 +95,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         // Resolve the effect name. Use `resolve_effects` so that LSP
-        // jump-to-def edges are recorded just like in `with E1, E2`
+        // jump-to-def edges are recorded just like in `with (E1, E2)`
         // function signatures.
         let interface_name = self.get_type_name(effect_ty);
         let effect_ids = effect_ty

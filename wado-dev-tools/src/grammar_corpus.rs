@@ -1,30 +1,22 @@
 //! `grammar-corpus`: hold `package-gale-highlight-wado/grammar/Wado.g4` to the
 //! compiler's own parser over the stdlib + fixture corpus.
 //!
-//! Three modes, driven by `scripts/check-grammar.sh`:
+//! Three modes, driven by `scripts/check-grammar.sh`: `--emit-corpus <file>`
+//! writes the corpus paths the Gale-side tool reads, `--compare <gale.tsv>
+//! [--report <file>]` joins both sides' verdicts and checks the invariants
+//! below, and anything else prints one verdict per path for triage.
 //!
-//! - `--emit-corpus <file>` — write the corpus paths, one per line. The
-//!   Gale-side tool reads the same list, so both sides see one corpus.
-//! - `--compare <gale.tsv> [--report <file>]` — re-walk the corpus, take the
-//!   compiler's verdict for each file, join it with the Gale side's, and check
-//!   the two invariants below.
-//! - anything else — print one verdict per path, for triage.
+//! Verdicts come from [`wado_lsp::Engine::parse_diagnostics`], so a fixture
+//! whose imports are deliberately broken still reports its syntax truthfully.
 //!
-//! Verdicts come from [`wado_lsp::Engine::parse_diagnostics`], so a file whose
-//! imports or types are deliberately broken still reports its syntax
-//! truthfully.
+//! Two invariants, both derived — a committed divergence list rotted between
+//! updates and nothing could verify it:
 //!
-//! The two invariants replace a committed divergence list, which nothing could
-//! verify and which rotted between updates:
-//!
-//! 1. Nothing the compiler parses is rejected by the grammar. A grammar that
-//!    does not cover the language is a gap, always.
-//! 2. Everything the grammar accepts but the compiler's parser rejects is a
-//!    fixture that declares a `compile_error`. Those are the rules no
-//!    context-free grammar can state — a chained `!=`, `internal` beside `pub`,
-//!    `#[serde]` spelled out in a diagnostic — and a fixture that expects a
-//!    compile error is exactly where they belong. A real source landing here
-//!    means the grammar accepts something the language does not.
+//! 1. Nothing the compiler parses is rejected by the grammar.
+//! 2. Everything the grammar accepts but the compiler rejects is a fixture
+//!    declaring a `compile_error` — the rules no context-free grammar can
+//!    state (a chained `!=`, `internal` beside `pub`). A real source landing
+//!    here means the grammar accepts what the language does not.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -32,9 +24,8 @@ use std::path::Path;
 
 use lexopt::Arg::{Long, Value};
 
-/// Corpus roots: the stdlib and its tests, the e2e fixtures, the format
-/// fixtures, and the examples. `tests/generated` is excluded — its
-/// `*.wir.wado` files are IR dumps, not Wado source.
+/// Corpus roots. `tests/generated` is excluded: its `*.wir.wado` files are IR
+/// dumps, not Wado source.
 const CORPUS_ROOTS: &[&str] = &[
     "wado-compiler/lib",
     "wado-compiler/tests/fixtures",
@@ -197,8 +188,8 @@ fn read_gale_verdicts(path: &str) -> Vec<Verdict> {
         .collect()
 }
 
-/// A fixture that declares a `compile_error` in its `__DATA__` section — the
-/// only place the grammar is allowed to be more permissive than the parser.
+/// A fixture declaring a `compile_error` — the only place the grammar may be
+/// more permissive than the parser.
 fn declares_compile_error(path: &str) -> bool {
     let Ok(source) = fs::read_to_string(path) else {
         return false;
@@ -277,19 +268,17 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         failed = true;
     }
     if failed {
-        // A check verdict, not a programming error: exit non-zero with the
-        // message already printed rather than unwinding with a backtrace.
+        // A check verdict, not a programming error: no backtrace.
         std::process::exit(1);
     }
 }
 
 fn render_report(rejects: &[&Verdict], accepts: &[(&Verdict, &Verdict)]) -> String {
     let mut out = String::from(
-        "# Files the two Wado parsers disagree about. Generated, not committed.\n#\n\
-         #   gap    Wado.g4 rejects what the compiler parses. Always work to do.\n\
-         #   rule   the compiler's parser rejects what Wado.g4 accepts — a rule no\n\
-         #          context-free grammar can state. Each one is a fixture that declares\n\
-         #          the compile error it expects.\n#\n\
+        "# Where the two Wado parsers disagree. Generated, not committed.\n#\n\
+         #   gap    Wado.g4 rejects what the compiler parses.\n\
+         #   rule   the compiler rejects what Wado.g4 accepts; each is a fixture\n\
+         #          declaring the compile error it expects.\n#\n\
          # kind<TAB>path<TAB>line<TAB>message\n",
     );
     for verdict in rejects {

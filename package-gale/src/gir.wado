@@ -917,12 +917,10 @@ pub struct OptionalShapeLookaheadStrategy {
     /// One entry per shape, longest-first (so the first matching
     /// shape is the longest match).
     pub shapes: List<OptionalLookaheadShape>,
-    /// Two shapes share a lookahead signature, so emit selects by
-    /// scanning each shape's body instead of by signature. A signature
-    /// stops at the first element that may consume more than one token
-    /// (`sig[d]` guards `peek_at(d)`), so shapes whose difference sits
-    /// past a variable-length element are indistinguishable by
-    /// lookahead alone.
+    /// Two shapes share a lookahead signature, so emit selects by scanning
+    /// each shape's body instead. A signature stops at the first element that
+    /// may consume more than one token, so shapes differing past one are
+    /// indistinguishable by lookahead alone.
     pub scan_guarded: bool = false,
 }
 
@@ -1131,11 +1129,9 @@ pub struct ScanOptionalLookaheadElement {
     /// shape selects a subset of the surface alt's elements (the
     /// optional sub-elements that are "on" in this shape).
     pub bodies: List<ScanBody>,
-    /// Two signatures can match the same input, so a shape whose body
-    /// fails must fall through to the next rather than skip the whole
-    /// optional. The parse-side twin selects by scanning in that case,
-    /// and the two sides have to resolve the same way — see
-    /// `OptionalShapeLookaheadStrategy::scan_guarded`.
+    /// Two signatures can match the same input, so a failing shape falls
+    /// through to the next rather than skipping the whole optional — matching
+    /// the parse side. See `OptionalShapeLookaheadStrategy::scan_guarded`.
     pub scan_guarded: bool = false,
 }
 

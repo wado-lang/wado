@@ -789,9 +789,8 @@ impl GenContext {
         for let elem of &alt.elements {
             let elem_first = self.first_of_element_at(elem, visiting, min_cycle);
             append_ids(&mut result, &mut seen, &elem_first);
-            // Deep nullability, on its own visiting stack: a `RuleRef` to a
-            // rule that derives nothing (`mods : 'pub'?`) is nullable, and
-            // FIRST has to reach past it to the element that follows.
+            // Deep: a `RuleRef` to a rule deriving nothing (`mods : 'pub'?`)
+            // is nullable, so FIRST has to reach past it.
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(elem, &mut nv) {
                 break;

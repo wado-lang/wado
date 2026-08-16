@@ -1101,8 +1101,7 @@ fn write_file(path: String, data: String) with FileSystem { ... }
 fn main() with (Stdout, FileSystem) { ... }        // more than one → parentheses
 fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 
-// The parentheses rule is the same in every position, so a comma after a bare
-// effect always belongs to the enclosing list.
+// Same rule in every position, so a comma after a bare effect is the list's.
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two parameters
 

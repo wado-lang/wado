@@ -1,11 +1,9 @@
 //! An alternative whose head is a rule reference with an all-optional body.
 //!
-//! `fnDecl : mods 'fn' ID ';'` with `mods : 'pub'?` puts a nullable rule
-//! reference at the front of `member`'s second alternative, so `FIRST(member)`
-//! only contains `'fn'` if it is computed *through* the nullable reference.
-//! Regression for a `first_of_alt` that stopped at `mods` on the shallow
-//! `is_nullable` (top-level `Repeat` kind only), leaving the `member*` loop
-//! unable to enter on a bare `fn`.
+//! `fnDecl : mods 'fn' ID ';'` with `mods : 'pub'?`: `FIRST(member)` holds
+//! `'fn'` only if computed *through* the nullable reference. Regression for a
+//! `first_of_alt` that stopped at `mods` on the shallow `is_nullable`, leaving
+//! the `member*` loop unable to enter on a bare `fn`.
 
 use g from "./grammars/ll_nullable_rule_head.g4"
     with {

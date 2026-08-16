@@ -627,15 +627,10 @@ impl Engine {
 
     /// Compute the *syntax-only* diagnostics for the given document.
     ///
-    /// Lexes and parses the document text and reports nothing else: no
-    /// loader, no imports, no semantics pipeline. That makes it answerable
-    /// synchronously and without a [`CompilerHost`], so an editor can paint
-    /// syntax squiggles on every keystroke while the full [`Engine::diagnostics`]
-    /// pass runs behind it, and a document whose imports do not resolve still
-    /// reports its own syntax truthfully.
-    ///
-    /// Columns are re-encoded in the negotiated position encoding, as in
-    /// [`Engine::diagnostics`].
+    /// Lexes and parses, and reports nothing else: no loader, no imports, no
+    /// semantics. So a document whose imports do not resolve still reports its
+    /// own syntax, and no [`CompilerHost`] is needed. Columns are re-encoded as
+    /// in [`Engine::diagnostics`].
     #[must_use]
     pub fn parse_diagnostics(&self, uri: &str) -> Vec<Diagnostic> {
         let Some(doc) = self.documents.get(uri) else {

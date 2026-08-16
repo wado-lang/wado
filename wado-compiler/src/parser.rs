@@ -1899,14 +1899,8 @@ impl Parser {
     const EMPTY_EFFECT_ROW: &'static str =
         "`with ()` names no effect; drop the clause, or name the effects the row carries";
 
-    /// Read the opening of a `with` row. `Some(true)` when the row is
-    /// parenthesized, `Some(false)` for the bare single-item form, `None` when
-    /// there is no `with` clause.
-    ///
-    /// One row shape serves every position — a declaration, a `fn` type, a
-    /// closure-type bound. A bare row holds exactly one item, so a comma after
-    /// it always belongs to the enclosing list and no position has to look
-    /// past the comma to tell an effect from the next parameter.
+    /// Open a `with` row: `Some(true)` parenthesized, `Some(false)` bare,
+    /// `None` when there is no `with`. One shape serves every position.
     fn open_with_row(&mut self) -> Option<bool> {
         if !self.check(&TokenKind::With) {
             return None;
@@ -1919,13 +1913,9 @@ impl Parser {
         Some(false)
     }
 
-    /// Parse a declaration's `with (Effect1, Effect2, stores[a, b])` clause.
-    /// Returns `(effects, effect_ids, stores)`. `stores[...]` is a row member,
-    /// so it may appear at any position in the row.
-    ///
-    /// A declaration's row is followed by the body or a `;`, never by a list,
-    /// so a comma after a bare effect can only be a missing-parentheses
-    /// mistake and is reported as one.
+    /// Parse a declaration's `with (Effect1, stores[a])` clause. `stores[...]`
+    /// is a row member, so it may sit at any position. Nothing follows the row
+    /// but the body or `;`, so a comma after a bare effect is a missing paren.
     fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
         let Some(parenthesized) = self.open_with_row() else {
             return Ok((Vec::new(), Vec::new(), Vec::new()));
@@ -1963,12 +1953,8 @@ impl Parser {
     }
 
     /// Point a `type F = fn() with A, B;` at the parentheses it is missing.
-    ///
-    /// A bare `with` row is one effect, so the comma belongs to whatever
-    /// encloses the type — except where nothing does. Only a caller that knows
-    /// its type is followed by a terminator rather than a list may ask; inside
-    /// a parameter or generic list the same comma is the list's, and
-    /// `fn(fn() with E, Stdout)` really is a two-parameter function type.
+    /// Only a caller whose type is followed by a terminator rather than a list
+    /// may ask: elsewhere the comma is the enclosing list's.
     fn reject_bare_effect_row_after_type(&mut self, ty: &Type) -> ParseResult<()> {
         if !self.check(&TokenKind::Comma) {
             return Ok(());
@@ -1994,11 +1980,7 @@ impl Parser {
     }
 
     /// Parse a function type's `with (Effect1, stores[0, 1])` clause. Same row
-    /// shape as a declaration's; only `stores` differs, taking positional
-    /// indices here.
-    ///
-    /// A bare row is one item, so the comma in `fn(f: fn() with E, x: T)` ends
-    /// the row and belongs to the parameter list.
+    /// shape as a declaration's; `stores` takes positional indices here.
     fn parse_with_clause_for_fn_type(
         &mut self,
     ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<StoresEntry>)> {
@@ -2060,12 +2042,9 @@ impl Parser {
         }
     }
 
-    /// Consume the `;` that separates this statement from the next.
-    ///
-    /// `;` separates statements, it does not terminate them, so a block's last
-    /// statement may drop it — a closing `}` ends the statement just as well.
-    /// Returns the span the statement ends at. A newline never separates:
-    /// anything else here is a missing `;`.
+    /// Consume the `;` separating this statement from the next and return the
+    /// span it ends at. A closing `}` separates just as well; nothing else
+    /// does — there is no ASI.
     fn expect_stmt_separator(&mut self, fallback: Span) -> ParseResult<Span> {
         if self.check(&TokenKind::Semicolon) {
             return Ok(self.advance().span);
@@ -2097,8 +2076,7 @@ impl Parser {
                 || self.at_visibility_prefixed_local_item_start()
                 || !self.at_hard_item_keyword())
         {
-            // A lone `;` is an empty statement: nothing to record, so it
-            // leaves no node and the formatter drops it.
+            // A lone `;` is an empty statement: no node, nothing to record.
             if self.check(&TokenKind::Semicolon) {
                 self.advance();
                 continue;
@@ -2192,8 +2170,8 @@ impl Parser {
         }
     }
 
-    /// Parse a match statement. Its closing `}` ends the statement, so any
-    /// `;` after it is an empty statement the block loop skips.
+    /// Parse a match statement. Its closing `}` ends the statement; a `;`
+    /// after it is an empty statement the block loop skips.
     fn parse_match_stmt(&mut self) -> ParseResult<Stmt> {
         let expr = self.parse_match_expr()?;
         let Expr::Match(m) = expr else {
@@ -2204,11 +2182,9 @@ impl Parser {
 
     /// Parse a `with E => h do { ... }` statement.
     ///
-    /// The trailing `}` of the do-block ends the statement, same as `if`,
-    /// `while`, `for`, `loop`, and `match` in statement position. The
-    /// expression is wrapped in a `Stmt::Expr` so the rest of the pipeline
-    /// (effect-check, TIR lowering, dispatch synthesis) continues to see a
-    /// single `Expr::WithHandler`.
+    /// The do-block's `}` ends the statement, as for `if` / `while` / `for` /
+    /// `loop` / `match`. The expression is wrapped in a `Stmt::Expr` so the
+    /// rest of the pipeline still sees a single `Expr::WithHandler`.
     fn parse_with_handler_stmt(&mut self) -> ParseResult<Stmt> {
         let id = self.alloc_ast_id();
         let expr = self.parse_with_handler_expr()?;
@@ -2288,7 +2264,6 @@ impl Parser {
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
         let mut stmt = self.parse_let_stmt_inner(true)?;
         let semi_span = self.expect_stmt_separator(stmt.span())?;
-        // Extend let statement span to include the trailing semicolon
         if let Stmt::Let(ref mut l) = stmt {
             l.span = l.span.merge(&semi_span);
         }
@@ -4704,7 +4679,7 @@ impl Parser {
                 })
             };
 
-            // Parse effects and stores (optional): with Effect1, stores[0]
+            // Parse effects and stores (optional): with (Effect1, stores[0])
             let (effects, effect_ids, stores) = self.parse_with_clause_for_fn_type()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
@@ -5058,7 +5033,6 @@ impl Parser {
 
     /// Parse a `fn(...)` / `fn mut(...)` closure-type bound.
     ///
-    ///
     /// - `fn(...) -> R`                  — no effects
     /// - `fn(...) -> R with E`            — single effect
     /// - `fn(...) -> R with (E1, E2)`     — multiple effects (parens required)
@@ -5105,8 +5079,6 @@ impl Parser {
 
     /// Parse a closure-type bound's `with (E1, E2)` clause. Same row shape as
     /// a declaration's, without `stores` — that belongs to a free `fn` type.
-    /// A comma after a bare effect belongs to the enclosing trait-bound or
-    /// generic-parameter list.
     fn parse_bound_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
         let Some(parenthesized) = self.open_with_row() else {
             return Ok((Vec::new(), Vec::new()));
@@ -7416,8 +7388,7 @@ line 2
                 "fn f<effect E>(x: i32, mut g: fn mut() with E,) with E {}",
                 2,
             ),
-            // A parameter type's own multi-effect row is parenthesized, so the
-            // comma after it belongs to the parameter list and nothing has to
+            // A parenthesized row ends before the comma, so nothing has to
             // look past it.
             (
                 "fn f<effect E>(mut g: fn mut() with (E, Stdout),) with (E, Stdout) {}",
@@ -7441,8 +7412,8 @@ line 2
         assert_eq!(func.params.len(), 1);
     }
 
-    /// Without parentheses the row is one effect, so the comma starts the next
-    /// parameter — `Stderr` is then a parameter with no type.
+    /// Bare, the row is one effect, so the comma starts a parameter — and
+    /// `Stderr` has no type.
     #[test]
     fn test_param_list_bare_row_ends_at_the_comma() {
         assert!(parse("fn f(mut g: fn mut() with Stdout, Stderr) {}").is_err());
@@ -8033,14 +8004,7 @@ line 2
         assert!(w.handlers[0].effect.is_none());
     }
 
-    /// `with` takes one effect bare; more than one needs parentheses. The rule
-    /// is the same in every position a `with` row can appear — a declaration,
-    /// a free-standing `fn` type, and a closure-type bound — so that a comma
-    /// after a bare effect always belongs to the enclosing list and never to
-    /// the row.
-    /// `;` separates statements; a block's last one may drop it, whatever kind
-    /// of statement it is. Newline never separates — there is no ASI — so two
-    /// statements with no `;` between them are an error.
+    /// A block's last statement may drop its `;`, whatever kind it is.
     #[test]
     fn parse_trailing_semicolon_is_optional_for_every_statement() {
         for source in [
@@ -8091,6 +8055,8 @@ line 2
         }
     }
 
+    /// One effect goes bare; more than one needs parentheses. Same rule in
+    /// every position, so a comma after a bare effect is the enclosing list's.
     #[test]
     fn parse_with_row_bare_single_effect() {
         let module = parse("fn f() with E { }").unwrap();
@@ -8128,8 +8094,7 @@ line 2
         );
     }
 
-    /// `with ()` names no effect. Accepting it silently would let the
-    /// formatter delete a clause the author wrote.
+    /// Accepting `with ()` would let the formatter delete a written clause.
     #[test]
     fn parse_with_row_empty_parens_are_rejected() {
         for source in [
@@ -8146,8 +8111,7 @@ line 2
         }
     }
 
-    /// A type alias's row is followed by `;`, never by a list, so the comma
-    /// can only be a missing parenthesis and is reported as one.
+    /// A type alias's row is followed by `;`, never a list.
     #[test]
     fn parse_with_row_bare_comma_in_a_type_alias_is_rejected() {
         let err = parse("type F = fn() with A, B;").unwrap_err();
@@ -8192,9 +8156,7 @@ line 2
         assert_eq!(f.stores, vec!["self".to_string()]);
     }
 
-    /// In a `fn` type the row is the same shape, so the comma after a bare
-    /// effect ends the row and belongs to the parameter list. No lookahead
-    /// past the comma is involved.
+    /// The comma after a bare effect ends the row and belongs to the list.
     #[test]
     fn parse_with_row_in_fn_type_yields_the_comma_to_the_param_list() {
         let module = parse("fn f(g: fn() with E, x: T) { }").unwrap();
