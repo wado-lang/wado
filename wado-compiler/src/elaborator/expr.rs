@@ -1770,8 +1770,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else if if_expr.else_block.is_none() {
                         TypeTable::UNIT
                     } else {
-                        let chain_name = self.tysys.type_table.borrow().type_name(chain_type);
-                        let else_name = self.tysys.type_table.borrow().type_name(else_type);
+                        let (chain_name, else_name) = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .type_names_for_mismatch(chain_type, else_type);
                         let _ = self.emit(TypeError::TypeMismatch {
                             expected: chain_name,
                             found: else_name,
@@ -1883,8 +1886,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         TypeTable::UNIT
                     } else {
-                        let then_name = self.tysys.type_table.borrow().type_name(then_type);
-                        let else_name = self.tysys.type_table.borrow().type_name(else_type);
+                        let (then_name, else_name) = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .type_names_for_mismatch(then_type, else_type);
                         let _ = self.emit(TypeError::TypeMismatch {
                             expected: then_name,
                             found: else_name,
@@ -1957,8 +1963,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             check_assignable(actual, expected, &tt)
         };
         if matches!(result, TypeCheckResult::Incompatible) {
-            let expected_name = self.tysys.type_table.borrow().type_name(expected);
-            let found_name = self.tysys.type_table.borrow().type_name(actual);
+            let (expected_name, found_name) = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_names_for_mismatch(expected, actual);
             let _ = self.emit(TypeError::TypeMismatch {
                 expected: expected_name,
                 found: found_name,
@@ -2212,8 +2221,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     check_assignable(arm_type, type_id, &tt)
                 };
                 if matches!(result, TypeCheckResult::Incompatible) {
-                    let expected_name = self.tysys.type_table.borrow().type_name(type_id);
-                    let found_name = self.tysys.type_table.borrow().type_name(arm_type);
+                    let (expected_name, found_name) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_names_for_mismatch(type_id, arm_type);
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected: expected_name,
                         found: found_name,
@@ -3913,10 +3925,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
         };
-        self.sem
-            .decls
-            .local_struct_fields
-            .insert(anon_name.clone(), field_info);
+        self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
         // Create TirStruct definition for codegen
         let tir_fields: Vec<TirField> = effective_fields

@@ -40,7 +40,7 @@ Two registers, one grammar:
 - `MODULE` reuses the import specifier verbatim, so any module the loader accepts is nameable with no new escaping rules.
 - `::`/`.` match Wado source, so no second, conflicting operator vocabulary is introduced; the user's three kinds map to distinct separators.
 - `#` is spent on the module boundary, so instance methods use `.` rather than Ruby's `Type#method`; Ruby users may pause briefly.
-- The notation is purely textual. Resolving it to an `AstId` is implemented (`wado query`); the reverse — rendering an internal `name.rs` name back into this notation — remains follow-up.
+- The notation is purely textual, and runs both ways: `wado query` resolves it to an `AstId`, and `symbol_notation::render` writes one back out. A type-mismatch diagnostic uses the rendering where the two bare names collide (see WEP 2026-08-12 §9), so the notation a reader is told to type is the notation the compiler prints.
 
 ## Implementation
 
@@ -50,7 +50,7 @@ Resolution loads the module named in the notation and looks the symbol up by
 name, so no entry file is needed — relative modules anchor at `--base` (default
 `.`), while `core:` / `wasi:` are location-independent.
 
-- `wado_compiler::symbol_notation` — the parser (`MODULE#SYMBOL`).
+- `wado_compiler::symbol_notation` — the parser and renderer (`MODULE#SYMBOL`).
 - `Semantics::resolve_symbol_notation` — notation → `Definition`.
 - `Engine::{definition,references,document_highlight,hover}_by_symbol` — drive
   resolution over a synthetic entry that `use`s the module.

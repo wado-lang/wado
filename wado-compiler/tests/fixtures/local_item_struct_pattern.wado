@@ -1,0 +1,26 @@
+// A function-local `struct` is a declaration whose type renders a mangled name.
+// Its pattern qualifier names the declaration, not that rendering.
+
+fn first() -> i32 {
+    struct Local {
+        first: i32,
+        second: i32,
+    }
+
+    let Local { first, second } = Local { first: 7, second: 8 };
+    return first * 10 + second;
+}
+
+fn second() -> i32 {
+    struct Local {
+        only: i32,
+    }
+
+    let Local { only } = Local { only: 3 };
+    return only;
+}
+
+test "a function-local struct's pattern names its own declaration" {
+    assert first() == 78;
+    assert second() == 3;
+}

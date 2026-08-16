@@ -67,8 +67,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .collect();
 
                     let module_source = scope.current_module_source.clone();
+                    let def = scope.def_of_item(struct_decl.id);
                     scope.sem.decls.local_struct_fields.insert(
-                        struct_decl.name.clone(),
+                        def,
                         StructFieldInfo {
                             name: struct_decl.name.clone(),
                             module_source,
@@ -102,10 +103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_table
                             .borrow_mut()
                             .register_decl_type(newtype_decl.id, newtype_id);
-                        self.sem
-                            .decls
-                            .local_newtypes
-                            .insert(newtype_decl.name.clone(), newtype_id);
+                        self.sem.decls.local_newtypes.insert(def, newtype_id);
                     } else {
                         // Generic newtype: store definition for lazy instantiation
                         let type_params = newtype_decl
@@ -114,9 +112,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .map(|p| p.name.clone())
                             .collect();
                         self.sem.decls.local_generic_newtypes.insert(
-                            newtype_decl.name.clone(),
+                            self.def_of_item(newtype_decl.id),
                             GenericNewtypeInfo {
-                                defined_at: newtype_decl.id,
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
@@ -169,8 +166,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     let module_source = scope.current_module_source.clone();
+                    let def = scope.def_of_item(variant_decl.id);
                     scope.sem.decls.local_variant_cases.insert(
-                        variant_decl.name.clone(),
+                        def,
                         VariantInfo {
                             name: variant_decl.name.clone(),
                             module_source: module_source.clone(),
@@ -219,7 +217,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect();
                     self.sem.decls.local_enum_cases.insert(
-                        enum_decl.name.clone(),
+                        self.def_of_item(enum_decl.id),
                         EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
                     );
                     // Mirror the variant / trait paths: register the enum's
@@ -271,10 +269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_decl_type(flags_decl.id, flags_type);
                     // Add to newtypes so it can be used as a type name
-                    self.sem
-                        .decls
-                        .local_newtypes
-                        .insert(flags_decl.name.clone(), flags_type);
+                    self.sem.decls.local_newtypes.insert(def, flags_type);
                     // Store member info with bitmask values (1 << index)
                     let members: Vec<FlagsMemberData> = flags_decl
                         .flags
@@ -287,7 +282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect();
                     self.sem.decls.local_flags_cases.insert(
-                        flags_decl.name.clone(),
+                        def,
                         FlagsInfo {
                             type_id: flags_type,
                             module_source: self.current_module_source.clone(),

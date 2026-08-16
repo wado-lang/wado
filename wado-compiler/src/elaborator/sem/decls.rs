@@ -140,25 +140,26 @@ pub(crate) struct ModuleDecls {
     /// (which records) from reify (which emits).
     pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
 
-    /// Per-module additions to the type tables, consulted by
-    /// [`super::super::types::TypeLookup`] before the shared `all_*` tables.
-    /// Populated by [`super::super::Elaborator::collect_types`] and by call
-    /// sites that intern an anonymous struct or instantiate a generic
-    /// newtype on demand.
-    pub(crate) local_struct_fields: IndexMap<String, StructFieldInfo>,
-    pub(crate) local_newtypes: IndexMap<String, TypeId>,
-    pub(crate) local_generic_newtypes: IndexMap<String, GenericNewtypeInfo>,
-    pub(crate) local_enum_cases: IndexMap<String, EnumInfo>,
-    pub(crate) local_flags_cases: IndexMap<String, FlagsInfo>,
-    pub(crate) local_variant_cases: IndexMap<String, VariantInfo>,
+    /// Additions to the type tables made during this module's walk, consulted
+    /// by [`super::super::types::TypeLookup`] before the shared `all_*`
+    /// tables. Populated by [`super::super::Elaborator::collect_types`] and by
+    /// call sites that instantiate a generic newtype on demand.
+    ///
+    /// Keyed by declaration, so a module-level `struct` and the same spelling
+    /// declared inside a function body are two entries rather than one that
+    /// wins — and so a walk standing in another module reads these without
+    /// having to hide them first.
+    pub(crate) local_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo>,
+    pub(crate) local_newtypes: IndexMap<crate::defs::DefId, TypeId>,
+    pub(crate) local_generic_newtypes: IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
+    pub(crate) local_enum_cases: IndexMap<crate::defs::DefId, EnumInfo>,
+    pub(crate) local_flags_cases: IndexMap<crate::defs::DefId, FlagsInfo>,
+    pub(crate) local_variant_cases: IndexMap<crate::defs::DefId, VariantInfo>,
 
-    /// Function-local item declarations (`Stmt::Item` — a `struct` or `type`
-    /// declared inside a function body), by their own identity, as against the
-    /// module-scoped `local_struct_fields` above. Two functions declaring the
-    /// same spelling declare two items, and these maps say so: a local item is
-    /// a declaration with a [`crate::defs::DefId`] like any other.
-    pub(crate) local_item_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo>,
-    pub(crate) local_item_newtypes: IndexMap<crate::defs::DefId, TypeId>,
+    /// Fields of the anonymous struct shapes this walk interned. A shape names
+    /// no declaration, so it is keyed by the shape's own id — the same head
+    /// [`crate::tir::StructDef::Anon`] carries.
+    pub(crate) anon_struct_fields: IndexMap<crate::tir::AnonStructId, StructFieldInfo>,
 
     /// The spelling a local item's *type* renders to, back to the declaration.
     ///
@@ -173,7 +174,7 @@ pub(crate) struct ModuleDecls {
     /// source. `hoist_local_items` saves and restores it per block, and
     /// `clear_fn_local_items` empties it per function body.
     ///
-    /// It answers with an identity; a declaration's contents come from the two
+    /// It answers with an identity; a declaration's contents come from the
     /// maps above.
     pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
 }

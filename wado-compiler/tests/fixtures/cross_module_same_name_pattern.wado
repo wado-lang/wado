@@ -1,0 +1,22 @@
+// A struct pattern's qualifier names a declaration, checked against the
+// scrutinee's own head. This module's `Pair` is not the imported one, so the
+// pattern is a mismatch rather than a rebinding onto the local field order.
+
+use { make } from "./sub/cross_module_same_name_pattern_dep.wado";
+
+struct Pair {
+    b: i32,
+    a: i32,
+}
+
+test "a same-named local struct does not answer for an imported scrutinee" {
+    let Pair { a, b } = make();
+    assert a == 1;
+    assert b == 2;
+}
+
+__DATA__
+{
+  "test": {},
+  "compile_error": "pattern mismatch: expected 'cross_module_same_name_pattern.wado#Pair', found './sub/cross_module_same_name_pattern_dep.wado#Pair'"
+}

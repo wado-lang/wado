@@ -2913,6 +2913,10 @@ pub enum Pattern {
     /// Struct destructuring pattern: `{ x, y }` or `Point { x, y }`
     Struct {
         type_name: Option<String>,
+        /// The qualifier's own reference site. Naming a type in pattern
+        /// position is naming a declaration, so the walk answers for it and
+        /// the consumer compares declarations rather than spellings.
+        type_name_id: Option<AstId>,
         fields: Vec<StructPatternField>,
         has_rest: bool,
         span: Span,
@@ -3591,41 +3595,121 @@ mod ast_id_tests {
              module a local name is unambiguous by construction",
         ),
         (
-            "StructLiteralField",
+            "StructPatternField",
             "a field of a known struct type, not a module-scoped name",
         ),
-        ("StructPatternField", "likewise a field of a known type"),
+        (
+            "UseItem::InterfaceFunctions",
+            "an import's own local names, like `UseItemSimple`",
+        ),
     ];
 
     /// A reference site with no id has nowhere to record which declaration it
     /// means, so its consumers thread the spelling instead and two modules'
     /// same-named declarations compare equal — the shape of #1785.
-    #[test]
-    fn every_reference_bearing_node_carries_an_ast_id() {
-        let source = include_str!("ast.rs");
-        let mut offenders: Vec<&str> = Vec::new();
-        let mut unused: Vec<&str> = NAMED_WITHOUT_ID.iter().map(|(n, _)| *n).collect();
-
-        for decl in source.split("\npub struct ").skip(1) {
+    /// The struct-like variants of `pub enum X { … }`, as `X::Variant` paired
+    /// with the variant's own body. A variant names things exactly as a struct
+    /// does, and half this file's reference positions are variants.
+    fn enum_variants(source: &str) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for decl in source.split("\npub enum ").skip(1) {
             let Some((name, rest)) = decl.split_once(" {") else {
                 continue;
             };
             let name = name.trim();
-            let Some((body, _)) = rest.split_once("\n}") else {
-                continue;
-            };
-            let names_something = body
+            let mut depth = 1usize;
+            let mut end = rest.len();
+            for (i, ch) in rest.char_indices() {
+                match ch {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = i;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // Doc comments carry braces of their own (`Effect::{f, g}`), which
+            // the brace counting below would take for structure.
+            let body: String = rest[..end]
                 .lines()
-                .any(|l| l.trim_start().starts_with("pub name") || l.contains("_name: String"));
-            if !names_something || body.contains("pub id: AstId") {
-                continue;
+                .filter(|l| {
+                    let l = l.trim_start();
+                    !l.starts_with("//") && !l.starts_with("#[")
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let body = body.as_str();
+            let mut depth = 0usize;
+            let mut start = 0;
+            let mut cuts: Vec<&str> = Vec::new();
+            for (i, ch) in body.char_indices() {
+                match ch {
+                    '{' | '(' => depth += 1,
+                    '}' | ')' => depth -= 1,
+                    ',' if depth == 0 => {
+                        cuts.push(&body[start..i]);
+                        start = i + 1;
+                    }
+                    _ => {}
+                }
+            }
+            cuts.push(&body[start..]);
+            for variant in cuts {
+                let Some((head, tail)) = variant.split_once('{') else {
+                    continue;
+                };
+                let Some(vname) = head.split_whitespace().last() else {
+                    continue;
+                };
+                out.push((format!("{name}::{vname}"), tail.to_string()));
+            }
+        }
+        out
+    }
+
+    /// Whether `body` spells a name it declares no id for — a reference site
+    /// with nowhere to record which declaration it means.
+    fn names_without_id(body: &str) -> bool {
+        let names = body.lines().any(|l| {
+            let l = l.trim_start();
+            l.starts_with("pub name") || l.contains("_name: String") || l.contains("_name: Option<")
+        });
+        names && !body.contains("id: AstId") && !body.contains("id: Option<AstId>")
+    }
+
+    #[test]
+    fn every_reference_bearing_node_carries_an_ast_id() {
+        let source = include_str!("ast.rs");
+        let mut offenders: Vec<String> = Vec::new();
+        let mut unused: Vec<&str> = NAMED_WITHOUT_ID.iter().map(|(n, _)| *n).collect();
+
+        let mut check = |name: &str, body: &str, offenders: &mut Vec<String>| {
+            if !names_without_id(body) {
+                return;
             }
             match unused.iter().position(|n| *n == name) {
                 Some(i) => {
                     unused.remove(i);
                 }
-                None => offenders.push(name),
+                None => offenders.push(name.to_string()),
             }
+        };
+
+        for decl in source.split("\npub struct ").skip(1) {
+            let Some((name, rest)) = decl.split_once(" {") else {
+                continue;
+            };
+            let Some((body, _)) = rest.split_once("\n}") else {
+                continue;
+            };
+            check(name.trim(), body, &mut offenders);
+        }
+        for (name, body) in enum_variants(source) {
+            check(&name, &body, &mut offenders);
         }
 
         assert!(

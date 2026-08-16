@@ -113,6 +113,20 @@ pub fn parse(input: &str) -> Result<SymbolNotation, ParseError> {
     })
 }
 
+/// Render `MODULE#SYMBOL`, the inverse of [`parse`] for the shape a diagnostic
+/// needs: a symbol in a module, no receiver.
+///
+/// The module is quoted only when it carries the `#` that would otherwise split
+/// it, which is the rule [`split_module`] reads back.
+#[must_use]
+pub fn render(module: &str, symbol: &str) -> String {
+    if module.contains('#') {
+        format!("\"{module}\"#{symbol}")
+    } else {
+        format!("{module}#{symbol}")
+    }
+}
+
 /// Split `MODULE#SYMBOL` into its two halves. A quoted module spans to its
 /// closing quote (so a `#` inside it is literal); an unquoted module ends at
 /// the first `#`.

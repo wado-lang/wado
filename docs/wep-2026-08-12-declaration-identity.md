@@ -188,14 +188,28 @@ impl Resolutions {
 
 Every node that names a declaration carries an `AstId`, and the walk records an
 answer for every one; `ast.rs`'s
-`every_reference_bearing_node_carries_an_ast_id` scans its own source and fails on
-a name-bearing node with no id unless `NAMED_WITHOUT_ID` registers the reason it
-needs none.
+`every_reference_bearing_node_carries_an_ast_id` scans its own source — struct
+declarations and struct-like enum variants alike, since half the reference
+positions are variants — and fails on a name-bearing node with no id unless
+`NAMED_WITHOUT_ID` registers the reason it needs none. A struct pattern's
+qualifier is such a position: naming a type in pattern position is naming a
+declaration.
 
 `get` is total. A site the walk missed is a bug in the walk, not an absent answer a
 consumer improvises around, so it panics rather than returning `None`. The three
 cases stay distinct on purpose: reading `Unresolved` as `Binder` loses the
-diagnostic a name that reaches nothing deserves.
+diagnostic a name that reaches nothing deserves. `walked` keeps a fourth case
+apart from all three — a node no walk saw, which synthesis mints — because that
+is the only one for which some other source of truth is honest.
+
+Type resolution is the largest consumer and takes the site with it: `resolve_type`
+hands the head's `AstId` to `resolve_named_type` / `resolve_generic_type`, which
+read the declaration off this table rather than re-running a scope lookup from
+wherever the walk stands. An alias, a namespace prefix and a function-local
+`struct` reach their own declarations with no vantage supplied. One entry point
+declines a site — `resolve_unsited_type_name`, for a `Self::` / `T::` receiver
+the elaborator rewrote to a spelling no source segment names; giving the
+static-call chain the receiver's own site is what removes it.
 
 `Unresolved` is not a synonym for "error", but an `impl` header's trait position
 is: implementing a trait is naming it. `impl Deserialize for Point;` written in a
@@ -245,9 +259,17 @@ The seven name-keyed registries collapse into `DefId`-indexed columns on
 span. `TypeLookup`'s four-tier scope walk disappears, because there is nothing
 left to walk — the caller arrives holding the `DefId` its site resolved to.
 
+The tables a walk builds as it goes are keyed the same way. `ModuleDecls`'
+`local_*` maps — the fields, cases, members and newtypes the module being
+elaborated has contributed so far — are keyed by declaration, so a module-level
+`struct Box` and a function-local one of that name are two entries rather than
+one the later insert wins. No separate tier is needed to keep the two apart.
+
 This is what removes the consumers' need for a vantage. A pass reading a struct's
-fields no longer needs to know which module it is standing in, so it can no longer
-stand in the wrong one.
+fields does not need to know which module it is standing in, so it cannot stand
+in the wrong one, and `with_module_perspective_for` does not swap these tables
+when it enters another module: a declaration-keyed entry answers for its
+declaration from anywhere.
 
 ### 6. Types carry `DefId`
 
@@ -305,7 +327,10 @@ enum StructDef {
 Every site that matches `Struct` keeps matching it; every site that reads the
 head has to say which case it means, and the compiler lists them. The
 synthesized `__anon_{…}` spelling goes: it exists only to key the interner, and
-the fields are the key.
+the fields are the key. A shape's fields are filed under its `AnonStructId`
+beside the declarations' under their `DefId`s, so nothing has to render a
+spelling to store them and nothing has to reproduce that spelling to read them
+back.
 
 Interning identity does not change. `TypeTable` keys an interned type by its
 rendered spelling, because holding argument `TypeId`s as identity would mint two
@@ -375,7 +400,10 @@ Two rules survive from the structured-name work and still apply to the renderer:
   instantiation. That is the same defect one layer down: a rendering standing in
   for an identity, and two things rendering the same.
 
-The rendered format is unchanged; the emitted Wasm is byte-identical.
+The rendered format is not itself a constraint. A mangle has to be injective and
+has to agree between the site that mints a name and the site that looks one up;
+what it spells is free to change, and the emitted Wasm changing with it is a
+golden-fixture update, not a regression.
 
 ### 9. What names are still for
 
@@ -383,7 +411,14 @@ Three things, none of them comparable:
 
 - Source syntax. The AST holds what the programmer wrote, so the formatter and the
   LSP reproduce it.
-- Diagnostics. A message says what the programmer wrote, read off the site.
+- Diagnostics. A message says what the programmer wrote, read off the site —
+  except in the one case where what the programmer wrote does not separate the
+  two sides: `expected 'Point', found 'Point'`, two declarations of that name.
+  `TypeTable::type_names_for_mismatch` renders both plainly and qualifies each
+  only when the two strings are equal, so every other message keeps its short
+  form. The qualified spelling is the `MODULE#SYMBOL` notation of WEP
+  2026-06-14, and comes from the same renderer the plain one does, so the two
+  cannot drift.
 - The Component Model boundary. An export name is an ABI fact derived from a
   `DefId`. The one direction that runs the other way is a WIT type name inside
   a generated `wasi:*` / `core:kiln/*` module, which `TypeTable::cm_decl_in`
@@ -426,33 +461,18 @@ them is a ratchet rather than an absolute, and says so.
 
 The design above is implemented far enough that the whole suite passes and the
 class of bug in Context is not reachable by any program the repository builds.
-It is not yet _unwritable_, which is what the design asks for. What stands
-between the two is one step, and everything else here follows from it.
+It is not yet _unwritable_, which is what the design asks for.
 
-What prevents a collision today is that two same-named declarations _render_
-differently — `name::mangle_local_item_name`'s `@AstId` suffix, plus the
-function-local tier `TypeLookup` consults ahead of the module's own. That is a
-convention every minting site and every lookup site has to keep, not a property
-of a key. The evidence it is a convention: closing one fixture — two sibling
-functions each declaring `struct Box<T>` — took seven separate fixes, at type
-resolution, the struct literal, the WIR lookup key, template admission, template
-lookup, the registration name, and the instantiation scan. Each was a distinct
-caller of the same first-wins index. A removed mechanism takes one fix.
+What still prevents some collisions by convention rather than by key is
+`name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
+index that reads that suffix back into a declaration. That is a convention every
+minting site and every lookup site has to keep. The evidence it is a convention:
+closing one fixture — two sibling functions each declaring `struct Box<T>` —
+took seven separate fixes, at type resolution, the struct literal, the WIR
+lookup key, template admission, template lookup, the registration name, and the
+instantiation scan. Each was a distinct caller of the same first-wins index. A
+removed mechanism takes one fix.
 
-- [x] A _type_ head carries a `DefId`, not a `(module, name)` pair.
-      `name::TypeHead::Declared` carries a `DeclaredHead` — the declaration,
-      plus the module and the two spellings its one constructor reads off the
-      table — and equality compares the `DefId`. A head that names no
-      declaration is `TypeHead::Shape`, whose rendering _is_ its identity.
-- [x] `TypeTable::decl_named_in` deleted. Every stdlib type it was reached for
-      — `Future`, `Stream`, `AsyncCall`, `ByteList`, `ByteSlice`, `ArraySlice`
-      — is a `compiler_item.rs` registry entry, and the registry now records a
-      declaring node for every kind that names a type of its own (`enum`,
-      `resource`, `type X = Y`, the tuple family, a builtin type), so
-      `TypeTable::compiler_item_def` answers for all of them. The rest carry
-      the identity their site already resolved. What is left of the index is
-      `TypeTable::cm_decl_in`, reachable only from `synthesis::cm_binding` and
-      permanent: see §9's third bullet.
 - [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
       and the Enforcement bullet they contradict becomes true: a pass holding
       only a spelling cannot obtain an identity. `DefTable` itself already has
@@ -466,11 +486,13 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       that mislaid it:
 
       - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
-        family (9 callers, each with its own). A written name in *type*
-        position has a site; these are reached from resolved types and from
-        synthesis, which do not.
-      - `canonical_decl_key` and `decl_key_or_local` (19 callers) are the frame
-        derivation: a name that reaches no import, no declaration of the
+        family. Every *written* type reference now reaches the family through
+        `declaration_at`, which asks the site; what is left on the by-name
+        forms is reached holding a resolved type's rendered head — a struct
+        literal's recorded name, a pattern's qualifier, a reflection subject —
+        each of which has the type it came from and should ask that instead.
+      - `decl_key_or_local` (19 callers) and the `canonical_decl_key` it is
+        built on (3 more) are the frame derivation: a name that reaches no import, no declaration of the
         writing module and no prelude entry, for which only the declaration
         indexes can answer.
 
@@ -519,6 +541,8 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and
       `LocalMethodName::method_type_args` are still `Vec<String>` — rendered
-      arguments stored as text. Blocked by the first item: `written_type_args`
-      renders an `ast::Type` by spelling because the arguments' own reference
-      sites are not resolved where it stands.
+      arguments stored as text. `written_type_args` can now build a structured
+      head for each argument, since the arguments' own reference sites are
+      resolved; what it costs is that `mangle_type_name` and
+      `FqTypeName::mangled` are two renderers, so the mangles have to be brought
+      together rather than assumed to agree.

@@ -2981,6 +2981,7 @@ impl Parser {
     /// Parse `{ field, field: pattern, .. }` for struct destructuring.
     /// The `{` token must be the current token.
     fn parse_struct_pattern_fields(&mut self, type_name: Option<String>) -> ParseResult<Pattern> {
+        let type_name_id = type_name.as_ref().map(|_| self.alloc_ast_id());
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
 
@@ -3061,6 +3062,7 @@ impl Parser {
 
         Ok(Pattern::Struct {
             type_name,
+            type_name_id,
             fields,
             has_rest,
             span: start_span.merge(&end_span),
