@@ -1,0 +1,51 @@
+// Constant Object Globalization through a chain of read-only borrows.
+//
+// The serde derivation writes `st.field(&"created_at", &value)`, so the wire
+// key is a constant `String` literal borrowed at a call argument. `field` hands
+// that borrow on to a writer, which hands it on again and finally reads its
+// bytes through `array.get` / `array.copy` — all read-only, none of them
+// keeping the referent past the call. Handing a borrow on is therefore not an
+// escape, and the key is built once at instantiation instead of allocating a
+// `String` header plus a byte array per field per call.
+//
+// The shape below is that chain in miniature: `emit` borrows the literal,
+// `relay` passes it on, `total` reads it through a hoisted local the way LICM
+// leaves one. Without the pass the loop allocates a fresh literal per
+// iteration.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn total(s: &String) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < s.len(); i += 1 {
+        sum += s.get_byte_unchecked(i) as i32;
+    }
+    return sum;
+}
+
+#[inline(never)]
+fn relay(s: &String, out: &mut String) -> i32 {
+    out.push_str(s);
+    return total(s);
+}
+
+#[inline(never)]
+fn emit(out: &mut String) -> i32 {
+    return relay(&"created_at", out);
+}
+
+export fn run() with Stdout {
+    let mut buf = "";
+    let mut sum = 0;
+    for let mut k = 0; k < 3; k += 1 {
+        sum += emit(&mut buf);
+    }
+    println(`${buf.len()} ${sum}`);
+}
+
+__DATA__
+{
+    "stdout": "30 3108\n",
+    "wir_expect:O2": ["/relay\"(global:const_object_globalization_borrow_passthrough.wado::__const_obj"]
+}

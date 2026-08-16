@@ -310,6 +310,7 @@ import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-write from "wasi/future-write";
 
 global mut global:http_routing_created.wado::__modules_initialized: bool = 0;
+global global:http_routing_created.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 99, 114, 101, 97, 116, 101, 100), used: 8 };
 
 fn "http_routing_created.wado/handle"(request) {
     let path: ref null "core:prelude/string.wado//String";
@@ -499,7 +500,7 @@ fn "http_routing_created.wado/handle"(request) {
     response = __pattern_temp_1.0;
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
-        if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(p, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("/created"), used: 8 }) {
+        if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(p, global:http_routing_created.wado::__const_obj_0) {
             drop("http_routing_created.wado/__cm_binding__Response_set_status_code"(response, 201));
         }
     } else {

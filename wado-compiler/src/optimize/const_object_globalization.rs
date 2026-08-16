@@ -106,10 +106,20 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .zip(&fn_effects)
         .map(|(f, e)| e.is_pure() && crate::niri::is_ctfe_eligible(&f.borrow()))
         .collect();
+    // A bodyless callee `mod_ref` did not mark opaque is a Wasm instruction:
+    // `leaf_effect` opaques every component-model builtin and every bodyless
+    // non-builtin, so what is left has no channel to store a reference in.
+    let instruction_leaf: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(&fn_effects)
+        .map(|(f, e)| f.borrow().body.is_none() && !e.opaque)
+        .collect();
     let gate = Gate {
         funcs: &project.functions,
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
+        instruction_leaf: &instruction_leaf,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
         ref_param_leaks: RefCell::new(IndexMap::default()),
@@ -1076,6 +1086,11 @@ struct Gate<'a> {
     type_table: &'a Rc<RefCell<TypeTable>>,
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
+    /// Indexed by `func_id.index()`: a bodyless callee that is a plain Wasm
+    /// instruction (`array.get`, `array.copy`, a linear-memory load), as
+    /// opposed to a component-model builtin or an extern with no body at all —
+    /// both of which `mod_ref` marks opaque. See [`Gate::instruction_arg_captures`].
+    instruction_leaf: &'a [bool],
     structs: &'a [crate::nir::NirStruct],
     /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
     /// Each verdict costs two walks of the callee body, and one helper taking a
@@ -1227,15 +1242,101 @@ impl Gate<'_> {
 
     /// Whether the callee's parameter at `param_pos` — a borrow — delivers its
     /// referent's storage out of the callee. Unknown callees count as leaking.
+    ///
+    /// The walk asks the same question of the callees it hands the borrow on
+    /// to, so a recursive helper re-enters this query for a key already in
+    /// flight. Seeding the memo with the leaking verdict cuts the cycle the
+    /// conservative way.
     fn callee_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.ref_param_leaks.borrow().get(&key) {
             return cached;
         }
+        self.ref_param_leaks.borrow_mut().insert(key, true);
         let verdict = self.compute_ref_param_leaks(func_id, param_pos);
         self.ref_param_leaks.borrow_mut().insert(key, verdict);
         verdict
+    }
+
+    /// Whether handing a borrow to `func_id`'s parameter at `pos` keeps it a
+    /// borrow: the callee takes it by shared reference and does not deliver it
+    /// anywhere its own caller can reach.
+    ///
+    /// This is the argument-position dual of [`Self::callee_borrows_self`]. A
+    /// `&mut` parameter is excluded — the callee may write through it, which
+    /// the shared global must never see.
+    fn callee_only_borrows_arg(&self, func_id: crate::nir::FuncId, pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return false;
+        };
+        let borrows = {
+            let f = f.borrow();
+            let Some(param) = f.params.get(pos) else {
+                return false;
+            };
+            f.body.is_some()
+                && !self.param_borrows_mutably(param)
+                && matches!(
+                    self.type_table.borrow().get(param.type_id),
+                    ResolvedType::Ref(_)
+                )
+        };
+        borrows && !self.callee_ref_param_leaks(func_id, pos)
+    }
+
+    /// Whether passing a value of `arg_ty` to a Wasm-instruction callee lets a
+    /// reference reachable from it survive the call.
+    ///
+    /// A plain instruction has no place to put one: the operand stack does not
+    /// outlive the call, and every store it can perform travels through a
+    /// `&mut` operand, which the caller side excludes. Two channels are left,
+    /// and each gets a gate: what it returns must be a primitive, and what it
+    /// moves elementwise (`array.copy`) means the argument may only be a
+    /// primitive or an array of them.
+    fn instruction_arg_captures(&self, func_id: crate::nir::FuncId, arg_ty: TypeId) -> bool {
+        use cranelift_entity::EntityRef;
+        if !self
+            .instruction_leaf
+            .get(func_id.index())
+            .copied()
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return true;
+        };
+        let return_type = f.borrow().return_type;
+        if !matches!(
+            self.type_table.borrow().get(return_type),
+            ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
+        ) {
+            return true;
+        }
+        let tt = self.type_table.borrow();
+        let mut ty = arg_ty;
+        loop {
+            let resolved = tt.get(ty);
+            if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = resolved {
+                ty = *inner;
+                continue;
+            }
+            if matches!(
+                resolved,
+                ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
+            ) {
+                return false;
+            }
+            let ResolvedType::BuiltinArray(elem) = resolved else {
+                return true;
+            };
+            return !matches!(
+                tt.get(*elem),
+                ResolvedType::Primitive(_) | ResolvedType::Unit
+            );
+        }
     }
 
     fn compute_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
@@ -1288,7 +1389,7 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
-    projection_alias_roots(body, idx, gate)
+    projection_alias_roots(body, idx, gate, AliasRoots::Declared)
         .into_iter()
         .filter(|&root| root != idx)
         .all(|root| !written_through(body, root, gate))
@@ -1331,7 +1432,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// own copy is legitimate and even counts as owned, a premise hoisting
 /// invalidates. A borrow or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    let roots = projection_alias_roots(body, idx, gate);
+    let roots = projection_alias_roots(body, idx, gate, AliasRoots::WithReassigned);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -1355,8 +1456,13 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                 | StmtKind::Continue => {}
             },
             NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::Assign { value, .. } => {
-                    if escapes(*value) {
+                // Assigning into a local is naming, not escaping: that local is
+                // already one of `roots`, so this walk covers its own uses too.
+                // Any other target is a place that outlives the borrow.
+                ExprKind::Assign { target, value } => {
+                    if escapes(*value)
+                        && !assign_target_local(body, *target).is_some_and(|l| roots.contains(&l))
+                    {
                         return true;
                     }
                 }
@@ -1368,12 +1474,26 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                     has_receiver,
                     ..
                 } => {
-                    let (receiver, rest) = match (has_receiver, args.split_first()) {
-                        (true, Some((receiver, rest))) => (Some(receiver), rest),
+                    let (receiver, first_rest) = match (has_receiver, args.split_first()) {
+                        (true, Some(_)) => (args.first(), 1),
                         (true, None) => return true,
-                        (false, _) => (None, args.as_slice()),
+                        (false, _) => (None, 0),
                     };
-                    if rest.iter().any(|a| escapes(a.expr)) {
+                    // Handing the storage on as a read-only borrow is not an
+                    // escape when the callee keeps it one — the same question
+                    // this walk answers, asked of the callee. A Wasm
+                    // instruction has no way to keep it at all.
+                    for (pos, a) in args.iter().enumerate().skip(first_rest) {
+                        if !escapes(a.expr) {
+                            continue;
+                        }
+                        let arg_ty = body.operand_type(a.expr);
+                        if !a.is_mut
+                            && (gate.callee_only_borrows_arg(*func_id, pos)
+                                || !gate.instruction_arg_captures(*func_id, arg_ty))
+                        {
+                            continue;
+                        }
                         return true;
                     }
                     if let Some(receiver) = receiver
@@ -1402,7 +1522,20 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// scrutinee. All name the same storage, so an escape through any is an escape of
 /// the parameter. The source need only *contain* a reference-typed projection:
 /// `let r = if c { s.a } else { s.b };` binds one of two and nothing says which.
-fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
+/// Which aliases [`projection_alias_roots`] collects.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AliasRoots {
+    /// Only locals *declared* from a projection. A local an assignment fills is
+    /// left out because the assignment filling it reads, to
+    /// [`written_through`], as a write of the storage it names — true of the
+    /// tracked binding, false of a mere alias.
+    Declared,
+    /// Also locals an assignment fills, which name the same storage as a
+    /// declared alias and so must be walked for escapes.
+    WithReassigned,
+}
+
+fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRoots) -> Vec<u32> {
     let mut roots = vec![idx];
     let mut i = 0;
     while i < roots.len() {
@@ -1441,6 +1574,18 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
                             collect_pattern_bindings(body, arm.pattern, &mut roots);
                         }
                     }
+                    // A local re-assigned from a projection names the same
+                    // storage as one bound by `let` — the shape `licm` leaves
+                    // when it hoists a field read out of a loop and refreshes
+                    // it after each call that could have changed it.
+                    if which == AliasRoots::WithReassigned
+                        && let ExprKind::Assign { target, value } = &body.exprs[e].kind
+                        && let Some(local) = assign_target_local(body, *target)
+                        && yields_projection_of(body, *value, root, gate)
+                        && !roots.contains(&local)
+                    {
+                        roots.push(local);
+                    }
                 }
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
@@ -1449,6 +1594,15 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
         i += 1;
     }
     roots
+}
+
+/// The local an assignment targets whole, or `None` for a projection, an index
+/// or a deref — those name storage the local merely points at.
+fn assign_target_local(body: &Body, target: ExprId) -> Option<u32> {
+    match &body.exprs[target].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        _ => None,
+    }
 }
 
 fn delivers_projection_operand(body: &Body, op: Operand, roots: &[u32], gate: &Gate<'_>) -> bool {
