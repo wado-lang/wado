@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786874893712,
+  "lastUpdate": 1786888500118,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48765,6 +48765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa2a4a78d557a33987d0031dabc49b5cd771165e"
         },
         "date": 1786874893264,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b287254d909878c50fc13ae151b14f27510261af",
+          "message": "Merge pull request #1832 from wado-lang/claude/benchmark-refresh-and-perf-notes\n\nchore(benchmark): refresh results, log perf dead ends",
+          "timestamp": "2026-08-16T22:34:11+09:00",
+          "tree_id": "5719a02c9f6fdea5adaf2bf27beb72caa499aa96",
+          "url": "https://github.com/wado-lang/wado/commit/b287254d909878c50fc13ae151b14f27510261af"
+        },
+        "date": 1786888499511,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
