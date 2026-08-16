@@ -235,18 +235,6 @@ impl Resolutions {
         self.scopes.resolve(module, name)
     }
 
-    /// [`Self::declaration_named`] for a name written in value or pattern
-    /// position, where a case is reachable and a type of the same name shadows
-    /// it.
-    ///
-    /// Same scope, one tier longer — a caller asks this rather than the type
-    /// query because of where the name is written, not because it wants a
-    /// second opinion.
-    #[must_use]
-    pub fn value_named(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        self.scopes.resolve_value(module, name)
-    }
-
     /// Every declaration `module` explicitly `use`d, by the local name it
     /// wrote — an alias where it wrote one, and the `ns$member` name a
     /// namespace import registers.
@@ -774,13 +762,13 @@ mod tests {
         );
         // `Leaf` reaches nothing in type position and its case in value position.
         assert!(r.declaration_named(&entry, "Leaf").is_none());
-        let leaf = r.value_named(&entry, "Leaf").unwrap();
+        let leaf = r.scopes.resolve_value(&entry, "Leaf").unwrap();
         assert_eq!(r.defs().kind(leaf), crate::defs::DefKind::VariantCase);
         assert_eq!(r.defs().module(leaf), &other);
 
         // `List` is both a case of the imported variant and this module's own
         // struct. The type wins in both positions.
-        let list = r.value_named(&entry, "List").unwrap();
+        let list = r.scopes.resolve_value(&entry, "List").unwrap();
         assert_eq!(list, r.declaration_named(&entry, "List").unwrap());
         assert_eq!(r.defs().kind(list), crate::defs::DefKind::Struct);
         assert_eq!(r.defs().module(list), &entry);
@@ -801,7 +789,7 @@ mod tests {
         assert_eq!(r.defs().name(def), "FieldKind");
         assert_eq!(r.defs().module(def), &other);
         // The variant's cases reach value position without entering this tier.
-        assert!(r.value_named(&entry, "Leaf").is_some());
+        assert!(r.scopes.resolve_value(&entry, "Leaf").is_some());
     }
 
     /// A namespace import enters its members under the qualification the

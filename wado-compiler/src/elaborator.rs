@@ -939,14 +939,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// declaration carries no identity — see [`Self::fq_trait_name_at`].
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> crate::name::FqTraitName {
         let written = self.get_type_name(ty);
-        let args: Vec<String> = match ty {
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .map(|a| self.get_type_name_full(a))
-                .collect(),
-            _ => Vec::new(),
-        };
+        let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
         let head = crate::resolve::head_site(ty)
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;

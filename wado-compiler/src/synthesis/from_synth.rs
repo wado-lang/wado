@@ -45,7 +45,7 @@ pub fn synthesize_from(module: &mut TirModule) {
         // Build the `From<Source>` trait spelling from the source type via the
         // type table — the canonical naming authority — rather than echoing a
         // pre-mangled request string.
-        let source_name = module.type_table.borrow().type_name(source);
+        let source_name = module.type_table.borrow().fq_type_name(source);
         let from_trait = from_trait_name.clone().with_args(vec![source_name]);
         let key = MethodName::format_local(
             &module

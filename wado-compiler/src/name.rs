@@ -441,8 +441,10 @@ pub struct LocalMethodName {
     pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
-    /// Method-level type args (e.g., `["i64"]` for `transform<i64>`)
-    pub method_type_args: Vec<String>,
+    /// Method-level type args (e.g., `[i64]` for `transform<i64>`), structured.
+    /// [`Self::full_method_name`] renders them; nothing stores the rendering,
+    /// so a call site's spelling and a definition's cannot drift.
+    pub method_type_args: Vec<FqTypeName>,
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
@@ -761,7 +763,7 @@ impl LocalMethodName {
         struct_name: FqTypeName,
         trait_name: Option<FqTraitName>,
         method_name: String,
-        method_type_args: Vec<String>,
+        method_type_args: Vec<FqTypeName>,
     ) -> Self {
         debug_assert!(
             struct_name.args().is_empty(),
@@ -791,7 +793,7 @@ impl LocalMethodName {
     pub fn with_type_args(
         &self,
         impl_type_args: &[FqTypeName],
-        method_type_args: &[String],
+        method_type_args: &[FqTypeName],
     ) -> Self {
         Self {
             struct_type_args: impl_type_args.to_vec(),
@@ -823,7 +825,7 @@ impl LocalMethodName {
     /// Panics if `self.trait_name` is `None` — type args on an inherent
     /// method don't have a trait to mangle.
     #[must_use]
-    pub fn with_trait_type_args(&self, trait_type_args: &[String]) -> Self {
+    pub fn with_trait_type_args(&self, trait_type_args: &[FqTypeName]) -> Self {
         let trait_name = self
             .trait_name
             .as_ref()
@@ -860,11 +862,12 @@ impl LocalMethodName {
     /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
-        if self.method_type_args.is_empty() {
-            self.method_name.clone()
-        } else {
-            format!("{}<{}>", self.method_name, self.method_type_args.join(","))
-        }
+        let args: Vec<String> = self
+            .method_type_args
+            .iter()
+            .map(FqTypeName::to_mangled)
+            .collect();
+        MethodName::format_method_with_args(&self.method_name, &args)
     }
 
     /// Generate the mangled name from the components.
@@ -911,14 +914,16 @@ impl LocalMethodName {
     /// `fq_base_struct_name` / `fq_struct_name`, and its `name` is overwritten
     /// with whatever that key finds.
     ///
-    /// `trait_name`'s arguments and `method_type_args` are still rendered
-    /// strings and are left alone — a CM type swap changes the receiver, not
-    /// the trait.
+    /// The trait is left alone — a CM type swap changes the receiver, not the
+    /// trait it implements.
     pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
         if let Receiver::Type(fq) = &self.receiver {
             self.receiver = Receiver::Type(fq.substitute(old, new));
         }
         for arg in &mut self.struct_type_args {
+            *arg = arg.substitute(old, new);
+        }
+        for arg in &mut self.method_type_args {
             *arg = arg.substitute(old, new);
         }
     }
@@ -2586,7 +2591,11 @@ impl DeclaredHead {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTraitName {
     head: TraitHead,
-    args: Vec<String>,
+    /// The trait's type arguments, structured. Each is an identity or a shape,
+    /// never a spelling: an impl header's `Index<K>` and a call site's
+    /// `Index<K>` reach one head through their own reference sites, so the two
+    /// sides of a mangled trait segment cannot render it differently.
+    args: Vec<FqTypeName>,
 }
 
 /// What an [`FqTraitName`]'s head names.
@@ -2628,9 +2637,9 @@ impl FqTraitName {
         }
     }
 
-    /// The same trait with its type arguments, each already mangled.
+    /// The same trait with its type arguments.
     #[must_use]
-    pub fn with_args(mut self, args: Vec<String>) -> Self {
+    pub fn with_args(mut self, args: Vec<FqTypeName>) -> Self {
         self.args = args;
         self
     }
@@ -2662,7 +2671,7 @@ impl FqTraitName {
     }
 
     #[must_use]
-    pub fn args(&self) -> &[String] {
+    pub fn args(&self) -> &[FqTypeName] {
         &self.args
     }
 
@@ -2682,14 +2691,16 @@ impl FqTraitName {
             TraitHead::Declared(head) => format!("{}/{}", head.module(), head.rendered()),
             TraitHead::Binder(name) => name.clone(),
         };
-        mangle_generic_name(&head, &self.args)
+        let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
+        mangle_generic_name(&head, &args)
     }
 
     /// The trait as source writes it: the declaring module dropped. Diagnostics
     /// only.
     #[must_use]
     pub fn to_display(&self) -> String {
-        mangle_generic_name(self.head.name(), &self.args)
+        let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
+        mangle_generic_name(self.head.name(), &args)
     }
 }
 

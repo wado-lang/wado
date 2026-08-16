@@ -3560,76 +3560,15 @@ impl TypeTable {
     /// [`Self::mangle_type_name`], every named user-defined head is qualified by
     /// its declaring `ModuleSource`, or two same-named types collapse onto one
     /// WIR identity and the second inherits the first's representation.
+    ///
+    /// One renderer, not two: the structured name is the identity and
+    /// [`crate::name::FqTypeName::to_mangled`] is the only thing that spells
+    /// one. A definition's name and a lookup's name therefore cannot disagree
+    /// — the failure WEP 2026-08-12 calls out, which a second mangler
+    /// reproducing this by hand is exactly how you get.
+    #[must_use]
     pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
-        match self.get(id) {
-            ResolvedType::Variant { def }
-            | ResolvedType::Enum { def }
-            | ResolvedType::Resource { def }
-            | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => {
-                format!("{}/{}", self.def_module(*def), self.def_name(*def))
-            }
-            // A struct mangles as a type argument by its rendered spelling:
-            // `TreeMap<String,i32>` and `TreeMap<String,String>` are distinct
-            // arguments, and naming both `TreeMap` collides the functions
-            // instantiated over them.
-            ResolvedType::Struct { def, type_args } => format!(
-                "{}/{}",
-                self.struct_head_module(*def),
-                self.struct_rendered_name(*def, type_args)
-            ),
-            ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.def_name(*def);
-                let module_source = self.def_module(*def);
-                // Qualify the BASE name of the instance and recursively
-                // qualify each type argument so the result is identical
-                // to the qualified name produced once the instance is
-                // substituted to a `Struct` by the monomorphizer.
-                // Without this, the mangled name flips at the
-                // substitution boundary and downstream registries see
-                // two distinct mangled names for the same logical type.
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.mangle_type_arg_for_generic(*t))
-                    .collect();
-                // A tuple is module-independent, so it carries no module prefix
-                // (its elements stay qualified).
-                if Self::is_tuple_type(name) {
-                    return crate::name::mangle_tuple_type(&args);
-                }
-                let unqualified =
-                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
-                format!("{module_source}/{unqualified}")
-            }
-            // Ref / MutRef are preserved in the mangled output so that
-            // `Box<T>` and `Box<&T>` (semantically distinct instantiations)
-            // map to distinct mangled names. Stripping refs here used to
-            // collapse two `InstantiationKey`s like `[List<char>]` and
-            // `[&List<char>]` to the same mangled function name, breaking
-            // `function_id_for` injectivity in `project.functions`
-            // (issue #1093). Sites that want the "base type name" use
-            // `mangle_type_name` (or `base_type_name`), which peels refs by
-            // delegating through `TypeNameInfo::Ref`.
-            ResolvedType::Ref(inner) => {
-                format!("&{}", self.mangle_type_arg_for_generic(*inner))
-            }
-            ResolvedType::MutRef(inner) => {
-                format!("&mut {}", self.mangle_type_arg_for_generic(*inner))
-            }
-            // A raw GC array must carry its element's *qualified* mangle.
-            // Delegating to `mangle_type_name` (the `_` arm) mangles the
-            // element unqualified, so `Array<Foo>` built from two modules'
-            // same-named structs collapses to one mangle — merging their
-            // otherwise-distinct `$value_copy$` helpers into a single helper
-            // whose one concrete signature then mismatches the other array's
-            // ref type (invalid Wasm). Structs / variants / generic instances
-            // are already module-qualified above; arrays must match.
-            ResolvedType::BuiltinArray(elem) => {
-                crate::name::mangle_builtin_array_type(&self.mangle_type_arg_for_generic(*elem))
-            }
-            // Primitives / functions delegate to `mangle_type_name`.
-            _ => self.mangle_type_name(id),
-        }
+        self.fq_type_name(id).to_mangled()
     }
 
     /// Module-qualifying analogue of

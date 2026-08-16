@@ -263,11 +263,15 @@ impl ImplHeader {
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
-    pub(super) fn fq_trait(&self, defs: &crate::defs::DefTable) -> Option<name::FqTraitName> {
+    pub(super) fn fq_trait(
+        &self,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> Option<name::FqTraitName> {
         let trait_type = self.trait_type.as_ref()?;
         match self.trait_key.as_ref()? {
             ImplTargetKey::Decl(def) => Some(
-                name::FqTraitName::declared(defs, *def).with_args(written_type_args(trait_type)),
+                name::FqTraitName::declared(resolutions.defs(), *def)
+                    .with_args(written_type_args(trait_type, resolutions)),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
             ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
@@ -650,9 +654,10 @@ fn push_module(
 /// instance is materialised in the receiver type's.
 fn index_impl_modules(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
-    defs: &crate::defs::DefTable,
+    resolutions: &crate::resolve::Resolutions,
     concrete_only: bool,
 ) -> ImplModuleIndex {
+    let defs = resolutions.defs();
     let mut out = ImplModuleIndex::default();
     for header in impl_headers.values() {
         // A bodiless derive (`impl Deserialize for Point;`) asks for an impl,
@@ -670,7 +675,7 @@ fn index_impl_modules(
         if concrete_only && !header.type_params.is_empty() {
             continue;
         }
-        let Some(fq_trait) = header.fq_trait(defs) else {
+        let Some(fq_trait) = header.fq_trait(resolutions) else {
             continue;
         };
         out.record(
@@ -1255,8 +1260,8 @@ impl TraitEnv {
             let key = resolutions.declared(bound.id)?;
             decl_index.contains(&key).then_some(key)
         };
-        let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
-        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
+        let trait_impl_modules = index_impl_modules(&impl_headers, resolutions, false);
+        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, resolutions, true);
 
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
         violations.extend(check_inherent_impl_collisions(defs, &impl_headers));
@@ -2436,34 +2441,69 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     }
 }
 
-/// [`get_type_name_static`] keeping the written type arguments
-/// (`Stream<u8>`), for the spellings a mangled name embeds.
-/// The type arguments a written trait position supplies, each rendered the
-/// way [`get_type_name_full_static`] renders one.
+/// The type arguments a written trait position supplies, structured.
 ///
-/// Read off the node that wrote them. Rendering the whole position and
-/// splitting the rendering back apart answers the same for a well-formed
-/// spelling and guesses for anything else, which is the failure this WEP is
-/// about.
-pub(super) fn written_type_args(ty: &ast::Type) -> Vec<String> {
+/// Read off the nodes that wrote them, and each argument's own reference site
+/// says which declaration it names — so an alias, a namespace prefix and a
+/// function-local item reach the head a call site's `TypeId` reaches. Rendering
+/// the whole position and splitting the rendering back apart answers the same
+/// for a well-formed spelling and guesses for anything else, which is the
+/// failure this WEP is about.
+pub(super) fn written_type_args(
+    ty: &ast::Type,
+    resolutions: &crate::resolve::Resolutions,
+) -> Vec<name::FqTypeName> {
     match ty {
-        ast::Type::Generic(generic) => generic.args.iter().map(get_type_name_full_static).collect(),
+        ast::Type::Generic(generic) => generic
+            .args
+            .iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect(),
         _ => Vec::new(),
     }
 }
 
-pub(super) fn get_type_name_full_static(ty: &ast::Type) -> String {
+/// One written type argument as the identity it names.
+///
+/// A name that reaches no declaration keeps its spelling — there is no identity
+/// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
+pub(super) fn written_type_arg(
+    ty: &ast::Type,
+    resolutions: &crate::resolve::Resolutions,
+) -> name::FqTypeName {
+    let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
+        args.iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect()
+    };
     match ty {
-        ast::Type::Generic(generic) => {
-            let args: Vec<String> = generic.args.iter().map(get_type_name_full_static).collect();
-            // `, `, matching `Elaborator::get_type_name_full`: both render the
-            // written trait type into one mangled segment, and a separator only
-            // one of them uses splits a nested `Pair<i32, i32>` into two names.
-            format!("{}<{}>", generic.name, args.join(", "))
+        ast::Type::Reference(inner) => {
+            written_type_arg(inner, resolutions).with_reference(name::RefKind::Shared)
         }
-        ast::Type::Reference(inner) => format!("&{}", get_type_name_full_static(inner)),
-        ast::Type::MutReference(inner) => format!("&mut {}", get_type_name_full_static(inner)),
-        other => get_type_name_static(other),
+        ast::Type::MutReference(inner) => {
+            written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
+        }
+        ast::Type::Tuple(elems) if elems.is_empty() => {
+            name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
+        }
+        ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
+        _ => {
+            let head = match crate::resolve::head_site(ty).map(|site| resolutions.get(site)) {
+                Some(crate::resolve::Resolution::Def(def)) => {
+                    name::FqTypeName::of_head(resolutions.defs(), def)
+                }
+                Some(crate::resolve::Resolution::Binder(_)) => {
+                    name::FqTypeName::binder(&get_type_name_static(ty))
+                }
+                Some(crate::resolve::Resolution::Unresolved) | None => {
+                    name::FqTypeName::builtin(&get_type_name_static(ty))
+                }
+            };
+            match ty {
+                ast::Type::Generic(generic) => head.with_args(nested(&generic.args)),
+                _ => head,
+            }
+        }
     }
 }
 

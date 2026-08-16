@@ -375,22 +375,32 @@ look up, no vantage to get wrong.
 
 ### 8. Mangled names are rendered once, never parsed
 
-Wasm needs a string, so one place produces one. `SymbolPath` is a structured
-function identity — the defining module, the receiver's `DefId` and type
-arguments, the trait's `DefId` and type arguments, the method name and its type
-arguments — and it renders on demand.
+Wasm needs a string, so one place produces one. `LocalMethodName` is the
+structured function identity — the defining module, the receiver and its type
+arguments, the trait and its type arguments, the method name and its type
+arguments, every head an identity or a shape — and it renders on demand.
 
 Every question a consumer answers today by splitting a mangled string
 (`split_local_method_name`, `split_trait_method_receiver`, `split_head_and_args`,
 `split_base_name`, `extract_local_name`, `rebase_monomorph_method`,
 `replace_type_name_in_mangled`) becomes a field access, and those functions are
 deleted rather than deprecated. `MangledName` is constructible only from a
-`SymbolPath`, so a declaration name cannot be promoted to a mangled one by hand.
+structured identity, so a declaration name cannot be promoted to a mangled one
+by hand.
 
-`FqTypeName`, `FqTraitName`, `Receiver`, `TypeHead`, `DeclName` and `DeclPath` are
-subsumed: their job was to keep a rendered string honest about which namespace it
-belonged to, and a `DefId` has no namespaces to confuse. `LocalMethodName`'s
-remaining stored spellings become derived renderings of the same `SymbolPath`.
+`FqTypeName`, `FqTraitName`, `Receiver`, `TypeHead` and `DeclName` are the
+pieces it is built from. Each keeps its own namespace honest — the mangled one,
+the declaration one — and each compares by the `DefId` its head carries, so
+being separate types costs nothing in identity.
+
+Nothing a name is built from is stored as text. `FqTraitName::args` and
+`LocalMethodName::method_type_args` hold `FqTypeName`s, and
+`trait_env::written_type_args` builds one per argument off the argument's own
+reference site — so an `impl Index<K>` header and a call site reach the same
+head, and a `From<Foo>` segment names the module that declares `Foo`. There is
+one renderer for a type argument: `TypeTable::mangle_type_arg_for_generic` *is*
+`FqTypeName::to_mangled`, so a definition's name and a lookup's name cannot be
+spelled by two functions that drift.
 
 Two rules survive from the structured-name work and still apply to the renderer:
 
@@ -483,17 +493,23 @@ lookup key, template admission, template lookup, the registration name, and the
 instantiation scan. Each was a distinct caller of the same first-wins index. A
 removed mechanism takes one fix.
 
-- [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
-      and the Enforcement bullet they contradict becomes true: a pass holding
-      only a spelling cannot obtain an identity. `DefTable` itself already has
-      no such lookup; these three are what remain.
-      `declared_in` is gone: its callers each held a pair standing in for
-      something they already had, and `TypeLookup`'s whole `*_in(name, module)`
-      family went with it.
+- [ ] `Resolutions::declaration_named` deleted, and the Enforcement bullet it
+      contradicts becomes true: a pass holding only a spelling cannot obtain an
+      identity. `DefTable` itself already has no such lookup; this one is what
+      remains.
 
-      `declaration_named` / `value_named` have six callers left, and they are
-      the hard tail — each is a pass that genuinely has no site, rather than one
-      that mislaid it:
+      `declared_in` and `value_named` are gone. `declared_in`'s callers each
+      held a pair standing in for something they already had, and
+      `TypeLookup`'s whole `*_in(name, module)` family went with it.
+      `value_named` — the same scope one tier longer, for a name in value or
+      pattern position — had one caller left, `find_struct_module_source`,
+      asking it about a struct-like spelling for which the case tier could not
+      answer anyway; the tier itself stays, inside the walk, where a value
+      site is what consults it.
+
+      `declaration_named` has five callers left, and they are the hard tail —
+      each is a pass that genuinely has no site, rather than one that mislaid
+      it:
 
       - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
         family. Every *written* type reference now reaches the family through
@@ -517,17 +533,18 @@ removed mechanism takes one fix.
         that held an identifier now read its site through `symbol_at`; what is
         left is reached from a mangled name or a synthesis target.
       - `find_struct_module_source` answers which module a spelling means, for
-        a synthesised lookup that never had a site.
+        a synthesised lookup that never had a site. It reaches the scope
+        through `decl_key_or_local` alone now.
       - `static_receiver_keys` files a static call under two vantages, because
         a receiver that arrived through a namespace prefix lost its qualifier.
         The call site's path still names the receiver with its owner segment,
         which the walk answers for under `ns$Type` — the dispatch chain has to
         carry that site down to here for it to be read.
-- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Four of the original
-      seven are left: `declaration_named` and `value_named` above, `imported_as`,
-      which answers what a module imported under a local name rather than what a
-      spelling means, and `cm_decl_in`, the Component Model boundary.
-      `decl_named_in`, `canonical_assoc_const_key` and `declare_for_test` are
+- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Three of the original
+      seven are left: `declaration_named` above, `imported_as`, which answers
+      what a module imported under a local name rather than what a spelling
+      means, and `cm_decl_in`, the Component Model boundary. `decl_named_in`,
+      `canonical_assoc_const_key`, `declare_for_test` and `value_named` are
       gone. When only the last two are left, the Enforcement bullet above is a
       statement about production code rather than a ratchet over it.
 
@@ -535,12 +552,3 @@ removed mechanism takes one fix.
       a declaration outside the pass that declares, and with the unit tests
       resting on them. A feature whose only unit test needs a hole cut in it is
       covered by `tests/fixtures/` instead, which exercises the real path.
-- [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
-      structured identity a name renders from, and nothing parses a rendering
-      back. What is left is that `FqTraitName::args` and
-      `LocalMethodName::method_type_args` are still `Vec<String>` — rendered
-      arguments stored as text. `written_type_args` can now build a structured
-      head for each argument, since the arguments' own reference sites are
-      resolved; what it costs is that `mangle_type_name` and
-      `FqTypeName::mangled` are two renderers, so the mangles have to be brought
-      together rather than assumed to agree.

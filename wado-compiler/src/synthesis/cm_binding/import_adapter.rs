@@ -1146,7 +1146,7 @@ impl<'a> AdapterBuilder<'a> {
                     .names
                     .index_value
                     .clone()
-                    .with_args(vec!["i32".to_string()]),
+                    .with_args(vec![crate::name::FqTypeName::builtin("i32")]),
             ),
             "index_value".to_string(),
         );

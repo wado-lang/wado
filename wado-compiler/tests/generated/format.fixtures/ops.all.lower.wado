@@ -5141,28 +5141,28 @@ pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/From<i64>::from"(
     return "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(value as i64);
 }
 
-pub fn "u64^core:prelude/traits.wado/TryFrom<u128>::try_from"(value: u128) -> Result<u64, ConvertError> {
+pub fn "u64^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/u128>::try_from"(value: u128) -> Result<u64, ConvertError> {
     if (value."core:prelude/int128.wado/u128::high"() != 0) {
         return Result<u64, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for u64", used: 26 }));
     }
     return Result<u64, ConvertError>::Ok(value."core:prelude/int128.wado/u128::low"());
 }
 
-pub fn "i64^core:prelude/traits.wado/TryFrom<u128>::try_from"(value: u128) -> Result<i64, ConvertError> {
+pub fn "i64^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/u128>::try_from"(value: u128) -> Result<i64, ConvertError> {
     if ((value."core:prelude/int128.wado/u128::high"() != 0) || (value."core:prelude/int128.wado/u128::low"() > 9223372036854775807 as u64)) {
         return Result<i64, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for i64", used: 26 }));
     }
     return Result<i64, ConvertError>::Ok(value."core:prelude/int128.wado/u128::low"() as i64);
 }
 
-pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/TryFrom<u128>::try_from"(value: u128) -> Result<i128, ConvertError> {
+pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/u128>::try_from"(value: u128) -> Result<i128, ConvertError> {
     if (value."core:prelude/int128.wado/u128::high"() > 9223372036854775807 as u64) {
         return Result<i128, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for i128", used: 27 }));
     }
     return Result<i128, ConvertError>::Ok("core::prelude/int128.wado::core:prelude/int128.wado/i128::from_u128"(value));
 }
 
-pub fn "i64^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Result<i64, ConvertError> {
+pub fn "i64^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/i128>::try_from"(value: i128) -> Result<i64, ConvertError> {
     let min: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(-9223372036854775808 as i64);
     let max: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(9223372036854775807 as i64);
     if !{
@@ -5174,21 +5174,21 @@ pub fn "i64^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Re
     return Result<i64, ConvertError>::Ok(value."core:prelude/int128.wado/i128::low"() as i64);
 }
 
-pub fn "u64^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Result<u64, ConvertError> {
+pub fn "u64^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/i128>::try_from"(value: i128) -> Result<u64, ConvertError> {
     if (value."core:prelude/int128.wado/i128::high"() != 0) {
         return Result<u64, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for u64", used: 26 }));
     }
     return Result<u64, ConvertError>::Ok(value."core:prelude/int128.wado/i128::low"());
 }
 
-pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Result<u128, ConvertError> {
+pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/i128>::try_from"(value: i128) -> Result<u128, ConvertError> {
     if value."core:prelude/int128.wado/i128::is_negative"() {
         return Result<u128, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for u128", used: 27 }));
     }
     return Result<u128, ConvertError>::Ok("core::prelude/int128.wado::core:prelude/int128.wado/u128::from_i128"(value));
 }
 
-pub fn "f64^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Result<f64, ConvertError> {
+pub fn "f64^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/i128>::try_from"(value: i128) -> Result<f64, ConvertError> {
     let max: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(9007199254740992);
     let min: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_pair"(18437736874454810624, -1);
     if !{
@@ -5200,7 +5200,7 @@ pub fn "f64^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Re
     return Result<f64, ConvertError>::Ok(value."core:prelude/int128.wado/i128::low"() as i64 as f64);
 }
 
-pub fn "f32^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Result<f32, ConvertError> {
+pub fn "f32^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/i128>::try_from"(value: i128) -> Result<f32, ConvertError> {
     let max: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_i64"(16777216);
     let min: i128 = "core::prelude/int128.wado::core:prelude/int128.wado/i128::from_pair"(18446744073692774400, -1);
     if !{
@@ -5212,7 +5212,7 @@ pub fn "f32^core:prelude/traits.wado/TryFrom<i128>::try_from"(value: i128) -> Re
     return Result<f32, ConvertError>::Ok(value."core:prelude/int128.wado/i128::low"() as i64 as f32);
 }
 
-pub fn "f64^core:prelude/traits.wado/TryFrom<u128>::try_from"(value: u128) -> Result<f64, ConvertError> {
+pub fn "f64^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/u128>::try_from"(value: u128) -> Result<f64, ConvertError> {
     let max: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(9007199254740992);
     if (value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&max) == Ordering::Greater) {
         return Result<f64, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for f64", used: 26 }));
@@ -5220,7 +5220,7 @@ pub fn "f64^core:prelude/traits.wado/TryFrom<u128>::try_from"(value: u128) -> Re
     return Result<f64, ConvertError>::Ok(value."core:prelude/int128.wado/u128::low"() as f64);
 }
 
-pub fn "f32^core:prelude/traits.wado/TryFrom<u128>::try_from"(value: u128) -> Result<f32, ConvertError> {
+pub fn "f32^core:prelude/traits.wado/TryFrom<core:prelude/int128.wado/u128>::try_from"(value: u128) -> Result<f32, ConvertError> {
     let max: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(16777216);
     if (value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Ord::cmp"(&max) == Ordering::Greater) {
         return Result<f32, ConvertError>::Err("core::prelude/traits.wado::core:prelude/traits.wado/ConvertError::new"(String { repr: packed"value out of range for f32", used: 26 }));

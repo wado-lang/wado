@@ -2867,9 +2867,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let final_return_type = return_type;
 
             // Build method_info with is_type_param_receiver = true
-            let method_type_arg_names: Vec<String> = method_type_args
+            let method_type_arg_names: Vec<FqTypeName> = method_type_args
                 .iter()
-                .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
                 FqTypeName::binder(type_param_name),

@@ -2122,7 +2122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => vec![],
                         };
                         let Some(trait_key) = header
-                            .fq_trait(self.tysys.resolutions.defs())
+                            .fq_trait(&self.tysys.resolutions)
                             .and_then(|t| t.canonical())
                         else {
                             continue;
@@ -2241,7 +2241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 if bounds_ok {
                     let Some(trait_key) = header
-                        .fq_trait(self.tysys.resolutions.defs())
+                        .fq_trait(&self.tysys.resolutions)
                         .and_then(|t| t.canonical())
                     else {
                         continue;

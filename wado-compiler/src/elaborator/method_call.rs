@@ -1001,9 +1001,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Convert method type args to string names for method_info
         // Use inferred type args if available, otherwise use explicit type args
-        let method_type_arg_names: Vec<String> = method_type_args
+        let method_type_arg_names: Vec<FqTypeName> = method_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
 
         // Build method_info with base struct name, then apply impl and method type args
@@ -2140,9 +2140,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
 
-        let method_type_arg_names: Vec<String> = method_type_args
+        let method_type_arg_names: Vec<FqTypeName> = method_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
         let impl_only_type_arg_names: Vec<FqTypeName> = struct_type_args
             .iter()
@@ -2268,9 +2268,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .fq_type_name(receiver_type_id);
-        let method_type_arg_names: Vec<String> = method_type_args
+        let method_type_arg_names: Vec<FqTypeName> = method_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
         let method_info = LocalMethodName::new(
             self.tysys.fq_receiver_head(receiver_type_id),
@@ -2446,7 +2446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .impl_headers
                     .get(&(b.module.clone(), b.ast_id))?;
                 Some((
-                    header.fq_trait(self.tysys.resolutions.defs())?,
+                    header.fq_trait(&self.tysys.resolutions)?,
                     b.param.clone(),
                     b.module.clone(),
                     b.bounds.clone(),
@@ -3165,7 +3165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // names the declaration alone.
         let resolve_trait_name =
             |header: &super::trait_env::ImplHeader| -> Option<crate::name::FqTraitName> {
-                let fq = header.fq_trait(self.tysys.resolutions.defs())?;
+                let fq = header.fq_trait(&self.tysys.resolutions)?;
                 Some(if is_from_or_try_from(fq.base_name()) {
                     fq
                 } else {

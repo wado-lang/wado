@@ -728,11 +728,6 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
          this.",
     ),
     (
-        "value_named",
-        "the same lookup one tier longer, for a name written in value or \
-         pattern position",
-    ),
-    (
         "imported_as",
         "answers the import tier alone, for a caller to whom the *aliasing* is \
          the question — the one import fact that is not a scope lookup",
