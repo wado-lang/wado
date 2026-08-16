@@ -329,6 +329,28 @@ fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
     buf.push(':');
 }
 
+/// The indented twins, on the same split so a constant key folds there too.
+#[inline(never)]
+fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    write_pretty_newline_and_indent(buf, indent, depth);
+    buf.push('"');
+    buf.push_str(name);
+    buf.push_str(&"\": ");
+}
+
+#[inline(never)]
+fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    write_pretty_newline_and_indent(buf, indent, depth);
+    write_escaped_string_slow(buf, name);
+    buf.push_str(&": ");
+}
+
 impl SerializeStruct for JsonStructSerializer {
     // Inlined so a derivation's constant wire key reaches `json_escape_free`,
     // which folds at compile time and leaves only `write_plain_key`.
@@ -575,13 +597,13 @@ impl SerializeMap for PrettyJsonMapSerializer {
 }
 
 impl SerializeStruct for PrettyJsonStructSerializer {
+    #[inline]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.push_str(&",");
+        if json_escape_free(name) {
+            write_pretty_plain_key(self.buf, name, self.count, self.indent, self.depth);
+        } else {
+            write_pretty_escaping_key(self.buf, name, self.count, self.indent, self.depth);
         }
-        write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
-        write_escaped_string(self.buf, name);
-        self.buf.push_str(&": ");
         let mut ser = PrettyJsonSerializer {
             buf: self.buf,
             indent: self.indent,
