@@ -11,13 +11,15 @@
 //
 // `byte_sum` is `#[inline(never)]` so the call (and its literal argument)
 // survives to `const_object_globalization`, instead of the literal getting
-// substituted into an inlined copy and constant-folded away entirely.
+// substituted into an inlined copy and constant-folded away entirely. The
+// opaque `extra` keeps the call itself off the constant path, so what the pass
+// has to hoist is the borrowed literal rather than the whole result.
 
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
-fn byte_sum(s: &String) -> i32 {
-    let mut total = 0;
+fn byte_sum(s: &String, extra: i32) -> i32 {
+    let mut total = extra;
     for let i of 0..<s.len() {
         total = total + s.get_byte_unchecked(i) as i32;
     }
@@ -26,7 +28,7 @@ fn byte_sum(s: &String) -> i32 {
 
 export fn run() with Stdout {
     // 'h'+'e'+'l'+'l'+'o' = 104+101+108+108+111 = 532.
-    println(`${byte_sum(&"hello")}`);
+    println(`${byte_sum(&"hello", builtin::black_box(0))}`);
 }
 
 __DATA__

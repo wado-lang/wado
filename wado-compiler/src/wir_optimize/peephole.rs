@@ -438,6 +438,21 @@ fn try_fold_wir_to_bool(instr: &WirInstr) -> Option<bool> {
 
 /// Replace an `If` with a constant condition by the surviving branch.
 fn try_eliminate_const_if(instr: &mut WirInstr) -> bool {
+    // A `select` this pass produced is decidable too, and a condition can
+    // become constant a round after the select replaced the branch — the arms
+    // are pure and trap-free by construction, so dropping one is free.
+    if let WirInstr::Select {
+        condition,
+        if_true,
+        if_false,
+        ..
+    } = instr
+        && let Some(const_val) = try_fold_wir_to_bool(condition)
+    {
+        let taken = if const_val { if_true } else { if_false };
+        *instr = std::mem::replace(taken.as_mut(), WirInstr::Nop);
+        return true;
+    }
     let WirInstr::If {
         condition,
         then_body,

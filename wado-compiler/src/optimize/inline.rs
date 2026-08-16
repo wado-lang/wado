@@ -561,7 +561,10 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
         let decided_arms: Vec<BlockId> = match node {
             NodeRef::Expr(e) => match &body.exprs[e].kind {
                 ExprKind::Call { func_id, args, .. } => {
-                    if view.loopy.get(func_id.index()).copied().unwrap_or(false)
+                    // Both halves: the engine has to be able to run it away
+                    // (`foldable`), and there has to be a loop in what goes.
+                    if view.foldable.get(func_id.index()).copied().unwrap_or(false)
+                        && view.loopy.get(func_id.index()).copied().unwrap_or(false)
                         && args.iter().all(|a| walk.folds(a.expr))
                     {
                         return true;
@@ -646,13 +649,25 @@ fn constant_locals(body: &Body) -> IndexSet<u32> {
                     }
                 }
             }
-            NodeRef::Expr(e) => {
-                if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-                    && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                {
-                    written.insert(*index);
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                // A write anywhere in the place, not just to the bare local:
+                // `p.x = f()` leaves `p` runtime-valued too.
+                ExprKind::Assign { target, .. } => {
+                    if let Some(root) = place_root_local(body, *target) {
+                        written.insert(root);
+                    }
                 }
-            }
+                // Handing a local out mutably is a write the body does not show.
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: inner,
+                } => {
+                    if let Some(root) = inner.as_expr().and_then(|x| place_root_local(body, x)) {
+                        written.insert(root);
+                    }
+                }
+                _ => {}
+            },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
     }
@@ -661,6 +676,23 @@ fn constant_locals(body: &Body) -> IndexSet<u32> {
         .filter(|&(idx, is_const)| is_const && !written.contains(&idx))
         .map(|(idx, _)| idx)
         .collect()
+}
+
+/// The local a place expression is rooted at, through field, index and deref
+/// steps: `p.inner[i]` is rooted at `p`.
+fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::FieldAccess { expr: inner, .. }
+        | ExprKind::VariantPayload { expr: inner, .. }
+        | ExprKind::Unary { expr: inner, .. } => {
+            inner.as_expr().and_then(|x| place_root_local(body, x))
+        }
+        ExprKind::Index { expr: inner, .. } => {
+            inner.as_expr().and_then(|x| place_root_local(body, x))
+        }
+        _ => None,
+    }
 }
 
 /// Whether an argument reaches the callee as a compile-time constant — the
@@ -752,89 +784,51 @@ fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
     out
 }
 
-/// Whether this body is only ever inlinable *folded* — over budget as written,
-/// under it once its parameters arrive constant, and shrinking by a loop when
-/// they do.
-///
-/// Its constant may not have arrived yet: a `Serialize` derivation computes its
-/// wire key with a compile-time call, so the key is a literal only after a few
-/// rounds of folding. Until then the body reads as an ordinary over-budget
-/// callee, and bottom-up inlining fills it with its own leaves — after which it
-/// is over budget folded too, and every caller loses the fold. Answering this
-/// optimistically is what lets the engine hold the option open, and is the job
-/// a stdlib `#[inline(never)]` on each leaf otherwise does by hand.
-fn is_fold_sensitive(
-    func: &NirFunction,
-    type_table: &TypeTable,
-    inline_threshold: usize,
-    descriptors: &[FunctionRef],
-    foldable: &[bool],
-    loopy: &[bool],
-) -> bool {
-    if func.inline_hint == InlineHint::Never {
-        return false;
-    }
-    let Some(body) = &func.body else {
-        return false;
-    };
-    if inline_cost(body, type_table, descriptors) <= inline_threshold {
-        return false;
-    }
-    let params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
-    let view = ConstView {
-        params: &params,
-        foldable,
-        loopy,
-    };
-    if inline_cost_folded(body, type_table, descriptors, &view) > inline_threshold {
-        return false;
-    }
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        consts: Some(&view),
-    };
-    fold_drops_loop(body, &view, &walk)
+/// What the engine decides about one callee.
+#[derive(Clone, Copy, Default)]
+struct Verdict {
+    /// Splice it at its call sites.
+    inline: bool,
+    /// Do not splice anything *into* it. Set when the body is over budget as
+    /// written and under it with its parameters assumed constant: bottom-up
+    /// order would otherwise fill it with its own leaves and put it back over,
+    /// costing every caller the fold — and the constant deciding that fold can
+    /// arrive rounds later than the leaves do, so the hold has to precede the
+    /// decision it protects. That hold is what an `#[inline(never)]` on each
+    /// leaf otherwise applies by hand.
+    hold: bool,
 }
 
-/// Why a callee was admitted, which decides whether it may itself receive
-/// inlining this round. See [`Admission::WhenFolded`].
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Admission {
-    /// Its body fits the budget as written.
-    AsWritten,
-    /// Only its *folded* body fits. Splicing anything into it first pushes it
-    /// back over and costs every caller the fold, so the engine leaves it alone
-    /// this round; its own callees reach the copies it leaves behind instead.
-    /// Bottom-up inlining is what an `#[inline(never)]` on the leaf otherwise
-    /// has to prevent by hand.
-    WhenFolded,
-}
-
-/// Check if a function is eligible for inlining.
-fn is_inline_eligible(
+/// Decide a callee's fate: whether to splice it, and whether to leave it
+/// alone so it stays spliceable. Both answers come from here so they cannot
+/// disagree about the budget or about which callees are eligible at all.
+/// Decide a callee's fate: whether to splice it, and whether to leave it
+/// alone so it stays spliceable. Both answers come from here so they cannot
+/// disagree about the budget or about which callees are eligible at all.
+fn classify_callee(
     func: &NirFunction,
     const_view: Option<&ConstView<'_>>,
     recursive_functions: &IndexSet<FuncId>,
     type_table: &TypeTable,
     inline_threshold: usize,
     descriptors: &[FunctionRef],
-) -> Option<Admission> {
+    foldable: &[bool],
+    loopy: &[bool],
+) -> Verdict {
     // #[inline(never)] unconditionally prevents inlining
     if func.inline_hint == InlineHint::Never {
-        return None;
+        return Verdict::default();
     }
 
     // Must have a body
     let Some(body) = &func.body else {
-        return None;
+        return Verdict::default();
     };
 
     // Don't inline CM binding functions - they are ABI bridges between
     // Wado GC types and CM linear memory that must remain as separate functions
     if func.is_cm_binding {
-        return None;
+        return Verdict::default();
     }
 
     // Not recursive — keyed on the function's `FuncId` (its store position),
@@ -845,19 +839,19 @@ fn is_inline_eligible(
     // and expand without bound (a compiler stack overflow at higher iteration
     // counts).
     if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
-        return None;
+        return Verdict::default();
     }
 
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body, a non-adapter, and non-recursion, all checked above)
     if func.inline_hint == InlineHint::Always {
-        return Some(Admission::AsWritten);
+        return Verdict { inline: true, hold: false };
     }
 
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if type_table.is_never(func.return_type) {
-        return None;
+        return Verdict::default();
     }
 
     // The threshold applies even at a single call site: if that site sits inside
@@ -873,26 +867,46 @@ fn is_inline_eligible(
 
     let plain = inline_cost(body, type_table, descriptors);
     if plain <= effective_threshold {
-        return Some(Admission::AsWritten);
+        return Verdict {
+            inline: true,
+            hold: false,
+        };
     }
-    // Second chance on the cost the caller actually pays: a body whose branches
-    // a constant argument decides, or whose sub-call it folds, is smaller once
-    // spliced than as written. Admitting on that alone licenses every marginal
-    // fold, which measured -9% on cbor-twitter — so the fold must also be worth
-    // the duplication, which is what deleting a loop, or half the body, says.
-    let view = const_view?;
-    let folded = inline_cost_folded(body, type_table, descriptors, view);
-    if folded > effective_threshold {
-        return None;
-    }
-    let walk = CostWalk {
-        body,
-        type_table,
-        descriptors,
-        consts: Some(view),
+
+    // Over budget as written. It may still be worth splicing once the caller's
+    // constants have folded it — and if it might be, it has to be protected
+    // from its own leaves in the meantime.
+    let pays_off = |view: &ConstView<'_>| {
+        let folded = inline_cost_folded(body, type_table, descriptors, view);
+        if folded > effective_threshold {
+            return false;
+        }
+        let walk = CostWalk {
+            body,
+            type_table,
+            descriptors,
+            consts: Some(view),
+        };
+        // Fitting folded is not enough on its own: admitting every marginal
+        // fold measured -9% on cbor-twitter, more inlining and none of it
+        // paying. The fold must also delete a loop — the model prices one at
+        // three instructions, and it is worth however many times it spins — or
+        // halve the body.
+        folded * 2 <= plain || fold_drops_loop(body, view, &walk)
     };
-    let worthwhile = folded * 2 <= plain || fold_drops_loop(body, view, &walk);
-    worthwhile.then_some(Admission::WhenFolded)
+
+    // The hold asks optimistically, with every parameter assumed constant: a
+    // derivation computes its wire key with a compile-time call, so the key is
+    // a literal only after several rounds of folding, and by the time the real
+    // view exists the leaves have already been spliced in.
+    let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
+    let hold = pays_off(&ConstView {
+        params: &all_params,
+        foldable,
+        loopy,
+    });
+    let inline = const_view.is_some_and(pays_off);
+    Verdict { inline, hold }
 }
 
 /// Detect recursive functions using call graph analysis.
@@ -1052,9 +1066,8 @@ pub fn inline_functions(
         .map(|f| f.borrow().body.as_ref().is_some_and(body_has_loop))
         .collect();
 
-    // Callees admitted only on their folded cost, which must not receive
-    // inlining this round — see `Admission::WhenFolded`.
-    let mut frozen: IndexSet<FuncId> = IndexSet::default();
+    // Callees that must not receive inlining this round — see `Verdict::hold`.
+    let mut held: IndexSet<FuncId> = IndexSet::default();
 
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
@@ -1067,27 +1080,22 @@ pub fn inline_functions(
                 foldable: &foldable,
                 loopy: &loopy,
             });
-        if let Some(id) = func.id
-            && is_fold_sensitive(
-                &func,
-                &type_table,
-                inline_threshold,
-                &descriptors,
-                &foldable,
-                &loopy,
-            )
-        {
-            frozen.insert(id);
-        }
-        let admission = is_inline_eligible(
+        let verdict = classify_callee(
             &func,
             view.as_ref(),
             &recursive_functions,
             &type_table,
             inline_threshold,
             &descriptors,
+            &foldable,
+            &loopy,
         );
-        if admission.is_some() {
+        if verdict.hold
+            && let Some(id) = func.id
+        {
+            held.insert(id);
+        }
+        if verdict.inline {
             let id = func.id.expect("func_id assigned at lower");
             let string_key = (func.module_source.clone(), func.name.clone());
             // Get the strings used by this function
@@ -1122,7 +1130,7 @@ pub fn inline_functions(
 
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
-        if frozen.contains(&fid) {
+        if held.contains(&fid) {
             continue;
         }
         let caller_idx = fid.index();
