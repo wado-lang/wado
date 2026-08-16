@@ -20,6 +20,22 @@ const DEFAULT_MEMORY: wasm_encoder::MemoryType = wasm_encoder::MemoryType {
     page_size_log2: None,
 };
 
+/// Log2 of the default wasm page size, 64 KiB.
+const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
+
+/// Turn a memory the asset described into the request it becomes once the host
+/// hands over its own: keep the minimum the asset needs, and drop the ceiling
+/// and the spelling of the page size. Both belong to the memory the asset no
+/// longer has, and an import declaring them cannot be satisfied by a host
+/// memory that leaves them open.
+fn shared_memory(mut memory: wasm_encoder::MemoryType) -> wasm_encoder::MemoryType {
+    memory.maximum = None;
+    if memory.page_size_log2 == Some(DEFAULT_PAGE_SIZE_LOG2) {
+        memory.page_size_log2 = None;
+    }
+    memory
+}
+
 pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     assert_eq!(
         asset.funcs.len(),
@@ -45,11 +61,16 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
     // it disturbs nothing else.
     let mut imports = wasm_encoder::ImportSection::new();
     for import in &asset.imports {
-        remap.parse_import(&mut imports, *import)?;
+        if let wasmparser::TypeRef::Memory(memory) = import.ty {
+            let memory = shared_memory(remap.memory_type(memory)?);
+            imports.import(import.module, import.name, memory);
+        } else {
+            remap.parse_import(&mut imports, *import)?;
+        }
     }
     if asset.imported.memories == 0 {
         let memory = match asset.memory {
-            Some(memory) => remap.memory_type(memory)?,
+            Some(memory) => shared_memory(remap.memory_type(memory)?),
             None => DEFAULT_MEMORY,
         };
         imports.import(opts.memory_import.0, opts.memory_import.1, memory);

@@ -281,14 +281,26 @@ pub struct WasmAsset {
 }
 
 impl WasmAsset {
-    /// The asset's own memory section minimum, in pages; 1 when it defines no
-    /// memory. Read by `wir_build` to size the memory the component shares.
+    /// The minimum, in pages, of the memory the asset asks for — defined or
+    /// imported; 1 when it has neither. Read by `wir_build` to size the memory
+    /// the component shares, so an asset written against `env.memory` counts
+    /// just as much as one defining its own.
     pub fn min_memory_pages(&self) -> u64 {
         for payload in wasmparser::Parser::new(0).parse_all(&self.bytes) {
-            if let Ok(wasmparser::Payload::MemorySection(mems)) = payload
-                && let Some(mem) = mems.into_iter().flatten().next()
-            {
-                return mem.initial;
+            match payload {
+                Ok(wasmparser::Payload::ImportSection(reader)) => {
+                    for import in reader.into_imports().flatten() {
+                        if let wasmparser::TypeRef::Memory(mem) = import.ty {
+                            return mem.initial;
+                        }
+                    }
+                }
+                Ok(wasmparser::Payload::MemorySection(mems)) => {
+                    if let Some(mem) = mems.into_iter().flatten().next() {
+                        return mem.initial;
+                    }
+                }
+                _ => {}
             }
         }
         1
@@ -569,8 +581,13 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
     out
 }
 
+/// Log2 of the default wasm page size, 64 KiB.
+const DEFAULT_PAGE_SIZE_LOG2: u32 = 16;
+
 /// An embedded asset is wired to the component's memory, so its own memory
-/// must have that memory's shape: 32-bit, unshared, default page size.
+/// must have that memory's shape: 32-bit, unshared, default page size. Its
+/// maximum needs no check — the rewrite to an import drops it, since the
+/// component's memory is the one that sets the ceiling.
 fn check_shared_memory_shape(
     source: &ModuleSource,
     mem: wasmparser::MemoryType,
@@ -591,7 +608,9 @@ fn check_shared_memory_shape(
                 .to_string(),
         });
     }
-    if mem.page_size_log2.is_some() {
+    // `None` and an explicit 64 KiB are the same shape; only a custom one is
+    // a memory the component cannot hand over.
+    if mem.page_size_log2.unwrap_or(DEFAULT_PAGE_SIZE_LOG2) != DEFAULT_PAGE_SIZE_LOG2 {
         return Err(LoadError::WasmImport {
             module_source: source.clone(),
             message: "Phase 1 wasm import requires the default page size; the asset shares the \

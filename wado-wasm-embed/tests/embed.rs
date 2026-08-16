@@ -130,10 +130,40 @@ fn a_defined_memory_becomes_an_import() {
         &["f"],
     );
     let memory = memory_import(&pruned).expect("memory import");
-    assert_eq!(memory.initial, 2);
-    assert_eq!(memory.maximum, Some(4), "the shape survives the rewrite");
+    assert_eq!(memory.initial, 2, "the minimum the asset needs is kept");
+    assert_eq!(
+        memory.maximum, None,
+        "the ceiling belongs to the memory the asset no longer has"
+    );
     assert!(!section_ids(&pruned).contains(&5), "the definition is gone");
     assert_eq!(exports(&pruned), ["f"], "the memory export is dropped");
+}
+
+/// An explicit 64 KiB page is the host's own shape spelled out; the import
+/// leaves it unsaid so it matches a host memory that does too.
+#[test]
+fn an_explicit_default_page_size_is_normalised_away() {
+    let pruned = prune(
+        r#"(module (memory 1 (pagesize 65536)) (func (export "f")))"#,
+        &["f"],
+    );
+    let memory = memory_import(&pruned).expect("memory import");
+    assert_eq!(memory.page_size_log2, None);
+}
+
+/// The same normalisation applies to an asset already written against the
+/// host's memory: a maximum it declares is a ceiling the host need not honour.
+#[test]
+fn an_existing_memory_imports_ceiling_is_dropped() {
+    let source = r#"
+        (module
+          (import "env" "memory" (memory 3 8))
+          (func (export "load") (result i32) (i32.load (i32.const 0))))
+    "#;
+    let pruned = prune(source, &["load"]);
+    let memory = memory_import(&pruned).expect("memory import");
+    assert_eq!(memory.initial, 3);
+    assert_eq!(memory.maximum, None);
 }
 
 #[test]
