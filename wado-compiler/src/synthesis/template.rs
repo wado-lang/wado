@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::{BlanketBound, BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
@@ -70,17 +70,15 @@ pub(super) struct FormatStdlibNames {
 }
 
 impl FormatStdlibNames {
-    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+    pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+        let items = type_table.compiler_items();
         let (_, _, left_name, left_index) = items.require_enum_case(CompilerItem::AlignmentLeft);
         let (_, _, center_name, center_index) =
             items.require_enum_case(CompilerItem::AlignmentCenter);
         let (_, _, right_name, right_index) = items.require_enum_case(CompilerItem::AlignmentRight);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
-            formatter_fq: {
-                let (module, name) = items.require_struct(CompilerItem::Formatter);
-                FqTypeName::declared(module, name)
-            },
+            formatter_fq: type_table.compiler_struct_fq_name(CompilerItem::Formatter),
             alignment: items.enum_name(CompilerItem::Alignment).to_string(),
             left_name: left_name.to_string(),
             left_index,
@@ -138,7 +136,7 @@ pub fn expand_templates(
     tt: &Rc<RefCell<TypeTable>>,
     trait_env: &Arc<TraitEnv>,
 ) {
-    let names = FormatStdlibNames::from_compiler_items(tt.borrow().compiler_items());
+    let names = FormatStdlibNames::from_type_table(&tt.borrow());
     let ctx = TemplateCtx {
         tt,
         module_src: module.module_source.clone(),
@@ -465,9 +463,8 @@ fn build_template_block(
 
     let formatter_type = {
         let def = tt
-            .borrow_mut()
-            .decl_named_in(&ctx.names.formatter, &ModuleSource::format())
-            .expect("the declaration this type names exists");
+            .borrow()
+            .require_compiler_item_def(crate::compiler_item::CompilerItem::Formatter);
         tt.borrow_mut()
             .make_struct(crate::tir::StructDef::Decl(def))
     };
@@ -821,9 +818,8 @@ fn build_formatter_expr(
     let pf = parsed.as_ref().unwrap();
     let alignment_type = {
         let def = tt
-            .borrow_mut()
-            .decl_named_in(&names.alignment, &ModuleSource::format())
-            .expect("the declaration this type names exists");
+            .borrow()
+            .require_compiler_item_def(crate::compiler_item::CompilerItem::Alignment);
         tt.borrow_mut().make_enum(def)
     };
     let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
@@ -980,10 +976,7 @@ fn peel_transparent_newtype(
                         .trait_def_of_fq(trait_name)
                         .is_none_or(|trait_| {
                             !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                                &Receiver::Type(FqTypeName::of_head(
-                                    tt.def_module(*def),
-                                    tt.def_name(*def),
-                                )),
+                                &Receiver::Type(FqTypeName::of_head(tt.defs(), *def)),
                                 trait_,
                             )
                         }) =>

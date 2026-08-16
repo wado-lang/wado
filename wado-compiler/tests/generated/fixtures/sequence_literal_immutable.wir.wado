@@ -44,23 +44,19 @@ type "functype//sequence_literal_immutable.wado/__cm_export__run" = fn();  // Ty
 
 type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(17)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(18)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(19)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(19)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(20)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -71,15 +67,19 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:sequence_literal_immutable.wado::__modules_initialized: bool = 0;
 global global:sequence_literal_immutable.wado::__const_obj_45: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
 
 fn "sequence_literal_immutable.wado/run"() with Stdout {
-    let __sroa___b_items_98: ref "core:prelude//List<i32>";
+    let handle: i32;
+    let packed: i64;
+    let rx_96: i32;
+    let tx_97: i32;
+    let __sroa___b_items_109: ref "core:prelude//List<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:sequence_literal_immutable.wado::__modules_initialized);
         cold_path;
@@ -93,9 +93,13 @@ fn "sequence_literal_immutable.wado/run"() with Stdout {
     let __array_clone_dst_7: ref Array<i32>;
     __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7);
     builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7);
-    __sroa___b_items_98 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
-    drop(struct.new "sequence_literal_immutable.wado//FrozenVec<i32>" { items: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<i32>; __array_clone_src_7 = __sroa___b_items_98.repr; let __array_clone_len_7: i32; __array_clone_len_7 = 2; let __array_clone_dst_7: ref Array<i32>; __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7); builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: 2 } });
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sequence-literal-immutable: ok"), used: 30 });
+    __sroa___b_items_109 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
+    drop(struct.new "sequence_literal_immutable.wado//FrozenVec<i32>" { items: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<i32>; __array_clone_src_7 = __sroa___b_items_109.repr; let __array_clone_len_7: i32; __array_clone_len_7 = 2; let __array_clone_dst_7: ref Array<i32>; __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7); builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: 2 } });
+    rx_96 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_97 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "sequence_literal_immutable.wado/__cm_binding__Stdout_write_via_stream"(rx_96);
+    "core:cli/write_to_stream"(tx_97, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sequence-literal-immutable: ok"), used: 30 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "sequence_literal_immutable.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -114,46 +118,43 @@ fn "sequence_literal_immutable.wado/__cm_export__run"() {
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {
-    let len: i32;
+    let len_3: i32;
     let new_repr: ref Array<u8>;
     let packed_9: i64;
     let ptr_10: i32;
     let raw_len_11: i32;
     let end_15: i32;
-    let packed_21: i64;
-    let ptr_22: i32;
-    let raw_len_23: i32;
-    let repr_25: ref Array<u8>;
-    len = message.used;
+    let len_18: i32;
+    let ptr_19: i32;
+    let packed_25: i64;
+    let ptr_26: i32;
+    let raw_len_27: i32;
+    let repr_29: ref Array<u8>;
+    let len_35: i32;
+    let ptr_36: i32;
+    len_3 = message.used;
     if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        end_15 = len + 1;
-        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9("core:rt/cm_lower_list_u8"(new_repr, 0, end_15 - 0)));
+        new_repr = builtin::array_new<u8>(len_3 + 1);
+        builtin::array_copy<u8>(new_repr, 0, message.repr, 0, len_3);
+        builtin::array_set_u8(new_repr, len_3, 10);
+        len_18 = local.tee end_15(len_3 + 1) - 0;
+        ptr_19 = "mem/realloc"(0, 0, 1, len_18);
+        "core:rt/gc_array_to_memory"(new_repr, 0, ptr_19, len_18);
+        ptr_10 = builtin::i32_wrap_i64(local.tee packed_9(builtin::i64_extend_i32_s(ptr_19) | (builtin::i64_extend_i32_s(len_18) << 32_i64)));
         raw_len_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
         "core:rt/cm_stream_write_drain"(tx, ptr_10, raw_len_11, 1);
         drop("mem/realloc"(ptr_10, raw_len_11, 1, 0));
     } else {
-        repr_25 = message.repr;
-        ptr_22 = builtin::i32_wrap_i64(local.tee packed_21("core:rt/cm_lower_list_u8"(repr_25, 0, len - 0)));
-        raw_len_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
-        "core:rt/cm_stream_write_drain"(tx, ptr_22, raw_len_23, 1);
-        drop("mem/realloc"(ptr_22, raw_len_23, 1, 0));
+        repr_29 = message.repr;
+        len_35 = len_3 - 0;
+        ptr_36 = "mem/realloc"(0, 0, 1, len_35);
+        "core:rt/gc_array_to_memory"(repr_29, 0, ptr_36, len_35);
+        ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
+        raw_len_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
+        "core:rt/cm_stream_write_drain"(tx, ptr_26, raw_len_27, 1);
+        drop("mem/realloc"(ptr_26, raw_len_27, 1, 0));
     }
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:cli/println"(message) with Stdout {
-    let handle: i32;
-    let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "sequence_literal_immutable.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:cli/write_to_stream"(tx_7, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
@@ -167,13 +168,6 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l2;
         };
     };
-}
-
-fn "core:rt/cm_lower_list_u8"(data, start, len) {
-    let ptr: i32;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(data, start, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:rt/cm_await_blocked"(handle) {

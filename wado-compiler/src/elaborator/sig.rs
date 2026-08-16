@@ -43,13 +43,12 @@ pub(crate) struct Signatures {
     /// `(declared type, is_mut)`.
     pub(crate) globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>,
 
-    /// Impl-associated constants, keyed by canonical identity
-    /// `(type-declaring module, "Type::CONST")` → `(impl-declaring module,
-    /// declared type, value expr)`. Canonical keys cannot collide across
-    /// modules; consumers canonicalize the queried prefix the same way the
-    /// decl pass did.
+    /// Impl-associated constants, keyed by `(owning type declaration, constant
+    /// name)` → `(impl-declaring module, declared type, value expr)`. The
+    /// owner is an identity, so two modules' same-named types cannot share an
+    /// entry.
     pub(crate) associated_constants:
-        IndexMap<(ModuleSource, String), (ModuleSource, TypeId, crate::ast::Expr)>,
+        IndexMap<(crate::defs::DefId, String), (ModuleSource, TypeId, crate::ast::Expr)>,
 
     /// Per-module `__DATA__` section contents; modules without one have no
     /// entry.
@@ -89,13 +88,13 @@ impl Signatures {
         self.globals.get(module)?.get(name).copied()
     }
 
-    /// The associated constant at canonical identity `(module, key)`.
+    /// The constant `name` declared on the type `owner`.
     pub(crate) fn associated_constant(
         &self,
-        module: &ModuleSource,
-        key: String,
+        owner: crate::defs::DefId,
+        name: &str,
     ) -> Option<&(ModuleSource, TypeId, crate::ast::Expr)> {
-        self.associated_constants.get(&(module.clone(), key))
+        self.associated_constants.get(&(owner, name.to_string()))
     }
 
     /// The `__DATA__` section of `module`, if it declares one.

@@ -775,20 +775,14 @@ fn build_dispatch_wrapper_function(
         // effect-check.
         let string_type_id = {
             let tt = type_table.borrow();
-            let (string_module, string_struct_name) =
-                tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);
-            {
-                let def = tt
-                    .decl_named_in(&string_struct_name, &string_module)
-                    .expect("the declaration this type names exists");
-                tt.find_struct_type(crate::tir::StructDef::Decl(def))
-            }
-            .unwrap_or_else(|| {
-                panic!(
-                    "core:prelude/string.wado String type missing from \
+            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::String);
+            tt.find_struct_type(crate::tir::StructDef::Decl(def))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "core:prelude/string.wado String type missing from \
                          the package type table at effect-dispatch synthesis"
-                )
-            })
+                    )
+                })
         };
         let message = TirExpr::new(
             TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),
@@ -940,7 +934,7 @@ fn build_resource_fallback_call(
     let _ = type_table;
     // The receiver is the resource declaration, so both the base head and the
     // instantiation label carry the module that declares it.
-    let label_fq = crate::name::FqTypeName::declared(effect_module, label);
+    let label_fq = crate::name::FqTypeName::shape(effect_module, label);
     let mangled_method_name = crate::name::MethodName::format_local(&label_fq, None, &op.name);
 
     // The label is the receiver: a rendered name has nowhere to be stored now,

@@ -35,7 +35,7 @@ const OPTION_NONE: u32 = 1;
 /// The value that fills a slot the live case does not use. Resolved once, when
 /// the type table is in hand, so the rewrite never has to consult it again.
 #[derive(Clone, Copy)]
-enum Pad {
+pub(super) enum Pad {
     Int(TypeId),
     Float(TypeId),
     Bool,
@@ -1984,6 +1984,18 @@ fn wrap_in_some(body: &mut Body, payload: Operand, slot_type: TypeId, span: Span
 /// constant this pass mints therefore goes through `alloc_unshared`.
 fn constant(body: &mut Body, kind: ValueKind, type_id: TypeId) -> Operand {
     Operand::Value(body.values.alloc_unshared(kind, type_id))
+}
+
+/// The zero a pass declaring a slot local initialises it with before it can
+/// assign the real value at each producer. `None` where the type has no NIR
+/// literal to stand in, or where the slot rule would wrap it rather than pad it.
+/// Materialise it through the rewrite engine, never [`pad_value`], so the
+/// engine's per-node bookkeeping grows with the arena.
+pub(super) fn zero_pad(type_id: TypeId, type_table: &TypeTable) -> Option<Pad> {
+    match slot_shape(type_id, type_table)? {
+        SlotShape::Direct(pad) => Some(pad),
+        SlotShape::Absent | SlotShape::Wrapped => None,
+    }
 }
 
 /// The value that fills a slot the live case does not use. Never read — every

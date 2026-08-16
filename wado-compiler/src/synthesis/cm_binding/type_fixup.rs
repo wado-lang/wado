@@ -36,8 +36,7 @@ fn replace_wasi_derived_type_recursive(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     let old_type = {
         let mut tt = type_table.borrow_mut();
         cm_type_to_type_id(wasi_type, &mut tt, cm_interface_registry, wasi_package)
@@ -605,8 +604,7 @@ pub(super) fn rewrite_calls_in_block(
 ) {
     // The stdlib-name snapshot is invariant across the whole walk; build it
     // once here instead of once per expression node in `rewrite_calls_in_expr`.
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
     CallRewriteWalker {
         adapters,
         entry_source,

@@ -1,0 +1,29 @@
+// A chain of local newtypes resolves however it is ordered. Regression test
+// for the hoisting fixpoint binding a dependent to the base's placeholder:
+// a round that failed still registered the newtype against an `UNKNOWN` base,
+// and the next round froze that stale registration into its dependent, so a
+// reverse-ordered chain of three or more links never converged.
+
+test "a reverse-ordered newtype chain resolves" {
+    type A = B;
+    type B = C;
+    type C = i32;
+    let v: A = 1;
+    assert v == 1;
+}
+
+test "a forward-ordered newtype chain resolves" {
+    type C = i32;
+    type B = C;
+    type A = B;
+    let v: A = 2;
+    assert v == 2;
+}
+
+test "a newtype chain resolves out of order" {
+    type A = B;
+    type C = i32;
+    type B = C;
+    let v: A = 3;
+    assert v == 3;
+}

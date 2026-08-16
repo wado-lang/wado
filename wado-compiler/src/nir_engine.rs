@@ -655,6 +655,16 @@ impl<'a> Engine<'a> {
         self.vg_type_table
     }
 
+    /// Build the persisted value graph now, for a caller that has already set
+    /// the real alias sets.
+    ///
+    /// [`Self::scoped_const_reads`] only grows a graph that already exists, so
+    /// whether a body has one is otherwise incidental — it depends on whether
+    /// some earlier pass happened to run a value query on it.
+    pub fn build_value_graph_now(&mut self) {
+        self.ensure_value_graph();
+    }
+
     fn ensure_value_graph(&mut self) {
         if self.body.value_graph.is_some() {
             return;

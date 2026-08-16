@@ -104,6 +104,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default();
         let mut resolved_effects = self.resolve_effects(&[interface_name], &effect_ids);
         let effect = resolved_effects.pop();
+        // The `with` clause names the effect in this module, and the walk
+        // answered for that site — so the declaration comes from the site
+        // rather than from asking a module about a spelling.
+        let effect_decl = effect_ty
+            .id()
+            .and_then(|id| self.tysys.resolutions.declared(id));
 
         // The name must point at an actual effect or resource
         // declaration, not a regular trait or arbitrary identifier. Both
@@ -115,25 +121,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // polymorphic effect parameter.
         if let Some(eff) = &effect {
             match eff {
-                EffectRef::Concrete {
-                    name,
-                    module_source,
-                } => {
-                    // `EffectRef::Concrete` already carries the module that
-                    // declares it, so this asks that module about its own
-                    // declaration and then asks the declaration what it is —
-                    // rather than building a key and probing two indexes to
-                    // find out which kind it belongs to.
-                    let handles = self
-                        .tysys
-                        .resolutions
-                        .declared_in(module_source, name)
-                        .is_some_and(|def| {
-                            matches!(
-                                self.tysys.resolutions.defs().kind(def),
-                                crate::defs::DefKind::Effect | crate::defs::DefKind::Resource
-                            )
-                        });
+                EffectRef::Concrete { name, .. } => {
+                    // Ask the declaration what it is, rather than building a
+                    // key and probing two indexes to find out which it belongs
+                    // to.
+                    let handles = effect_decl.is_some_and(|def| {
+                        matches!(
+                            self.tysys.resolutions.defs().kind(def),
+                            crate::defs::DefKind::Effect | crate::defs::DefKind::Resource
+                        )
+                    });
                     if !handles {
                         let _ = self.emit(TypeError::NotAnEffect {
                             name: name.clone(),
@@ -159,7 +156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
         if let Some(EffectRef::Concrete {
             name: interface_name,
-            module_source: interface_module,
+            ..
         }) = &effect
         {
             // Skip the check for an unresolved handler (`Unknown` / `Error`):
@@ -178,16 +175,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 underlying,
                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
             );
-            // The effect reference already names its declaring module, so the
-            // declaration is looked up where it lives rather than resolved
-            // again from this frame's vantage.
-            let effect_def = self
-                .tysys
-                .resolutions
-                .declared_in(interface_module, interface_name);
             if is_real_type
                 && (is_type_param
-                    || !effect_def.is_some_and(|trait_| {
+                    || !effect_decl.is_some_and(|trait_| {
                         self.tysys.type_implements_trait(
                             &self.annotate_ctx,
                             &self.type_lookup(),
@@ -391,21 +381,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `impl Foo for T` block we're walking; the decl index is
             // keyed by `(decl_module, name)` and two modules can declare
             // a same-named effect / resource.
-            let canonical_key = self.decl_key_or_local(&base_trait_name);
-            let decl_module = self
-                .tysys
-                .trait_env
-                .effect_decl_index
-                .get(&canonical_key)
-                .map(|(m, _)| m.clone())
-                .or_else(|| {
-                    self.tysys
-                        .trait_env
-                        .resource_decl_index
-                        .get(&canonical_key)
-                        .map(|(m, _)| m.clone())
-                });
-            let Some(decl_module) = decl_module else {
+            let decl_module = self.decl_key_or_local(&base_trait_name).filter(|key| {
+                self.tysys.trait_env.effect_decl_index.contains(key)
+                    || self.tysys.trait_env.resource_decl_index.contains(key)
+            });
+            let Some(decl_module) =
+                decl_module.map(|key| self.tysys.resolutions.defs().module(key).clone())
+            else {
                 continue;
             };
             let type_args: Vec<TypeId> = match trait_type {

@@ -12,13 +12,15 @@ When WebAssembly provides a native instruction for a feature, prefer it over a c
 
 All levels run DCE on functions, types, and globals.
 
-| Flag            | Iterations | Inline threshold | Notes                                           |
-| --------------- | ---------- | ---------------- | ----------------------------------------------- |
-| `-O0`           | 0          | N/A              | DCE only + `match_to_switch` + backend rewrites |
-| `-O1`           | 2          | 4                |                                                 |
-| `-O2` (default) | 10         | 13               |                                                 |
-| `-O3`           | 30         | 32               |                                                 |
-| `-Os`           | 10         | 13               | strips the Wasm name section                    |
+| Flag            | Iterations | Inline budget | Notes                                           |
+| --------------- | ---------- | ------------- | ----------------------------------------------- |
+| `-O0`           | 0          | N/A           | DCE only + `match_to_switch` + backend rewrites |
+| `-O1`           | 2          | 4             |                                                 |
+| `-O2` (default) | 10         | 13            |                                                 |
+| `-O3`           | 30         | 32            |                                                 |
+| `-Os`           | 10         | 13            | strips the Wasm name section                    |
+
+The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights.
 
 The fixed-point loop exits early on convergence. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
 
@@ -45,7 +47,7 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 Allocation and aggregate:
 
-- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the size threshold, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out.
+- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions, so control flow outweighs a straight-line operation and a cold or unreachable tail prices nothing; the weights are in the pass's `weight` module.
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.
@@ -61,6 +63,7 @@ There is no value-copy _elision_ pass: defensive copies are chosen at the lower 
 Variant and reference:
 
 - `labeled_block_fusion` — delete the intermediate an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields. Recognises the `Option`/`Result` and the `[tag, slots…]` `sroa_variant_return` leaves in its place.
+- `slot_temp_sroa` — decompose the `[tag, slots…]` temp an inlined helper leaves where fusion cannot relocate the consumer into the block, as in the value-producing `let x = f()?`. Each projected slot gets a local declared ahead of the block, so its definition dominates every read, and the exits assign it instead of building the tuple.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
 
 Scalar and dataflow:
@@ -91,7 +94,7 @@ Whole-program and backend:
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
-- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
 
 ## Lowering optimizations
 

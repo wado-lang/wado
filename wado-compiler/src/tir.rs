@@ -474,10 +474,11 @@ pub enum ResolvedType {
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
         /// The trait declaring `assoc_name`: `Self::Err` inside
-        /// `trait FromStr` is `<Self as FromStr>::Err`. `None` where the
-        /// builder had no trait, which makes resolution require the name to
-        /// be unambiguous.
-        owning_trait: Option<String>,
+        /// `trait FromStr` is `<Self as FromStr>::Err`. An identity, so a
+        /// projection built under one module's `FromStr` cannot be answered by
+        /// another's. `None` where the builder had no trait, which makes
+        /// resolution require the name to be unambiguous.
+        owning_trait: Option<crate::defs::DefId>,
         /// Trait bounds on this associated type, named by the declarations the
         /// trait's own `type A: Bound` references resolve to. A projection
         /// outlives the frame that built it, so a spelling here would be read
@@ -619,13 +620,6 @@ impl TypeSet {
     }
 }
 
-/// A trait named by the module that declares it.
-///
-/// The associated-type registries key on this rather than a spelling: two
-/// modules' same-named traits each declare their own `Item`, and the name
-/// alone cannot say which one an impl bound (WEP 2026-08-12).
-pub type TraitKey = (ModuleSource, String);
-
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -643,20 +637,14 @@ pub struct TypeTable {
     ///
     /// Keyed by trait because one type may implement several declaring the
     /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
-    assoc_type_resolutions: IndexMap<(TypeId, TraitKey, String), TypeId>,
-    /// [`Self::assoc_type_resolutions`] keyed by the trait's *written* name,
-    /// for the callers that hold one rather than its declaration. `None` marks
-    /// a name two declarations answer differently for — the same "decline
-    /// rather than let registration order decide" rule the scan had, without
-    /// walking the whole map per projection.
-    assoc_type_resolutions_by_trait_name: IndexMap<(TypeId, String, String), Option<TypeId>>,
+    assoc_type_resolutions: IndexMap<(TypeId, crate::defs::DefId, String), TypeId>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, TraitKey, String), TypeId>,
+    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, crate::defs::DefId, String), TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -705,7 +693,7 @@ pub struct TypeTable {
     /// (bound-driven synthesis, WEP 2026-06-25). Keyed nominally rather than by
     /// `TypeId`, so a generic records once against its declaration. Lives on the
     /// shared `TypeTable` because elaboration runs one `Elaborator` per module.
-    bound_driven_synth_requests: IndexSet<(String, ModuleSource, TraitKey)>,
+    bound_driven_synth_requests: IndexSet<(String, ModuleSource, crate::defs::DefId)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -714,9 +702,10 @@ pub struct TypeTable {
     anon_structs: Vec<(ModuleSource, AnonShape)>,
     /// Dedup for the above: the same shape in the same module is one id.
     anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
-    /// `(name, module)` of each type declaration, for [`Self::decl_named_in`].
-    /// Built with [`Self::attach_defs`], so it answers at any point in the
-    /// pipeline rather than only after a declaration's type is interned.
+    /// `(WIT name, generated module)` of each type declaration, for
+    /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
+    /// any point in the pipeline rather than only after a declaration's type is
+    /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
@@ -829,7 +818,6 @@ impl TypeTable {
             intern_map: IndexMap::default(),
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
-            assoc_type_resolutions_by_trait_name: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
@@ -901,7 +889,7 @@ impl TypeTable {
     /// Mint a brand-new `TypeId` for `ty`, bypassing `intern`'s structural dedup.
     /// `intern_map` / `struct_name_index` are deliberately not updated — keyed by
     /// `(name, module_source)`, a second same-named entry would overwrite the
-    /// first. This is what a function-scoped local type declaration mints
+    /// first. This is what a local type declaration mints
     /// through: its identity is the caller's `AstId`, not this type's name.
     pub fn push_fresh(&mut self, ty: ResolvedType) -> TypeId {
         let id = self.types.next_id();
@@ -1128,6 +1116,19 @@ impl TypeTable {
         }
     }
 
+    /// A struct head as a mangled name embeds it: the declaration when it names
+    /// one, the interned shape otherwise.
+    #[must_use]
+    pub fn fq_struct_head(&self, head: StructDef) -> crate::name::FqTypeName {
+        match head {
+            StructDef::Decl(def) => crate::name::FqTypeName::declared(&self.defs, def),
+            StructDef::Anon(id) => crate::name::FqTypeName::shape(
+                self.anon_struct_module(id),
+                &self.anon_struct_name(id),
+            ),
+        }
+    }
+
     /// The head as source spells it: the declared name, with no storage
     /// disambiguator. [`Self::struct_head_name`]'s counterpart in the
     /// declaration namespace — what a diagnostic shows, never a lookup key.
@@ -1148,124 +1149,30 @@ impl TypeTable {
         }
     }
 
-    /// Mint a declaration in this table's own `DefTable`, for a unit test that
-    /// builds a type without parsing a module. See
-    /// [`crate::defs::DefTable::declare_for_test`].
-    #[cfg(any(test, feature = "test-util"))]
-    pub fn declare_for_test(
-        &mut self,
-        name: &str,
-        module: ModuleSource,
-        kind: crate::defs::DefKind,
-    ) -> crate::defs::DefId {
-        let def = std::sync::Arc::make_mut(&mut self.defs).declare_for_test(&module, name, kind);
-        if kind.is_type() {
-            self.decl_index
-                .entry((name.to_string(), module))
-                .or_insert(def);
-        }
-        def
-    }
-
-    /// Register the compiler-item declarations a bare table's own type
-    /// constructors read — `make_list`, `make_option`, `make_result`,
-    /// `make_tuple`, `make_compiler_struct(String)`.
-    ///
-    /// A test that builds types without loading the stdlib has no annotate
-    /// pass to record what `#[compiler_item("…")]` marks, and those
-    /// constructors answer from the declaration rather than from a spelling.
-    #[cfg(any(test, feature = "test-util"))]
-    pub fn seed_compiler_items_for_test(&mut self) {
-        use crate::compiler_item::{CompilerItem, Resolved};
-        use crate::defs::DefKind;
-
-        let prelude = ModuleSource::prelude();
-        let _ = self.compiler_items.register(
-            CompilerItem::Tuple,
-            Resolved::TupleFamily {
-                module_source: prelude.clone(),
-            },
-        );
-        self.declare_for_test(Self::TUPLE_TYPE_NAME, prelude.clone(), DefKind::Struct);
-
-        for (item, name) in [
-            (CompilerItem::List, "List"),
-            (CompilerItem::String, "String"),
-        ] {
-            let def = self.declare_for_test(name, prelude.clone(), DefKind::Struct);
-            let decl = self.defs.ast_id(def);
-            let _ = self.compiler_items.register(
-                item,
-                Resolved::Struct {
-                    module_source: prelude.clone(),
-                    name: name.to_string(),
-                    decl,
-                },
-            );
-        }
-
-        for (item, name) in [
-            (CompilerItem::Option, "Option"),
-            (CompilerItem::Result, "Result"),
-        ] {
-            let def = self.declare_for_test(name, prelude.clone(), DefKind::Variant);
-            let decl = self.defs.ast_id(def);
-            let _ = self.compiler_items.register(
-                item,
-                Resolved::Variant {
-                    module_source: prelude.clone(),
-                    name: name.to_string(),
-                    decl,
-                },
-            );
-        }
-    }
-
     /// The declaration a compiler item names.
     ///
-    /// The registry records the declaring node, so this answers at any point
-    /// in the pipeline — unlike [`Self::decl_named_in`], which needs the
-    /// declaration's own type to be interned already.
+    /// The registry records the declaring node for every kind that names a
+    /// type of its own, so this answers at any point in the pipeline and for
+    /// any stdlib type the compiler knows — no site has to spell one.
     #[must_use]
     pub fn compiler_item_def(
         &self,
         item: crate::compiler_item::CompilerItem,
     ) -> Option<crate::defs::DefId> {
-        if let Some(def) = self
-            .compiler_items
-            .variant_decl(item)
-            .or_else(|| self.compiler_items.struct_decl(item))
+        self.compiler_items
+            .decl(item)
             .and_then(|ast| self.defs.of_ast_id(ast))
-        {
-            return Some(def);
-        }
-        // An enum item records `(module, name)` rather than its declaring
-        // node, so its identity comes from the module the registry knows —
-        // not from a module a caller guessed.
-        let (module, name) = match self.compiler_items.get(item)? {
-            crate::compiler_item::Resolved::Enum {
-                module_source,
-                name,
-            } => (module_source.clone(), name.clone()),
-            _ => return None,
-        };
-        self.decl_named_in(&name, &module)
     }
 
-    /// The declaration `module` declares under `name`.
-    ///
-    /// This is a name reaching an identity, which the design forbids
-    /// everywhere else, and it is here only for the consumers that still hold
-    /// a spelling and nothing else — synthesis targets built from TIR
-    /// declarations, and the stdlib heads a constructor spells outright. Both
-    /// go when what they hold carries an identity; `compiler_item.rs`'s
-    /// registry is what replaces the second. It cannot invent one: a name that
-    /// declares nothing answers `None`.
+    /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
+    /// — for the items the compiler requires to be registered.
     #[must_use]
-    pub fn decl_named_in(&self, name: &str, module: &ModuleSource) -> Option<crate::defs::DefId> {
-        self.decl_index
-            .get(&(name.to_string(), module.clone()))
-            .copied()
+    pub fn require_compiler_item_def(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> crate::defs::DefId {
+        self.compiler_item_def(item)
+            .unwrap_or_else(|| panic!("compiler item `{item}` names no declaration"))
     }
 
     /// The declaration a nominal type was written from, if it names one.
@@ -1336,7 +1243,7 @@ impl TypeTable {
     /// Canonical `TypeId` for a declared-type [`AstId`](crate::ast::AstId).
     /// Prefer this over re-deriving one from `(name, module_source)`: the
     /// `AstId` is a cheap `Copy` key, and it stays unique even where name+module
-    /// does not — a function-scoped local type can share another's name.
+    /// does not — a local type can share another's name.
     ///
     /// Panics if `collect_types` has not run for this declaration; both that and
     /// a non-decl-backed `AstId` are compiler bugs, not recoverable conditions.
@@ -1585,7 +1492,7 @@ impl TypeTable {
         &mut self,
         type_name: &str,
         module_source: &ModuleSource,
-        trait_key: &TraitKey,
+        trait_key: &crate::defs::DefId,
     ) {
         let already_recorded = self
             .bound_driven_synth_requests
@@ -1595,7 +1502,7 @@ impl TypeTable {
             self.bound_driven_synth_requests.insert((
                 type_name.to_string(),
                 module_source.clone(),
-                trait_key.clone(),
+                *trait_key,
             ));
         }
     }
@@ -1608,8 +1515,8 @@ impl TypeTable {
     /// means each caller only clones the entries it keeps.
     pub fn bound_driven_synth_requests(
         &self,
-        mut matches: impl FnMut(&TraitKey) -> bool,
-    ) -> Vec<(String, ModuleSource, TraitKey)> {
+        mut matches: impl FnMut(&crate::defs::DefId) -> bool,
+    ) -> Vec<(String, ModuleSource, crate::defs::DefId)> {
         self.bound_driven_synth_requests
             .iter()
             .filter(|(_, _, trait_key)| matches(trait_key))
@@ -1631,8 +1538,15 @@ impl TypeTable {
         &self,
         item: crate::compiler_item::CompilerItem,
     ) -> crate::name::FqTypeName {
-        let (module, name) = self.compiler_items.require_struct(item);
-        crate::name::FqTypeName::declared(module, name)
+        let decl = self
+            .compiler_items
+            .struct_decl(item)
+            .expect("a registered struct item records its declaring node");
+        let def = self
+            .defs
+            .of_ast_id(decl)
+            .expect("a compiler item's declaring node is a declaration");
+        crate::name::FqTypeName::declared(&self.defs, def)
     }
 
     pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
@@ -1770,10 +1684,7 @@ impl TypeTable {
     /// Same shape as [`Self::make_compiler_struct`]: routes both name
     /// and module through the registry.
     pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
-        let (module_source, name) = self.compiler_items.enum_owned(item);
-        let def = self
-            .decl_named_in(&name, &module_source)
-            .unwrap_or_else(|| panic!("compiler item {item:?} is not a declared enum"));
+        let def = self.require_compiler_item_def(item);
         self.make_enum(def)
     }
 
@@ -1797,9 +1708,7 @@ impl TypeTable {
 
     /// Create a `Future<T>` generic resource type.
     pub fn make_future(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("Future", &ModuleSource::types())
-            .expect("`Future` is declared in core:types");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Future);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1808,9 +1717,8 @@ impl TypeTable {
 
     /// Create a `FutureWritable<T>` generic resource type.
     pub fn make_future_writable(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("FutureWritable", &ModuleSource::types())
-            .expect("`FutureWritable` is declared in core:types");
+        let def =
+            self.require_compiler_item_def(crate::compiler_item::CompilerItem::FutureWritable);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1819,9 +1727,7 @@ impl TypeTable {
 
     /// Create a `Stream<T>` generic resource type.
     pub fn make_stream(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("Stream", &ModuleSource::types())
-            .expect("`Stream` is declared in core:types");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Stream);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1830,9 +1736,8 @@ impl TypeTable {
 
     /// Create a `StreamWritable<T>` generic resource type.
     pub fn make_stream_writable(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("StreamWritable", &ModuleSource::types())
-            .expect("`StreamWritable` is declared in core:types");
+        let def =
+            self.require_compiler_item_def(crate::compiler_item::CompilerItem::StreamWritable);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -1846,9 +1751,7 @@ impl TypeTable {
     /// handle and the result buffer, so it is represented as a
     /// `GenericInstance`, not a `GenericResource`.
     pub fn make_async_call(&mut self, inner: TypeId) -> TypeId {
-        let def = self
-            .decl_named_in("AsyncCall", &ModuleSource::types())
-            .expect("`AsyncCall` is declared in core:types");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::AsyncCall);
         self.make_generic_instance(def, vec![inner])
     }
 
@@ -1896,14 +1799,7 @@ impl TypeTable {
     }
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
-        let module_source = self
-            .compiler_items
-            .tuple_module()
-            .cloned()
-            .unwrap_or_else(ModuleSource::prelude);
-        let def = self
-            .decl_named_in(Self::TUPLE_TYPE_NAME, &module_source)
-            .expect("the tuple declaration is a compiler item");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Tuple);
         self.intern(ResolvedType::GenericInstance {
             def,
             type_args: elements,
@@ -2068,15 +1964,42 @@ impl TypeTable {
         self.intern_map.get(&ResolvedType::Flags { def }).copied()
     }
 
-    /// Find any decl-backed named type by exact `(name, module_source)` key,
-    /// for CM types whose interface FQ maps to a concrete `ModuleSource`
-    /// (component imports, `--lib` locals) rather than a cm-package prefix.
+    /// The declaration `module` declares under the WIT name `name`.
+    ///
+    /// The one place a name still reaches an identity, and it is the Component
+    /// Model boundary. Two things make it unavoidable rather than unfinished:
+    /// a WIT name is written in a namespace no Wado resolver walked, so there
+    /// is no reference site to ask; and `CmInterfaceRegistry` parses its own
+    /// copy of the WASI modules once per process, independent of any
+    /// compilation, so the declaring node it could record is not a node this
+    /// program's `DefTable` ever saw.
+    ///
+    /// It cannot mis-identify: `wado-from-idl` generates exactly one module per
+    /// interface and each declares a WIT name once, so `module` picks the
+    /// generated module and `name` the single declaration in it. It cannot
+    /// invent one either — a name that declares nothing answers `None`.
+    /// Nothing outside `synthesis::cm_binding` may call it; a Wado name
+    /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
+    /// through [`Self::compiler_item_def`].
+    #[must_use]
+    pub(crate) fn cm_decl_in(
+        &self,
+        name: &str,
+        module: &ModuleSource,
+    ) -> Option<crate::defs::DefId> {
+        self.decl_index
+            .get(&(name.to_string(), module.clone()))
+            .copied()
+    }
+
+    /// The interned type the CM declaration `module` names `name` was
+    /// registered under, whichever nominal shape it is.
     pub fn find_named_type_by_source(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<TypeId> {
-        let def = self.decl_named_in(name, module_source)?;
+        let def = self.cm_decl_in(name, module_source)?;
         self.find_struct_type(StructDef::Decl(def))
             .or_else(|| self.find_variant_type(def))
             .or_else(|| self.find_enum_type(def))
@@ -2359,7 +2282,7 @@ impl TypeTable {
     pub fn make_assoc_type_projection_of_trait(
         &mut self,
         param_id: TypeId,
-        owning_trait: Option<String>,
+        owning_trait: Option<crate::defs::DefId>,
         assoc_name: String,
         bounds: Vec<crate::name::FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
@@ -2379,19 +2302,10 @@ impl TypeTable {
     pub fn register_assoc_type_resolution(
         &mut self,
         concrete_id: TypeId,
-        trait_key: TraitKey,
+        trait_key: crate::defs::DefId,
         assoc_name: String,
         resolved_id: TypeId,
     ) {
-        let by_name = (concrete_id, trait_key.1.clone(), assoc_name.clone());
-        self.assoc_type_resolutions_by_trait_name
-            .entry(by_name)
-            .and_modify(|prior| {
-                if *prior != Some(resolved_id) {
-                    *prior = None;
-                }
-            })
-            .or_insert(Some(resolved_id));
         self.assoc_type_resolutions
             .insert((concrete_id, trait_key, assoc_name), resolved_id);
     }
@@ -2401,11 +2315,11 @@ impl TypeTable {
     pub fn resolve_assoc_type_of_trait(
         &self,
         concrete_id: TypeId,
-        trait_key: &TraitKey,
+        trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, trait_key.clone(), assoc_name.to_string()))
+            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
             .copied()
     }
 
@@ -2417,34 +2331,16 @@ impl TypeTable {
     pub fn resolve_assoc_type_qualified(
         &self,
         concrete_id: TypeId,
-        owning_trait: &Option<String>,
+        owning_trait: &Option<crate::defs::DefId>,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        if let Some(trait_name) = owning_trait
+        if let Some(trait_key) = owning_trait
             && let Some(resolved) =
-                self.resolve_assoc_type_of_trait_by_name(concrete_id, trait_name, assoc_name)
+                self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
         {
             return Some(resolved);
         }
         self.resolve_assoc_type(concrete_id, assoc_name)
-    }
-
-    /// [`Self::resolve_assoc_type_of_trait`] for a caller holding the trait's
-    /// written name rather than its declaration — an `AssocTypeProjection`
-    /// records one. Two declarations sharing the name and disagreeing answer
-    /// `None`, so the unqualified rule takes over rather than one winning by
-    /// registration order.
-    fn resolve_assoc_type_of_trait_by_name(
-        &self,
-        concrete_id: TypeId,
-        trait_name: &str,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        *self.assoc_type_resolutions_by_trait_name.get(&(
-            concrete_id,
-            trait_name.to_string(),
-            assoc_name.to_string(),
-        ))?
     }
 
     /// Resolve an associated type named `assoc_name` on `concrete_id`
@@ -2477,7 +2373,7 @@ impl TypeTable {
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_decl: crate::ast::AstId,
-        trait_key: TraitKey,
+        trait_key: crate::defs::DefId,
         assoc_name: String,
         type_param_id: TypeId,
     ) {
@@ -2493,8 +2389,8 @@ impl TypeTable {
         &self,
         base_decl: crate::ast::AstId,
         assoc_name: &str,
-    ) -> Option<(TraitKey, TypeId)> {
-        let mut found: Option<(TraitKey, TypeId)> = None;
+    ) -> Option<(crate::defs::DefId, TypeId)> {
+        let mut found: Option<(crate::defs::DefId, TypeId)> = None;
         for ((decl, trait_key, name), &def_id) in &self.generic_assoc_type_defs {
             if *decl != base_decl || name != assoc_name {
                 continue;
@@ -2502,7 +2398,7 @@ impl TypeTable {
             if found.as_ref().is_some_and(|(_, prior)| *prior != def_id) {
                 return None;
             }
-            found = Some((trait_key.clone(), def_id));
+            found = Some((*trait_key, def_id));
         }
         found
     }
@@ -2518,13 +2414,11 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
-        let defs: Vec<(TraitKey, String, TypeId)> = self
+        let defs: Vec<(crate::defs::DefId, String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|((decl, _, _), _)| *decl == base_decl)
-            .map(|((_, trait_key, assoc_name), &def_id)| {
-                (trait_key.clone(), assoc_name.clone(), def_id)
-            })
+            .map(|((_, trait_key, assoc_name), &def_id)| (*trait_key, assoc_name.clone(), def_id))
             .collect();
         for (trait_key, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);
@@ -2665,11 +2559,11 @@ impl TypeTable {
     pub fn resolve_trait_assoc_type(
         &self,
         concrete_id: TypeId,
-        trait_key: &TraitKey,
+        trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, trait_key.clone(), assoc_name.to_string()))
+            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
             .copied()
     }
 
@@ -2681,10 +2575,10 @@ impl TypeTable {
     pub fn resolve_trait_assoc_type_of_instance(
         &mut self,
         concrete_id: TypeId,
-        trait_key: &TraitKey,
+        trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let key = (concrete_id, trait_key.clone(), assoc_name.to_string());
+        let key = (concrete_id, *trait_key, assoc_name.to_string());
         if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
             return Some(resolved);
         }
@@ -2694,7 +2588,7 @@ impl TypeTable {
         };
         let def_key = (
             self.decl_of_type(concrete_id)?,
-            trait_key.clone(),
+            *trait_key,
             assoc_name.to_string(),
         );
         let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
@@ -3007,9 +2901,7 @@ impl TypeTable {
     /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
     pub fn make_byte_list(&mut self) -> TypeId {
         let base = self.make_list(TypeTable::U8);
-        let def = self
-            .decl_named_in("ByteList", &ModuleSource::bytes())
-            .expect("`ByteList` is declared in core:bytes");
+        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteList);
         self.make_newtype(def, base)
     }
 
@@ -3758,7 +3650,7 @@ impl TypeTable {
     pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
         use crate::name::{FqTypeName, Receiver};
         let declared =
-            |module: &ModuleSource, name: &str| Receiver::Type(FqTypeName::declared(module, name));
+            |def: crate::defs::DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
         // erasure rewrites a newtype / flags id to the representation it is
@@ -3768,10 +3660,7 @@ impl TypeTable {
                 crate::name::RefKind::from_resolved(self.get(id))
                     .map_or_else(|| builtin(""), Receiver::Ref)
             }
-            ResolvedType::Struct { def, .. } => declared(
-                &self.struct_head_module(*def).clone(),
-                &self.struct_head_name(*def),
-            ),
+            ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // A newtype's head is its declaration, arguments never spelled into
             // it — an `impl` header writes `MyArray`, not `MyArray<i32>`.
             ResolvedType::Enum { def }
@@ -3779,9 +3668,7 @@ impl TypeTable {
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::GenericInstance { def, .. } => {
-                declared(self.def_module(*def), self.def_name(*def))
-            }
+            | ResolvedType::GenericInstance { def, .. } => declared(*def),
             // A generic resource and a binder name no declaration of their own.
             ResolvedType::GenericResource { def, .. } => builtin(self.def_name(*def)),
             ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
@@ -3798,24 +3685,13 @@ impl TypeTable {
     pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
         use crate::name::FqTypeName;
         match self.get(id) {
-            ResolvedType::Struct { def, .. } => FqTypeName::declared(
-                &self.struct_head_module(*def).clone(),
-                &self.struct_head_name(*def),
-            ),
+            ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
             ResolvedType::Enum { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
             | ResolvedType::Flags { def }
             | ResolvedType::Resource { def }
-            | ResolvedType::GenericInstance { def, .. } => {
-                // The *rendered* name, as the `Struct` arm above uses: this
-                // spells a receiver into a method name, and a function-local
-                // declaration's methods are registered under its disambiguated
-                // spelling. `def_name` here made a local `type UserId = i32`
-                // call `UserId^Inspect::inspect` against a definition emitted
-                // as `UserId@2^Inspect::inspect`.
-                FqTypeName::declared(self.def_module(*def), &self.decl_render_name(*def))
-            }
+            | ResolvedType::GenericInstance { def, .. } => FqTypeName::declared(&self.defs, *def),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.fq_base_type_name(*inner)
             }
@@ -3867,25 +3743,21 @@ impl TypeTable {
             // Head and arguments come straight off the type — the same shape
             // every other instantiated type has. No recovery step, because
             // there is no fused spelling left to recover them from.
-            ResolvedType::Struct { def, type_args } => FqTypeName::declared(
-                &self.struct_head_module(*def).clone(),
-                &self.struct_head_name(*def),
-            )
-            .with_args(args_of(type_args)),
+            ResolvedType::Struct { def, type_args } => {
+                self.fq_struct_head(*def).with_args(args_of(type_args))
+            }
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => {
-                FqTypeName::declared(self.def_module(*def), self.def_name(*def))
-            }
+            | ResolvedType::Flags { def } => FqTypeName::declared(&self.defs, *def),
             ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args = args_of(type_args);
                 if Self::is_tuple_type(self.def_name(*def)) {
                     FqTypeName::tuple(args)
                 } else {
-                    FqTypeName::declared(self.def_module(*def), self.def_name(*def)).with_args(args)
+                    FqTypeName::declared(&self.defs, *def).with_args(args)
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {
@@ -5818,32 +5690,6 @@ impl TirProgram {
 mod tests {
     use super::*;
 
-    /// `intern` indexes a struct under its rendered spelling, so `retain` has
-    /// to rebuild the index the same way. Rebuilding it under the bare
-    /// declaration name instead collapses every instantiation of a generic
-    /// struct onto one entry, and the survivors then answer for each other.
-    #[test]
-    fn retaining_keeps_a_struct_findable_under_the_spelling_it_was_indexed_by() {
-        use crate::module_source::ModuleSourceInterner;
-        let mut table = TypeTable::new();
-        let mut interner = ModuleSourceInterner::new();
-        let m = interner.local("./main.wado");
-
-        let def = table.declare_for_test("Box", m.clone(), crate::defs::DefKind::Struct);
-        let head = StructDef::Decl(def);
-        let base = table.make_struct(head);
-        let boxed_i32 = table.make_monomorphized_struct_from_args(head, vec![TypeTable::I32]);
-        let boxed_i64 = table.make_monomorphized_struct_from_args(head, vec![TypeTable::I64]);
-        assert_eq!(table.find_struct_by_name("Box<i32>", &m), Some(boxed_i32));
-
-        let keep: IndexSet<TypeId> = [base, boxed_i32, boxed_i64].into_iter().collect();
-        table.retain(&keep);
-
-        assert_eq!(table.find_struct_by_name("Box<i32>", &m), Some(boxed_i32));
-        assert_eq!(table.find_struct_by_name("Box<i64>", &m), Some(boxed_i64));
-        assert_eq!(table.find_struct_by_name("Box", &m), Some(base));
-    }
-
     #[test]
     fn test_primitive_constants() {
         let table = TypeTable::new();
@@ -5857,52 +5703,6 @@ mod tests {
         ));
         // Note: String is now a user-defined struct, not a builtin type
         assert!(matches!(table.get(TypeTable::UNIT), ResolvedType::Unit));
-    }
-
-    #[test]
-    fn test_intern_deduplication() {
-        let mut table = TypeTable::new();
-        table.seed_compiler_items_for_test();
-        // Test that interning the same type returns the same TypeId
-        let arr1 = table.make_list(TypeTable::I32);
-        let arr2 = table.make_list(TypeTable::I32);
-        assert_eq!(arr1, arr2);
-        // Verify as_array works
-        assert_eq!(table.as_list(arr1), Some(TypeTable::I32));
-    }
-
-    #[test]
-    fn register_decl_type_disambiguates_same_name_same_module_by_ast_id() {
-        // Two distinct declaration sites for the same source name in the
-        // same module — the shape a function-scoped local type produces
-        // when the enclosing function is called from two different bodies
-        // (or the same body twice). `AstId` distinguishes them even though
-        // `(name, module_source)` alone would collide.
-        let mut table = TypeTable::new();
-        let module = ModuleSource::entry_point_synthetic();
-        let space = crate::ast::AstIdSpace::next();
-        let first = crate::ast::AstId::new(space, 10);
-        let second = crate::ast::AstId::new(space, 20);
-
-        let point = table.declare_for_test("Point", module, crate::defs::DefKind::Struct);
-        let first_type = table.make_struct(StructDef::Decl(point));
-        table.register_decl_type(first, first_type);
-
-        // A second, distinct declaration reusing the same source name
-        // must not be silently aliased to the first: mint its own TypeId
-        // (bypassing the name-keyed intern_map, as a local declaration's
-        // constructor will) and register it under its own AstId.
-        let second_type = table.push_fresh(ResolvedType::Struct {
-            def: StructDef::Decl(point),
-            type_args: Vec::new(),
-        });
-        table.register_decl_type(second, second_type);
-
-        assert_ne!(first_type, second_type);
-        assert_eq!(table.type_of_symbol(&first), Some(first_type));
-        assert_eq!(table.type_of_symbol(&second), Some(second_type));
-        assert_eq!(table.type_id_of_decl(first), first_type);
-        assert_eq!(table.type_id_of_decl(second), second_type);
     }
 
     #[test]
@@ -5960,27 +5760,6 @@ mod tests {
         assert_eq!(substituted, TypeTable::U8);
     }
 
-    /// The answer reaches projections nested inside containers, which is
-    /// where a signature actually spells them (`Option<Self::Item>`).
-    #[test]
-    fn a_projection_answer_applies_inside_a_container() {
-        let mut table = TypeTable::new();
-        table.seed_compiler_items_for_test();
-        let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
-        let list_of_projection = table.make_list(projection);
-
-        let receiver = table.make_type_param("I".to_string(), 1);
-        let substituted = table.substitute_type_params_with(
-            list_of_projection,
-            &IndexMap::from_iter([(0, receiver)]),
-            &SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]),
-        );
-
-        let expected = table.make_list(TypeTable::U8);
-        assert_eq!(substituted, expected);
-    }
-
     /// An unanswered name leaves the projection abstract over the substituted
     /// base — the frame simply does not know, and inventing an answer would
     /// be worse than deferring to monomorphization.
@@ -6002,157 +5781,6 @@ mod tests {
             panic!("expected a projection");
         };
         assert_eq!(param_id, receiver);
-    }
-
-    /// A projection's bindings are types resolved in the same frame, so they
-    /// carry the frame's slots and must be substituted with everything else.
-    /// `IntoIterator::Iter` records `[("Item", Self::Item)]`; under `Self := I`
-    /// that binding is `I::Item`, not the trait frame's `Self::Item`.
-    #[test]
-    fn substituting_rewrites_a_projections_own_bindings() {
-        let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
-        let item = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
-        let iter = table.make_assoc_type_projection(
-            self_param,
-            "Iter".to_string(),
-            vec![crate::name::FqTraitName::declared(
-                &ModuleSource::prelude(),
-                "Iterator",
-            )],
-            vec![("Item".to_string(), item)],
-        );
-
-        let receiver = table.make_type_param("I".to_string(), 1);
-        let substituted = table.substitute_type_params(iter, &IndexMap::from_iter([(0, receiver)]));
-
-        let ResolvedType::AssocTypeProjection {
-            assoc_type_bindings,
-            ..
-        } = table.get(substituted).clone()
-        else {
-            panic!("expected a projection");
-        };
-        let bound_item = assoc_type_bindings
-            .iter()
-            .find(|(name, _)| name == "Item")
-            .map(|(_, id)| *id)
-            .expect("the Item binding survives substitution");
-        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(bound_item).clone()
-        else {
-            panic!("expected the binding to stay a projection");
-        };
-        assert_eq!(param_id, receiver);
-    }
-
-    /// The projection's own metadata survives a base rewrite: bounds and
-    /// bindings describe the associated type, not the base.
-    #[test]
-    fn substitute_preserves_projection_metadata() {
-        let mut table = TypeTable::new();
-        let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection(
-            self_param,
-            "Acc".to_string(),
-            vec![crate::name::FqTraitName::declared(
-                &ModuleSource::prelude(),
-                "Default",
-            )],
-            vec![("Item".to_string(), TypeTable::I32)],
-        );
-
-        let receiver = table.make_type_param("D".to_string(), 3);
-        let substitution = IndexMap::from_iter([(0, receiver)]);
-        let substituted = table.substitute_type_params(projection, &substitution);
-
-        let ResolvedType::AssocTypeProjection {
-            param_id,
-            bounds,
-            assoc_type_bindings,
-            ..
-        } = table.get(substituted).clone()
-        else {
-            panic!("expected a projection");
-        };
-        assert_eq!(param_id, receiver);
-        assert_eq!(
-            bounds,
-            vec![crate::name::FqTraitName::declared(
-                &ModuleSource::prelude(),
-                "Default"
-            )]
-        );
-        assert_eq!(
-            assoc_type_bindings,
-            vec![("Item".to_string(), TypeTable::I32)]
-        );
-    }
-
-    /// A trait declared in the prelude, for the registry tests. The module is
-    /// what tells two same-named traits apart; these two differ by name, so
-    /// one module is enough.
-    fn trait_key(name: &str) -> TraitKey {
-        (ModuleSource::prelude(), name.to_string())
-    }
-
-    /// Two traits may declare the same associated-type name for one type
-    /// (`f32` has `FromStr::Err` and `LenientFromStr::Err`). Keying by the
-    /// declaring trait is what keeps them apart; without it the later
-    /// registration silently answers for the earlier.
-    #[test]
-    fn assoc_type_resolution_is_keyed_by_declaring_trait() {
-        let mut table = TypeTable::new();
-        let target = TypeTable::F32;
-        table.register_assoc_type_resolution(
-            target,
-            trait_key("FromStr"),
-            "Err".to_string(),
-            TypeTable::I32,
-        );
-        table.register_assoc_type_resolution(
-            target,
-            trait_key("LenientFromStr"),
-            "Err".to_string(),
-            TypeTable::I64,
-        );
-
-        assert_eq!(
-            table.resolve_assoc_type_of_trait(target, &trait_key("FromStr"), "Err"),
-            Some(TypeTable::I32)
-        );
-        assert_eq!(
-            table.resolve_assoc_type_of_trait(target, &trait_key("LenientFromStr"), "Err"),
-            Some(TypeTable::I64)
-        );
-    }
-
-    /// An unqualified lookup answers only when the name is unambiguous.
-    /// Guessing between two traits is how the wrong type reaches a call
-    /// site with no diagnostic; `None` sends the caller to a qualified
-    /// lookup instead.
-    #[test]
-    fn unqualified_assoc_type_resolution_declines_when_ambiguous() {
-        let mut table = TypeTable::new();
-        let target = TypeTable::F32;
-        table.register_assoc_type_resolution(
-            target,
-            trait_key("FromStr"),
-            "Err".to_string(),
-            TypeTable::I32,
-        );
-        assert_eq!(
-            table.resolve_assoc_type(target, "Err"),
-            Some(TypeTable::I32),
-            "a single declaring trait is unambiguous"
-        );
-
-        table.register_assoc_type_resolution(
-            target,
-            trait_key("LenientFromStr"),
-            "Err".to_string(),
-            TypeTable::I64,
-        );
-        assert_eq!(table.resolve_assoc_type(target, "Err"), None);
     }
 
     /// A substitution that misses the base leaves the projection interned as

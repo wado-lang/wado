@@ -87,17 +87,15 @@ fn debug_assert_key_matches(impl_key: Option<TypeId>, elaborated: TypeId) {
 pub(super) fn peel_to_struct(
     tt: &TypeTable,
     type_id: TypeId,
-) -> Option<(String, ModuleSource, Vec<TypeId>)> {
+) -> Option<(crate::tir::StructDef, Vec<TypeId>)> {
     let peeled = tt.peel_refs(type_id);
     match tt.get(peeled) {
-        ResolvedType::Struct { .. } => {
-            let (n, m) = tt.nominal_head(peeled)?;
-            Some((n, m, Vec::new()))
-        }
-        ResolvedType::GenericInstance { type_args, .. } => {
-            let args = type_args.clone();
-            let (n, m) = tt.nominal_head(peeled)?;
-            Some((n, m, args))
+        // An anonymous shape names no declaration, so the head is what
+        // answers for it — a `DefId` would drop the whole anon-composition
+        // path on the floor.
+        ResolvedType::Struct { def, .. } => Some((*def, Vec::new())),
+        ResolvedType::GenericInstance { def, type_args } => {
+            Some((crate::tir::StructDef::Decl(*def), type_args.clone()))
         }
         _ => None,
     }
@@ -573,8 +571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) =
-            self.lookup_associated_constant(&ident.name)
+        if let Some((_const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
         {
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
@@ -584,7 +581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for qualified variant case names like Color::Red (without parentheses)
         if ident.name.contains("::")
-            && let Some(result) = self.resolve_qualified_case(ident, None, expected_type)
+            && let Some(result) = self.resolve_qualified_case(ident, expected_type)
         {
             return result;
         }
@@ -645,24 +642,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // Fallback: when resolving a default expression, look up the
-        // identifier in the callee's lexical scope (see
-        // `default_scope_module`). This gives defaults access to the
-        // definition module's private globals and functions, and to
-        // qualified type paths (`Mode::Fast`) whose type the use site
-        // never imported (issue #1486).
+        // A default expression looks its identifier up in the callee's lexical
+        // scope, which is what gives it the definition module's private globals
+        // and functions (issue #1486).
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
+            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
         {
-            if let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback) {
-                return result;
-            }
-            if ident.name.contains("::")
-                && let Some(result) =
-                    self.resolve_qualified_case(ident, Some(&fallback), expected_type)
-            {
-                return result;
-            }
+            return result;
         }
 
         // Unknown variable - report error
@@ -693,27 +680,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Resolve a struct-literal type name in the default-expression scope
-    /// (`default_scope_module`): first a struct the declaring module defines,
-    /// then one it imports (via its symbol table). Returns the canonical
-    /// struct name and its defining module. `None` when no default scope is
-    /// active or the name doesn't resolve there.
-    fn lookup_struct_in_default_scope(&mut self, name: &str) -> Option<(String, ModuleSource)> {
-        let fallback = self.annotate_ctx.default_scope_module.clone()?;
-        if fallback == self.current_module_source {
-            return None;
-        }
-        if self.lookup_struct_fields_in(name, &fallback).is_some() {
-            return Some((name.to_string(), fallback));
-        }
-        if let Some(symbol) = self.symbol_named(&fallback, name)
-            && let crate::symbol::SymbolKind::Struct(_) = &symbol.kind
-        {
-            return Some((symbol.name.clone(), symbol.module_source().clone()));
-        }
-        None
-    }
-
     /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
     /// the declaring type's parameters; an enum or a flags type declares none.
     fn check_case_turbofish_arity(
@@ -738,33 +704,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a qualified case reference `Type::Case` — a payload-less variant
-    /// case, an enum case, or a flags member. `in_module: None` resolves the type
-    /// name in the current scope; `Some(module)` against that module's own
-    /// declarations. `None` when the prefix names no such type, so the caller can
-    /// try other interpretations; `Some(TypeTable::ERROR)` when it is invalid.
+    /// case, an enum case, or a flags member. `None` when the prefix names no
+    /// such type, so the caller can try other interpretations;
+    /// `Some(TypeTable::ERROR)` when it is invalid.
     fn resolve_qualified_case(
         &mut self,
         ident: &ast::IdentExpr,
-        in_module: Option<&ModuleSource>,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
         let pos = ident.name.find("::")?;
         let prefix = &ident.name[..pos];
         let suffix = &ident.name[pos + 2..];
 
-        // Pick the module-scoped (`_in`) lookup when resolving in a foreign
-        // declaring module (the default-expression fallback), else the
-        // current-scope lookup.
+        // The type a case is qualified with is the segment just before the
+        // case's own name — the head for `Color::Red`, the second segment for
+        // `ns::Color::Red` — and the resolve walk answered for it in the
+        // module that wrote it. So a reference inside a foreign default
+        // resolves in the declaring module without a second, module-scoped
+        // lookup beside the first.
+        let owner = ident
+            .segments
+            .len()
+            .checked_sub(2)
+            .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
         macro_rules! lookup_case {
-            ($scoped:ident, $current:ident) => {
-                match in_module {
-                    Some(m) => self.$scoped(prefix, m).cloned(),
-                    None => self.$current(prefix).cloned(),
-                }
+            ($of:ident) => {
+                owner.and_then(|def| self.type_lookup().$of(def)).cloned()
             };
         }
 
-        let variant_info = lookup_case!(lookup_variant_case_in, lookup_variant_case);
+        let variant_info = lookup_case!(variant_cases_of);
         if let Some(variant_info) = variant_info {
             // Find the case by name
             if let Some((_case_index, case_data)) = variant_info
@@ -817,7 +786,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
-                            prefix,
                             &variant_info,
                             &case_data,
                             None,
@@ -846,7 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check for enum case: Color::Red (enums have no payload)
-        let enum_info = lookup_case!(lookup_enum_case_in, lookup_enum_case);
+        let enum_info = lookup_case!(enum_cases_of);
         if let Some(enum_info) = enum_info
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
@@ -864,7 +832,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for flags member: PathFlags::SymlinkFollow
         // Flags members are bitmask integers (1 << index) represented as IntLiteral
-        let flags_info = lookup_case!(lookup_flags_case_in, lookup_flags_case);
+        let flags_info = lookup_case!(flags_members_of);
         if let Some(flags_info) = flags_info
             && let Some(member) = flags_info
                 .members
@@ -1147,22 +1115,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use_id: AstId,
     ) {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        let mut struct_head = None;
-        let (struct_name, module_source) = match resolved {
-            ResolvedType::Struct { def, .. } => {
-                struct_head = Some(def);
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(receiver_type)
-                    .expect("a nominal type names a declaration")
-            }
-            ResolvedType::GenericInstance { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(receiver_type)
-                .expect("a nominal type names a declaration"),
+        let struct_head = match resolved {
+            ResolvedType::Struct { def, .. } => Some(def),
+            ResolvedType::GenericInstance { def, .. } => Some(crate::tir::StructDef::Decl(def)),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1171,10 +1126,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return,
         };
-        if let Some(info) = struct_head
-            .and_then(|head| self.lookup_struct_fields_of(head))
-            .or_else(|| self.lookup_struct_fields_in(&struct_name, &module_source))
-        {
+        if let Some(info) = struct_head.and_then(|head| self.lookup_struct_fields_of(head)) {
             for ((fname, _, _), fid) in info.fields.iter().zip(info.field_ast_ids.iter()) {
                 if fname == field_name {
                     self.record_reference_to_def(use_id, *fid);
@@ -1230,16 +1182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match resolved {
             // Struct field access
             ResolvedType::Struct { def, .. } => {
-                let (name, module_source) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(struct_type)
-                    .expect("a struct names a declaration");
-                let declared = self
-                    .lookup_struct_fields_of(def)
-                    .or_else(|| self.lookup_struct_fields_in(&name, &module_source));
-                let hit = declared.map(|info| {
+                let hit = self.lookup_struct_fields_of(def).map(|info| {
                     info.fields
                         .iter()
                         .enumerate()
@@ -1248,7 +1191,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 match hit {
                     Some(Some(found)) => return found,
-                    Some(None) => return self.field_not_found(&name, field_name, span),
+                    Some(None) => {
+                        let name = self.tysys.type_table.borrow().type_name(struct_type);
+                        return self.field_not_found(&name, field_name, span);
+                    }
                     None => {}
                 }
             }
@@ -1264,12 +1210,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // and substitute type parameters with concrete type args.
             // Tuples use numeric field access (0, 1, 2, ...).
             ResolvedType::GenericInstance { type_args, .. } => {
-                let (name, module_source) = self
+                let name = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(struct_type)
-                    .expect("a generic instance names a declaration");
+                    .expect("a generic instance names a declaration")
+                    .0;
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
@@ -1287,14 +1234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // instance names answers first: a function-local generic
                 // struct's fields are keyed by its identity, and the spelling
                 // reaches them only through the local-item render index.
-                let by_def = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_def(struct_type)
-                    .and_then(|def| self.lookup_struct_fields_of_decl(def).cloned());
-                let fields_clone =
-                    by_def.or_else(|| self.lookup_struct_fields_in(&name, &module_source).cloned());
+                let fields_clone = self.struct_fields_of_type(struct_type).cloned();
                 if let Some(struct_info) = fields_clone {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
@@ -1359,11 +1299,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let same_package = module_source.same_package(&self.current_module_source);
-        if let Some(struct_info) = self.lookup_struct_fields_in(&struct_name, &module_source) {
+        if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
-                        struct_name: struct_name.clone(),
+                        struct_name,
                         field_name: field_name.to_string(),
                         visibility: *vis,
                         span,
@@ -2357,13 +2297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         match &resolved {
             ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("an enum names a declaration");
-                if let Some(enum_info) = self.lookup_enum_case_in(name, module_source) {
+                if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
                     let covered: IndexSet<&str> = {
@@ -2387,25 +2321,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             }
-            ResolvedType::Variant { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("a variant names a declaration");
-                self.check_variant_exhaustiveness(&classified, name, module_source, span);
-            }
-            ResolvedType::GenericInstance { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("a generic instance names a declaration");
-                if self.contains_variant(name) {
-                    self.check_variant_exhaustiveness(&classified, name, module_source, span);
-                }
+            ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                self.check_variant_exhaustiveness(&classified, scrutinee_type, span);
             }
             ResolvedType::Primitive(crate::tir::PrimitiveType::Bool) => {
                 let has_true = classified
@@ -2616,9 +2533,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            let assoc_const_key = Self::exh_assoc_const_key(variant_name, variant_qualifier);
             if let Some((_m, _type_id, const_expr)) =
-                self.lookup_associated_constant(&assoc_const_key)
+                self.associated_constant_qualified(variant_qualifier, variant_name)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {
@@ -2659,13 +2575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         match &resolved {
             ResolvedType::Enum { .. } => {
-                let (name, module_source) = &self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("an enum names a declaration");
-                if let Some(enum_info) = self.lookup_enum_case_in(name, module_source)
+                if let Some(enum_info) = self.enum_of_type(scrutinee_type)
                     && enum_info.find_case(&normalized).is_some()
                 {
                     return ExhPattern::EnumCase(normalized);
@@ -2678,21 +2588,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => ExhPattern::CatchAll,
         }
-    }
-
-    /// Build the `associated_constants` lookup key. Mirrors
-    /// `Elaborator::format_assoc_const_key`.
-    fn exh_assoc_const_key(variant_name: &str, qualifier: Option<&ast::Type>) -> String {
-        let Some(qualifier) = qualifier else {
-            return variant_name.to_string();
-        };
-        let base = match qualifier {
-            ast::Type::Named(t) => t.name.as_str(),
-            ast::Type::Generic(t) => t.name.as_str(),
-            ast::Type::NamespacedGeneric(t) => t.name.as_str(),
-            _ => return variant_name.to_string(),
-        };
-        format!("{base}::{variant_name}")
     }
 
     fn exh_range(
@@ -2751,11 +2646,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn check_variant_exhaustiveness(
         &self,
         classified: &[(bool, ExhPattern)],
-        variant_name: &str,
-        variant_module: &ModuleSource,
+        scrutinee_type: TypeId,
         span: Span,
     ) {
-        if let Some(variant_info) = self.lookup_variant_case_in(variant_name, variant_module) {
+        if let Some(variant_info) = self.variant_of_type(scrutinee_type) {
             let all_cases: IndexSet<&str> =
                 variant_info.cases.iter().map(|c| c.name.as_str()).collect();
             let covered: IndexSet<&str> = {
@@ -3003,12 +2897,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(target_type)
-                .map(|(n, m)| (FqTypeName::declared(&m, &n), n)),
+            ResolvedType::Struct { .. } => {
+                let tt = self.tysys.type_table.borrow();
+                tt.nominal_def(target_type).map(|def| {
+                    (
+                        FqTypeName::declared(tt.defs(), def),
+                        tt.def_name(def).to_string(),
+                    )
+                })
+            }
             _ => None,
         };
 
@@ -3234,59 +3131,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_item_reference_by_name(name_id, name);
         }
 
-        // Look up the struct in the symbol table to resolve imports/aliases
-        // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
-        // Local struct definitions (current module) shadow imported/prelude structs.
-        // Resolve struct name and module_source.
-        // Local definitions shadow imported/prelude structs.
-        let (struct_name, struct_module_source) = if self
-            .lookup_struct_fields_in_scope(name, &self.current_module_source)
-            .is_some()
-        {
-            (name.clone(), self.current_module_source.clone())
-        } else if let Some(symbol) = self.symbol_named(&self.current_module_source, name) {
-            if let crate::symbol::SymbolKind::Struct(_) = &symbol.kind {
-                (symbol.name.clone(), symbol.module_source().clone())
-            } else {
+        // Which declaration the written name means is the resolve pass's
+        // answer, keyed on the name's own site: the module that wrote it is
+        // the vantage that decides, aliases and `ns::Type` included, and a
+        // literal inside a *foreign* default resolves in the module that wrote
+        // the default rather than the one splicing it in. Everything below
+        // reads the declaration; the name and module are renderings of it, for
+        // the mangled instance name and the diagnostics.
+        let struct_decl = struct_lit
+            .name_id
+            .and_then(|id| self.tysys.resolutions.declared(id));
+        let declared = struct_decl.and_then(|def| self.lookup_struct_fields_of_decl(def));
+        let (struct_name, struct_module_source) = match declared {
+            // The canonical name, not the import alias — and for a
+            // function-local `struct` its mangled storage name, which is what
+            // makes the instance's `TypeId` its own.
+            Some(info) => (info.name.clone(), info.module_source.clone()),
+            None => {
+                // The name is not a struct, or reaches no declaration at all.
+                // Diagnose rather than silently falling back — that fallback
+                // creates a TypeId whose key does not match the registered
+                // struct in WIR build, which used to surface as a downstream
+                // `StructLiteral expected Ref WirType` panic. The best-effort
+                // pair is still returned so later passes have something.
                 let _ = self.emit(TypeError::UnknownType {
                     name: name.clone(),
                     span: struct_lit.span,
                 });
                 (name.clone(), self.current_module_source.clone())
             }
-        } else if let Some(resolved) = self.lookup_struct_in_default_scope(name) {
-            // Default-expression fallback (`default_scope_module`, issue
-            // #1486): a struct literal inside a foreign default resolves its
-            // type name in the declaring module's scope — covering both a
-            // struct the declaring module defines and one it imports
-            // (`span: Span = Span { ... }` where `Span` comes from a `use`).
-            resolved
-        } else {
-            // The struct name is neither locally defined nor imported.
-            // Emit a clear diagnostic instead of silently falling back to
-            // `current_module_source` — that fallback creates a TypeId
-            // whose key does not match the registered struct in WIR build,
-            // which used to surface as a downstream
-            // `StructLiteral expected Ref WirType` panic. The fallback
-            // module_source is still returned so subsequent passes have a
-            // best-effort type; the error has already been logged.
-            let _ = self.emit(TypeError::UnknownType {
-                name: name.clone(),
-                span: struct_lit.span,
-            });
-            (name.clone(), self.current_module_source.clone())
         };
-
-        // Use canonical name from struct_fields info (not import alias) for
-        // consistent TypeId. `struct_name` may still be a bare, pre-
-        // canonicalization name matched via the current function's own
-        // local structs above, so this lookup needs the same function-local
-        // awareness — its result's `info.name` is what makes it canonical
-        // (the internal mangled identity for a local struct).
-        let struct_name = self
-            .lookup_struct_fields_in_scope(&struct_name, &struct_module_source)
-            .map(|info| info.name.clone())
-            .unwrap_or(struct_name);
 
         // Get expected field types using (name, module_source) lookup.
         //
@@ -3296,16 +3170,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // typed by — it would settle on the default `i32` and then mismatch.
         let expected_args =
             expected_type.and_then(|ty| match self.tysys.type_table.borrow().get(ty) {
-                ResolvedType::GenericInstance { def, type_args }
-                    if self.tysys.type_table.borrow().def_name(*def) == struct_name =>
-                {
+                ResolvedType::GenericInstance { def, type_args } if Some(*def) == struct_decl => {
                     Some(type_args.clone())
                 }
                 _ => None,
             });
-        let resolved_struct_fields: Option<Vec<(String, TypeId)>> = self
-            .lookup_struct_fields_in(&struct_name, &struct_module_source)
-            .map(|info| {
+        let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
+            self.struct_fields_of_written_decl(struct_decl).map(|info| {
                 let params = info.type_param_type_ids.clone();
                 let fields: Vec<(String, TypeId)> = info
                     .fields
@@ -3374,7 +3245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Record use→def references for each field name, pointing at the
         // field definition's AstId in the struct declaration.
         let field_refs: Vec<(AstId, AstId)> = self
-            .lookup_struct_fields_in(&struct_name, &struct_module_source)
+            .struct_fields_of_written_decl(struct_decl)
             .map(|info| {
                 struct_lit
                     .fields
@@ -3496,7 +3367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // provided; fields with `= expr` are synthesized from the default
         // expression (pure, resolved in the struct's module scope).
         let struct_field_defaults: Vec<Option<ast::Expr>> = self
-            .lookup_struct_fields_in(&struct_name, &struct_module_source)
+            .struct_fields_of_written_decl(struct_decl)
             .map(|info| info.field_defaults.clone())
             .unwrap_or_default();
         let mut fields = fields;
@@ -3551,8 +3422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // preserved — so only flag fields the user explicitly provided, not the
         // defaults synthesized above.
         if struct_module_source != self.current_module_source
-            && let Some(struct_info) =
-                self.lookup_struct_fields_in(&struct_name, &struct_module_source)
+            && let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl)
         {
             let same_package = struct_module_source.same_package(&self.current_module_source);
             for (fname, _, vis) in &struct_info.fields {
@@ -3576,7 +3446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // a module-level name set and a local-struct table separately could name
         // two different structs when a local shadows a module-level generic.
         let is_generic_struct = self
-            .lookup_struct_fields_in(&struct_name, &struct_module_source)
+            .struct_fields_of_written_decl(struct_decl)
             .is_some_and(|info| !info.type_param_bounds.is_empty());
         let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
             // This is a generic struct - infer type arguments from field values.
@@ -3585,8 +3455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
             let type_args = self.infer_struct_type_args(
-                &struct_name,
-                &struct_module_source,
+                struct_decl,
                 &fields,
                 expected_type.or(spread_base_type),
                 struct_lit.span,
@@ -3605,7 +3474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields
             } else {
                 let struct_param_map: IndexMap<TypeId, TypeId> = self
-                    .lookup_struct_fields_in(&struct_name, &struct_module_source)
+                    .struct_fields_of_written_decl(struct_decl)
                     .map(|info| {
                         info.type_param_type_ids
                             .iter()
@@ -3669,10 +3538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self
-                .lookup_struct_fields_in(&struct_name, &struct_module_source)
-                .cloned()
-            {
+            if let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() {
                 for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
                     if let Some(&type_arg) = type_args.get(i) {
                         for bound in bounds {
@@ -3713,17 +3579,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // continues on `unknown` rather than stopping at the first
             // unresolved name.
             let declared_at = self
-                .lookup_struct_fields_in(&struct_name, &struct_module_source)
+                .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.defined_at);
             let struct_type = {
-                let def = declared_at
-                    .and_then(|ast| self.tysys.resolutions.defs().of_ast_id(ast))
-                    .or_else(|| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .decl_named_in(&struct_name, &struct_module_source)
-                    });
+                let def = declared_at.and_then(|ast| self.tysys.resolutions.defs().of_ast_id(ast));
                 match def {
                     Some(def) => self
                         .tysys
@@ -3753,25 +3612,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (struct_type, mangled_name, fields)
         } else {
             let defined_at = self
-                .lookup_struct_fields_in(&struct_name, &struct_module_source)
+                .struct_fields_of_written_decl(struct_decl)
                 .map(|info| info.defined_at);
-            let struct_type = if let Some(defined_at) = defined_at {
+            let struct_type = defined_at.map_or(TypeTable::UNKNOWN, |defined_at| {
                 self.tysys.type_table.borrow().type_id_of_decl(defined_at)
-            } else {
-                let def = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .decl_named_in(&struct_name, &struct_module_source);
-                match def {
-                    Some(def) => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_struct(crate::tir::StructDef::Decl(def)),
-                    None => TypeTable::UNKNOWN,
-                }
-            };
+            });
             (struct_type, struct_name, fields)
         };
 
@@ -3797,8 +3642,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ModuleSource,
         Vec<(String, TypeId, u32, crate::ast::Visibility)>,
     )> {
-        let (name, module, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
-        let info = self.lookup_struct_fields_in(&name, &module)?.clone();
+        let (head, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
+        let info = self.lookup_struct_fields_of(head)?.clone();
         let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
             .zip(type_args.iter().copied())
             .collect();
@@ -4133,16 +3978,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
     pub(super) fn infer_struct_type_args(
         &mut self,
-        struct_name: &str,
-        struct_module: &ModuleSource,
+        struct_decl: Option<crate::defs::DefId>,
         fields: &[TirStructField],
         expected_type: Option<TypeId>,
         span: Span,
     ) -> Vec<TypeId> {
-        let Some(struct_info) = self
-            .lookup_struct_fields_in(struct_name, struct_module)
-            .cloned()
-        else {
+        let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() else {
             return vec![];
         };
         if struct_info.type_param_type_ids.is_empty() {
@@ -4158,7 +3999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &struct_info.type_param_type_ids,
             &Instantiation {
                 kind: "struct",
-                name: struct_name,
+                name: &struct_info.name,
                 span,
             },
         );
@@ -4221,7 +4062,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 def,
                 type_args: expected_args,
             } = expected_resolved
-                && self.tysys.type_table.borrow().def_name(def) == struct_info.name
+                && Some(def) == struct_decl
                 && expected_args.len() == struct_info.type_param_type_ids.len()
             {
                 for (&var, &expected_arg) in inst.vars.iter().zip(expected_args.iter()) {
@@ -4901,7 +4742,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         use crate::ast::RangeKind;
-        use crate::module_source::ModuleSource;
 
         // Bidirectional coercion: resolve non-literal first to infer the element type
         let start_is_literal = self.tysys.is_numeric_literal(&range.start);
@@ -4997,36 +4837,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let (struct_name, module_source) = match range.kind {
-            RangeKind::Exclusive => {
-                let ms = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
-                    .cloned()
-                    .unwrap_or_else(ModuleSource::range);
-                ("RangeExclusive".to_string(), ms)
-            }
-            RangeKind::Inclusive => {
-                let ms = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
-                    .cloned()
-                    .unwrap_or_else(ModuleSource::range);
-                ("RangeInclusive".to_string(), ms)
-            }
+        let item = match range.kind {
+            RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
+            RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
         };
+        let struct_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .struct_name(item)
+            .to_string();
 
         let struct_type = {
             let def = self
                 .tysys
                 .type_table
-                .borrow_mut()
-                .decl_named_in(&struct_name, &module_source)
-                .expect("the declaration this type names exists");
+                .borrow()
+                .require_compiler_item_def(item);
             self.tysys
                 .type_table
                 .borrow_mut()

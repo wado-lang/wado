@@ -143,7 +143,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
         let call_method_local = crate::name::MethodName::format_local(
-            &crate::name::FqTypeName::declared(module_source, functor_name),
+            &crate::name::FqTypeName::shape(module_source, functor_name),
             None,
             crate::name::CLOSURE_CALL_METHOD,
         );
@@ -475,7 +475,7 @@ fn register_inspect_wrapper(
     // The per-functor impl's local name is `<fq functor>^Trait::method`;
     // module + local name together form its `func_map` key.
     let impl_local_name = crate::name::MethodName::format_local(
-        &crate::name::FqTypeName::declared(module_source, functor_name),
+        &crate::name::FqTypeName::shape(module_source, functor_name),
         Some(trait_name),
         method_name,
     );
@@ -2955,7 +2955,6 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
             i += 1;
             continue;
         }
-        all_rewritten &= !exits_to_target(&instrs[i], target_depth);
         let one_deeper = target_depth + 1;
         let inherited = if tail == Tail::IsResult && i + 1 == instrs.len() {
             Tail::IsResult
@@ -2964,7 +2963,7 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
         };
         match &mut instrs[i] {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
-                all_rewritten &= return_every_exit(body, one_deeper, inherited);
+                return_every_exit(body, one_deeper, inherited);
             }
             WirInstr::If {
                 condition,
@@ -2972,31 +2971,31 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
                 else_body,
                 ..
             } => {
-                all_rewritten &= return_every_exit(
+                return_every_exit(
                     std::slice::from_mut(condition.as_mut()),
                     target_depth,
                     Tail::IsOperand,
                 );
-                all_rewritten &= return_every_exit(then_body, one_deeper, inherited);
+                return_every_exit(then_body, one_deeper, inherited);
                 if let Some(eb) = else_body {
-                    all_rewritten &= return_every_exit(eb, one_deeper, inherited);
+                    return_every_exit(eb, one_deeper, inherited);
                 }
             }
             WirInstr::Seq(body) => {
-                all_rewritten &= return_every_exit(body, target_depth, inherited);
+                return_every_exit(body, target_depth, inherited);
             }
             other => {
-                let mut ok = true;
                 other.for_each_boxed_child_mut(&mut |child| {
-                    ok &= return_every_exit(
-                        std::slice::from_mut(child),
-                        target_depth,
-                        Tail::IsOperand,
-                    );
+                    return_every_exit(std::slice::from_mut(child), target_depth, Tail::IsOperand);
                 });
-                all_rewritten &= ok;
             }
         }
+        // Ask after rewriting, never before: a rewritten exit is a `Return`, so
+        // what `exits_to_target` still finds is exactly an exit the walk could
+        // not reach — and the block must keep its result type for it. Asking
+        // first reported every `if` holding an exit as unrewritten, even the
+        // ones the recursion below had just converted.
+        all_rewritten &= !exits_to_target(&instrs[i], target_depth);
         i += 1;
     }
 

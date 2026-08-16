@@ -42,7 +42,7 @@ fn collect_array_clone_helper_refs_recursive<F>(
     F: Fn(&str) -> Option<u32>,
 {
     if let WirInstr::ArrayClone {
-        element_copy_mangle: Some(copy_mangle),
+        element_copy_mangle: copy_mangle,
         ..
     } = instr
         && let Some(idx) = resolve(copy_mangle)

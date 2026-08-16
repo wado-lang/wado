@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -37,7 +37,8 @@ pub(super) struct SerdeStdlibNames {
 }
 
 impl SerdeStdlibNames {
-    pub fn from_compiler_items(items: &CompilerItems) -> Self {
+    pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+        let items = type_table.compiler_items();
         Self {
             deserialize: items.trait_fq(CompilerItem::Deserialize),
             field_schema: items.trait_fq(CompilerItem::FieldSchema),
@@ -99,7 +100,7 @@ pub fn synthesize_serde(project: &mut Package) {
         }
         let names = {
             let tt = module.type_table.borrow();
-            SerdeStdlibNames::from_compiler_items(tt.compiler_items())
+            SerdeStdlibNames::from_type_table(&tt)
         };
         let existing = collect_existing_trait_methods(module);
         let mut generated = Vec::new();
@@ -114,7 +115,10 @@ pub fn synthesize_serde(project: &mut Package) {
                 SynthTrait::Serialize => {}
                 SynthTrait::Deserialize => {
                     let key = MethodName::format_local(
-                        &FqTypeName::declared(&module.module_source, &req.target_type_name),
+                        &module
+                            .type_table
+                            .borrow()
+                            .fq_base_type_name(req.target_type_id),
                         Some(&names.deserialize),
                         "deserialize",
                     );
@@ -263,22 +267,12 @@ fn generate_field_schema(
     // byte-read compiler item, wrapped in the `ByteSlice` newtype to match the
     // trait signature.
     let key_slice_type = {
-        let slice_module = tt
-            .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
-            .0
-            .clone();
         let base = {
-            let def = tt
-                .decl_named_in("ArraySlice", &slice_module)
-                .expect("the declaration this type names exists");
+            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice);
             tt.make_generic_instance(def, vec![TypeTable::U8])
         };
-        {
-            let def = tt
-                .decl_named_in("ByteSlice", &crate::module_source::ModuleSource::bytes())
-                .expect("the declaration this type names exists");
-            tt.make_newtype(def, base)
-        }
+        let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteSlice);
+        tt.make_newtype(def, base)
     };
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
         .fields
@@ -398,9 +392,10 @@ fn byte_slice_method_call(
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirExpr {
-    let (module_source, owner, name) = compiler_items.require_method(item);
+    let (module_source, _, name) = compiler_items.require_method(item);
+    let module_source = module_source.clone();
     let method_info = LocalMethodName::new(
-        FqTypeName::declared(module_source, owner),
+        compiler_items.require_method_owner(item).clone(),
         None,
         name.to_string(),
     )
@@ -415,7 +410,7 @@ fn byte_slice_method_call(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
-                module_source: module_source.clone(),
+                module_source,
                 name: method_info.to_mangled_name(),
                 monomorph_info: Some(monomorph_info),
                 method_info: Some(method_info),

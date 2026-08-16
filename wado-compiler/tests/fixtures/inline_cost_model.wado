@@ -1,0 +1,69 @@
+// The inline cost model is measured in emitted Wasm instructions, not NIR node
+// count.
+//
+// `Buf::reserve` is the shape every `String` / `List` append goes through: a
+// chain of field reads plus a cold-guarded capacity branch. It is a handful of
+// instructions, but its node count put it out of reach of the `-O2` threshold,
+// so every push paid a call. It inlines now.
+//
+// `Buf::churn` is the counterweight. Node-for-node it is no larger, but it is a
+// loop around calls — a region of its own once spliced into the caller — so it
+// stays a call.
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    repr: List<i32>,
+    used: i32,
+}
+
+impl Buf {
+    fn reserve(&mut self, n: i32) -> i32 {
+        let new_used = self.used + n;
+        if new_used > self.repr.len() {
+            builtin::cold_path();
+            self.repr.push(0);
+        }
+        let start = self.used;
+        self.used = new_used;
+        return start;
+    }
+
+    fn churn(&mut self, rounds: i32) -> i32 {
+        let mut acc = 0;
+        for let mut r = 0; r < rounds; r += 1 {
+            acc += step(acc, r);
+            acc += step(acc, r + 1);
+            acc += step(acc, r + 2);
+            acc += step(acc, r + 3);
+            acc += step(acc, r + 4);
+            acc += step(acc, r + 5);
+        }
+        return acc;
+    }
+}
+
+#[inline(never)]
+fn step(acc: i32, r: i32) -> i32 {
+    return (acc + r) % 7;
+}
+
+export fn run() with Stdout {
+    let mut b = Buf { repr: [0, 0, 0, 0, 0, 0, 0, 0], used: builtin::black_box(0) };
+    let mut total = 0;
+    for let mut i = 0; i < 4; i += 1 {
+        total += b.reserve(i);
+    }
+    println(`${total} ${b.used}`);
+    println(`${b.churn(builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "4 6\n52\n",
+    "wir_not_expect:O2": [
+        "Buf::reserve"
+    ],
+    "wir_expect:O2": [
+        "Buf::churn"
+    ]
+}

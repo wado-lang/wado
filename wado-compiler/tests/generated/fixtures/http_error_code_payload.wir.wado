@@ -206,13 +206,11 @@ type "functype//http_error_code_payload.wado/__cm_export__handle" = fn(i32);  //
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(36)
 
-type "functype//core:rt/cm_lower_string" = fn(ref "core:prelude/string.wado//String") -> i64;  // TypeId(37)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(37)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(38)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(38)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(39)
-
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(40)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -353,6 +351,42 @@ fn "http_error_code_payload.wado/handle"(request) {
     let __free_ptr_164: i32;
     let __free_ptr_166: i32;
     let __free_ptr_168: i32;
+    let s_170: ref "core:prelude/string.wado//String";
+    let len_171: i32;
+    let bytes_172: ref Array<u8>;
+    let ptr_173: i32;
+    let s_176: ref "core:prelude/string.wado//String";
+    let len_177: i32;
+    let bytes_178: ref Array<u8>;
+    let ptr_179: i32;
+    let s_182: ref "core:prelude/string.wado//String";
+    let len_183: i32;
+    let bytes_184: ref Array<u8>;
+    let ptr_185: i32;
+    let s_188: ref "core:prelude/string.wado//String";
+    let len_189: i32;
+    let bytes_190: ref Array<u8>;
+    let ptr_191: i32;
+    let s_194: ref "core:prelude/string.wado//String";
+    let len_195: i32;
+    let bytes_196: ref Array<u8>;
+    let ptr_197: i32;
+    let s_200: ref "core:prelude/string.wado//String";
+    let len_201: i32;
+    let bytes_202: ref Array<u8>;
+    let ptr_203: i32;
+    let s_206: ref "core:prelude/string.wado//String";
+    let len_207: i32;
+    let bytes_208: ref Array<u8>;
+    let ptr_209: i32;
+    let s_212: ref "core:prelude/string.wado//String";
+    let len_213: i32;
+    let bytes_214: ref Array<u8>;
+    let ptr_215: i32;
+    let s_218: ref "core:prelude/string.wado//String";
+    let len_219: i32;
+    let bytes_220: ref Array<u8>;
+    let ptr_221: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:http_error_code_payload.wado::__modules_initialized);
         cold_path;
@@ -385,7 +419,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_17 = 0;
             __local_18 = 0;
             if __local_16 != 0 {
-                __local_20 = builtin::i32_wrap_i64(local.tee __local_19("core:rt/cm_lower_string"(ref.as_non_null(__local_15))));
+                s_170 = ref.as_non_null(__local_15);
+                len_171 = s_170.used;
+                bytes_172 = s_170.repr;
+                ptr_173 = "mem/realloc"(0, 0, 1, len_171);
+                "core:rt/gc_array_to_memory"(bytes_172, 0, ptr_173, len_171);
+                __local_20 = builtin::i32_wrap_i64(local.tee __local_19(builtin::i64_extend_i32_s(ptr_173) | (builtin::i64_extend_i32_s(len_171) << 32_i64)));
                 __local_21 = builtin::i32_wrap_i64(__local_19 >> 32_i64);
                 __local_17 = __local_20;
                 __local_18 = __local_21;
@@ -426,7 +465,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_34 = 0;
             __local_35 = 0;
             if __local_33 != 0 {
-                __local_37 = builtin::i32_wrap_i64(local.tee __local_36("core:rt/cm_lower_string"(ref.as_non_null(__local_32))));
+                s_176 = ref.as_non_null(__local_32);
+                len_177 = s_176.used;
+                bytes_178 = s_176.repr;
+                ptr_179 = "mem/realloc"(0, 0, 1, len_177);
+                "core:rt/gc_array_to_memory"(bytes_178, 0, ptr_179, len_177);
+                __local_37 = builtin::i32_wrap_i64(local.tee __local_36(builtin::i64_extend_i32_s(ptr_179) | (builtin::i64_extend_i32_s(len_177) << 32_i64)));
                 __local_38 = builtin::i32_wrap_i64(__local_36 >> 32_i64);
                 __local_34 = __local_37;
                 __local_35 = __local_38;
@@ -474,7 +518,12 @@ fn "http_error_code_payload.wado/handle"(request) {
                 __local_60 = 0;
                 __local_61 = 0;
                 if __local_59 != 0 {
-                    __local_63 = builtin::i32_wrap_i64(local.tee __local_62("core:rt/cm_lower_string"(ref.as_non_null(__local_58))));
+                    s_182 = ref.as_non_null(__local_58);
+                    len_183 = s_182.used;
+                    bytes_184 = s_182.repr;
+                    ptr_185 = "mem/realloc"(0, 0, 1, len_183);
+                    "core:rt/gc_array_to_memory"(bytes_184, 0, ptr_185, len_183);
+                    __local_63 = builtin::i32_wrap_i64(local.tee __local_62(builtin::i64_extend_i32_s(ptr_185) | (builtin::i64_extend_i32_s(len_183) << 32_i64)));
                     __local_64 = builtin::i32_wrap_i64(__local_62 >> 32_i64);
                     __local_60 = __local_63;
                     __local_61 = __local_64;
@@ -513,7 +562,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_78 = 0;
             __local_79 = 0;
             if __local_77 != 0 {
-                __local_81 = builtin::i32_wrap_i64(local.tee __local_80("core:rt/cm_lower_string"(ref.as_non_null(__local_76))));
+                s_188 = ref.as_non_null(__local_76);
+                len_189 = s_188.used;
+                bytes_190 = s_188.repr;
+                ptr_191 = "mem/realloc"(0, 0, 1, len_189);
+                "core:rt/gc_array_to_memory"(bytes_190, 0, ptr_191, len_189);
+                __local_81 = builtin::i32_wrap_i64(local.tee __local_80(builtin::i64_extend_i32_s(ptr_191) | (builtin::i64_extend_i32_s(len_189) << 32_i64)));
                 __local_82 = builtin::i32_wrap_i64(__local_80 >> 32_i64);
                 __local_78 = __local_81;
                 __local_79 = __local_82;
@@ -546,7 +600,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_96 = 0;
             __local_97 = 0;
             if __local_95 != 0 {
-                __local_99 = builtin::i32_wrap_i64(local.tee __local_98("core:rt/cm_lower_string"(ref.as_non_null(__local_94))));
+                s_194 = ref.as_non_null(__local_94);
+                len_195 = s_194.used;
+                bytes_196 = s_194.repr;
+                ptr_197 = "mem/realloc"(0, 0, 1, len_195);
+                "core:rt/gc_array_to_memory"(bytes_196, 0, ptr_197, len_195);
+                __local_99 = builtin::i32_wrap_i64(local.tee __local_98(builtin::i64_extend_i32_s(ptr_197) | (builtin::i64_extend_i32_s(len_195) << 32_i64)));
                 __local_100 = builtin::i32_wrap_i64(__local_98 >> 32_i64);
                 __local_96 = __local_99;
                 __local_97 = __local_100;
@@ -587,7 +646,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_119 = 0;
             __local_120 = 0;
             if __local_118 != 0 {
-                __local_122 = builtin::i32_wrap_i64(local.tee __local_121("core:rt/cm_lower_string"(ref.as_non_null(__local_117))));
+                s_200 = ref.as_non_null(__local_117);
+                len_201 = s_200.used;
+                bytes_202 = s_200.repr;
+                ptr_203 = "mem/realloc"(0, 0, 1, len_201);
+                "core:rt/gc_array_to_memory"(bytes_202, 0, ptr_203, len_201);
+                __local_122 = builtin::i32_wrap_i64(local.tee __local_121(builtin::i64_extend_i32_s(ptr_203) | (builtin::i64_extend_i32_s(len_201) << 32_i64)));
                 __local_123 = builtin::i32_wrap_i64(__local_121 >> 32_i64);
                 __local_119 = __local_122;
                 __local_120 = __local_123;
@@ -609,7 +673,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_131 = 0;
             __local_132 = 0;
             if __local_130 != 0 {
-                __local_134 = builtin::i32_wrap_i64(local.tee __local_133("core:rt/cm_lower_string"(ref.as_non_null(__local_128))));
+                s_206 = ref.as_non_null(__local_128);
+                len_207 = s_206.used;
+                bytes_208 = s_206.repr;
+                ptr_209 = "mem/realloc"(0, 0, 1, len_207);
+                "core:rt/gc_array_to_memory"(bytes_208, 0, ptr_209, len_207);
+                __local_134 = builtin::i32_wrap_i64(local.tee __local_133(builtin::i64_extend_i32_s(ptr_209) | (builtin::i64_extend_i32_s(len_207) << 32_i64)));
                 __local_135 = builtin::i32_wrap_i64(__local_133 >> 32_i64);
                 __local_131 = __local_134;
                 __local_132 = __local_135;
@@ -623,7 +692,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_139 = 0;
             __local_140 = 0;
             if __local_138 != 0 {
-                __local_142 = builtin::i32_wrap_i64(local.tee __local_141("core:rt/cm_lower_string"(ref.as_non_null(__local_136))));
+                s_212 = ref.as_non_null(__local_136);
+                len_213 = s_212.used;
+                bytes_214 = s_212.repr;
+                ptr_215 = "mem/realloc"(0, 0, 1, len_213);
+                "core:rt/gc_array_to_memory"(bytes_214, 0, ptr_215, len_213);
+                __local_142 = builtin::i32_wrap_i64(local.tee __local_141(builtin::i64_extend_i32_s(ptr_215) | (builtin::i64_extend_i32_s(len_213) << 32_i64)));
                 __local_143 = builtin::i32_wrap_i64(__local_141 >> 32_i64);
                 __local_139 = __local_142;
                 __local_140 = __local_143;
@@ -642,7 +716,12 @@ fn "http_error_code_payload.wado/handle"(request) {
             __local_147 = 0;
             __local_148 = 0;
             if __local_146 != 0 {
-                __local_150 = builtin::i32_wrap_i64(local.tee __local_149("core:rt/cm_lower_string"(ref.as_non_null(__local_144))));
+                s_218 = ref.as_non_null(__local_144);
+                len_219 = s_218.used;
+                bytes_220 = s_218.repr;
+                ptr_221 = "mem/realloc"(0, 0, 1, len_219);
+                "core:rt/gc_array_to_memory"(bytes_220, 0, ptr_221, len_219);
+                __local_150 = builtin::i32_wrap_i64(local.tee __local_149(builtin::i64_extend_i32_s(ptr_221) | (builtin::i64_extend_i32_s(len_219) << 32_i64)));
                 __local_151 = builtin::i32_wrap_i64(__local_149 >> 32_i64);
                 __local_147 = __local_150;
                 __local_148 = __local_151;
@@ -751,17 +830,6 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             continue l91;
         };
     };
-}
-
-fn "core:rt/cm_lower_string"(s) {
-    let len: i32;
-    let bytes: ref Array<u8>;
-    let ptr: i32;
-    len = s.used;
-    bytes = s.repr;
-    ptr = "mem/realloc"(0, 0, 1, len);
-    "core:rt/gc_array_to_memory"(bytes, 0, ptr, len);
-    return builtin::i64_extend_i32_s(ptr) | (builtin::i64_extend_i32_s(len) << 32_i64);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
