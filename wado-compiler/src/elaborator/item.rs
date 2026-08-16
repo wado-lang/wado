@@ -1794,8 +1794,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         owner: &str,
         methods: &[ast::Function],
+        allows_receiver: bool,
     ) {
         for method in methods {
+            // An effect operation is called as `E::op(args)` — there is no
+            // receiver to bind `self` to, and a body that names one resolves
+            // `Self` to nothing. A resource method is the opposite: its `&self`
+            // becomes the CM adapter's first parameter.
+            if !allows_receiver
+                && let Some(receiver) = method
+                    .params
+                    .iter()
+                    .find(|p| p.self_kind != ast::SelfKind::None)
+            {
+                let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    detail: "cannot take a `self` receiver: an operation is called as \
+                             `Effect::op(args)`, with no receiver to bind it to",
+                    span: receiver.span,
+                });
+            }
             if method.is_async && method.body.is_some() {
                 let _ = self.emit(TypeError::OperationClauseNotAllowed {
                     owner: owner.to_string(),

@@ -1,0 +1,67 @@
+// A handler covers the operations it means to answer for; an operation the
+// interface gave a default runs that default, the way a trait's default method
+// fills an impl that leaves it out. An explicit `..trap` still wins.
+use { println, Stdout } from "core:cli";
+
+interface Calc {
+    fn one() -> i32 {
+        return 1;
+    }
+
+    fn two() -> i32 {
+        return 2;
+    }
+
+    // `#function` inside a default reports the operation, not the synthesized
+    // name its body is stored under.
+    fn who() -> String {
+        return #function;
+    }
+}
+
+struct Only {
+}
+
+impl Calc for Only {
+    fn one(&self) -> i32 {
+        resume 10;
+    }
+}
+
+struct Mock {
+}
+
+impl Mock {
+    fn nothing(&self) {
+    }
+}
+
+impl Calc for Mock {
+    fn one(&self) -> i32 {
+        resume 100;
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let o = Only {};
+    with Calc => &o do {
+        println(`${Calc::one()}`);
+        // Left out with no rest clause: the interface's default answers.
+        println(`${Calc::two()}`);
+        println(Calc::who());
+    };
+
+    let m = Mock {};
+    with Calc => &m do {
+        println(`${Calc::one()}`);
+        // `..trap` covers `two` / `who` — not exercised, since a trap ends the
+        // program; that it is a trap and not the default is the point.
+    };
+}
+
+__DATA__
+{
+    "stdout": "10\n2\nCalc::who\n100\n"
+}

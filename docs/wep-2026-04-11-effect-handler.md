@@ -250,10 +250,15 @@ fn test_logging() with Stdout {
 
 ### Handling Granularity: `..forward` and `..trap`
 
-By default, `impl Effect for Type` must implement every operation of the effect (like a complete trait impl); a missing operation is a compile error. A trailing rest clause opts the unimplemented operations into one of two behaviours:
+An `impl Effect for Type` covers the operations it means to answer for. What happens to the rest is decided in this order:
+
+- an operation the interface gave a default implementation runs that default, exactly as a trait's default method fills an impl that leaves it out;
+- otherwise the operation traps if it is ever dispatched.
+
+A trailing rest clause overrides both, for every operation the block leaves out:
 
 - `..forward` — forward each to the outer handler of the same effect (the layer / middleware case).
-- `..trap` — trap if called (the mock / test case).
+- `..trap` — trap if called (the mock / test case), including operations that have a default: a mock that says an operation must not be called means it.
 
 `forward` and `trap` are contextual keywords, recognised only in this rest position. There is no bare `..`: the choice between forwarding and trapping is always explicit, since silently picking either is a footgun (a forwarded mock leaks to the real outer handler; a trapping layer breaks composition).
 

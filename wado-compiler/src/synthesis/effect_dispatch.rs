@@ -200,6 +200,9 @@ pub struct DispatchPlan {
     /// Cached operation declarations (cloned from `EffectMeta`) so the
     /// wrapper / closure synth doesn't have to walk back to the index.
     pub operations: Vec<TirEffectOp>,
+    /// Module the effect is declared in — where an operation's default
+    /// implementation lives.
+    pub decl_module: ModuleSource,
 }
 
 /// Build the mangled instantiation label for naming dispatch
@@ -400,6 +403,7 @@ fn synthesize_dispatch_struct(
         field_types,
         field_indices,
         operations: meta.operations.clone(),
+        decl_module: key.0.clone(),
     }
 }
 
@@ -1647,6 +1651,12 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 )
             } else if impl_info.rest == Some(crate::ast::RestClause::Forward) {
                 build_forward_closure(op, plan, &env.entry_source, &env.type_table)
+            } else if impl_info.rest.is_none() && op.has_default {
+                // No rest clause and the interface declared what the operation
+                // does unhandled: run that, the way a trait's default method
+                // fills an impl that leaves it out. An explicit `..trap` still
+                // wins — a mock says "this must not be called" and means it.
+                build_default_closure(op, plan, &interface_name, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)
             };
@@ -2296,6 +2306,77 @@ fn build_trap_closure(
 /// operation's own dispatch wrapper, which by then has installed `outer`, so
 /// the call lands on the next handler out. Named directly rather than emitted
 /// as `E::op(...)` because call-site rewriting has already run.
+/// A closure calling the operation's default implementation directly — the
+/// stub for an operation a handler leaves out with no rest clause. Unlike the
+/// forward stub it does not consult the outer handler: the default is what the
+/// declaration says the operation does when this handler does not answer for
+/// it.
+fn build_default_closure(
+    op: &TirEffectOp,
+    plan: &DispatchPlan,
+    interface_name: &str,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) -> TirExpr {
+    let span = synth_span();
+    let closure_params: Vec<(String, TypeId)> = op
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.type_id))
+        .collect();
+    let args: Vec<CallArg> = op
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: i as u32,
+                        name: p.name.clone(),
+                    },
+                    p.type_id,
+                    span,
+                ),
+                false,
+            )
+        })
+        .collect();
+    let body = TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: plan.decl_module.clone(),
+                name: crate::name::effect_default_impl_name(interface_name, &op.name),
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: Vec::new(),
+            args,
+            has_receiver: false,
+        },
+        op.return_type,
+        span,
+    );
+
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let func_type =
+        type_table
+            .borrow_mut()
+            .make_function(param_types, op.return_type, vec![], vec![]);
+    TirExpr::new(
+        TirExprKind::Closure {
+            params: closure_params,
+            body: Box::new(body),
+            captures: Vec::new(),
+            functor_id: None,
+            address_taken_locals: crate::hashmap::IndexSet::default(),
+            body_locals: Vec::new(),
+            declared_effects: None,
+        },
+        func_type,
+        span,
+    )
+}
+
 fn build_forward_closure(
     op: &TirEffectOp,
     plan: &DispatchPlan,

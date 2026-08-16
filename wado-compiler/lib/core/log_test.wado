@@ -524,3 +524,21 @@ test "the raw event emitter runs the run-time gates too" {
     assert sink2.events.len() == 1;
     assert sink2.events[0].message == "kept";
 }
+
+test "a directive matches the target an event is actually emitted with" {
+    // The target defaults to the caller's `#function`, so a directive names a
+    // function, not a module path. Passing `target` explicitly is how events
+    // get grouped under a name of the application's choosing.
+    let mut sink = CaptureSink {};
+    let filt = Filter { directives: parse_directives("error,db=debug") };
+    with Log => &mut sink do {
+        with Log => &filt do {
+            info(`unmatched target falls to the default level`);
+            info(`grouped under db`, {}, "db");
+            info(`grouped under db::query`, {}, "db::query");
+        };
+    };
+    assert sink.events.len() == 2;
+    assert sink.events[0].meta.target == "db";
+    assert sink.events[1].meta.target == "db::query";
+}

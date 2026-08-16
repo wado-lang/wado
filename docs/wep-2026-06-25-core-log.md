@@ -200,13 +200,19 @@ is what makes a sink installable where no clock is.
 string an application supplies:
 
 ```
-info,core:json=debug,app::db=trace
+info,Db::query=debug,handle_request=trace
 ```
 
 A bare level is the default for unmatched targets; `target=level` overrides it
 for targets under that prefix, longest matching prefix winning. A malformed
 directive is skipped — a typo in an environment variable must not stop a program
 from starting.
+
+A target is a function name, not a module path: it defaults to the caller's
+`#function`, which is bare for a free function, `Type::method` for a method, and
+`Interface::op` inside an operation's default implementation. Grouping events
+under a subsystem name instead is a matter of passing `target` explicitly at the
+call site — there is no `#module` literal to derive one from.
 
 ### Timestamp and sequence
 

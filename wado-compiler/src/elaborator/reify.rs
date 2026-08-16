@@ -9516,12 +9516,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
             ast::Literal::LocationFunction => {
-                // `#function`; in a default, the calling function.
+                // `#function`; in a default, the calling function. Rendered,
+                // so an operation's default body reports the operation rather
+                // than the synthesized name its body is stored under.
                 let name = match &self.call_site_location {
                     Some(loc) => loc.function_name.clone(),
                     None => ctx.function_name.clone(),
                 };
-                TirExprKind::StringLiteral(name)
+                TirExprKind::StringLiteral(crate::name::display_function_name(&name))
             }
             ast::Literal::LocationFile => {
                 // `#file`; in a default, the caller's module.

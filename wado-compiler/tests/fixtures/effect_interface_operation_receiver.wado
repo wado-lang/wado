@@ -1,0 +1,16 @@
+// An operation is called as `Effect::op(args)`, so there is no receiver to bind
+// `self` to; a body naming one used to reach codegen with an unresolved `Self`.
+interface Calc {
+    fn go(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    Calc::go();
+}
+
+__DATA__
+{
+    "compile_error": "cannot take a `self` receiver"
+}

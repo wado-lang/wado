@@ -4577,7 +4577,7 @@ interface Log {
 }
 ```
 
-A default runs in the caller's scope, like any function call. It is what `..forward` reaches when the outermost handler forwards an operation it does not implement, so a layer that only decorates one operation is installable on its own.
+A default runs in the caller's scope, like any function call. It fills a handler that leaves the operation out — the way a trait's default method does — and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles, so a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
 
 An operation backed by a Component Model import — one carrying `#[cm(...)]`, and every `resource` method — cannot carry a default: its no-handler case is the CM adapter, so a body there could never run and is rejected.
 

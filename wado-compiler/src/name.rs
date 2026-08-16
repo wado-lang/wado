@@ -75,7 +75,25 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
 /// never collides with a source-level function: `core:log` declares both a
 /// `Log::event` default and an `event` facade in one module.
 pub fn effect_default_impl_name(interface: &str, op: &str) -> String {
-    format!("$effect_default${interface}${op}")
+    format!("{EFFECT_DEFAULT_PREFIX}{interface}${op}")
+}
+
+/// Prefix of [`effect_default_impl_name`].
+const EFFECT_DEFAULT_PREFIX: &str = "$effect_default$";
+
+/// How a function name reads where a user sees it — `#function`, and the
+/// call-site name a defaulted argument captures. A default implementation's
+/// storage name is an internal detail, so it renders as the operation it
+/// implements (`Log::event`); every other name passes through unchanged.
+#[must_use]
+pub fn display_function_name(name: &str) -> String {
+    let Some(rest) = name.strip_prefix(EFFECT_DEFAULT_PREFIX) else {
+        return name.to_string();
+    };
+    match rest.split_once('$') {
+        Some((interface, op)) => format!("{interface}::{op}"),
+        None => name.to_string(),
+    }
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's

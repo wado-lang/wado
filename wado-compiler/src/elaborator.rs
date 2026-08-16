@@ -1785,6 +1785,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.reject_unsupported_operation_clauses(
                         &effect_decl.name,
                         &effect_decl.methods,
+                        false,
                     );
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
@@ -1805,6 +1806,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
                         &resource_decl.methods,
+                        true,
                     );
                 }
                 // Other items will be added as needed
