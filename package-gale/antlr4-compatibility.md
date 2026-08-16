@@ -52,7 +52,7 @@ runs ahead of it: **divergence that traces to the Unicode version is
 wontfix**. The superset rule already covers it — a newly assigned code
 point's meaning is fixed by the UCD, not invented by Gale.
 
-A derivation that disagrees on a code point *both* versions define is
+A derivation that disagrees on a code point _both_ versions define is
 still a bug; `scripts/check-unicode-properties.sh` separates the two.
 
 ### EOF in parse trees
@@ -361,13 +361,13 @@ stubbed predicates, never about the base class.
 #### Oracling the Unicode property tables
 
 `\P{...}` complements what `\p` selects, so a table that is merely close
-*admits* code points rather than missing them — and a property's values
+_admits_ code points rather than missing them — and a property's values
 partition the code-point space, so it can be compared exactly instead of
 spot-checked.
 
 `scripts/antlr4-property-oracle.sh <property> <value>...` gives the jar
 one `[\p{PROPERTY=VALUE}]+` rule per value over every Unicode scalar in
-order; a `+` rule consumes a whole run, so the token stream *is* the
+order; a `+` rule consumes a whole run, so the token stream _is_ the
 jar's range table. `scripts/check-unicode-properties.sh` diffs that
 against Gale's expansion, with the tables regenerated at the jar's frozen
 version (above). Java runs only here, never in CI.
