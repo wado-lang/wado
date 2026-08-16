@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786843335710,
+  "lastUpdate": 1786845919245,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48457,6 +48457,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6d74f0a123d3d95cead6b9d9e6f714507098c96"
         },
         "date": 1786843334851,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1975,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6493,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16648,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284956,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3709833b9ca73565785753ee12a9cd226db51b5b",
+          "message": "Merge pull request #1825 from wado-lang/claude/wado-cli-smell-exploration-3mq2bb\n\nrefactor(cli)!: give the shared build knobs one home",
+          "timestamp": "2026-08-16T10:52:14+09:00",
+          "tree_id": "625fe9c5ab9002d1ab29c05a061b8ea24d681f90",
+          "url": "https://github.com/wado-lang/wado/commit/3709833b9ca73565785753ee12a9cd226db51b5b"
+        },
+        "date": 1786845918581,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
