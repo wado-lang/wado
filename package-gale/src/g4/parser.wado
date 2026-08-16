@@ -1744,15 +1744,17 @@ fn drop_prefix(name: &String, count: i32) -> String {
     return out;
 }
 
-/// Decode a range list from the generated tables: base64 over `(gap from the
-/// previous range's end, length)` varint pairs.
+/// Decode a range list from the generated tables: base64 over a varint stream
+/// whose every range is the gap from the previous range's end, shifted up one
+/// bit saying whether a length varint follows.
 fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
     let bytes = base64_decode(encoded).unwrap();
     let mut pos = 0;
     let mut prev = -1;
     while pos < bytes.len() {
-        let lo = prev + 1 + read_varint(&bytes, &mut pos);
-        let hi = lo + read_varint(&bytes, &mut pos);
+        let head = read_varint(&bytes, &mut pos);
+        let lo = prev + 1 + head / 2;
+        let hi = if head % 2 == 0 { lo } else { lo + 1 + read_varint(&bytes, &mut pos) };
         clip_to_scalars(ranges, lo, hi);
         prev = hi;
     }

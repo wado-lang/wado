@@ -669,16 +669,20 @@ fn unassigned_ranges(runs: &List<CategoryRun>) -> List<[i32, i32]> {
     return out;
 }
 
-/// Base64 over `(gap from the previous range's end, length)` varint pairs.
-/// Most ranges are one code point a short way past the previous, so the pair is
-/// two bytes; spelling the endpoints out costs three times as much.
+/// Base64 over a varint stream: per range, the gap from the previous range's
+/// end, shifted up one bit whose value says whether a length follows. Most of
+/// the table is a single code point a short way past the previous one, so most
+/// ranges are one byte; spelling the endpoints out costs six times as much.
 fn encode(ranges: &List<[i32, i32]>) -> String {
     let mut bytes: ByteList = [];
     let mut prev = -1;
     for let r of ranges {
         assert prev < r.0 <= r.1, "encode expects sorted, merged ranges";
-        push_varint(&mut bytes, r.0 - prev - 1);
-        push_varint(&mut bytes, r.1 - r.0);
+        let length = r.1 - r.0;
+        push_varint(&mut bytes, (r.0 - prev - 1) * 2 + if length > 0 { 1 } else { 0 });
+        if length > 0 {
+            push_varint(&mut bytes, length - 1);
+        }
         prev = r.1;
     }
     return base64_encode(&bytes);
