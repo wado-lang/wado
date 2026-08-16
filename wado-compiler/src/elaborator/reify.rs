@@ -8496,10 +8496,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // elaborator's `lookup_field_type`: `&Point`, `&mut Point`, a
             // newtype `Location = Point`, and chained newtypes / `&Location`
             // all resolve their fields against the ultimate underlying struct.
-            // Without the `Newtype` arm a `loc: Location` receiver fell to the
-            // fallback and every field reified with `field_index = 0`, which
-            // `nir/sroa` later keys on to alias `.y` onto the `.x` scalar
-            // local.
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.lookup_struct_field_index(inner, field_name);
             }

@@ -1282,7 +1282,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().struct_fields_of(def)
     }
 
-    /// Field info for a struct type's head; see `TypeLookup::struct_fields_of`.
+    /// Field info for a struct type's head; see
+    /// [`TypeLookup::struct_fields_of_head`].
     pub(super) fn lookup_struct_fields_of(
         &self,
         head: crate::tir::StructDef,

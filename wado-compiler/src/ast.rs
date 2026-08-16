@@ -2915,9 +2915,7 @@ pub enum Pattern {
         type_name: Option<String>,
         /// The qualifier's own reference site. Naming a type in pattern
         /// position is naming a declaration, so the walk answers for it and
-        /// the consumer compares declarations instead of spellings — a
-        /// function-local `struct` renders a mangled name that matches
-        /// nothing, and two modules' same-named structs render the same one.
+        /// the consumer compares declarations rather than spellings.
         type_name_id: Option<AstId>,
         fields: Vec<StructPatternField>,
         has_rest: bool,

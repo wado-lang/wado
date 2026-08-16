@@ -261,18 +261,15 @@ left to walk — the caller arrives holding the `DefId` its site resolved to.
 
 The tables a walk builds as it goes are keyed the same way. `ModuleDecls`'
 `local_*` maps — the fields, cases, members and newtypes the module being
-elaborated has contributed so far — used to be keyed by spelling, so a
-module-level `struct Box` and a function-local one of that name were one entry
-that the later insert won. They are keyed by declaration, and the separate
-`local_item_*` maps that existed to keep local items out of that collision are
-gone with the collision.
+elaborated has contributed so far — are keyed by declaration, so a module-level
+`struct Box` and a function-local one of that name are two entries rather than
+one the later insert wins. No separate tier is needed to keep the two apart.
 
 This is what removes the consumers' need for a vantage. A pass reading a struct's
-fields no longer needs to know which module it is standing in, so it can no longer
-stand in the wrong one — and `with_module_perspective_for`, which used to hide
-the walk's own tables behind a `mem::take` before entering another module, no
-longer swaps them at all. A declaration-keyed entry answers for its declaration
-from anywhere.
+fields does not need to know which module it is standing in, so it cannot stand
+in the wrong one, and `with_module_perspective_for` does not swap these tables
+when it enters another module: a declaration-keyed entry answers for its
+declaration from anywhere.
 
 ### 6. Types carry `DefId`
 
@@ -494,8 +491,8 @@ removed mechanism takes one fix.
         forms is reached holding a resolved type's rendered head — a struct
         literal's recorded name, a pattern's qualifier, a reflection subject —
         each of which has the type it came from and should ask that instead.
-      - `canonical_decl_key` and `decl_key_or_local` (19 callers) are the frame
-        derivation: a name that reaches no import, no declaration of the
+      - `decl_key_or_local` (19 callers) and the `canonical_decl_key` it is
+        built on (3 more) are the frame derivation: a name that reaches no import, no declaration of the
         writing module and no prelude entry, for which only the declaration
         indexes can answer.
 
