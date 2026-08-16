@@ -1802,6 +1802,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         |_| true,
                     );
+                    self.reject_unsupported_operation_clauses(
+                        &resource_decl.name,
+                        &resource_decl.methods,
+                    );
                 }
                 // Other items will be added as needed
                 _ => {}

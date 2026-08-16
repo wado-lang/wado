@@ -1796,6 +1796,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         methods: &[ast::Function],
     ) {
         for method in methods {
+            if method.is_async && method.body.is_some() {
+                let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    detail: "cannot carry a default implementation: an async operation's call \
+                             site is typed as an `AsyncCall`, which a plain body does not \
+                             produce",
+                    span: method.span,
+                });
+            }
+            if !method.stores.is_empty() {
+                let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    detail: "cannot declare `stores`: nothing checks the clause on an \
+                             operation, so it would constrain call sites on a promise the \
+                             handler never makes",
+                    span: method.span,
+                });
+            }
             if !method.effects.is_empty() {
                 let _ = self.emit(TypeError::OperationClauseNotAllowed {
                     owner: owner.to_string(),

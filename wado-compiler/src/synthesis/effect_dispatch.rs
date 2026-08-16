@@ -720,10 +720,15 @@ fn build_dispatch_wrapper_function(
     // and cm_binding rewrites both uniformly. A user-defined effect never gets
     // here: effect-check insists on a handler at every call site.
     let mut else_stmts: Vec<TirStmt> = Vec::new();
-    if op.has_default {
+    if !is_resource && op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
         // The declaration gave the operation a body: that is what "no handler
-        // installed" does. A `#[cm]`-backed operation never gets here — the
-        // elaborator rejects a body on one, since its fallback is the adapter.
+        // installed" does — but only where nothing else answers for the
+        // operation. An effect open at the CM boundary has a real
+        // implementation on the other side, supplied by the consumer, and that
+        // is the handler; a local default must not shadow it. (A `#[cm]`-backed
+        // operation cannot declare a default at all — the elaborator rejects
+        // one — but a boundary-open effect is a property of the world, not of
+        // the declaration, so the ordering here is what settles it.)
         assert!(
             type_args.is_empty(),
             "a default implementation is one monomorphic function, so only a \

@@ -205,6 +205,11 @@ fn compute_last_uses(
                         analyze_body(method, references, last_uses, spans);
                     }
                 }
+                Item::Interface(interface_decl) => {
+                    for method in &interface_decl.methods {
+                        analyze_body(method, references, last_uses, spans);
+                    }
+                }
                 _ => {}
             }
         }
