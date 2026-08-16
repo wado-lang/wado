@@ -906,6 +906,27 @@ fn classify_callee(
     // inlining across the whole program — it stopped `String::get_byte_unchecked`
     // reaching a two-line `peek`. A loop the fold deletes is the option worth
     // holding open.
+    //
+    // This half is a guess, and known to be one. `inline` above reads a fact —
+    // which parameters arrive constant at every call site — while the hold
+    // reads what *would* be true if they all did. That asymmetry is not a
+    // design choice; it is the pass order showing through, and it has already
+    // cost one bug (taking `folded * 2 <= plain` as evidence held half the
+    // program, so `String::get_byte_unchecked` stopped reaching a two-line
+    // `peek`).
+    //
+    // The fix that would remove the guess is to make the fact available in
+    // time: fold before inlining. Measured, on json-twitter ser —
+    //
+    //     const_fold after inline (today)     383 MB/s, 167 KB
+    //     const_fold before inline            341 MB/s, 205 KB
+    //     ditto with the hold deleted         335 MB/s, 204 KB
+    //
+    // — folding ahead of the inliner works on bodies the inliner has not
+    // opened yet, and the duplicate specialization it leaves behind costs more
+    // than the round of blindness it buys. The hold still earns its 2% even
+    // there, so the order is not what makes it necessary. Until a pass order
+    // exists that pays, this stays a guess with its reasoning written down.
     let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
