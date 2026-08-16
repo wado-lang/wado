@@ -29,7 +29,7 @@ impl Deserialize for Options;
 /// point). `highlight` is a grammar's fragment renderer.
 ///
 ///     run_cli(my_grammar::highlight, args());
-pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with Stderr, Preopens, MonotonicClock {
+pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with (Stderr, Preopens, MonotonicClock) {
     let opts = match parse_args::<Options>(args) {
         Ok(o) => o,
         Err(e) => {
@@ -81,7 +81,7 @@ fn highlight_file(
     path: &String,
     output_dir: &String,
     highlight: fn(&String) -> String,
-) -> Option<u64> with Stderr, MonotonicClock {
+) -> Option<u64> with (Stderr, MonotonicClock) {
     let file = match root.open_at(
         PathFlags::none(),
         *path,

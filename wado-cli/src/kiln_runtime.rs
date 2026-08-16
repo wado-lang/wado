@@ -27,6 +27,8 @@ use wado_compiler::{
     GeneratorRunnerError, GeneratorSourceSpan,
 };
 
+use crate::sync::lock;
+
 wasmtime::component::bindgen!({
     path: "../wado-compiler/lib/core/kiln/generator.wit",
     world: "generator",
@@ -55,10 +57,7 @@ struct KilnHostState {
 
 impl kiln_host::Host for KilnHostState {
     async fn emit_diagnostic(&mut self, diagnostic: kiln_host::Diagnostic) {
-        self.diagnostics
-            .lock()
-            .unwrap()
-            .push(lift_diagnostic(diagnostic));
+        lock(&self.diagnostics).push(lift_diagnostic(diagnostic));
     }
 }
 
@@ -407,7 +406,7 @@ pub async fn run_generator(
     }
     .await;
 
-    let emitted: Vec<GeneratorDiagnostic> = diagnostics.lock().unwrap().drain(..).collect();
+    let emitted: Vec<GeneratorDiagnostic> = lock(&diagnostics).drain(..).collect();
     (outcome, emitted)
 }
 

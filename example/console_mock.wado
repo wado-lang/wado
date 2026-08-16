@@ -101,7 +101,7 @@ impl Future<Result<(), ErrorCode>> for MockStdio {
     ..trap
 }
 
-fn greet(name: String) with Stdout, Stderr {
+fn greet(name: String) with (Stdout, Stderr) {
     if name.is_empty() {
         eprintln("warning: empty name");
         return;
@@ -123,7 +123,7 @@ fn read_all_stdin() -> String with Stdin {
     return String::from_utf8_lossy(buf);
 }
 
-export fn run() with Stdout, Stderr {
+export fn run() with (Stdout, Stderr) {
     let mut mock = MockStdio {
         input: b"Ada\nTuring\n",
     };

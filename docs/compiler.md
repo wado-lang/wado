@@ -237,12 +237,14 @@ What is one is a `crate::defs::DefId`: a dense index into the whole-program
 `DefTable`, built after loading from every module's items. Declaration data
 (fields, cases, members, visibility, span) is keyed by it, `ResolvedType`'s
 nominal variants carry it, and every trait / effect / resource / impl-target
-index in the elaborator is keyed by it — so a consumer reads a declaration
-without knowing which module it stands in. `FqTypeName` and `FqTraitName` carry
-one too, in a `DeclaredHead` whose equality and hashing read the `DefId` alone,
-and neither has a constructor that takes a spelling. A head that names no
-declaration — a closure environment, an anonymous literal's shape — is
-`TypeHead::Shape`, whose rendering _is_ its identity.
+index in the elaborator is keyed by it — as are the tables a module's own walk
+adds to as it goes, so a consumer reads a declaration without knowing which
+module it stands in, and a function-local `struct Box` and a module-level one
+are two entries rather than one the later insert wins. `FqTypeName` and
+`FqTraitName` carry one too, in a `DeclaredHead` whose equality and hashing
+read the `DefId` alone, and neither has a constructor that takes a spelling. A
+head that names no declaration — a closure environment, an anonymous literal's
+shape — is `TypeHead::Shape`, whose rendering _is_ its identity.
 
 A handful of functions still turn a name into a declaration; `defs.rs`'s
 `NAME_TO_IDENTITY` lists them with the reason each survives, and

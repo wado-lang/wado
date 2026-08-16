@@ -1,6 +1,7 @@
 mod compiler_host;
 mod data_section;
 mod format_md;
+mod grammar_corpus;
 mod pipeline;
 mod template;
 
@@ -13,14 +14,15 @@ fn main() {
         Some(Value(v)) => v.to_string_lossy().into_owned(),
         Some(other) => panic!(
             "expected subcommand as first argument, got {other:?} \
-             (commands: golden-dump, wasm2wat, format-md)"
+             (commands: golden-dump, wasm2wat, format-md, grammar-corpus)"
         ),
-        None => panic!("command is required (golden-dump, wasm2wat, format-md)"),
+        None => panic!("command is required (golden-dump, wasm2wat, format-md, grammar-corpus)"),
     };
     match cmd.as_str() {
         "golden-dump" => golden_dump(parser),
         "wasm2wat" => wasm2wat(parser),
         "format-md" => format_md::run(parser),
+        "grammar-corpus" => grammar_corpus::run(parser),
         other => panic!("unknown command: {other}"),
     }
 }

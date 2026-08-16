@@ -1162,7 +1162,7 @@ impl Lexer {
     }
 }
 
-fn apply_AB_actions(lx: &mut Lexer, start: i32, end: i32) with SaBase, stores[lx] {
+fn apply_AB_actions(lx: &mut Lexer, start: i32, end: i32) with (SaBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return; }
@@ -1173,7 +1173,7 @@ fn apply_AB_actions(lx: &mut Lexer, start: i32, end: i32) with SaBase, stores[lx
     SaBase::done(LexerView { chars, start, pos });
 }
 
-fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with SaBase, stores[lx] {
+fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with (SaBase, stores[lx]) {
     let chars = &lx.chars;
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return; }
@@ -1197,7 +1197,7 @@ fn try_A(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_KW(chars: &List<char>, start: i32) -> i32 with SaBase, stores[chars] {
+fn try_KW(chars: &List<char>, start: i32) -> i32 with (SaBase, stores[chars]) {
     let mut pos = start;
     if !( SaBase::enabled(LexerView { chars, start, pos }) ) { return -1; }
     if pos >= chars.len() { return -1; }

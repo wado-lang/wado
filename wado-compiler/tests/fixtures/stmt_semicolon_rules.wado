@@ -1,0 +1,45 @@
+// `;` separates statements: the last one in a block may drop it, whatever kind
+// it is, and a stray `;` is an empty statement. A trailing `;` never changes a
+// block's value.
+
+use { println, Stdout } from "core:cli";
+
+fn last_let() -> i32 {
+    let x = 1;
+    let y = 2
+    ;
+    return x + y;
+}
+
+fn last_return(n: i32) -> i32 {
+    return n * 2
+}
+
+fn last_assert(n: i32) -> i32 {
+    assert n > 0
+    ;
+    return n
+}
+
+fn value_with_trailing_semicolon(c: bool) -> i32 {
+    return if c { 1; } else { 2; };
+}
+
+fn empty_statements() -> i32 {
+    ;;
+    let x = 1;;
+    ;
+    return x;
+}
+
+export fn run() with Stdout {
+    println(`${last_let()}`);
+    println(`${last_return(3)}`);
+    println(`${last_assert(4)}`);
+    println(`${value_with_trailing_semicolon(true)}`);
+    println(`${value_with_trailing_semicolon(false)}`);
+    println(`${empty_statements()}`);
+}
+
+__DATA__
+{"stdout": "3\n6\n4\n1\n2\n1\n"}

@@ -274,7 +274,26 @@ test "FnSpec export with effects" {
     f.add_effect(&"Environment");
 
     let sig = f.signature();
-    assert sig == "export fn run() with Stdout, Stderr, Environment", `got: ${sig}`;
+    assert sig == "export fn run() with (Stdout, Stderr, Environment)", `got: ${sig}`;
+}
+
+// A row of one goes bare; only a row of more than one takes parentheses.
+test "FnSpec with a single effect" {
+    let mut f = FnSpec::new("run");
+    f.set_export();
+    f.add_effect(&"Stdout");
+
+    let sig = f.signature();
+    assert sig == "export fn run() with Stdout", `got: ${sig}`;
+}
+
+test "FnSpec with one effect and stores" {
+    let mut f = FnSpec::new("keep", Vis::Pub);
+    f.add_effect(&"Stdout");
+    f.add_stores(&"self");
+
+    let sig = f.signature();
+    assert sig == "pub fn keep() with (Stdout, stores[self])", `got: ${sig}`;
 }
 
 test "FnSpec generic type parameter" {

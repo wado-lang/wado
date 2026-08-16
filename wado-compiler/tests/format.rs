@@ -2951,3 +2951,44 @@ fn test_format_let_else_roundtrips() {
     let reformatted = wado_compiler::format(&formatted).expect("reformat failed");
     assert_eq!(formatted, reformatted, "format should be idempotent");
 }
+
+/// `;` separates statements, so a block's last one may drop it and a stray `;`
+/// is an empty statement. Neither carries meaning, so the formatter normalises
+/// both to the canonical one-`;`-per-statement form.
+#[test]
+fn test_format_normalizes_redundant_semicolons() {
+    let source = "fn run() {\n    let x = 1;;\n    let y = 2\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, "fn run() {\n    let x = 1;\n    let y = 2;\n}\n");
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// An empty statement on a line of its own leaves that line blank, which the
+/// formatter then preserves like any other blank line between statements.
+#[test]
+fn test_format_lone_semicolon_leaves_a_blank_line() {
+    let source = "fn run() {\n    let x = 1;\n    ;\n    let y = 2;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(
+        formatted,
+        "fn run() {\n    let x = 1;\n\n    let y = 2;\n}\n"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
+/// A `with` row of one goes bare and a row of more than one is parenthesised,
+/// in every position a row can appear.
+#[test]
+fn test_format_effect_row_parentheses() {
+    let source = concat!(
+        "fn one() with Stdout {\n}\n",
+        "fn many() with (Stdout, Stderr) {\n}\n",
+        "fn keep(d: &Data) with (Stdout, stores[d]) {\n}\n",
+        "fn nested(f: fn() with (A, B), x: i32) {\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "the canonical row shape must round-trip");
+    assert_format_preserves_ast(source);
+}

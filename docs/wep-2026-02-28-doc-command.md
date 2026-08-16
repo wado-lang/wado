@@ -76,7 +76,7 @@ wado doc lib/core/**/*.wado
 wado doc --format simple lib/core/**/*.wado
 
 # JSON format (serde DOM, machine-readable)
-wado doc -f json lib/core/**/*.wado
+wado doc --format json lib/core/**/*.wado
 ```
 
 | Flag                 | Description                                                          |
@@ -394,10 +394,10 @@ When multiple files are given, markdown and simple formats concatenate their out
 wado doc lib/core/**/*.wado > stdlib-reference.md
 
 # Cheatsheet for the entire stdlib
-wado doc -f simple lib/core/**/*.wado > stdlib-cheatsheet.md
+wado doc --format simple lib/core/**/*.wado > stdlib-cheatsheet.md
 
 # Machine-readable output for tooling
-wado doc -f json lib/core/**/*.wado > stdlib-api.json
+wado doc --format json lib/core/**/*.wado > stdlib-api.json
 ```
 
 Files are output in the order they are given (or glob-expanded).

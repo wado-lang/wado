@@ -1545,7 +1545,7 @@ impl Parser {
 
 fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_b(tokens, pos, &FOLLOW_MASK_0, 0);
+    pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_ID {
         let sp = pos;
@@ -1593,7 +1593,7 @@ fn scan_b(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let b = _parse_b(p, &FOLLOW_MASK_0);
+    let b = _parse_b(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1750,6 +1750,4 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_FLOAT, TK_INT];
-
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_ID, TK_LIT_SEMI]];
 

@@ -1,0 +1,21 @@
+// Two declarations of one name render identically, so a mismatch used to read
+// `expected '&Point', found '&Point'`. Each side takes its module — and only
+// here, because only here do the bare names collide.
+
+use { Point } from "./sub/same_name_diagnostic_a.wado";
+use { Point as BPoint } from "./sub/same_name_diagnostic_b.wado";
+
+fn takes_a(p: &Point) -> i32 {
+    return p.x;
+}
+
+test "a same-name mismatch names the module of each side" {
+    let b = BPoint { x: 1 };
+    assert takes_a(&b) == 1;
+}
+
+__DATA__
+{
+  "test": {},
+  "compile_error": "type mismatch: expected '&./sub/same_name_diagnostic_a.wado#Point', found '&./sub/same_name_diagnostic_b.wado#Point'"
+}

@@ -373,7 +373,7 @@ fn a_copy_in_another_module_of_the_entry_package_is_remarked() {
 use { println, Stdout, Environment, args } from "core:cli";
 use { grow } from "./helper.wado";
 
-export fn run() with Stdout, Environment {
+export fn run() with (Stdout, Environment) {
     println(`${grow(args().len() as i32)}`);
 }
 "#,

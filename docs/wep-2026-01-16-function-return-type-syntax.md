@@ -45,7 +45,7 @@ This decision impacts:
 
 Wado's design includes:
 
-- Effect systems (e.g., `fn foo() with Stdout, FileSystem`)
+- Effect systems (e.g., `fn foo() with (Stdout, FileSystem)`)
 - Higher-order functions with complex type signatures
 - Generic functions and methods
 

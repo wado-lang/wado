@@ -368,7 +368,7 @@ impl Client for CachingClient {
     ..forward
 }
 
-export fn run() with Stdout, Client {
+export fn run() with (Stdout, Client) {
     let mut cache = TreeMap::<String, Response>::new();
     with Client => &mut CachingClient { cache: &mut cache } do {
         app();

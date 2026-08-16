@@ -18,7 +18,7 @@ fn transform<T, effect E>(
     return g(y);
 }
 
-fn effect_poly_multi() with Stdout, Stderr {
+fn effect_poly_multi() with (Stdout, Stderr) {
     run_with(|| { println("stdout effect"); });
     run_with(|| { eprintln("stderr effect"); });
     run_with(|| {
@@ -28,7 +28,7 @@ fn effect_poly_multi() with Stdout, Stderr {
     println("done");
 }
 
-fn effect_poly_multi_param() with Stdout, Stderr {
+fn effect_poly_multi_param() with (Stdout, Stderr) {
     combine(
         || { println("from f"); },
         || { eprintln("from g"); },
@@ -52,7 +52,7 @@ fn effect_poly_multi_param() with Stdout, Stderr {
     println(`result: ${result}`);
 }
 
-export fn run() with Stdout, Stderr {
+export fn run() with (Stdout, Stderr) {
     effect_poly_multi();
     effect_poly_multi_param();
 }

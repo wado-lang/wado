@@ -458,13 +458,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_flags_cases: &self.sem.decls.local_flags_cases,
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
-            // Function-local item declarations resolve through the durable
-            // `local_*` tables above (keyed by their mangled storage name,
-            // recovered from `recorded_type` — see `reify_struct_literal`),
-            // not through this per-function ephemeral tier, which annotate
-            // clears between functions and reify never repopulates.
-            local_item_struct_fields: &self.sem.decls.local_item_struct_fields,
-            local_item_newtypes: &self.sem.decls.local_item_newtypes,
+            anon_struct_fields: &self.sem.decls.anon_struct_fields,
+            // A function-local item is reached through the `local_*` tables
+            // above, by the declaration `local_item_renders` recovers from its
+            // mangled storage name — not through the per-function tier below,
+            // which annotate clears between functions and reify never
+            // repopulates.
             local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
         }
@@ -929,7 +928,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Field types and type-param bounds come from
-    /// `sem.decls.local_item_struct_fields` — the durable fact
+    /// `sem.decls.local_struct_fields` — the durable fact
     /// `resolve_local_struct` recorded under this declaration's own identity.
     /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
@@ -941,7 +940,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .resolutions
             .defs()
             .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local_item_struct_fields.get(&def))
+            .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
             .cloned()
         else {
             // `resolve_local_struct` inserts this unconditionally for every
@@ -1015,7 +1014,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// The base type comes from `sem.decls.local_item_newtypes` — the durable
+    /// The base type comes from `sem.decls.local_newtypes` — the durable
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
@@ -1028,7 +1027,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .resolutions
             .defs()
             .of_ast_id(newtype_decl.id)
-            .and_then(|def| self.sem.decls.local_item_newtypes.get(&def))
+            .and_then(|def| self.sem.decls.local_newtypes.get(&def))
         else {
             return;
         };
@@ -4898,13 +4897,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         // Decl field shape: (name, index, raw_type, default_expr), cloned out
         // of the lookup so the borrow ends before reifying.
-        let anon_name = || {
-            struct_head.map_or_else(String::new, |head| {
-                self.tysys.type_table.borrow().struct_head_name(head)
-            })
-        };
         let lookup = self.type_lookup();
-        let info = struct_head.and_then(|head| lookup.struct_fields_of_head(head, anon_name));
+        let info = struct_head.and_then(|head| lookup.struct_fields_of_head(head));
         let decl_fields: Vec<(String, u32, TypeId, Option<ast::Expr>)> = {
             info.map(|info| {
                 info.fields
@@ -6991,10 +6985,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         else {
             return Vec::new();
         };
-        let anon_name = || self.tysys.type_table.borrow().struct_head_name(head);
         let raw: Vec<(String, TypeId, u32)> = {
             let lookup = self.type_lookup();
-            let Some(info) = lookup.struct_fields_of_head(head, anon_name) else {
+            let Some(info) = lookup.struct_fields_of_head(head) else {
                 return Vec::new();
             };
             info.fields
@@ -8474,80 +8467,64 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> (u32, String, Option<TypeId>) {
         use crate::tir::ResolvedType;
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
-        // Keep the receiver's `module_source` so same-named structs in
-        // different modules (a local `Pair` vs an imported `helper::Pair`)
-        // resolve their fields against the right decl. A name-only lookup
-        // finds whichever the current module sees first, mapping
-        // `remote.y` onto the wrong field index.
-        let (struct_name, _module_source, type_args): (String, Option<ModuleSource>, Vec<TypeId>) =
-            match resolved {
-                ResolvedType::Struct { .. } => {
-                    let (n, m) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(receiver_type)
-                        .expect("a struct names a declaration");
-                    (n, Some(m), vec![])
+        // The receiver's own head answers: same-named structs in different
+        // modules reach their own fields, and an anonymous shape — which no
+        // spelling names — reaches its own.
+        let (head, type_args): (Option<crate::tir::StructDef>, Vec<TypeId>) = match resolved {
+            ResolvedType::Struct { def, .. } => (Some(def), vec![]),
+            ResolvedType::GenericInstance { type_args, .. } => {
+                // Tuple projection (`t.0`): a tuple has no struct decl, so the
+                // struct-fields lookup below misses and the `(0, …)` fallback
+                // would collapse every `t.N` onto field 0. Resolve the numeric
+                // field name into the element index directly.
+                let name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_head(receiver_type)
+                    .map(|(n, _)| n)
+                    .unwrap_or_default();
+                if crate::tir::TypeTable::is_tuple_type(&name)
+                    && let Ok(index) = field_name.parse::<usize>()
+                    && let Ok(elem) = super::Elaborator::<H>::tuple_literal_index_type(
+                        &self.tysys.type_table,
+                        &type_args,
+                        index,
+                    )
+                {
+                    return (index as u32, field_name.to_string(), Some(elem));
                 }
-                ResolvedType::GenericInstance { type_args, .. } => {
-                    let (name, module_source) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(receiver_type)
-                        .expect("a generic instance names a declaration");
-                    // Tuple projection (`t.0`): a tuple has no struct decl, so the
-                    // struct-fields lookup below misses and the `(0, …)` fallback would
-                    // collapse every `t.N` onto field 0. Resolve the numeric field name
-                    // into the element index directly.
-                    if crate::tir::TypeTable::is_tuple_type(&name)
-                        && let Ok(index) = field_name.parse::<usize>()
-                        && let Ok(elem) = super::Elaborator::<H>::tuple_literal_index_type(
-                            &self.tysys.type_table,
-                            &type_args,
-                            index,
-                        )
-                    {
-                        return (index as u32, field_name.to_string(), Some(elem));
-                    }
-                    (name, Some(module_source), type_args)
-                }
-                // Peel references and newtypes and recurse, mirroring the
-                // elaborator's `lookup_field_type`: `&Point`,
-                // `&mut Point`, a newtype `Location = Point`, and chained
-                // newtypes / `&Location` all resolve their fields against the
-                // ultimate underlying struct. Without the `Newtype` arm a
-                // `loc: Location` receiver fell to the fallback and every field
-                // reified with `field_index = 0`, which `nir/sroa` later keys
-                // on to alias `.y` onto the `.x` scalar local.
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    return self.lookup_struct_field_index(inner, field_name);
-                }
-                ResolvedType::Newtype { base_type, .. } => {
-                    return self.lookup_struct_field_index(base_type, field_name);
-                }
-                _ => return (0, field_name.to_string(), None),
-            };
+                (
+                    self.tysys
+                        .type_def(receiver_type)
+                        .map(crate::tir::StructDef::Decl),
+                    type_args,
+                )
+            }
+            // Peel references and newtypes and recurse, mirroring the
+            // elaborator's `lookup_field_type`: `&Point`, `&mut Point`, a
+            // newtype `Location = Point`, and chained newtypes / `&Location`
+            // all resolve their fields against the ultimate underlying struct.
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                return self.lookup_struct_field_index(inner, field_name);
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                return self.lookup_struct_field_index(base_type, field_name);
+            }
+            _ => return (0, field_name.to_string(), None),
+        };
 
-        let resolve_in = |info: &super::types::StructFieldInfo| {
-            info.fields
-                .iter()
-                .enumerate()
-                .find(|(_, (n, _, _))| n == field_name)
-                .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
-        };
-        let found = if let Some(info) = self
-            .tysys
-            .type_def(receiver_type)
-            .and_then(|def| self.tysys.all_struct_fields.get(&def))
-        {
-            resolve_in(info)
-        } else {
+        let found = head.and_then(|head| {
             self.type_lookup()
-                .struct_fields(&struct_name)
-                .and_then(resolve_in)
-        };
+                .struct_fields_of_head(head)
+                .and_then(|info| {
+                    info.fields
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (n, _, _))| n == field_name)
+                        .map(|(idx, (n, ty, _))| (idx as u32, n.clone(), *ty))
+                })
+        });
         let Some((idx, canonical, raw_field_type)) = found else {
             return (0, field_name.to_string(), None);
         };
@@ -10147,17 +10124,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::Struct {
-                type_name,
-                fields,
-                has_rest,
-                ..
-            } => self.reify_struct_pattern(
-                type_name.as_deref(),
-                fields,
-                *has_rest,
-                scrutinee_type,
-                ctx,
-            ),
+                fields, has_rest, ..
+            } => self.reify_struct_pattern(fields, *has_rest, scrutinee_type, ctx),
             // `build_tir_from_state` skips reify for modules with syntax
             // errors, so reify never walks an `Error` placeholder.
             ast::Pattern::Error(_) => {
@@ -10166,16 +10134,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify a struct destructuring pattern `Point { x, y }` or
-    /// `{ x, y }` (anonymous). The struct's field-name → index map
-    /// comes from `tysys.all_struct_fields`; sub-patterns recurse
-    /// against the declared field type. Mirrors
-    /// `Elaborator::resolve_struct_pattern`'s shape; shorthand
-    /// `{ x }` (== `{ x: x }`) is encoded by the AST having the
-    /// sub-pattern be an `Ident { name: x }` either way.
+    /// Reify a struct destructuring pattern `Point { x, y }` or `{ x, y }`
+    /// (anonymous). The field-name → index map comes from the scrutinee's own
+    /// head; sub-patterns recurse against the declared field type. Mirrors
+    /// `Elaborator::resolve_struct_pattern`'s shape; shorthand `{ x }`
+    /// (== `{ x: x }`) is encoded by the AST having the sub-pattern be an
+    /// `Ident { name: x }` either way.
     fn reify_struct_pattern(
         &mut self,
-        type_name: Option<&str>,
         fields: &[ast::StructPatternField],
         has_rest: bool,
         scrutinee_type: TypeId,
@@ -10189,27 +10155,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // presents the scrutinee as `&Point`; peel references so the
         // struct decl resolves (fields inherit the reference kind below).
         let peeled_scrutinee = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let scrutinee_struct_name =
-            match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
-                ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(peeled_scrutinee)
-                    .map(|(n, _)| n)
-                    .unwrap_or_default(),
-                _ => String::new(),
-            };
-        let lookup_name = type_name.unwrap_or(&scrutinee_struct_name);
 
-        // Decl-interned struct info for field-name → (index, type)
-        // lookup. Falls back to UNKNOWN-typed sub-patterns for
-        // anonymous / unresolved scrutinees (matches annotate's
-        // recovery shape).
+        // A field index is a fact about the value being destructured, so the
+        // scrutinee's head answers and the pattern's qualifier — which annotate
+        // checked against this same head — has no say. An unresolved scrutinee
+        // falls back to UNKNOWN-typed sub-patterns, matching annotate.
+        let scrutinee_head = match self.tysys.type_table.borrow().get(peeled_scrutinee) {
+            ResolvedType::Struct { def, .. } => Some(*def),
+            ResolvedType::GenericInstance { .. } => self
+                .tysys
+                .type_def(peeled_scrutinee)
+                .map(crate::tir::StructDef::Decl),
+            _ => None,
+        };
         let field_info: crate::hashmap::IndexMap<String, (u32, TypeId)> = {
             let lookup = self.type_lookup();
-            lookup
-                .struct_fields(lookup_name)
+            scrutinee_head
+                .and_then(|head| lookup.struct_fields_of_head(head))
                 .map(|info| {
                     info.fields
                         .iter()

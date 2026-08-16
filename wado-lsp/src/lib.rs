@@ -625,6 +625,37 @@ impl Engine {
         semantic_tokens::delta_encode(&tokens, &doc.text, self.position_encoding)
     }
 
+    /// Compute the *syntax-only* diagnostics for the given document.
+    ///
+    /// Lexes and parses, and reports nothing else: no loader, no imports, no
+    /// semantics. So a document whose imports do not resolve still reports its
+    /// own syntax, and no [`CompilerHost`] is needed. Columns are re-encoded as
+    /// in [`Engine::diagnostics`].
+    #[must_use]
+    pub fn parse_diagnostics(&self, uri: &str) -> Vec<Diagnostic> {
+        let Some(doc) = self.documents.get(uri) else {
+            return Vec::new();
+        };
+        let mut lexed = wado_compiler::lex(&doc.text);
+        let lex_errors = std::mem::take(&mut lexed.errors);
+        let mut parser = wado_compiler::Parser::from_lex_no_trivia(lexed);
+        parser.parse();
+        let lines = text::LineIndex::new(&doc.text);
+        lex_errors
+            .into_iter()
+            .map(CompilerDiagnostic::from)
+            .chain(
+                parser
+                    .take_errors()
+                    .into_iter()
+                    .map(CompilerDiagnostic::from),
+            )
+            .filter_map(|d| {
+                diagnostics::from_compiler_diagnostic(&d, Some(&lines), self.position_encoding)
+            })
+            .collect()
+    }
+
     /// Compute diagnostics for the given document.
     ///
     /// Reads from the snapshot cache populated by [`Engine::snapshot`].

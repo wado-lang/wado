@@ -47,7 +47,7 @@ variant Command {
 }
 impl Deserialize for Command;
 
-export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
     match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
@@ -80,7 +80,7 @@ fn usage() with Stderr {
     eprintln("       gale dump [--atn | --lexer] <grammar.g4> [grammar2.g4 ...]");
 }
 
-fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdout, Stderr, Preopens, Exit {
+fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdout, Stderr, Preopens, Exit) {
     // Route inputs by extension: `.scm` is a highlight query, everything else
     // is a `.g4` grammar half.
     let mut g4_paths: List<String> = [];
@@ -138,7 +138,7 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with Stdou
 
 /// Write the generated parser source to `path`, inside the first granted
 /// directory.
-fn write_output(path: &String, source: &String) with Stderr, Preopens, Exit {
+fn write_output(path: &String, source: &String) with (Stderr, Preopens, Exit) {
     let file = create_granted(path);
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
@@ -154,7 +154,7 @@ fn write_output(path: &String, source: &String) with Stderr, Preopens, Exit {
     sub.drop();
 }
 
-fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with Stdout, Stderr, Preopens, Exit {
+fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, Preopens, Exit) {
     if paths.len() == 0 {
         eprintln("gale dump: no grammar files given");
         exit(1);
@@ -205,7 +205,7 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with Stdout, Stderr, Pr
 /// parse, merge the split halves, synthesize implicit tokens, and run the
 /// rule-reference check (deferred until post-merge so cross-grammar refs
 /// resolve). Any failure prints a message and exits with code 1.
-fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens, Exit {
+fn load_and_merge(paths: &List<String>) -> Grammar with (Stdout, Stderr, Preopens, Exit) {
     let mut inputs: List<[String, String]> = [];
     for let path of paths {
         let file = open_granted(path);
@@ -241,7 +241,7 @@ fn load_and_merge(paths: &List<String>) -> Grammar with Stdout, Stderr, Preopens
 
 /// Read one source file to a UTF-8 string. Any failure prints a message and
 /// exits with code 1.
-fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
+fn read_source_file(path: &String) -> String with (Stderr, Preopens, Exit) {
     let file = open_granted(path);
     let bytes = match read_all(&file) {
         Ok(b) => b,
@@ -265,7 +265,7 @@ fn read_source_file(path: &String) -> String with Stderr, Preopens, Exit {
 /// A path resolves inside a preopened directory, so `--dir` bounds what the
 /// program can reach. Reading searches every grant — the file sits under one or
 /// under none — and names why nothing matched instead of "no such file".
-fn open_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
+fn open_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
     let dirs = Preopens::get_directories();
     let mut grants: List<String> = [];
     let mut denied = false;
@@ -304,7 +304,7 @@ fn open_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
 ///
 /// Reading may search every grant, but creating cannot: the file does not exist
 /// yet, so a search would let grant order pick the output directory.
-fn create_granted(path: &String) -> Descriptor with Stderr, Preopens, Exit {
+fn create_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
     let dirs = Preopens::get_directories();
     if dirs.is_empty() {
         eprintln(`gale: ${*path}: cannot open for writing`);

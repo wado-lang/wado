@@ -125,6 +125,22 @@ null // coerce to Option::None
 ()
 ```
 
+## Semicolons
+
+```wado
+fn f() -> i32 {
+    let x = 1;
+    return x + 1        // the last statement may drop its `;`
+}                       // (a value-returning fn still needs `return`)
+
+let x = 1 let y = 2;    // Error: a newline does not separate (no ASI)
+let z = 1;;             // OK: an empty statement, removed by `wado format`
+
+let a = if c { 1; } else { 2; };  // 1 or 2 — a trailing `;` is not Rust's `()`
+let u = if c { g(); () } else { () };  // write `()` to mean `()`
+let b = { 1 };          // Error: a brace in value position is a struct literal
+```
+
 ## Variables
 
 ```wado
@@ -808,7 +824,7 @@ fn use_data(data: &Data) -> i32 {
 }
 
 // Combined with effects
-fn store_and_log(data: &Data) -> Container with Stdout, stores[data] {
+fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
     println(`Storing: ${data.value}`);
     return Container { data };
 }
@@ -1082,8 +1098,12 @@ See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
 ```wado
 fn write_file(path: String, data: String) with FileSystem { ... }
-fn main() with Stdout, FileSystem { ... }
+fn main() with (Stdout, FileSystem) { ... }        // more than one → parentheses
 fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
+
+// Same rule in every position, so a comma after a bare effect is the list's.
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters
+fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two parameters
 
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {

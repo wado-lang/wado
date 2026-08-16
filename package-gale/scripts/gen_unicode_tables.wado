@@ -85,7 +85,7 @@ struct NamedRanges {
     ranges: List<[i32, i32]>,
 }
 
-export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let arguments = args();
     if arguments.len() != 1 {
         eprintln("usage: gen_unicode_tables <version>   (UCD files come from the preopened directory)");
@@ -253,7 +253,7 @@ fn named_ranges(runs: &List<PropRun>, aliases: &List<NamedRanges>) -> List<Named
     return out;
 }
 
-fn read_file(path: &String) -> String with Stderr, Preopens, Exit {
+fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("gen_unicode_tables: no preopened directories available");

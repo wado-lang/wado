@@ -14,6 +14,6 @@ use { args, Environment, Stderr } from "core:cli";
 use { Preopens } from "wasi:filesystem";
 use { MonotonicClock } from "wasi:clocks";
 
-export fn run() with Stderr, Environment, Preopens, MonotonicClock {
+export fn run() with (Stderr, Environment, Preopens, MonotonicClock) {
     run_cli(|src: &String| highlight(*src), args());
 }

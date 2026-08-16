@@ -117,7 +117,7 @@ fn collect_entries(dir: &Descriptor, opts: &Options) -> List<DirectoryEntry> {
     return out;
 }
 
-fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with Stdout, Stderr {
+fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with (Stdout, Stderr) {
     let entries = collect_entries(dir, opts);
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
@@ -162,7 +162,7 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
     }
 }
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let opts = match parse_args(args()) {
         Ok(o) => o,
         Err(msg) => {

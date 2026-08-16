@@ -41,6 +41,7 @@ mise run doc-stdlib
 mise run format
 mise run test
 mise run test-wado
+mise run check-grammar
 """
 
 [tasks.build]
@@ -53,6 +54,10 @@ cargo check -p wado-compiler --target wasm32-unknown-unknown
 cargo check -p wado-lsp --target wasm32-unknown-unknown
 cargo check -p wado-manifest --target wasm32-unknown-unknown
 """
+
+[tasks.check-grammar]
+description = "Fail if Wado.g4 and the compiler's parser disagree on the stdlib + fixture corpus"
+run = "scripts/check-grammar.sh"
 
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
@@ -276,9 +281,9 @@ CORE_MODULES="core:prelude core:cli core:collections core:base64 core:zlib \
   core:benchmark core:router core:digest core:uuid core:temporal core:log"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
-cargo run --bin wado --quiet -- doc -f markdown -o 'docs/stdlib-{module}.md' \
+cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
   $CORE_MODULES
-cargo run --bin wado --quiet -- doc -f markdown --title "WASI Standard Library" \
+cargo run --bin wado --quiet -- doc --format markdown --title "WASI Standard Library" \
   -o docs/stdlib-wasi.md $WASI_MODULES
 """
 

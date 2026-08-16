@@ -3,7 +3,7 @@
 use { println, Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 
-export fn run() with Stdout, Stdin {
+export fn run() with (Stdout, Stdin) {
     let [stdin_stream, _done] = Stdin::read_via_stream();
 
     // Read chunks from stdin

@@ -1487,27 +1487,28 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_IN { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_LIT_A && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_B {
-        let sol_0_save = pos;
-        sol_0_done: {
-            sol_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_A { break sol_0; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break sol_0; }
-                pos += 1;
-                break sol_0_done;
-            }
-            pos = sol_0_save;
-        }
-    } else if pos < tokens.len() && tokens[pos] == TK_LIT_B {
-        let sol_1_save = pos;
-        sol_1_done: {
+    osl_0_done: {
+        if pos < tokens.len() && tokens[pos] == TK_LIT_A && pos + 1 < tokens.len() && tokens[pos + 1] == TK_LIT_B {
+            let sol_1_save = pos;
             sol_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_A { break sol_1; }
+                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break sol_1; }
                 pos += 1;
-                break sol_1_done;
+                break osl_0_done;
             }
             pos = sol_1_save;
+            break osl_0_done;
+        }
+        if pos < tokens.len() && tokens[pos] == TK_LIT_B {
+            let sol_2_save = pos;
+            sol_2: {
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break sol_2; }
+                pos += 1;
+                break osl_0_done;
+            }
+            pos = sol_2_save;
+            break osl_0_done;
         }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }

@@ -145,15 +145,17 @@ test "parse empty crate" {
     }
 }
 
-test "top-level fn item is not predicted yet (prediction gap, not a predicate)" {
-    // `fn main() {}` fails with `expected Eof, got "fn"`: the `crate` rule's
-    // item prediction does not route `KW_FN` into the `function_` alternative,
-    // so it matches zero items and expects EOF. `function_` uses no semantic
-    // predicate — this is a static-prediction gap, unrelated to superClass. A
-    // negative tripwire: it will flip to `ok()` when item prediction is fixed.
+// `item`'s route to `function_` runs through `visItem : visibility? ...`, so
+// `FIRST(item)` only reaches `KW_FN` when it is computed through the nullable
+// `visibility` reference. This used to fail with `expected Eof, got "fn"`.
+test "top-level fn item routes through the nullable visibility rule" {
     let r = rlex_prs(&"fn main() {}");
-    assert !r.ok(), "expected a diagnostic";
-    assert r.diagnostics[0].message.contains("Eof"), `unexpected diagnostic: ${r.diagnostics[0].message}`;
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "a visible top-level fn item still parses" {
+    let r = rlex_prs(&"pub fn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
 // Multi-token tail-greedy caller-FOLLOW gate (parse-side + scan-side).

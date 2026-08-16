@@ -394,14 +394,14 @@ Destructors can declare effects, and these effects propagate to callers:
 
 ```wado
 resource Database {
-    fn drop(self) with Network, Stdout {
+    fn drop(self) with (Network, Stdout) {
         // Close connection and log
         close_connection(self.handle);
         println("Database connection closed");
     }
 }
 
-fn use_db() with Network, Stdout {
+fn use_db() with (Network, Stdout) {
     let db = Database::connect();
     // ...
     // db.drop() requires Network, Stdout
@@ -454,12 +454,12 @@ struct Server {
 
 // Server is implicitly unique
 // Synthesized destructor:
-//   fn drop(self) with Network, FileSystem {
+//   fn drop(self) with (Network, FileSystem) {
 //       self.socket.drop();
 //       self.log_file.drop();
 //   }
 
-fn run_server() with Network, FileSystem {
+fn run_server() with (Network, FileSystem) {
     let server = Server {
         socket: Socket::bind("0.0.0.0:8080"),
         log_file: File::open("server.log"),

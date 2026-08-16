@@ -15,12 +15,12 @@ fn run_with_stdout<F: fn() with Stdout>(f: F) with Stdout {
 fn run_both<F: fn() with (Stdout, Stderr), G: fn() with Stdout>(
     mut f: F,
     mut g: G,
-) with Stdout, Stderr {
+) with (Stdout, Stderr) {
     f();
     g();
 }
 
-export fn run() with Stdout, Stderr {
+export fn run() with (Stdout, Stderr) {
     run_with_stdout(|| {
         println("single-effect bound");
     });

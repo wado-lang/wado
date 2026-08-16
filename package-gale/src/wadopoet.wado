@@ -461,11 +461,11 @@ pub struct FnSpec {
     /// and the parameter list (e.g. `"V: Visitor"` → `fn walk<V: Visitor>(`).
     generics: List<String>,
     /// Effect names for the `with …` clause, rendered after the return
-    /// type (e.g. `["Stdout", "Stderr"]` → ` with Stdout, Stderr`).
+    /// type (e.g. `["Stdout", "Stderr"]` → ` with (Stdout, Stderr)`).
     effects: List<String>,
     /// Reference-parameter names for a `stores[…]` clause, rendered inside the
     /// same `with` clause after the effects (e.g. `["chars"]` →
-    /// ` with Foo, stores[chars]`).
+    /// ` with (Foo, stores[chars])`).
     stores: List<String>,
     receiver: Option<String>,
 }
@@ -575,8 +575,10 @@ impl FnSpec {
         if self.stores.len() > 0 {
             clauses.push(`stores[${join_comma(&self.stores)}]`);
         }
-        if clauses.len() > 0 {
-            sig.push_str(&` with ${join_comma(&clauses)}`);
+        if clauses.len() == 1 {
+            sig.push_str(&` with ${clauses[0]}`);
+        } else if clauses.len() > 1 {
+            sig.push_str(&` with (${join_comma(&clauses)})`);
         }
         return sig;
     }

@@ -1,0 +1,124 @@
+//! Corpus check: parse every `.wado` path given on the command line with the
+//! Gale-generated parser and report each file's first diagnostic.
+//!
+//!     wado run package-gale-highlight-wado/tools/corpus_check.wado -- <paths...>
+//!     wado run package-gale-highlight-wado/tools/corpus_check.wado -- --paths-from list.txt
+//!
+//! One `ok` / `ng` line per file, plus a summary. `--paths-from` reads one
+//! path per line — the only form that survives a path containing a space.
+
+use { parse } from "../src/lib.wado";
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("error: no preopened directories available");
+        return;
+    }
+    let root = dirs[0].0;
+
+    let argv = args();
+    let mut paths: List<String> = [];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--paths-from" && i + 1 < argv.len() {
+            i += 1;
+            let list = match read_file(&root, &argv[i]) {
+                Some(text) => text,
+                None => "",
+            };
+            for let line of list.lines() {
+                if !line.is_empty() {
+                    paths.push(line);
+                }
+            }
+        } else if argv[i].ends_with(".wado") {
+            paths.push(argv[i]);
+        }
+    }
+
+    let mut total = 0;
+    let mut bad = 0;
+    for let arg of &paths {
+        total += 1;
+        if let Some(src) = read_file(&root, arg) {
+            let result = parse(&src);
+            if result.diagnostics.len() == 0 {
+                println(`ok\t${*arg}`);
+            } else {
+                bad += 1;
+                let d = result.diagnostics[0];
+                let line = line_of(&src, d.span.start);
+                println(
+                    `ng\t${*arg}\t${result.diagnostics.len()}\t${line}\t${d.message}\t${snippet(&src, d.span.start)}`,
+                );
+            }
+        } else {
+            bad += 1;
+            println(`ng\t${*arg}\t0\t0\tunreadable\t`);
+        }
+    }
+    eprintln(`summary: ${total} files, ${bad} with diagnostics`);
+}
+
+/// 1-based line number of byte offset `at`.
+fn line_of(src: &String, at: i32) -> i32 {
+    let mut line = 1;
+    let mut i = 0;
+    while i < at && i < src.len() {
+        if src.get_byte_unchecked(i) == b'\n' {
+            line += 1;
+        }
+        i += 1;
+    }
+    return line;
+}
+
+/// The source line containing byte offset `at`, trimmed.
+fn snippet(src: &String, at: i32) -> String {
+    let mut start = at;
+    if start > src.len() {
+        start = src.len();
+    }
+    while start > 0 && src.get_byte_unchecked(start - 1) != b'\n' {
+        start -= 1;
+    }
+    let mut end = at;
+    while end < src.len() && src.get_byte_unchecked(end) != b'\n' {
+        end += 1;
+    }
+    return src.substr_bytes(start, end).trim();
+}
+
+fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr {
+    let file = match root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot open: ${e:?}`);
+            return null;
+        },
+    };
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: List<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        bytes.extend(&chunk);
+    }
+    read_stream.drop();
+    return match String::from_utf8(bytes) {
+        Ok(s) => Option::Some(s),
+        Err(e) => {
+            eprintln(`error: ${*path}: not UTF-8: ${e}`);
+            return null;
+        },
+    };
+}

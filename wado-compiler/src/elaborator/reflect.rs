@@ -88,6 +88,149 @@ impl ScalarReflectSpec {
             ScalarReflectKind::Flags => matches!(subject, ResolvedType::Flags { .. }),
         }
     }
+
+    fn methods(self, tt: &TypeTable) -> ScalarMethods {
+        let items = tt.compiler_items();
+        ScalarMethods {
+            type_name: items.method_name(self.type_name_item).to_string(),
+            value: items.method_name(self.value_method_item).to_string(),
+            from: items.method_name(self.from_method_item).to_string(),
+            members: items.method_name(self.members_method_item).to_string(),
+            wire_name_policy: items.method_name(self.wire_name_policy_item).to_string(),
+        }
+    }
+}
+
+/// `ReflectStruct`'s member names, resolved once through the compiler-item
+/// registry so a stdlib rename flows through both the `is_*_trait_call`
+/// predicate and the resolver that dispatches on them.
+struct StructMethods {
+    type_name: String,
+    members: String,
+    from_fields: String,
+    defaults: String,
+    wire_name_policy: String,
+}
+
+impl StructMethods {
+    fn resolve(tt: &TypeTable) -> Self {
+        let items = tt.compiler_items();
+        Self {
+            type_name: items
+                .method_name(CompilerItem::ReflectStructTypeName)
+                .to_string(),
+            members: items
+                .method_name(CompilerItem::ReflectStructMembers)
+                .to_string(),
+            from_fields: items
+                .method_name(CompilerItem::ReflectStructFromFields)
+                .to_string(),
+            defaults: items
+                .method_name(CompilerItem::ReflectStructDefaults)
+                .to_string(),
+            wire_name_policy: items
+                .method_name(CompilerItem::ReflectStructWireNamePolicy)
+                .to_string(),
+        }
+    }
+
+    fn declares(&self, method: &str) -> bool {
+        [
+            &self.type_name,
+            &self.members,
+            &self.from_fields,
+            &self.defaults,
+            &self.wire_name_policy,
+        ]
+        .into_iter()
+        .any(|name| name == method)
+    }
+}
+
+/// `ReflectVariant`'s member names — the variant analog of [`StructMethods`].
+struct VariantMethods {
+    type_name: String,
+    discriminant: String,
+    cases: String,
+    wire_name_policy: String,
+}
+
+impl VariantMethods {
+    fn resolve(tt: &TypeTable) -> Self {
+        let items = tt.compiler_items();
+        Self {
+            type_name: items
+                .method_name(CompilerItem::ReflectVariantTypeName)
+                .to_string(),
+            discriminant: items
+                .method_name(CompilerItem::ReflectVariantDiscriminant)
+                .to_string(),
+            cases: items
+                .method_name(CompilerItem::ReflectVariantMembers)
+                .to_string(),
+            wire_name_policy: items
+                .method_name(CompilerItem::ReflectVariantWireNamePolicy)
+                .to_string(),
+        }
+    }
+
+    fn declares(&self, method: &str) -> bool {
+        [
+            &self.type_name,
+            &self.discriminant,
+            &self.cases,
+            &self.wire_name_policy,
+        ]
+        .into_iter()
+        .any(|name| name == method)
+    }
+}
+
+/// A scalar kind's member names, sourced from its [`ScalarReflectSpec`].
+struct ScalarMethods {
+    type_name: String,
+    value: String,
+    from: String,
+    members: String,
+    wire_name_policy: String,
+}
+
+impl ScalarMethods {
+    fn declares(&self, method: &str) -> bool {
+        [
+            &self.type_name,
+            &self.value,
+            &self.from,
+            &self.members,
+            &self.wire_name_policy,
+        ]
+        .into_iter()
+        .any(|name| name == method)
+    }
+}
+
+/// How the missing-pack-bound diagnostic spells the binding each payload kind
+/// needs on a generic subject.
+const STRUCT_PACK_BOUND: &str = "FieldTypes = [..F]";
+const VARIANT_PACK_BOUND: &str = "CasePayloads = [..P]";
+
+/// The `[..P]` pack a reflect bound projects: the pack element type itself and
+/// the `(name, index)` handle a mapped pack is rebuilt from.
+struct PackHead {
+    ty: TypeId,
+    name: String,
+    index: u32,
+}
+
+/// The dispatch record's per-parameter mutability. A reflect member takes
+/// either one never-`mut` argument — the subject of `discriminant(&self)` /
+/// `bits(&self)`, the raw scalar of `from_<value>(raw)` — or none.
+fn arg_param_is_mut(takes_argument: bool) -> Vec<bool> {
+    if takes_argument {
+        vec![false]
+    } else {
+        Vec::new()
+    }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -108,7 +251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // type-param-receiver dispatch that monomorphization redirects to the
         // concrete `Struct^ReflectStruct::method`.
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
+        if let ResolvedType::TypeParam { name, .. } = subject {
             return self.resolve_generic_reflect_static_call(self_ty, &name, static_call, ctx);
         }
 
@@ -128,33 +271,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             member_types: field_types,
         } = subject;
 
-        let (
-            reflect_trait_name,
-            members_method,
-            from_fields_method,
-            defaults_method,
-            wire_name_policy_method,
-        ) = {
+        let (reflect_trait_name, methods) = {
             let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
             (
-                items.trait_fq(crate::compiler_item::CompilerItem::ReflectStruct),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectStructMembers)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectStructFromFields)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectStructDefaults)
-                    .to_string(),
-                items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
-                    .to_string(),
+                tt.compiler_items().trait_fq(CompilerItem::ReflectStruct),
+                StructMethods::resolve(&tt),
             )
         };
 
-        let well_formed = if method == from_fields_method {
+        let well_formed = if method == methods.from_fields {
             self.check_reflect_from_fields_arg(&field_types, static_call, ctx)
         } else {
             self.reject_reflect_metadata_args(static_call, ctx)
@@ -174,31 +299,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a compiler trait item names a declaration"),
             );
 
-        let return_type = if method == from_fields_method {
+        let return_type = if method == methods.from_fields {
             self_ty
-        } else if method == defaults_method {
+        } else if method == methods.defaults {
             let mut tt = self.tysys.type_table.borrow_mut();
             let slots: Vec<TypeId> = field_types.iter().map(|&f| tt.make_option(f)).collect();
             tt.make_tuple(slots)
-        } else if method == members_method {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let def = tt
-                .require_compiler_item_def(crate::compiler_item::CompilerItem::ReflectStructField);
-            let members: Vec<TypeId> = field_types
-                .into_iter()
-                .map(|field_ty| tt.make_generic_instance(def, vec![self_ty, field_ty]))
-                .collect();
-            tt.make_tuple(members)
-        } else if method == wire_name_policy_method {
+        } else if method == methods.members {
+            self.payload_members_ty(CompilerItem::ReflectStructField, self_ty, &field_types)
+        } else if method == methods.wire_name_policy {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_compiler_enum(crate::compiler_item::CompilerItem::CaseStyle)
+                .make_compiler_enum(CompilerItem::CaseStyle)
         } else {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_compiler_struct(crate::compiler_item::CompilerItem::String)
+                .make_compiler_struct(CompilerItem::String)
         };
 
         let func_ref = self.reflect_func_ref(
@@ -209,19 +327,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method,
             module_source,
         );
+        self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
+
+        return_type
+    }
+
+    /// Record a reflect call's dispatch fact for reify. A reflection member
+    /// carries no method-level type args, no parameter defaults and no
+    /// self-in-args, so only the callee and the argument list vary.
+    fn record_reflect_dispatch(
+        &mut self,
+        call_id: ast::AstId,
+        function_ref: FunctionRef,
+        param_is_mut: Vec<bool>,
+    ) {
         self.sem.types.static_method_dispatch.insert(
-            static_call.id,
+            call_id,
             super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut: Vec::new(),
+                function_ref,
+                param_is_mut,
                 param_types: Vec::new(),
                 type_args: Vec::new(),
                 param_defaults: Vec::new(),
                 self_in_args: false,
             },
         );
-
-        return_type
     }
 
     /// Build the `FunctionRef` targeting a reflect subject's synthesized
@@ -280,39 +410,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (
-            reflect_trait_name,
-            type_name_method,
-            members_method,
-            from_fields_method,
-            defaults_method,
-            wire_name_policy_method,
-        ) = {
+        let (reflect_trait_name, methods) = {
             let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
             (
-                items.trait_fq(CompilerItem::ReflectStruct),
-                items
-                    .method_name(CompilerItem::ReflectStructTypeName)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectStructMembers)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectStructFromFields)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectStructDefaults)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectStructWireNamePolicy)
-                    .to_string(),
+                tt.compiler_items().trait_fq(CompilerItem::ReflectStruct),
+                StructMethods::resolve(&tt),
             )
         };
 
-        if method == from_fields_method {
+        if method == methods.from_fields {
             return self.resolve_generic_reflect_from_fields(
                 self_ty,
                 type_param_name,
@@ -322,41 +429,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        let return_type = if method == type_name_method {
+        let return_type = if method == methods.type_name {
             self.tysys
                 .type_table
                 .borrow_mut()
                 .make_compiler_struct(CompilerItem::String)
-        } else if method == wire_name_policy_method {
+        } else if method == methods.wire_name_policy {
             self.tysys
                 .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if method == defaults_method {
+        } else if method == methods.defaults {
             let Some(slots_ty) =
                 self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
             else {
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!(
-                        "ReflectStruct::<{type_param_name}>::{method} (no `FieldTypes = [..F]` bound on {type_param_name})"
-                    ),
-                    span: static_call.span,
-                });
+                self.emit_missing_pack_bound(
+                    reflect_trait_name.base_name(),
+                    type_param_name,
+                    &method,
+                    STRUCT_PACK_BOUND,
+                    static_call,
+                );
                 return TypeTable::ERROR;
             };
             slots_ty
-        } else if method == members_method {
-            let Some(members_ty) = self.struct_members_bound_ty(
+        } else if method == methods.members {
+            let Some(members_ty) = self.payload_member_pack_bound_ty(
                 self_ty,
                 type_param_name,
                 reflect_trait_name.base_name(),
+                crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+                CompilerItem::ReflectStructField,
             ) else {
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!(
-                        "ReflectStruct::<{type_param_name}>::{method} (no `FieldTypes = [..F]` bound on {type_param_name})"
-                    ),
-                    span: static_call.span,
-                });
+                self.emit_missing_pack_bound(
+                    reflect_trait_name.base_name(),
+                    type_param_name,
+                    &method,
+                    STRUCT_PACK_BOUND,
+                    static_call,
+                );
                 return TypeTable::ERROR;
             };
             members_ty
@@ -377,9 +488,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             reflect_trait_name,
             method,
             static_call,
+            Vec::new(),
         );
 
         return_type
+    }
+
+    /// The diagnostic for a reflect member on a generic subject `T` that
+    /// carries no pack bound to source the member's shape from. `pack_bound`
+    /// spells the missing binding, e.g. `FieldTypes = [..F]`.
+    fn emit_missing_pack_bound(
+        &mut self,
+        trait_name: &str,
+        type_param_name: &str,
+        method: &str,
+        pack_bound: &str,
+        static_call: &ast::StaticMethodCallExpr,
+    ) {
+        let _ = self.emit(TypeError::UnknownFunction {
+            name: format!(
+                "{trait_name}::<{type_param_name}>::{method} (no `{pack_bound}` bound on {type_param_name})"
+            ),
+            span: static_call.span,
+        });
     }
 
     /// Resolve `ReflectStruct::<T>::from_fields(fields)` on a generic subject: the
@@ -399,12 +530,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             reflect_trait_name.base_name(),
             crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
         ) else {
-            let _ = self.emit(TypeError::UnknownFunction {
-                name: format!(
-                    "ReflectStruct::<{type_param_name}>::{method} (no `FieldTypes = [..F]` bound on {type_param_name})"
-                ),
-                span: static_call.span,
-            });
+            self.emit_missing_pack_bound(
+                reflect_trait_name.base_name(),
+                type_param_name,
+                &method,
+                STRUCT_PACK_BOUND,
+                static_call,
+            );
             return TypeTable::ERROR;
         };
 
@@ -427,6 +559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             reflect_trait_name,
             method,
             static_call,
+            Vec::new(),
         );
 
         self_ty
@@ -440,6 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reflect_trait_name: crate::name::FqTraitName,
         method: String,
         static_call: &ast::StaticMethodCallExpr,
+        param_is_mut: Vec<bool>,
     ) {
         let mut method_info = LocalMethodName::new(
             FqTypeName::binder(type_param_name),
@@ -447,25 +581,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
         );
         method_info.is_type_param_receiver = true;
-        let mangled_name = method_info.to_mangled_name();
 
         let func_ref = FunctionRef {
             module_source: self.current_module_source.clone(),
-            name: mangled_name,
+            name: method_info.to_mangled_name(),
             monomorph_info: None,
             method_info: Some(method_info),
         };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut: Vec::new(),
-                param_types: Vec::new(),
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-                self_in_args: false,
-            },
-        );
+        self.record_reflect_dispatch(static_call.id, func_ref, param_is_mut);
     }
 
     /// The `Assoc = [..F]` pack binding on `T`'s bound of the given trait
@@ -680,7 +803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if arg_ty != TypeTable::ERROR && arg_ty != fields_tuple_ty {
             let (expected, found) = {
                 let tt = self.tysys.type_table.borrow();
-                (tt.type_name(fields_tuple_ty), tt.type_name(arg_ty))
+                tt.type_names_for_mismatch(fields_tuple_ty, arg_ty)
             };
             let _ = self.emit(TypeError::TypeMismatch {
                 expected,
@@ -727,17 +850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return false;
         }
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        method == items.method_name(crate::compiler_item::CompilerItem::ReflectStructTypeName)
-            || method == items.method_name(crate::compiler_item::CompilerItem::ReflectStructMembers)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectStructFromFields)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectStructDefaults)
-            || method
-                == items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectStructWireNamePolicy)
+        StructMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
     /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
@@ -750,16 +863,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return false;
         }
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        method == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantTypeName)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantDiscriminant)
-            || method
-                == items.method_name(crate::compiler_item::CompilerItem::ReflectVariantMembers)
-            || method
-                == items
-                    .method_name(crate::compiler_item::CompilerItem::ReflectVariantWireNamePolicy)
+        VariantMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
     /// Resolve a `ReflectVariant::<T>::method()` trait-qualified static call to
@@ -771,13 +875,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
 
         // Generic subject `T: ReflectVariant`: the concrete variant is unknown
         // until monomorphization; mirror `resolve_reflect_static_call`.
         let subject = self.tysys.type_table.borrow().get(self_ty).clone();
-        if let crate::tir::ResolvedType::TypeParam { name, .. } = subject {
+        if let ResolvedType::TypeParam { name, .. } = subject {
             return self.resolve_generic_reflect_variant_static_call(
                 self_ty,
                 &name,
@@ -801,24 +904,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             member_types: payloads,
         } = subject;
 
-        let (trait_name, discriminant_method, cases_method, wire_name_policy_method) = {
+        let (trait_name, methods) = {
             let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
             (
-                items.trait_fq(CompilerItem::ReflectVariant),
-                items
-                    .method_name(CompilerItem::ReflectVariantDiscriminant)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantMembers)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantWireNamePolicy)
-                    .to_string(),
+                tt.compiler_items().trait_fq(CompilerItem::ReflectVariant),
+                VariantMethods::resolve(&tt),
             )
         };
 
-        let is_discriminant = method == discriminant_method;
+        let is_discriminant = method == methods.discriminant;
         let args_valid = if is_discriminant {
             self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
         } else {
@@ -841,19 +935,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if is_discriminant {
             TypeTable::I32
-        } else if method == wire_name_policy_method {
+        } else if method == methods.wire_name_policy {
             self.tysys
                 .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if method == cases_method {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            let def = tt.require_compiler_item_def(CompilerItem::ReflectVariantCase);
-            let members: Vec<TypeId> = payloads
-                .into_iter()
-                .map(|payload| tt.make_generic_instance(def, vec![self_ty, payload]))
-                .collect();
-            tt.make_tuple(members)
+        } else if method == methods.cases {
+            self.payload_members_ty(CompilerItem::ReflectVariantCase, self_ty, &payloads)
         } else {
             self.tysys
                 .type_table
@@ -869,21 +957,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &method,
             module_source,
         );
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut: if is_discriminant {
-                    vec![false]
-                } else {
-                    Vec::new()
-                },
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-                param_types: Vec::new(),
-                self_in_args: false,
-            },
-        );
+        self.record_reflect_dispatch(static_call.id, func_ref, arg_param_is_mut(is_discriminant));
 
         return_type
     }
@@ -902,57 +976,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        use crate::compiler_item::CompilerItem;
         let method = static_call.method.clone();
-        let (
-            trait_name,
-            type_name_method,
-            discriminant_method,
-            cases_method,
-            wire_name_policy_method,
-        ) = {
+        let (trait_name, methods) = {
             let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
             (
-                items.trait_fq(CompilerItem::ReflectVariant),
-                items
-                    .method_name(CompilerItem::ReflectVariantTypeName)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantDiscriminant)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantMembers)
-                    .to_string(),
-                items
-                    .method_name(CompilerItem::ReflectVariantWireNamePolicy)
-                    .to_string(),
+                tt.compiler_items().trait_fq(CompilerItem::ReflectVariant),
+                VariantMethods::resolve(&tt),
             )
         };
 
-        let is_discriminant = method == discriminant_method;
-        let return_type = if method == wire_name_policy_method {
+        let is_discriminant = method == methods.discriminant;
+        let return_type = if method == methods.wire_name_policy {
             self.tysys
                 .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if method == type_name_method {
+        } else if method == methods.type_name {
             self.tysys
                 .type_table
                 .borrow_mut()
                 .make_compiler_struct(CompilerItem::String)
         } else if is_discriminant {
             TypeTable::I32
-        } else if method == cases_method {
-            let Some(members_ty) =
-                self.variant_members_bound_ty(self_ty, type_param_name, trait_name.base_name())
-            else {
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!(
-                        "ReflectVariant::<{type_param_name}>::{method} (no `CasePayloads = [..P]` bound on {type_param_name})"
-                    ),
-                    span: static_call.span,
-                });
+        } else if method == methods.cases {
+            let Some(members_ty) = self.payload_member_pack_bound_ty(
+                self_ty,
+                type_param_name,
+                trait_name.base_name(),
+                crate::synthesis::traits::REFLECT_CASE_PAYLOADS_ASSOC,
+                CompilerItem::ReflectVariantCase,
+            ) else {
+                self.emit_missing_pack_bound(
+                    trait_name.base_name(),
+                    type_param_name,
+                    &method,
+                    VARIANT_PACK_BOUND,
+                    static_call,
+                );
                 return TypeTable::ERROR;
             };
             members_ty
@@ -969,137 +1029,91 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let mut method_info = LocalMethodName::new(
-            FqTypeName::binder(type_param_name),
-            Some(trait_name),
+        self.record_type_param_reflect_dispatch(
+            type_param_name,
+            trait_name,
             method,
-        );
-        method_info.is_type_param_receiver = true;
-        let mangled_name = method_info.to_mangled_name();
-
-        let func_ref = FunctionRef {
-            module_source: self.current_module_source.clone(),
-            name: mangled_name,
-            monomorph_info: None,
-            method_info: Some(method_info),
-        };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut: if is_discriminant {
-                    vec![false]
-                } else {
-                    Vec::new()
-                },
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-                param_types: Vec::new(),
-                self_in_args: false,
-            },
+            static_call,
+            arg_param_is_mut(is_discriminant),
         );
 
         return_type
     }
 
-    /// The constructor-mapped member pack `[..Case<T, P>]` — the type of
-    /// `members()` under a `T: ReflectVariant<CasePayloads = [..P]>` bound. The pack
-    /// param recurs inside the mapped element as a scalar placeholder, so
-    /// per-element substitution binds it to `P_k`. `None` when `T` carries no
-    /// `Cases` pack bound.
-    fn variant_members_bound_ty(
+    /// Map the `[..P]` pack `T`'s bound projects through `elem`, rewrapped in
+    /// the `[..X]` tuple shape a member type carries. `None` when `T` carries
+    /// no such pack bound.
+    fn map_bound_pack(
         &mut self,
-        self_ty: TypeId,
         type_param_name: &str,
-        trait_name: &str,
+        reflect_trait_name: &str,
+        assoc_name: &str,
+        elem: impl FnOnce(&mut TypeTable, &PackHead) -> TypeId,
     ) -> Option<TypeId> {
-        use crate::compiler_item::CompilerItem;
-        let cases_ty = self.reflect_pack_bound_ty(
-            type_param_name,
-            trait_name,
-            crate::synthesis::traits::REFLECT_CASE_PAYLOADS_ASSOC,
-        )?;
+        let pack_tuple =
+            self.reflect_pack_bound_ty(type_param_name, reflect_trait_name, assoc_name)?;
         let mut tt = self.tysys.type_table.borrow_mut();
-        let elems = tt.as_tuple(cases_ty)?;
-        let (pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
-            crate::tir::ResolvedType::TypePack {
+        let elems = tt.as_tuple(pack_tuple)?;
+        let head = elems.iter().find_map(|&e| match tt.get(e) {
+            ResolvedType::TypePack {
                 name,
                 index,
                 mapped_elem: None,
-            } => Some((name.clone(), *index)),
+            } => Some(PackHead {
+                ty: e,
+                name: name.clone(),
+                index: *index,
+            }),
             _ => None,
         })?;
-        let def = tt.require_compiler_item_def(CompilerItem::ReflectVariantCase);
-        let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
-        let member = tt.make_generic_instance(def, vec![self_ty, elem_param]);
-        let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
+        let mapped = elem(&mut tt, &head);
+        let member_pack = tt.make_mapped_type_pack(head.name, head.index, mapped);
         Some(tt.make_tuple(vec![member_pack]))
     }
 
-    /// The constructor-mapped member pack `[..StructField<T, F>]` — the type of
-    /// `members()` under a `T: ReflectStruct<FieldTypes = [..F]>` bound. The variant
-    /// analog is [`Self::variant_members_bound_ty`]; both map the projected element
-    /// pack through a member constructor. `None` when `T` carries no `FieldTypes`
-    /// pack bound.
-    fn struct_members_bound_ty(
+    /// The constructor-mapped member pack `[..M<T, P>]` — the type of
+    /// `members()` under a `T: Trait<Assoc = [..P]>` bound whose member handle
+    /// carries the element as its payload parameter (`StructField<T, F>` /
+    /// `VariantCase<T, P>`). The pack param recurs inside the mapped element as
+    /// a scalar placeholder, so per-element substitution binds it to `P_k`.
+    fn payload_member_pack_bound_ty(
         &mut self,
         self_ty: TypeId,
         type_param_name: &str,
         reflect_trait_name: &str,
+        assoc_name: &str,
+        member_struct_item: CompilerItem,
     ) -> Option<TypeId> {
-        use crate::compiler_item::CompilerItem;
-        let fields_ty = self.reflect_pack_bound_ty(
+        self.map_bound_pack(
             type_param_name,
             reflect_trait_name,
-            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
-        )?;
-        let mut tt = self.tysys.type_table.borrow_mut();
-        let elems = tt.as_tuple(fields_ty)?;
-        let (pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
-            crate::tir::ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem: None,
-            } => Some((name.clone(), *index)),
-            _ => None,
-        })?;
-        let def = tt.require_compiler_item_def(CompilerItem::ReflectStructField);
-        let elem_param = tt.make_type_param(pack_name.clone(), pack_index);
-        let member = tt.make_generic_instance(def, vec![self_ty, elem_param]);
-        let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
-        Some(tt.make_tuple(vec![member_pack]))
+            assoc_name,
+            |tt, head| {
+                let def = tt.require_compiler_item_def(member_struct_item);
+                let elem_param = tt.make_type_param(head.name.clone(), head.index);
+                tt.make_generic_instance(def, vec![self_ty, elem_param])
+            },
+        )
     }
 
     /// The slot pack `[..Option<F>]` — the type of `defaults()` under a
     /// `T: ReflectStruct<FieldTypes = [..F]>` bound. Maps the field-type pack
-    /// through `Option`, as [`Self::struct_members_bound_ty`] maps it through
-    /// the member constructor.
+    /// through `Option`, as [`Self::payload_member_pack_bound_ty`] maps it
+    /// through the member constructor.
     fn struct_defaults_bound_ty(
         &mut self,
         type_param_name: &str,
         reflect_trait_name: &str,
     ) -> Option<TypeId> {
-        let fields_ty = self.reflect_pack_bound_ty(
+        self.map_bound_pack(
             type_param_name,
             reflect_trait_name,
             crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
-        )?;
-        let mut tt = self.tysys.type_table.borrow_mut();
-        let elems = tt.as_tuple(fields_ty)?;
-        let (pack_ty, pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
-            crate::tir::ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem: None,
-            } => Some((e, name.clone(), *index)),
-            _ => None,
-        })?;
-        // The slot names the pack itself, not a `TypeParam` placeholder: a
-        // derivation infers `Option<F>`'s payload from it, and inference binds
-        // through the pack.
-        let slot = tt.make_option(pack_ty);
-        let slot_pack = tt.make_mapped_type_pack(pack_name, pack_index, slot);
-        Some(tt.make_tuple(vec![slot_pack]))
+            // The slot names the pack itself, not a `TypeParam` placeholder: a
+            // derivation infers `Option<F>`'s payload from it, and inference
+            // binds through the pack.
+            |tt, head| tt.make_option(head.ty),
+        )
     }
 
     /// Whether `prefix::method` names a member of the scalar-kind reflection
@@ -1118,17 +1132,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return false;
         }
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        [
-            spec.type_name_item,
-            spec.value_method_item,
-            spec.from_method_item,
-            spec.members_method_item,
-            spec.wire_name_policy_item,
-        ]
-        .into_iter()
-        .any(|item| method == items.method_name(item))
+        spec.methods(&self.tysys.type_table.borrow())
+            .declares(method)
     }
 
     /// Resolve a `ReflectEnum` / `ReflectFlags` `::<T>::method()` static call to
@@ -1212,17 +1217,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method.clone(),
             )),
         };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut,
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-                param_types: Vec::new(),
-                self_in_args: false,
-            },
-        );
+        self.record_reflect_dispatch(static_call.id, func_ref, param_is_mut);
 
         return_type
     }
@@ -1259,30 +1254,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let param_is_mut = self.reflect_scalar_param_is_mut(spec, &method);
-        let mut method_info = LocalMethodName::new(
-            FqTypeName::binder(type_param_name),
-            Some(trait_name),
+        self.record_type_param_reflect_dispatch(
+            type_param_name,
+            trait_name,
             method,
-        );
-        method_info.is_type_param_receiver = true;
-        let mangled_name = method_info.to_mangled_name();
-
-        let func_ref = FunctionRef {
-            module_source: self.current_module_source.clone(),
-            name: mangled_name,
-            monomorph_info: None,
-            method_info: Some(method_info),
-        };
-        self.sem.types.static_method_dispatch.insert(
-            static_call.id,
-            super::sem::types::StaticMethodDispatch {
-                function_ref: func_ref,
-                param_is_mut,
-                type_args: Vec::new(),
-                param_defaults: Vec::new(),
-                param_types: Vec::new(),
-                self_in_args: false,
-            },
+            static_call,
+            param_is_mut,
         );
 
         return_type
@@ -1302,19 +1279,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        let (type_name_method, value_method, from_method, members_method, wire_name_policy_method) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.method_name(spec.type_name_item).to_string(),
-                items.method_name(spec.value_method_item).to_string(),
-                items.method_name(spec.from_method_item).to_string(),
-                items.method_name(spec.members_method_item).to_string(),
-                items.method_name(spec.wire_name_policy_item).to_string(),
-            )
-        };
+        let methods = spec.methods(&self.tysys.type_table.borrow());
 
-        if *method == wire_name_policy_method {
+        if *method == methods.wire_name_policy {
             self.reject_reflect_metadata_args(static_call, ctx)
                 .then(|| {
                     self.tysys
@@ -1322,7 +1289,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_compiler_enum(CompilerItem::CaseStyle)
                 })
-        } else if *method == type_name_method {
+        } else if *method == methods.type_name {
             self.reject_reflect_metadata_args(static_call, ctx)
                 .then(|| {
                     self.tysys
@@ -1330,15 +1297,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_compiler_struct(CompilerItem::String)
                 })
-        } else if *method == members_method {
+        } else if *method == methods.members {
             if !self.reject_reflect_metadata_args(static_call, ctx) {
                 return None;
             }
             self.scalar_members_return_ty(spec, self_ty, self_name, static_call)
-        } else if *method == value_method {
+        } else if *method == methods.value {
             self.check_reflect_fields_receiver(self_ty, self_name, static_call, ctx)
                 .then_some(spec.value_type)
-        } else if *method == from_method {
+        } else if *method == methods.from {
             let arg_types: Vec<TypeId> = static_call
                 .args
                 .iter()
@@ -1355,7 +1322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if arg_types[0] != TypeTable::ERROR && arg_types[0] != spec.value_type {
                 let (expected, found) = {
                     let tt = self.tysys.type_table.borrow();
-                    (tt.type_name(spec.value_type), tt.type_name(arg_types[0]))
+                    tt.type_names_for_mismatch(spec.value_type, arg_types[0])
                 };
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected,
@@ -1540,10 +1507,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The mapped member pack `[..M<T>]` — the type of `members()` under a
-    /// `T: Trait<Members = [..C]>` bound. Analogous to
-    /// [`Self::variant_members_bound_ty`], but the member carries no payload param,
-    /// so the mapped element is a constant `M<T>` and the bound pack serves only
-    /// to source the arity. `None` when `T` carries no `Members` pack bound.
+    /// `T: Trait<Members = [..C]>` bound. Unlike
+    /// [`Self::payload_member_pack_bound_ty`] the member carries no payload
+    /// param, so the mapped element is a constant `M<T>` and the bound pack
+    /// serves only to source the arity.
     fn scalar_members_bound_ty(
         &mut self,
         spec: ScalarReflectSpec,
@@ -1551,36 +1518,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_name: &str,
         trait_name: &str,
     ) -> Option<TypeId> {
-        let members_ty =
-            self.reflect_pack_bound_ty(type_param_name, trait_name, spec.members_assoc)?;
-        let mut tt = self.tysys.type_table.borrow_mut();
-        let elems = tt.as_tuple(members_ty)?;
-        let (pack_name, pack_index) = elems.iter().find_map(|&e| match tt.get(e) {
-            crate::tir::ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem: None,
-            } => Some((name.clone(), *index)),
-            _ => None,
-        })?;
-        let def = tt.require_compiler_item_def(spec.member_struct_item);
-        let member = tt.make_generic_instance(def, vec![self_ty]);
-        let member_pack = tt.make_mapped_type_pack(pack_name, pack_index, member);
-        Some(tt.make_tuple(vec![member_pack]))
+        self.map_bound_pack(type_param_name, trait_name, spec.members_assoc, |tt, _| {
+            let def = tt.require_compiler_item_def(spec.member_struct_item);
+            tt.make_generic_instance(def, vec![self_ty])
+        })
     }
 
     /// Per-parameter mutability of a scalar-kind member's dispatch record:
-    /// `<value>(&self)` and `from_<value>(raw)` take one non-mut argument; the
-    /// metadata members take none.
+    /// `<value>(&self)` and `from_<value>(raw)` take one argument; the metadata
+    /// members take none.
     fn reflect_scalar_param_is_mut(&self, spec: ScalarReflectSpec, method: &str) -> Vec<bool> {
         let tt = self.tysys.type_table.borrow();
         let items = tt.compiler_items();
-        if method == items.method_name(spec.value_method_item)
-            || method == items.method_name(spec.from_method_item)
-        {
-            vec![false]
-        } else {
-            Vec::new()
-        }
+        arg_param_is_mut(
+            method == items.method_name(spec.value_method_item)
+                || method == items.method_name(spec.from_method_item),
+        )
     }
 }

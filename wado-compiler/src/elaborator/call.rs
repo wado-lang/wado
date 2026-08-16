@@ -2660,11 +2660,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TirExpr],
         span: crate::Span,
     ) -> Option<TypeId> {
-        let receiver_ty = self.resolve_named_type(type_name, span, false);
+        // `type_name` is the receiver spelling after `Self::` / `T::`
+        // rewriting, which no source segment names.
+        let receiver_ty = self.resolve_unsited_type_name(type_name, span);
         // The blanket would key on the argument-less head, which carries no
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
-        if let Some(expected) = self.bare_generic_type_arity(type_name)
+        if let Some(expected) = self
+            .type_decl_at(None, type_name)
+            .and_then(|def| self.bare_generic_type_arity(def))
             && self
                 .find_blanket_static_method(receiver_ty, method)
                 .is_some()

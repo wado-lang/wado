@@ -1255,7 +1255,7 @@ fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
     return Result::<CliArgs, String>::Ok(CliArgs { want_all, categories, finalize_stage_b_oracle });
 }
 
-export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let cli = match parse_cli_args(args()) {
         Ok(c) => c,
         Err(msg) => {
@@ -1949,7 +1949,7 @@ fn write_oracle_pending_files(
 /// shell wrapper successfully ran the oracle); sweep any prior test
 /// whose `.input` has gone away. `ORACLE_VERSION` env stamps the test
 /// header with the resolved jar version.
-fn finalize_stage_b_oracle(root: &Descriptor) with Stdout, Stderr, Environment, Exit {
+fn finalize_stage_b_oracle(root: &Descriptor) with (Stdout, Stderr, Environment, Exit) {
     let pending_root = match open_dir(root, &"package-gale/tests/antlr4-compat/oracle-pending", false) {
         Ok(d) => d,
         Err(_) => {

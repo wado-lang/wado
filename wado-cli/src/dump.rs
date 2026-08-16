@@ -3,10 +3,10 @@ use std::fs;
 use std::path::Path;
 
 use lexopt::Arg::Value;
-use wado_compiler::OptLevel;
 
 use crate::args::{self, CliExit};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::knobs::{CompileKnobs, KnobOpt};
 
 pub struct DumpOptions {
     pub inputs: Vec<String>,
@@ -20,17 +20,9 @@ pub struct DumpOptions {
     pub show_nir_lowered: bool,
     pub show_nir: bool,
     pub show_wir: bool,
-    pub opt_level: OptLevel,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    /// Generic codegen feature flags from `-f <flag>` (e.g. `["no-branch-hinting"]`).
-    pub codegen_flags: Vec<String>,
+    pub knobs: CompileKnobs,
     /// `--world <name>`; `None` selects the default `wasi:cli/command`.
     pub target_world: Option<String>,
-    /// `--allocator <mode>`; `None` selects the world's default.
-    pub allocator: Option<String>,
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 #[derive(Clone, Copy)]
@@ -45,12 +37,7 @@ enum Opt {
     NirLowered,
     Nir,
     Wir,
-    OptLevel,
-    InlineThreshold,
-    OptIterations,
-    Feature,
     World,
-    Allocator,
     Help,
 }
 
@@ -66,13 +53,18 @@ impl Opt {
         Self::NirLowered,
         Self::Nir,
         Self::Wir,
-        Self::OptLevel,
-        Self::InlineThreshold,
-        Self::OptIterations,
-        Self::Feature,
         Self::World,
-        Self::Allocator,
         Self::Help,
+    ];
+
+    const KNOBS: &[KnobOpt] = &[
+        KnobOpt::OptLevel,
+        KnobOpt::InlineThreshold,
+        KnobOpt::OptIterations,
+        KnobOpt::LogLevel,
+        KnobOpt::Allocator,
+        KnobOpt::NoCache,
+        KnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -137,17 +129,7 @@ impl Opt {
                 value: None,
                 desc: "Show final WIR (after optimization, affected by -Ox) [default]",
             },
-            Self::OptLevel => args::OptSpec {
-                long: None,
-                short: Some('O'),
-                value: Some("<n>"),
-                desc: "Optimization level (affects --nir and --wir output)",
-            },
-            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
-            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::Feature => args::FEATURE_SPEC,
             Self::World => args::WORLD_SPEC,
-            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -190,38 +172,18 @@ fn format_usage() -> String {
     )
     .unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Optimization Level:").unwrap();
-    writeln!(buf, "  -O0          No optimizations").unwrap();
-    writeln!(
-        buf,
-        "  -O1          Development optimizations (all passes except DCE)"
-    )
-    .unwrap();
-    writeln!(buf, "  -O2          Production optimizations (default)").unwrap();
-    writeln!(buf, "  -O3          Aggressive optimizations").unwrap();
-    writeln!(buf, "  -Os          Size optimizations (O2 + strip names)").unwrap();
-    writeln!(buf).unwrap();
     writeln!(buf, "Other:").unwrap();
     write!(
         buf,
         "{}",
-        args::format_opts_help(
-            &[Opt::World, Opt::Allocator, Opt::Feature, Opt::Help],
-            |o| { o.spec() }
-        )
-    )
-    .unwrap();
-    write!(
-        buf,
-        "{}",
-        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+        args::OptsHelp::default()
+            .add(&[Opt::World, Opt::Help], |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .add(args::ParamOpt::ALL, |o| o.spec())
+            .render()
     )
     .unwrap();
     buf
-}
-
-pub fn print_usage() {
-    eprint!("{}", format_usage());
 }
 
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
@@ -237,18 +199,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_nir_lowered = false;
     let mut show_nir = false;
     let mut show_wir = false;
-    let mut opt_level = OptLevel::O2;
-    let mut inline_threshold: Option<usize> = None;
-    let mut opt_iterations: Option<u32> = None;
-    let mut codegen_flags: Vec<String> = Vec::new();
     let mut target_world: Option<String> = None;
-    let mut allocator: Option<String> = None;
     let mut any_phase = false;
-    let mut param_args = args::ParamArgs::default();
+    let mut knobs = CompileKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            param_args.apply(p, &mut parser)?;
+        if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
+            knobs.apply(k, &mut parser)?;
+        } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            knobs.params.apply(p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Tokens => {
@@ -291,38 +250,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_wir = true;
                     any_phase = true;
                 }
-                Opt::OptLevel => {
-                    let level = args::require_value(&mut parser)
-                        .map_err(|_| CliExit::error("-O requires a level (0, 1, 2, 3, or s)"))?;
-                    let level_str = level.to_string_lossy();
-                    opt_level = match level_str.as_ref() {
-                        "0" => OptLevel::O0,
-                        "1" => OptLevel::O1,
-                        "2" => OptLevel::O2,
-                        "3" => OptLevel::O3,
-                        "s" => OptLevel::Os,
-                        _ => {
-                            return Err(CliExit::error(format!(
-                                "Unknown optimization level: -O{level_str}\nValid levels: -O0, -O1, -O2, -O3, -Os"
-                            )));
-                        }
-                    };
-                }
-                Opt::InlineThreshold => {
-                    inline_threshold = Some(args::parse_inline_threshold_arg(
-                        "--optimize-inline-threshold",
-                        &mut parser,
-                    )?);
-                }
-                Opt::OptIterations => {
-                    opt_iterations = Some(args::parse_opt_iterations_arg(
-                        "--optimize-iterations",
-                        &mut parser,
-                    )?);
-                }
-                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
-                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -351,14 +279,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_nir_lowered,
         show_nir,
         show_wir,
-        opt_level,
-        inline_threshold,
-        opt_iterations,
-        codegen_flags,
+        knobs,
         target_world,
-        allocator,
-        param_overrides: param_args.overrides,
-        param_policy: param_args.policy,
     })
 }
 
@@ -385,7 +307,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::new(base_path.clone());
+    let host = FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level);
 
     let manifest_pair = crate::compile::load_nearest_manifest(path);
     let host = crate::compile::attach_manifest_and_component_deps(
@@ -401,26 +323,26 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     // Run any Kiln generators the entry declares (`use x from "<schema>" with
     // { generator: ... }`), so the loader below redirects to their generated
     // output instead of falling through to the raw (non-Wado) schema file.
-    let invocations = crate::compile::maybe_run_pipeline(path, &host, false, manifest_pair)
-        .await
-        .map_err(|e| CliExit::error(format!("wado dump: {e}")))?
-        .invocations;
+    let invocations =
+        crate::compile::maybe_run_pipeline(path, &host, opts.knobs.no_cache, manifest_pair)
+            .await
+            .map_err(|e| CliExit::error(format!("wado dump: {e}")))?
+            .invocations;
 
-    let target_world = opts.target_world.clone();
-
+    let knobs = &opts.knobs;
     // Diagnostics are already emitted by the host; signal silently on failure.
     let result = wado_compiler::dump_with_host_and_world(
         &source,
         &host,
         Some(input),
-        opts.opt_level,
-        target_world.as_deref(),
-        opts.allocator.as_deref(),
-        opts.inline_threshold,
-        opts.opt_iterations,
-        &opts.codegen_flags,
-        &opts.param_overrides,
-        opts.param_policy,
+        knobs.opt_level.to_compiler(),
+        opts.target_world.as_deref(),
+        knobs.allocator.as_deref(),
+        knobs.inline_threshold,
+        knobs.opt_iterations,
+        &knobs.codegen_flags,
+        &knobs.params.overrides,
+        knobs.params.policy,
         invocations,
     )
     .await
@@ -465,10 +387,12 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             let module_path = symbol.module_source().to_string();
             let kind_str = match &symbol.kind {
                 wado_compiler::symbol::SymbolKind::Function(f) => {
-                    let effects = if f.effects.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" with {}", f.effects.join(", "))
+                    // Same row shape the parser reads back: one effect bare,
+                    // more than one parenthesized.
+                    let effects = match f.effects.as_slice() {
+                        [] => String::new(),
+                        [only] => format!(" with {only}"),
+                        many => format!(" with ({})", many.join(", ")),
                     };
                     let ret = f
                         .return_type

@@ -76,6 +76,30 @@ impl CodegenFlags {
     /// `array_copy`, and a later flag wins over an earlier one). An
     /// unrecognized flag yields `Err(flag)`, carrying the offending string so
     /// the caller can surface a diagnostic.
+    /// Every flag [`Self::parse`] accepts, in help-text order. The single
+    /// source of truth for the CLI's `-f` help and [`Self::unknown_flag_message`],
+    /// so a new flag cannot be added and left undiscoverable.
+    pub const SUPPORTED: &'static [&'static str] = &[
+        "array-copy",
+        "branch-hinting",
+        "bare-asserts",
+        "wide-arithmetic",
+    ];
+
+    /// The diagnostic for a flag [`Self::parse`] rejected.
+    #[must_use]
+    pub fn unknown_flag_message(flag: &str) -> String {
+        let supported = Self::SUPPORTED
+            .iter()
+            .map(|f| format!("`{f}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "unknown codegen flag: `-f {flag}` (supported: {supported}, \
+             optionally prefixed with `no-`)"
+        )
+    }
+
     pub fn parse<I, S>(flags: I, opt_level: crate::OptLevel) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
@@ -109,6 +133,26 @@ mod tests {
     /// [`CodegenFlags::default`]), so these cases isolate flag handling.
     fn parse<'a, I: IntoIterator<Item = &'a str>>(flags: I) -> Result<CodegenFlags, String> {
         CodegenFlags::parse(flags, OptLevel::O2)
+    }
+
+    #[test]
+    fn every_advertised_flag_parses_both_ways() {
+        for name in CodegenFlags::SUPPORTED {
+            assert!(parse([*name]).is_ok(), "`-f {name}` was rejected");
+            assert!(
+                parse([format!("no-{name}").as_str()]).is_ok(),
+                "`-f no-{name}` was rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_flag_names_every_supported_one() {
+        let flag = parse(["nope"]).unwrap_err();
+        let message = CodegenFlags::unknown_flag_message(&flag);
+        for name in CodegenFlags::SUPPORTED {
+            assert!(message.contains(name), "{message} omits `{name}`");
+        }
     }
 
     #[test]

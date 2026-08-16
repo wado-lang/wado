@@ -61,7 +61,7 @@ pub fn next_arg(parser: &mut Parser) -> Result<Option<lexopt::Arg<'_>>, CliExit>
     parser.next().map_err(CliExit::error)
 }
 
-pub fn require_value(parser: &mut Parser) -> Result<OsString, CliExit> {
+fn require_value(parser: &mut Parser) -> Result<OsString, CliExit> {
     parser.value().map_err(CliExit::error)
 }
 
@@ -115,74 +115,17 @@ pub const HELP_SPEC: OptSpec = OptSpec {
     desc: "Show this help message",
 };
 
-pub const OPT_LEVEL_SPEC: OptSpec = OptSpec {
-    long: None,
-    short: Some('O'),
-    value: Some("<n>"),
-    desc: "Optimization level: -O0, -O1, -O2, -O3, -Os",
-};
-
-pub const INLINE_THRESHOLD_SPEC: OptSpec = OptSpec {
-    long: Some("optimize-inline-threshold"),
-    short: None,
-    value: Some("<n>"),
-    desc: "Override inlining threshold (max statement count per function)",
-};
-
-pub const OPT_ITERATIONS_SPEC: OptSpec = OptSpec {
-    long: Some("optimize-iterations"),
-    short: None,
-    value: Some("<n>"),
-    desc: "Override number of fixed-point optimization iterations",
-};
-
 /// Default log level for CLI subcommands. The CLI is quiet by default:
 /// warnings and errors show, but info-level output — including optimizer
 /// `remark:`s (WEP `wep-2026-06-03-optimizer-remarks.md`) — needs an explicit
 /// `--log-level info`.
 pub const DEFAULT_LOG_LEVEL: LogLevel = LogLevel::Warn;
 
-pub const LOG_LEVEL_SPEC: OptSpec = OptSpec {
-    long: Some("log-level"),
-    short: None,
-    value: Some("<level>"),
-    desc: "Log level: debug, info, warn, error, off (default: warn)",
-};
-
 pub const WORLD_SPEC: OptSpec = OptSpec {
     long: Some("world"),
     short: None,
     value: Some("<name>"),
     desc: "Target world (default: wasi:cli/command)\nUse 'test' to export test functions only",
-};
-
-pub const NO_VALIDATE_SPEC: OptSpec = OptSpec {
-    long: Some("no-validate"),
-    short: None,
-    value: None,
-    desc: "Skip Wasm validation (output raw bytes even if invalid)",
-};
-
-pub const ALLOCATOR_SPEC: OptSpec = OptSpec {
-    long: Some("allocator"),
-    short: None,
-    value: Some("<mode>"),
-    desc: "Allocator mode (default depends on target world):\nbump (CLI), freelist (HTTP), debug (test; no-reuse + 0xFF poison)",
-};
-
-/// Shared spec: `-f <flag>` — generic codegen feature flag forwarded to the
-/// compiler. Repeatable. Prefix a flag with `no-` to disable it. Currently
-/// recognized: `array-copy` (lower `builtin::array_copy` to the native Wasm
-/// `array.copy` instruction; on by default, disable with `no-array-copy`),
-/// `branch-hinting` (emit `metadata.code.branch_hint` entries; on by
-/// default, disable with `no-branch-hinting`), and `bare-asserts` (lower an
-/// assertion failure to a bare trap, dropping the diagnostic message; on by
-/// default at `-Os`, disable with `no-bare-asserts`).
-pub const FEATURE_SPEC: OptSpec = OptSpec {
-    long: None,
-    short: Some('f'),
-    value: Some("<flag>"),
-    desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy      native Wasm array.copy instead of a loop (default: on)\nbranch-hinting  emit metadata.code.branch_hint entries (default: on)\nbare-asserts    assertion failures trap without a message (default: on at -Os)",
 };
 
 /// Shared spec: `--collector <mode>`
@@ -205,13 +148,6 @@ pub const NO_DIR_SPEC: OptSpec = OptSpec {
     short: None,
     value: None,
     desc: "Do not preopen any directories (disables the default)",
-};
-
-pub const NO_CACHE_SPEC: OptSpec = OptSpec {
-    long: Some("no-cache"),
-    short: None,
-    value: None,
-    desc: "Bypass all build caches: re-run Kiln generators on every invocation\nand recompile generator wasm components from source.\nThe cache refreshes automatically, so this is normally unnecessary —\nit exists for benchmarking and cache-bug debugging.",
 };
 
 /// Shared spec: `-D NAME=value` (alias `--define`) — compile-time parameter
@@ -246,7 +182,7 @@ pub const PARAM_MISSING_SPEC: OptSpec = OptSpec {
 
 /// Parse `-D NAME=value` / `--define NAME=value`, splitting on the first `=`.
 /// A bare `NAME` (no `=`) is an error.
-pub fn parse_define_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
+fn parse_define_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
     let raw = require_string(parser)?;
     match raw.split_once('=') {
         Some((name, value)) if !name.is_empty() => Ok((name.to_owned(), value.to_owned())),
@@ -257,7 +193,7 @@ pub fn parse_define_arg(parser: &mut Parser) -> Result<(String, String), CliExit
 }
 
 /// Parse a `--param-*` policy level (`error` / `warn` / `ignore`).
-pub fn parse_param_policy_arg(opt: &str, parser: &mut Parser) -> Result<ParamPolicyLevel, CliExit> {
+fn parse_param_policy_arg(opt: &str, parser: &mut Parser) -> Result<ParamPolicyLevel, CliExit> {
     let s = require_string(parser)?;
     ParamPolicyLevel::parse(&s)
         .ok_or_else(|| CliExit::error(format!("{opt} requires error, warn, or ignore, got '{s}'")))
@@ -348,25 +284,42 @@ fn format_opt_label(spec: &OptSpec) -> String {
     result
 }
 
-pub fn format_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) -> String {
-    let labels: Vec<String> = all.iter().map(|t| format_opt_label(&spec(t))).collect();
-    let max_w = labels.iter().map(String::len).max().unwrap_or(0);
-    let mut buf = String::new();
-    for (label, t) in labels.iter().zip(all) {
-        let s = spec(t);
-        let mut lines = s.desc.lines();
-        if let Some(first) = lines.next() {
-            writeln!(buf, "  {label:<max_w$}  {first}").unwrap();
-            for cont in lines {
-                writeln!(buf, "  {:<max_w$}  {cont}", "").unwrap();
-            }
-        }
-    }
-    buf
+/// One help block, accumulated from however many option enums a subcommand
+/// draws on. Collecting them before rendering is what keeps the description
+/// column aligned: the width is computed once over every option, not per group.
+#[derive(Default)]
+pub struct OptsHelp {
+    specs: Vec<OptSpec>,
 }
 
-pub fn print_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) {
-    eprint!("{}", format_opts_help(all, &spec));
+impl OptsHelp {
+    /// Append a group, in the order it should appear.
+    #[must_use]
+    pub fn add<T>(mut self, all: &[T], spec: impl Fn(&T) -> OptSpec) -> Self {
+        self.specs.extend(all.iter().map(spec));
+        self
+    }
+
+    #[must_use]
+    pub fn render(&self) -> String {
+        let labels: Vec<String> = self.specs.iter().map(format_opt_label).collect();
+        let max_w = labels.iter().map(String::len).max().unwrap_or(0);
+        let mut buf = String::new();
+        for (label, s) in labels.iter().zip(&self.specs) {
+            let mut lines = s.desc.lines();
+            if let Some(first) = lines.next() {
+                writeln!(buf, "  {label:<max_w$}  {first}").unwrap();
+                for cont in lines {
+                    writeln!(buf, "  {:<max_w$}  {cont}", "").unwrap();
+                }
+            }
+        }
+        buf
+    }
+}
+
+pub fn format_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) -> String {
+    OptsHelp::default().add(all, spec).render()
 }
 
 #[must_use]
@@ -410,5 +363,35 @@ pub fn parse_dir_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
         Ok((h.to_owned(), g.to_owned()))
     } else {
         Ok((dir_spec.clone(), dir_spec))
+    }
+}
+
+/// `--dir` / `--no-dir` grants for `run` and `test`: the current directory is
+/// preopened when neither flag appears, and either flag replaces that default
+/// outright. `serve` has none — a service starts with no preopens.
+#[derive(Default)]
+pub struct DirGrants {
+    dirs: Vec<(String, String)>,
+    explicit: bool,
+    suppressed: bool,
+}
+
+impl DirGrants {
+    pub fn add(&mut self, parser: &mut Parser) -> Result<(), CliExit> {
+        self.dirs.push(parse_dir_arg(parser)?);
+        self.explicit = true;
+        Ok(())
+    }
+
+    pub fn suppress_default(&mut self) {
+        self.suppressed = true;
+    }
+
+    #[must_use]
+    pub fn finish(mut self) -> Vec<(String, String)> {
+        if !self.explicit && !self.suppressed {
+            self.dirs.push((".".to_owned(), ".".to_owned()));
+        }
+        self.dirs
     }
 }

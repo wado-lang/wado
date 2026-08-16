@@ -9,7 +9,7 @@
 use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { eprintln, Stderr } from "core:cli";
 
-export fn run() with Preopens, Stderr {
+export fn run() with (Preopens, Stderr) {
     let dirs = Preopens::get_directories();
     let root = dirs[0].0;
     let file = root.open_at(

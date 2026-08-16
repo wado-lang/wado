@@ -8,7 +8,7 @@
 use { println, Stdout } from "core:cli";
 use { IpNameLookup } from "wasi:sockets";
 
-export fn run() with Stdout, IpNameLookup {
+export fn run() with (Stdout, IpNameLookup) {
     // A syntactically invalid host name fails without touching the network, so
     // the outcome is the same offline and online.
     match IpNameLookup::resolve_addresses("").wait() {

@@ -285,8 +285,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && right.type_id != TypeTable::ERROR
                 {
                     let type_table = self.tysys.type_table.borrow();
-                    let left_name = type_table.type_name(left.type_id);
-                    let right_name = type_table.type_name(right.type_id);
+                    let (left_name, right_name) =
+                        type_table.type_names_for_mismatch(left.type_id, right.type_id);
                     if left_name != right_name {
                         let _ = self.emit(TypeError::TypeMismatch {
                             expected: left_name,
@@ -921,8 +921,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && right.type_id != TypeTable::NEVER
         {
             let type_table = self.tysys.type_table.borrow();
-            let left_name = type_table.type_name(left.type_id);
-            let right_name = type_table.type_name(right.type_id);
+            let (left_name, right_name) =
+                type_table.type_names_for_mismatch(left.type_id, right.type_id);
             if left_name != right_name {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: left_name,

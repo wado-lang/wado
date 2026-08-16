@@ -138,10 +138,6 @@ fn format_usage() -> String {
     buf
 }
 
-pub fn print_usage() {
-    eprint!("{}", format_usage());
-}
-
 fn parse_position_value(opt_name: &str, val: String) -> Result<u32, CliExit> {
     val.parse::<u32>().map_err(|_| {
         CliExit::error(format!(
