@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786889807226,
+  "lastUpdate": 1786890650523,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48853,6 +48853,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aaef7ebb01d36ed725a5cd3ba3bcd69ff0124acf"
         },
         "date": 1786889806568,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7529ba7e9cf2ca67d62bd6045248ce4f3a80c1b9",
+          "message": "Merge pull request #1834 from wado-lang/claude/package-gale-unicode-property-rraq78\n\nfeat(gale): answer ANTLR4's enumerated \\p{Property=Value} names",
+          "timestamp": "2026-08-16T23:10:41+09:00",
+          "tree_id": "ce0f72d3acee9c83f031859920e678613e46d4c0",
+          "url": "https://github.com/wado-lang/wado/commit/7529ba7e9cf2ca67d62bd6045248ce4f3a80c1b9"
+        },
+        "date": 1786890650016,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
