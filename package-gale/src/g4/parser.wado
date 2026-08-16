@@ -45,6 +45,7 @@ use {
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
 use { scan_balanced, is_id_continue_char } from "./scan.wado";
+use { decode as base64_decode } from "core:base64";
 use {
     general_category_ranges,
     general_category_group,
@@ -1740,21 +1741,33 @@ fn drop_prefix(name: &String, count: i32) -> String {
     return out;
 }
 
-/// Decode a `START[-END],…` hex range list from the generated tables.
+/// Decode a range list from the generated tables: base64 over `(gap from the
+/// previous range's end, length)` varint pairs, as `scripts/gen_unicode_tables`
+/// emits it.
 fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
-    for let item of encoded.split(",") {
-        let mut bounds = item.split("-");
-        let lo = hex_bound(&bounds.next().unwrap());
-        let hi = match bounds.next() {
-            Some(end) => hex_bound(&end),
-            None => lo,
-        };
+    let bytes = base64_decode(encoded).unwrap();
+    let mut pos = 0;
+    let mut prev = -1;
+    while pos < bytes.len() {
+        let lo = prev + 1 + read_varint(&bytes, &mut pos);
+        let hi = lo + read_varint(&bytes, &mut pos);
         clip_to_scalars(ranges, lo, hi);
+        prev = hi;
     }
 }
 
-fn hex_bound(text: &String) -> i32 {
-    return i32::from_str_hex(text).unwrap();
+fn read_varint(bytes: &ByteList, pos: &mut i32) -> i32 {
+    let mut value = 0;
+    let mut shift = 0;
+    loop {
+        let byte = bytes[*pos] as i32;
+        *pos += 1;
+        value |= (byte & 0x7F) << shift;
+        if byte < 0x80 {
+            return value;
+        }
+        shift += 7;
+    }
 }
 
 fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {

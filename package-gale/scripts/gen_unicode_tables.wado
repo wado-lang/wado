@@ -11,6 +11,7 @@
 
 use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { encode as base64_encode } from "core:base64";
 use { CodeWriter, FnSpec, GlobalSpec, Vis, str_lit } from "../src/wadopoet.wado";
 
 global CODE_POINT_MAX: i32 = 0x10FFFF;
@@ -352,22 +353,28 @@ fn unassigned_ranges(runs: &List<CategoryRun>) -> List<[i32, i32]> {
     return out;
 }
 
-/// `START[-END]` in hex, comma separated. A single code point drops its
-/// `-END` half, which is most of the table.
+/// Base64 over `(gap from the previous range's end, length)` varint pairs.
+/// Most ranges are a single code point a short way past the previous one, so
+/// the pair is two bytes; spelling the endpoints out costs three times as much.
 fn encode(ranges: &List<[i32, i32]>) -> String {
-    let mut out = String::with_capacity(ranges.len() * 8);
-    let mut first = true;
+    let mut bytes: ByteList = [];
+    let mut prev = -1;
     for let r of ranges {
-        if !first {
-            out.push_str(&",");
-        }
-        first = false;
-        out.push_str(&`${r.0:X}`);
-        if r.0 != r.1 {
-            out.push_str(&`-${r.1:X}`);
-        }
+        assert prev < r.0 <= r.1, "encode expects sorted, merged ranges";
+        push_varint(&mut bytes, r.0 - prev - 1);
+        push_varint(&mut bytes, r.1 - r.0);
+        prev = r.1;
     }
-    return out;
+    return base64_encode(&bytes);
+}
+
+fn push_varint(bytes: &mut ByteList, value: i32) {
+    let mut rest = value;
+    while rest >= 0x80 {
+        bytes.push((rest & 0x7F | 0x80) as u8);
+        rest >>= 7;
+    }
+    bytes.push(rest as u8);
 }
 
 fn emit_module(
@@ -457,10 +464,11 @@ fn emit_module_doc(w: &mut CodeWriter, version: &String) {
     w.line(&`//! Do not edit by hand — regenerate from UCD ${*version} with`);
     w.line(&"//! `scripts/regen-unicode-tables.sh`.");
     w.line(&"//!");
-    w.line(&"//! A property's ranges are `START[-END]` in hex, comma separated, and its");
-    w.line(&"//! keys are folded (lowercase, no `_` / `-` / space) as UAX #44 matches");
-    w.line(&"//! them. `\\P` complements what `\\p` selects, so an approximate table would");
-    w.line(&"//! admit real members of the property, not merely miss some.");
+    w.line(&"//! A property's ranges are base64 over `(gap from the previous range's");
+    w.line(&"//! end, length)` varint pairs, and its keys are folded (lowercase, no");
+    w.line(&"//! `_` / `-` / space) as UAX #44 matches them. `\\P` complements what");
+    w.line(&"//! `\\p` selects, so an approximate table would admit real members of the");
+    w.line(&"//! property, not merely miss some.");
     w.blank();
 }
 
