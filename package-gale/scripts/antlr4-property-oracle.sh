@@ -21,10 +21,11 @@
 #   2 = the jar rejected the property or one of its values
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 # shellcheck source=antlr4-jar.sh
-. "$(dirname "$0")/antlr4-jar.sh"
+. "$SCRIPT_DIR/antlr4-jar.sh"
 
 if [ $# -lt 2 ]; then
     echo "Usage: $(basename "$0") <property> <value>..." >&2
@@ -81,16 +82,14 @@ if ! generate; then
     fi
 fi
 
-cp scripts/PropertyOracle.java "$WORK_DIR/"
+cp "$SCRIPT_DIR/PropertyOracle.java" "$WORK_DIR/"
 if ! (cd "$WORK_DIR" && javac -cp "$JAR_PATH" ./*.java) > "$WORK_DIR/javac.log" 2>&1; then
     echo "oracle: javac failed:" >&2
     sed 's/^/oracle:   /' "$WORK_DIR/javac.log" >&2
     exit 1
 fi
 
-# `-Xss` because the run holds every scalar in one string; the default stack is
-# fine but the default heap is not on a 32-bit-ish default sizing.
-java -Xmx2g -cp "$JAR_PATH:$WORK_DIR" PropertyOracle > "$WORK_DIR/table.tsv"
+java -cp "$JAR_PATH:$WORK_DIR" PropertyOracle > "$WORK_DIR/table.tsv"
 
 # Strip the `V_` that made each value a legal rule name.
 sed 's/^V_//' "$WORK_DIR/table.tsv"

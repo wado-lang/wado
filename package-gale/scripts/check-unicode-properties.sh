@@ -15,7 +15,8 @@
 # Needs java, javac, network access, and a built `wado` (WADO env, default
 # ../target/debug/wado).
 set -euo pipefail
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 DEFAULT_PROPERTIES="gc sc blk bc lb WB SB GCB nt ea hst jt InSC dt vo"
 PROPERTIES="${*:-$DEFAULT_PROPERTIES}"
@@ -25,14 +26,14 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gale"
 mkdir -p "$CACHE_DIR"
 
 TABLE_VERSION=$(sed -n 's/^pub global UNICODE_VERSION: String = "\([^"]*\)".*/\1/p' src/g4/unicode_tables.wado)
+if [ -z "$TABLE_VERSION" ]; then
+    echo "check: cannot read UNICODE_VERSION from src/g4/unicode_tables.wado" >&2
+    exit 1
+fi
 echo "checking tables generated from UCD $TABLE_VERSION" >&2
 
 ALIASES="$CACHE_DIR/PropertyValueAliases-$TABLE_VERSION.txt"
 if [ ! -f "$ALIASES" ]; then
-    if [ "$TABLE_VERSION" = "" ]; then
-        echo "check: cannot read UNICODE_VERSION from src/g4/unicode_tables.wado" >&2
-        exit 1
-    fi
     curl -fsS -o "$ALIASES" "https://www.unicode.org/Public/$TABLE_VERSION/ucd/PropertyValueAliases.txt"
 fi
 
@@ -53,12 +54,12 @@ for property in $PROPERTIES; do
         continue
     fi
     # shellcheck disable=SC2086
-    if ! scripts/antlr4-property-oracle.sh "$property" $values > "$WORK/table.tsv"; then
+    if ! "$SCRIPT_DIR/antlr4-property-oracle.sh" "$property" $values > "$WORK/table.tsv"; then
         echo "check: the oracle refused '$property'" >&2
         FAILED=$((FAILED + 1))
         continue
     fi
-    if ! "$WADO" run --dir "$WORK" -- scripts/check_unicode_properties.wado "$property" table.tsv; then
+    if ! "$WADO" run --dir "$WORK" -- "$SCRIPT_DIR/check_unicode_properties.wado" "$property" table.tsv; then
         FAILED=$((FAILED + 1))
     fi
 done
