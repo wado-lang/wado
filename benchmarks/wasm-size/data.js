@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786832804004,
+  "lastUpdate": 1786843335710,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48413,6 +48413,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0c6346cd492f27f3763e3a3db73119e259632b7d"
         },
         "date": 1786832803145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1975,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6493,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16648,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 284956,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d6d74f0a123d3d95cead6b9d9e6f714507098c96",
+          "message": "Merge pull request #1824 from wado-lang/claude/reflection-smell-cleanup-lbp9du\n\nrefactor(reflect): one mechanism per concern across the four reflect kinds",
+          "timestamp": "2026-08-16T10:08:29+09:00",
+          "tree_id": "0b4c123d810e076b8503b45fadf049d7c0f97599",
+          "url": "https://github.com/wado-lang/wado/commit/d6d74f0a123d3d95cead6b9d9e6f714507098c96"
+        },
+        "date": 1786843334851,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
