@@ -101,11 +101,10 @@ impl<R: GlobRole> GlobSet<R> {
         self.matches(Path::new(path))
     }
 
-    /// True when no patterns were compiled. Used by the walker to decide
-    /// whether to honour the exclude layer as a directory-pruning shortcut
-    /// (no includes ⇒ exclude is authoritative) or as a file-level filter
-    /// only (some includes ⇒ excluded directories may still contain
-    /// includable files and must be descended).
+    /// True when no patterns were compiled. The walker asks this of the
+    /// include layer to decide how strong the exclude layer is: with no
+    /// includes, exclude prunes whole directories; with any, an excluded
+    /// directory must still be descended in case it holds an included file.
     pub fn is_empty(&self) -> bool {
         self.patterns.is_empty()
     }
