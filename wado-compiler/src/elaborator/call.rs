@@ -1207,11 +1207,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `lookup_static_method_*` from the AST alone. Carry the
                     // parameter defaults so reify pads omitted trailing
                     // arguments, matching the unqualified `Type::method()` path.
-                    // Keyed by the namespace member, not by the bare spelling:
-                    // the importing module never names `Type` on its own, so a
-                    // name-only key would reach nothing and the defaults would
-                    // come back empty — reify then pads nothing and codegen
-                    // emits a call short an argument.
+                    // Both keyed by the namespace member, not by the bare
+                    // spelling: the importing module never names `Type` on its
+                    // own, so a name-only key reaches nothing. The defaults
+                    // would come back empty and reify would pad nothing,
+                    // leaving codegen a call short an argument; the parameter
+                    // types would come back empty and reify would pad what
+                    // defaults it has untyped.
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
@@ -1220,8 +1222,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         ns_key.as_ref(),
                     );
-                    let param_types =
-                        self.lookup_static_method_param_types_keyed(type_name, method_name, None);
+                    let param_types = self.lookup_static_method_param_types_keyed(
+                        type_name,
+                        method_name,
+                        ns_key.as_ref(),
+                    );
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,

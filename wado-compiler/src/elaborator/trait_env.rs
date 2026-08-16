@@ -758,14 +758,15 @@ pub struct TraitEnv {
     /// separately in [`Self::newtype_decl_modules`] because the query consults
     /// them only as a later fallback.
     pub(super) struct_like_decl_modules: IndexMap<String, Vec<DefId>>,
-    /// Every type declaration — struct, resource, variant, enum, flags,
-    /// newtype, builtin. The complete half of the frame derivation: the
-    /// name-keyed maps beside it cover only the kinds their own consumers ask
-    /// for, and a spelling has to reach whichever kind declared it.
-    pub(super) type_decl_index: IndexSet<DefId>,
     /// Type name → modules declaring a `newtype` of that name, in build order.
     /// The fallback half of `find_struct_module_source`'s module lookup.
     pub(super) newtype_decl_modules: IndexMap<String, Vec<DefId>>,
+    /// Declared name → every declaration written under it, in build order.
+    /// The frame derivation's second tier reads this on every name that is not
+    /// an import, so it is keyed by name rather than scanned: the sets it
+    /// unions are whole-program, and every prelude spelling — `i32`, `String`,
+    /// `List` — would otherwise walk all of them before the prelude answered.
+    decls_by_name: IndexMap<String, Vec<DefId>>,
     /// Per-module namespace-import aliases, pre-computed once, so a query
     /// standing in a foreign module's perspective reads them instead of
     /// re-walking its `use` declarations. See [`namespace_imports_of`].
@@ -1267,6 +1268,16 @@ impl TraitEnv {
         };
         let trait_impl_modules = index_impl_modules(&impl_headers, resolutions, false);
         let concrete_trait_impl_modules = index_impl_modules(&impl_headers, resolutions, true);
+        let decls_by_name = index_decls_by_name(
+            defs,
+            [
+                &type_decl_index,
+                &decl_index,
+                &effect_decl_index,
+                &resource_decl_index,
+            ],
+            [&struct_like_decl_modules, &newtype_decl_modules],
+        );
 
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
         violations.extend(check_inherent_impl_collisions(defs, &impl_headers));
@@ -1303,8 +1314,8 @@ impl TraitEnv {
                 trait_decl_headers,
                 supertrait_closures,
                 function_type_params,
+                decls_by_name,
                 struct_like_decl_modules,
-                type_decl_index: type_decl_index.clone(),
                 newtype_decl_modules,
                 module_namespace_imports,
                 assoc_type_bound_index,
@@ -1388,21 +1399,8 @@ impl TraitEnv {
     /// The frame derivation's raw material, and not a scope: it holds what
     /// modules *declare*, never what they import, so no alias can steer it, and
     /// it takes no vantage — the caller filters for the module it means.
-    pub(crate) fn decls_named<'n>(&'n self, name: &'n str) -> impl Iterator<Item = DefId> + 'n {
-        // The indexes overlap — a struct is in the struct-like map and in the
-        // type index both — so one declaration must not read as two.
-        let mut seen: IndexSet<DefId> = IndexSet::default();
-        self.struct_like_decl_modules
-            .get(name)
-            .into_iter()
-            .flatten()
-            .chain(self.newtype_decl_modules.get(name).into_iter().flatten())
-            .chain(&self.type_decl_index)
-            .chain(&self.decl_index)
-            .chain(&self.effect_decl_index)
-            .chain(&self.resource_decl_index)
-            .copied()
-            .filter(move |def| self.defs.name(*def) == name && seen.insert(*def))
+    pub(crate) fn decls_named<'n>(&'n self, name: &str) -> impl Iterator<Item = DefId> + 'n {
+        self.decls_by_name.get(name).into_iter().flatten().copied()
     }
 
     /// Declaring module of a struct-like type (struct / resource / variant /
@@ -2440,6 +2438,37 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     }
 }
 
+/// Invert the declaration indexes into declared name → declarations.
+///
+/// The name-keyed maps come first so a struct keeps the position it had when
+/// the union was read in source order, and a declaration in two of the sources
+/// — a struct is in the struct-like map and in the type index both — must land
+/// once: a duplicate would make a caller taking the unique answer see two.
+fn index_decls_by_name(
+    defs: &crate::defs::DefTable,
+    sets: [&IndexSet<DefId>; 4],
+    maps: [&IndexMap<String, Vec<DefId>>; 2],
+) -> IndexMap<String, Vec<DefId>> {
+    let mut out: IndexMap<String, Vec<DefId>> = IndexMap::default();
+    let mut push = |def: DefId| {
+        let entry = out.entry(defs.name(def).to_string()).or_default();
+        if !entry.contains(&def) {
+            entry.push(def);
+        }
+    };
+    for map in maps {
+        for def in map.values().flatten() {
+            push(*def);
+        }
+    }
+    for set in sets {
+        for def in set {
+            push(*def);
+        }
+    }
+    out
+}
+
 /// The type arguments a written trait position supplies, structured.
 ///
 /// Read off the nodes that wrote them, and each argument's own reference site
@@ -2452,8 +2481,16 @@ pub(super) fn written_type_args(
     ty: &ast::Type,
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<name::FqTypeName> {
+    // `ns::Trait<T>` supplies its arguments the same as `Trait<T>` does — the
+    // namespace says which module declares the head, which is the reference
+    // site's question and not the argument list's.
     match ty {
         ast::Type::Generic(generic) => generic
+            .args
+            .iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect(),
+        ast::Type::NamespacedGeneric(ns) => ns
             .args
             .iter()
             .map(|arg| written_type_arg(arg, resolutions))
@@ -2500,6 +2537,12 @@ pub(super) fn written_type_arg(
             };
             match ty {
                 ast::Type::Generic(generic) => head.with_args(nested(&generic.args)),
+                // `ns::Pair<i32>` and `ns::Pair<bool>` are two instantiations
+                // of one declaration. Dropping the arguments here mangled both
+                // to the same segment, so the second `From` impl collided with
+                // the first, and a structural comparison against the
+                // argument's own type name matched neither.
+                ast::Type::NamespacedGeneric(ns) => head.with_args(nested(&ns.args)),
                 _ => head,
             }
         }

@@ -1,0 +1,42 @@
+// A namespace-qualified generic supplies its type arguments like any other:
+// `geo::Pair<i32>` and `geo::Pair<bool>` are two instantiations of one
+// declaration, and the two `From` impls below must stay apart.
+//
+// Read off the written nodes, the namespace only says which module declares
+// the head — the argument list is the same list either way. Dropping it
+// mangled both impls to one trait segment, so the second registration
+// collided with the first and the `From` lookup, comparing structurally
+// against the argument's own type name, matched neither.
+use geo from "./sub/ns_qualified_generic_args_lib.wado";
+
+struct Summary {
+    text: String,
+}
+
+impl From<geo::Pair<i32>> for Summary {
+    fn from(p: geo::Pair<i32>) -> Summary {
+        return Summary { text: `ints ${p.a + p.b}` };
+    }
+}
+
+impl From<geo::Pair<bool>> for Summary {
+    fn from(p: geo::Pair<bool>) -> Summary {
+        return Summary { text: `bools ${p.a && p.b}` };
+    }
+}
+
+test "each instantiation reaches its own impl" {
+    // Annotated, so each argument's type is settled before overload selection
+    // and what is under test is which impl the name reaches, not inference.
+    let pi: geo::Pair<i32> = geo::Pair { a: 3, b: 4 };
+    let pb: geo::Pair<bool> = geo::Pair { a: true, b: false };
+
+    let ints = Summary::from(pi);
+    assert ints.text == "ints 7";
+
+    let bools = Summary::from(pb);
+    assert bools.text == "bools false";
+}
+
+__DATA__
+{"test": {}}
