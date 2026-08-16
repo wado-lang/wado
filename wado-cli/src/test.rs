@@ -291,7 +291,7 @@ fn walk_into(
     queue: &mut Vec<PathBuf>,
 ) -> Result<(), CliExit> {
     let result =
-        discover::discover_test_files(pkg_root, excludes, includes).map_err(CliExit::error)?;
+        discover::discover_wado_files(pkg_root, excludes, includes).map_err(CliExit::error)?;
     let label = relative_label(invocation_root, pkg_root);
     let paths = result.files.iter().map(|p| display_path(p)).collect();
     runs.push(PackageRun { label, paths });

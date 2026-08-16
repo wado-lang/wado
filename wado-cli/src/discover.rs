@@ -1,4 +1,4 @@
-//! Test file discovery walker for `wado test`.
+//! Source file discovery walker, shared by `wado test` and `wado format`.
 //!
 //! Walks a project root for `*.wado` files, honouring:
 //!
@@ -6,7 +6,8 @@
 //! - submodule directories listed in the root `.gitmodules`
 //! - dot-prefixed files and directories
 //! - subtrees rooted at a nested `wado.toml` (separate package boundaries)
-//! - `[test].exclude` glob patterns from the root manifest
+//! - the caller's exclude / include globs (`[test]` or `[format]` in the
+//!   manifest, plus `wado test --exclude`)
 //! - symbolic links (followed once each, with cycle detection on canonical paths)
 
 use std::fs;
@@ -18,7 +19,7 @@ use wado_compiler::hashmap::IndexSet;
 use glob::{Pattern, PatternError};
 
 /// The walker's glob match options. Defined once in `wado-lsp` so
-/// workspace-member matching and test discovery interpret patterns identically.
+/// workspace-member matching and file discovery interpret patterns identically.
 pub use wado_lsp::workspace::WALK_MATCH_OPTIONS;
 
 /// Which filter layer a [`GlobSet`] belongs to. Only affects how an
@@ -101,10 +102,10 @@ impl<R: GlobRole> GlobSet<R> {
     }
 
     /// True when no patterns were compiled. Used by the walker to decide
-    /// whether to honour `[test].exclude` as a directory-pruning shortcut
+    /// whether to honour the exclude layer as a directory-pruning shortcut
     /// (no includes ⇒ exclude is authoritative) or as a file-level filter
     /// only (some includes ⇒ excluded directories may still contain
-    /// includable test files and must be descended).
+    /// includable files and must be descended).
     pub fn is_empty(&self) -> bool {
         self.patterns.is_empty()
     }
@@ -176,7 +177,7 @@ pub struct DiscoveryResult {
 /// `excludes` are shell-style globs evaluated against paths relative to `root`.
 /// Returned paths are absolute (relative to whatever `root` was given) and
 /// sorted for stable output. Returned sub-package roots are sorted as well.
-pub fn discover_test_files(
+pub fn discover_wado_files(
     root: &Path,
     excludes: &ExcludeSet,
     includes: &IncludeSet,
@@ -476,7 +477,7 @@ mod tests {
         touch(&root.join("readme.md"));
         touch(&root.join("nested/notes.txt"));
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -494,7 +495,7 @@ mod tests {
         touch(&root.join("a.wado"));
         touch(&root.join(".hidden/secret.wado"));
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -510,7 +511,7 @@ mod tests {
         touch(&root.join("target/build.wado"));
         fs::write(root.join(".gitignore"), "target/\n").unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -527,7 +528,7 @@ mod tests {
         touch(&root.join("pkg/skip/keep.wado"));
         fs::write(root.join("pkg/.gitignore"), "skip/\n!skip/keep.wado\n").unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -546,7 +547,7 @@ mod tests {
         touch(&root.join("nested/skipme.wado"));
         fs::write(root.join(".gitignore"), "skipme.wado\n").unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -584,7 +585,7 @@ pathology = should-not-match\n\
         )
         .unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -605,7 +606,7 @@ pathology = should-not-match\n\
         .unwrap();
 
         let result =
-            discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default()).unwrap();
+            discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default()).unwrap();
         let got = names_of(root, &result.files);
         assert!(got.contains("a.wado"));
         assert!(!got.contains("subpkg/main.wado"));
@@ -620,7 +621,7 @@ pathology = should-not-match\n\
         touch(&root.join("src/main.wado"));
         touch(&root.join("compiler/tests/fixture.wado"));
 
-        let files = discover_test_files(
+        let files = discover_wado_files(
             root,
             &ExcludeSet::compile(&["compiler/tests/**".to_string()]).unwrap(),
             &IncludeSet::default(),
@@ -644,7 +645,7 @@ pathology = should-not-match\n\
         touch(&root.join("skip/me.wado"));
         touch(&root.join("skip/deep/also.wado"));
 
-        let result = discover_test_files(
+        let result = discover_wado_files(
             root,
             &ExcludeSet::compile(&["skip/**".to_string()]).unwrap(),
             &IncludeSet::default(),
@@ -670,7 +671,7 @@ pathology = should-not-match\n\
         )
         .unwrap();
 
-        let result = discover_test_files(
+        let result = discover_wado_files(
             root,
             &ExcludeSet::compile(&["subpkg/**".to_string()]).unwrap(),
             &IncludeSet::default(),
@@ -697,7 +698,7 @@ pathology = should-not-match\n\
         touch(&root.join("src/top.wado"));
         touch(&root.join("src/sub/inner.wado"));
 
-        let files = discover_test_files(
+        let files = discover_wado_files(
             root,
             &ExcludeSet::compile(&["src/*.wado".to_string()]).unwrap(),
             &IncludeSet::default(),
@@ -719,7 +720,7 @@ pathology = should-not-match\n\
         touch(&root.join("a/b/c/foo.wado"));
         touch(&root.join("a/b/keep.wado"));
 
-        let files = discover_test_files(
+        let files = discover_wado_files(
             root,
             &ExcludeSet::compile(&["**/foo.wado".to_string()]).unwrap(),
             &IncludeSet::default(),
@@ -747,7 +748,7 @@ pathology = should-not-match\n\
         // Create a symlink loop: root/loop -> root
         symlink(root, root.join("loop")).unwrap();
 
-        let files = discover_test_files(root, &ExcludeSet::default(), &IncludeSet::default())
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
             .unwrap()
             .files;
         let got = names_of(root, &files);
@@ -767,7 +768,7 @@ pathology = should-not-match\n\
         touch(&root.join("lib/core/prelude/nested/array_test.wado"));
         touch(&root.join("lib/core/cli.wado"));
 
-        let files = discover_test_files(
+        let files = discover_wado_files(
             root,
             &ExcludeSet::compile(&["lib/core/prelude/**".to_string()]).unwrap(),
             &IncludeSet::compile(&["lib/**/*_test.wado".to_string()]).unwrap(),
@@ -793,7 +794,7 @@ pathology = should-not-match\n\
         touch(&root.join("excluded/b.wado"));
         touch(&root.join("excluded/b_test.wado"));
 
-        let files = discover_test_files(
+        let files = discover_wado_files(
             root,
             &ExcludeSet::compile(&["excluded/**".to_string()]).unwrap(),
             &IncludeSet::default(),
@@ -820,7 +821,7 @@ pathology = should-not-match\n\
         touch(&root.join("vendor/src/a.wado"));
         touch(&root.join("lib/stdlib_test.wado"));
 
-        let result = discover_test_files(
+        let result = discover_wado_files(
             root,
             &ExcludeSet::compile(&["vendor/**".to_string()]).unwrap(),
             &IncludeSet::compile(&["lib/**/*_test.wado".to_string()]).unwrap(),

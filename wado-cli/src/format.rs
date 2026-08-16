@@ -141,7 +141,7 @@ fn collect_package_tree(root: &Path, files: &mut Vec<PathBuf>) -> Result<(), Cli
     while let Some(pkg) = queue.pop() {
         let (excludes, includes) = format_filters_for(&pkg)?;
         let result =
-            discover::discover_test_files(&pkg, &excludes, &includes).map_err(CliExit::error)?;
+            discover::discover_wado_files(&pkg, &excludes, &includes).map_err(CliExit::error)?;
         files.extend(result.files);
         queue.extend(result.subpackages);
     }
