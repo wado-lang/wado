@@ -63,20 +63,6 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
     buf.push('"');
 }
 
-/// Writes a JSON-escaped string (with surrounding quotes) into buf.
-///
-/// Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
-/// runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
-pub fn write_escaped_string(buf: &mut String, s: &String) {
-    if json_escape_free(s) {
-        buf.push('"');
-        buf.push_str(s);
-        buf.push('"');
-        return;
-    }
-    write_escaped_string_slow(buf, s);
-}
-
 /// True when `s` holds no byte JSON must escape. Pure and closed over `s`, so a
 /// constant key folds this away at compile time.
 fn json_escape_free(s: &String) -> bool {
@@ -91,7 +77,10 @@ fn json_escape_free(s: &String) -> bool {
     return true;
 }
 
-fn write_escaped_string_slow(buf: &mut String, s: &String) {
+/// Writes a JSON-escaped string (with surrounding quotes) into buf. Only `"`,
+/// `\`, and controls (< 0x20) are escaped — all ASCII, so a run of multi-byte
+/// UTF-8 copies through unchanged.
+pub fn write_escaped_string(buf: &mut String, s: &String) {
     buf.push('"');
     let n = s.len();
     let mut run_start = 0;
@@ -318,7 +307,7 @@ fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
         buf.push(',');
     }
-    write_escaped_string_slow(buf, name);
+    write_escaped_string(buf, name);
     buf.push(':');
 }
 
@@ -338,7 +327,7 @@ fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent
         buf.push(',');
     }
     write_pretty_newline_and_indent(buf, indent, depth);
-    write_escaped_string_slow(buf, name);
+    write_escaped_string(buf, name);
     buf.push_str(&": ");
 }
 
@@ -912,13 +901,12 @@ fn parse_u64_from(raw: &String, start: i64) -> Result<u64, DeserializeError> {
     };
 }
 
-/// Result of scanning a JSON string run up to the next `"` or `\`. `high_bits`
-/// ORs every byte of `[from, end)`, so `high_bits < 0x80` proves the run is pure
-/// ASCII; `at_escape` is true when the stop was a `\` (rather than `"` or EOF).
+/// Result of scanning a JSON string run. `at_escape` distinguishes stopping on
+/// a `\` from stopping on a `"` or EOF.
 struct StringRunScan {
     end: i32,
-    high_bits: i32,
     at_escape: bool,
+    valid: bool,
 }
 
 impl JsonDeserializer {
@@ -982,47 +970,49 @@ impl JsonDeserializer {
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);
     }
 
-    /// Scan `input` from `from` up to the next `"` or `\` (or EOF), OR-ing every
-    /// byte into `high_bits`. Does not move `self.pos`; the caller advances.
+    /// Scan `input` from `from` up to the next `"` or `\` (or EOF), validating
+    /// UTF-8 in the same pass. Does not move `self.pos`; the caller advances.
     fn scan_string_run(&self, from: i32) -> StringRunScan {
         let len = self.input.len();
         let mut pos = from;
-        let mut high_bits = 0;
+        let mut valid = true;
         while pos < len {
             let b = self.input.get_unchecked(pos) as i32;
-            if b == '"' as i32 || b == '\\' as i32 {
-                break;
+            if b < 0x80 {
+                if b == '"' as i32 || b == '\\' as i32 {
+                    break;
+                }
+                pos += 1;
+                continue;
             }
-            high_bits |= b;
-            pos += 1;
+            let advance = String::utf8_sequence_len(&self.input, pos, len);
+            if advance == 0 {
+                builtin::cold_path();
+                valid = false;
+                pos += 1;
+                continue;
+            }
+            pos += advance;
         }
         let at_escape = pos < len && self.input.get_unchecked(pos) as i32 == '\\' as i32;
-        return StringRunScan { end: pos, high_bits, at_escape };
+        return StringRunScan { end: pos, at_escape, valid };
     }
 
-    /// Append `input[start..end)` to `dst` in a single copy, validating UTF-8
-    /// unless `all_ascii`. Invariant: `all_ascii` holds only when every byte in
-    /// the range is `< 0x80` (valid UTF-8 by construction); a malformed sequence
-    /// always has a byte `>= 0x80`, so it never bypasses validation.
-    fn append_scanned_run(
-        &self,
-        dst: &mut String,
-        start: i32,
-        end: i32,
-        all_ascii: bool,
-    ) -> Result<(), DeserializeError> {
-        let slice = self.input.slice(start, end);
-        if !all_ascii && !String::is_valid_utf8(slice) {
+    /// Append `input[start..end)` to `dst` in a single copy. `valid` must come
+    /// from the `scan_string_run` that produced the range.
+    fn append_scanned_run(&self, dst: &mut String, start: i32, end: i32, valid: bool) -> Result<(), DeserializeError> {
+        if !valid {
             return Result::Err(self.invalid_utf8_string(start));
         }
+        let slice = self.input.slice(start, end);
         dst.push_bytes_unchecked(&slice);
         return Result::Ok(());
     }
 
     /// `append_scanned_run` into a fresh, exactly-sized `String`.
-    fn take_scanned_run(&self, start: i32, end: i32, all_ascii: bool) -> Result<String, DeserializeError> {
+    fn take_scanned_run(&self, start: i32, end: i32, valid: bool) -> Result<String, DeserializeError> {
         let mut s = String::with_capacity(end - start);
-        self.append_scanned_run(&mut s, start, end, all_ascii)?;
+        self.append_scanned_run(&mut s, start, end, valid)?;
         return Result::Ok(s);
     }
 
@@ -1048,7 +1038,7 @@ impl JsonDeserializer {
         // Fast path: no escapes. The token is `input[prefix_start..<prefix.end]`;
         // only string *content* can be multi-byte — JSON structure is ASCII.
         if prefix.end < input_len && !prefix.at_escape {
-            let result = self.take_scanned_run(prefix_start, prefix.end, prefix.high_bits < 0x80)?;
+            let result = self.take_scanned_run(prefix_start, prefix.end, prefix.valid)?;
             self.pos = prefix.end + 1;
             return Result::Ok(result);
         }
@@ -1059,7 +1049,7 @@ impl JsonDeserializer {
         // likely-taken and lets the engine lay this path out of line. Build the
         // escape-free prefix, then handle escapes.
         builtin::cold_path();
-        let mut result = self.take_scanned_run(prefix_start, prefix.end, prefix.high_bits < 0x80)?;
+        let mut result = self.take_scanned_run(prefix_start, prefix.end, prefix.valid)?;
         self.pos = prefix.end;
 
         loop {
@@ -1069,7 +1059,7 @@ impl JsonDeserializer {
             let chunk_start = self.pos;
             let chunk = self.scan_string_run(chunk_start);
             self.pos = chunk.end;
-            self.append_scanned_run(&mut result, chunk_start, chunk.end, chunk.high_bits < 0x80)?;
+            self.append_scanned_run(&mut result, chunk_start, chunk.end, chunk.valid)?;
 
             if self.pos >= self.input.len() {
                 builtin::cold_path();

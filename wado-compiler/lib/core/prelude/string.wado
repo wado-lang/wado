@@ -1124,17 +1124,86 @@ impl String {
         });
     }
 
+    /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, or 0 when
+    /// it is malformed. The validating half of `decode_utf8_scalar`.
+    internal fn utf8_sequence_len(bytes: &ByteSlice, start: i32, len: i32) -> i32 {
+        let b0 = bytes.get_unchecked(start);
+        if b0 < 0x80 {
+            return 1;
+        }
+        if b0 < 0xC2 {
+            // Bare continuation byte (0x80–0xBF) or overlong 2-byte lead (0xC0, 0xC1)
+            builtin::cold_path();
+            return 0;
+        }
+        if b0 < 0xE0 {
+            if start + 1 >= len {
+                builtin::cold_path();
+                return 0;
+            }
+            let b1 = bytes.get_unchecked(start + 1);
+            if b1 < 0x80 || b1 > 0xBF {
+                builtin::cold_path();
+                return 0;
+            }
+            return 2;
+        }
+        if b0 < 0xF0 {
+            if start + 2 >= len {
+                builtin::cold_path();
+                return 0;
+            }
+            let b1 = bytes.get_unchecked(start + 1);
+            // Reject bad continuation, overlong (E0 < A0), and surrogates (ED >= A0)
+            if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
+                builtin::cold_path();
+                return 0;
+            }
+            let b2 = bytes.get_unchecked(start + 2);
+            if b2 < 0x80 || b2 > 0xBF {
+                builtin::cold_path();
+                return 0;
+            }
+            return 3;
+        }
+        if b0 < 0xF5 {
+            if start + 3 >= len {
+                builtin::cold_path();
+                return 0;
+            }
+            let b1 = bytes.get_unchecked(start + 1);
+            // Reject bad continuation, overlong (F0 < 90), and out-of-range (F4 > 8F)
+            if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
+                builtin::cold_path();
+                return 0;
+            }
+            let b2 = bytes.get_unchecked(start + 2);
+            if b2 < 0x80 || b2 > 0xBF {
+                builtin::cold_path();
+                return 0;
+            }
+            let b3 = bytes.get_unchecked(start + 3);
+            if b3 < 0x80 || b3 > 0xBF {
+                builtin::cold_path();
+                return 0;
+            }
+            return 4;
+        }
+        builtin::cold_path();
+        return 0;
+    }
+
     /// Whether `bytes` is well-formed UTF-8.
     pub fn is_valid_utf8(bytes: ByteSlice) -> bool {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
-            let scalar = decode_utf8_scalar(bytes, i, len);
-            if !scalar.valid {
+            let advance = String::utf8_sequence_len(&bytes, i, len);
+            if advance == 0 {
                 builtin::cold_path();
                 return false;
             }
-            i += scalar.advance;
+            i += advance;
         }
         return true;
     }

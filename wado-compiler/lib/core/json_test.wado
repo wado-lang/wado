@@ -608,8 +608,6 @@ test "from_bytes rejects invalid UTF-8" {
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
-// A bad byte after an ASCII prefix must still be rejected: the ASCII-skip path
-// ORs every scanned byte, so the high bit is never missed.
 test "from_bytes rejects invalid UTF-8 after ASCII prefix" {
     let bytes: ByteList = [0x22, 0x61, 0x62, 0xff, 0x22];  // "ab<0xff>"
     let r: Result<String, DeserializeError> = from_bytes(bytes);
@@ -618,6 +616,37 @@ test "from_bytes rejects invalid UTF-8 after ASCII prefix" {
     let bytes2: ByteList = [0x22, 0x78, 0xc3, 0x22];  // "x<0xc3>" truncated lead
     let r2: Result<String, DeserializeError> = from_bytes(bytes2);
     assert r2 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+// Encoding rules that only apply to a whole sequence must still reject.
+test "from_bytes validates multibyte sequences during the scan" {
+    // A 4-byte scalar immediately before the closing quote.
+    let emoji: Result<String, DeserializeError> = from_string(`"🦀"`);
+    assert emoji matches { Ok(v) && v == "🦀" };
+
+    // Overlong 2-byte encoding of NUL (C0 80).
+    let overlong: ByteList = [0x22, 0xc0, 0x80, 0x22];
+    let r1: Result<String, DeserializeError> = from_bytes(overlong);
+    assert r1 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // UTF-16 surrogate half (ED A0 80).
+    let surrogate: ByteList = [0x22, 0xed, 0xa0, 0x80, 0x22];
+    let r2: Result<String, DeserializeError> = from_bytes(surrogate);
+    assert r2 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // Beyond U+10FFFF (F5 80 80 80).
+    let too_big: ByteList = [0x22, 0xf5, 0x80, 0x80, 0x80, 0x22];
+    let r3: Result<String, DeserializeError> = from_bytes(too_big);
+    assert r3 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // A bad byte directly before an escape must not swallow the escape.
+    let before_escape: ByteList = [0x22, 0xff, 0x5c, 0x6e, 0x22];  // "<0xff>\n"
+    let r4: Result<String, DeserializeError> = from_bytes(before_escape);
+    assert r4 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // Multibyte content on both sides of an escape (the chunked slow path).
+    let around: Result<String, DeserializeError> = from_string(`"日\\n本"`);
+    assert around matches { Ok(v) && v == "日\n本" };
 }
 
 test "to_bytes_canonical sorts map keys" {

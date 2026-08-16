@@ -29,10 +29,9 @@ assert from_string::<Point>("{\"x\":1,\"y\":2}") matches { Ok(p) && p.x == 1 && 
 
 ### `pub fn write_escaped_string(buf: &mut String, s: &String)`
 
-Writes a JSON-escaped string (with surrounding quotes) into buf.
-
-Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
-runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
+Writes a JSON-escaped string (with surrounding quotes) into buf. Only `"`,
+`\`, and controls (< 0x20) are escaped — all ASCII, so a run of multi-byte
+UTF-8 copies through unchanged.
 
 ### `pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<String, SerializeError>`
 
