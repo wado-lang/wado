@@ -239,17 +239,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .expect("an item declaration has an identity")
     }
 
-    /// The symbol `name` reaches from `module`.
+    /// The symbol `name` reaches from `module`, for a caller whose reference
+    /// site is not at hand — a mangled name, a synthesis target. Prefer
+    /// [`Self::symbol_at`], which reads the answer the walk recorded.
     ///
-    /// One scope answers, and it is the resolve pass's: the identity comes from
-    /// [`crate::resolve::Resolutions`] and the symbol row is read back off the
-    /// declaring node. Nothing here walks a module's imports a second time.
+    /// No scope is run: the identity comes from the import record and the
+    /// declaration index, and the symbol row is read back off the declaring
+    /// node.
     pub(crate) fn symbol_named(
         &self,
         module: &ModuleSource,
         name: &str,
     ) -> Option<&'a crate::symbol::Symbol> {
-        let def = self.tysys.resolutions.declaration_named(module, name)?;
+        // Three recorded facts, in the order the scope stores them and none of
+        // them a walk: what this module `use`d under the name, what it declares
+        // itself, and what the prelude puts in scope everywhere. No spelling
+        // another module happens to share can steer any of them.
+        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
+            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
+        }
+        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
+            return Some(symbol);
+        }
+        let def = self.tysys.resolutions.prelude_decl(name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
@@ -287,6 +299,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             anon_struct_fields: &self.sem.decls.anon_struct_fields,
             local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
+            decls: Some(&self.tysys.trait_env),
         }
     }
 
@@ -512,8 +525,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The receiver keys a static-method lookup may be filed under, in the order
-    /// to try them. Neither vantage answers alone: the call site's scope resolves
-    /// a name it declares or imports, but one that arrived through a namespace
+    /// to try them. Neither vantage answers alone: the call site's frame
+    /// resolves a name it declares, but one that arrived through a namespace
     /// prefix lost its qualifier, and canonicalising *that* from the call site
     /// finds the caller's own `Pair` for `helper::Pair::new`.
     pub(super) fn static_receiver_keys(
@@ -524,11 +537,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let defs = self.tysys.resolutions.defs();
         let mut keys = vec![self.impl_target(written_name)];
         if let Some(module) = receiver_module {
-            // From the receiver's own vantage, not the call site's.
+            // From the receiver's own vantage, not the call site's: what that
+            // module imported under the spelling, else what it declares under
+            // it. Two recorded facts, neither of them a scope walk.
             let by_receiver = self
                 .tysys
                 .resolutions
-                .declaration_named(module, written_name)
+                .imported_as(module, written_name)
+                .or_else(|| {
+                    self.tysys
+                        .trait_env
+                        .decls_named(written_name)
+                        .find(|def| defs.module(*def) == module)
+                })
                 .map(|def| trait_env::ImplTargetKey::of_decl(defs, def));
             if let Some(by_receiver) = by_receiver
                 && keys[0] != by_receiver
@@ -868,25 +889,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// The declaration `name` means from this module's vantage, for a caller
-    /// holding a name and no reference site to key on. Runs the resolution
-    /// table's own scope lookup rather than a second chain beside it, so a
-    /// name-only caller and the site that wrote the same name cannot disagree.
-    /// `None` when the name reaches no declaration; the caller decides.
-    pub(crate) fn canonical_decl_key(&self, name: &str) -> Option<crate::defs::DefId> {
+    /// The declaration a written reference names, keyed on the site that wrote
+    /// it.
+    ///
+    /// The walk answered for the site in the module that wrote the name, so an
+    /// alias, a namespace prefix and a function-local item reach their own
+    /// declarations with no vantage supplied. `name` is the frame derivation's
+    /// input, never a second opinion: it is read only where the site reaches
+    /// nothing, and then only by the declaration indexes.
+    pub(crate) fn decl_key_at(
+        &self,
+        site: crate::ast::AstId,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
         self.tysys
             .resolutions
-            .declaration_named(&self.current_module_source, name)
+            .declared_if_walked(site)
+            .or_else(|| self.decl_key_or_local(name))
     }
 
-    /// [`Self::canonical_decl_key`], then the declaration indexes, then the
-    /// writing module — for the callers that must produce *some* bucket.
+    /// The declaration indexes, for a caller holding a spelling whose reference
+    /// site is not at hand — a rendered head, a synthesis target.
     ///
-    /// A name the module never imported still has a declaration: a struct-like
-    /// type reached only through a return type, a stdlib trait a bodiless
-    /// derive names. The indexes answer for those, and decline when several
-    /// modules declare the name rather than picking one — guessing between
-    /// them is the mis-identification this design exists to prevent.
+    /// Two recorded facts, not a second walk: what this module imported under
+    /// the name, then what some module declares under it. The indexes hold what
+    /// modules *declare*, and they decline when several declare the name rather
+    /// than picking one — guessing between them is the mis-identification this
+    /// design exists to prevent.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
         // A type parameter in scope shadows every declaration of that name, so
         // a frame writing `T` means its own binder even where a `struct T`
@@ -895,11 +924,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        let env = &self.tysys.trait_env;
-        self.canonical_decl_key(name)
-            .or_else(|| env.find_struct_like_decl_key(name))
-            .or_else(|| env.unique_trait_decl_key(name))
-            .or_else(|| env.unique_effect_or_resource_decl_key(name))
+        self.tysys
+            .resolutions
+            .imported_as(&self.current_module_source, name)
+            .or_else(|| {
+                let defs = self.tysys.resolutions.defs();
+                self.tysys
+                    .trait_env
+                    .decls_named(name)
+                    .find(|def| defs.module(*def) == &self.current_module_source)
+            })
+            .or_else(|| self.tysys.resolutions.prelude_decl(name))
+            // Past the frame's own reach, because these callers must produce
+            // *some* bucket: a name reaching nothing here keys to the call site
+            // and splits one declaration's impls across modules. Widening a
+            // bucket is not widening scope — whether a written name resolves at
+            // all is decided by `TypeLookup::declaration`, which stops at the
+            // three tiers above.
+            .or_else(|| self.tysys.trait_env.unique_decl_named(name))
     }
 
     /// The trait a bound's reference site names. `written` supplies the type

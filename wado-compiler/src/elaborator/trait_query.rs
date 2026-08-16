@@ -334,7 +334,7 @@ impl TypeSystem {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::trait_sig_of`] for a caller still holding a trait's spelling.
     pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&TraitSig> {
-        let decl = self.canonical_decl_key(trait_name)?;
+        let decl = self.decl_key_or_local(trait_name)?;
         trait_sig_of_with(
             decl,
             &self.tysys.resolutions,
@@ -447,9 +447,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        // A supertrait is a bound written in the trait's own declaration, so
-        // which trait it names is the answer already recorded for that site.
-        let Some(trait_decl) = self.decl_key_or_local(&trait_name) else {
+        // The header's own site says which trait it names, so an aliased
+        // `impl B for T` enforces `Base`'s supertraits.
+        let Some(trait_decl) = crate::resolve::head_site(trait_type)
+            .and_then(|site| self.decl_key_at(site, &trait_name))
+        else {
             return;
         };
         let supertraits: Vec<(String, Option<DefId>)> = self

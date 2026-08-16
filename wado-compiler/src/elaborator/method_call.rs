@@ -1358,7 +1358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if target_type_id == TypeTable::UNKNOWN
             && let ast::Type::Generic(g) = &static_call.target_type
             && self
-                .decl_key_or_local(&g.name)
+                .decl_key_at(g.id, &g.name)
                 .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
@@ -1372,7 +1372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // misuse), so that shape keeps its unknown-function error.
             if self.is_trait_instance_method(&g.name, &static_call.method)
                 && self
-                    .decl_key_or_local(&g.name)
+                    .decl_key_at(g.id, &g.name)
                     .and_then(|key| self.trait_decl_type_params_of(&key))
                     .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
             {
@@ -3600,7 +3600,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .method_id
             .and_then(|id| self.tysys.resolutions.defs().of_ast_id(id))
             .and_then(|method| self.tysys.resolutions.defs().parent(method))
-            .or_else(|| self.canonical_decl_key(&actual_struct_name));
+            .or_else(|| self.decl_key_or_local(&actual_struct_name));
         let cm_name = self.lookup_resource_static_cm(cm_owner, method_name);
 
         let StaticMethodRef {

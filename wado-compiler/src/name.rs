@@ -970,10 +970,21 @@ impl LocalMethodName {
 }
 
 /// A unified function identifier that can be either a free function or a method.
+///
+/// The method payload is boxed: a `MethodName` carries the receiver and the
+/// trait with their type arguments and is several times a free function's name,
+/// and this is a map key held by the thousand in the call graph.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FunctionId {
     Free(FreeFunctionName),
-    Method(MethodName),
+    Method(Box<MethodName>),
+}
+
+impl FunctionId {
+    #[must_use]
+    pub fn method(method: MethodName) -> Self {
+        FunctionId::Method(Box::new(method))
+    }
 }
 
 impl fmt::Display for FunctionId {
@@ -993,7 +1004,7 @@ impl From<FreeFunctionName> for FunctionId {
 
 impl From<MethodName> for FunctionId {
     fn from(method: MethodName) -> Self {
-        FunctionId::Method(method)
+        FunctionId::method(method)
     }
 }
 

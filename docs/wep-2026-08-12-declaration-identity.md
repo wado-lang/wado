@@ -154,7 +154,10 @@ incidental fallbacks:
 5. the case names of variant / enum / flags types in scope, which a type of the
    same name always shadows.
 
-`Scope` is private to `crate::resolve`. `SymbolTable`'s name-keyed accessors,
+`Scope` is private to `crate::resolve`, and nothing outside it can run the walk
+by name: the scope is reached only through a reference site, and a caller
+holding a spelling and no site gets the frame derivation below instead — which
+is not a scope and cannot pretend to be one. `SymbolTable`'s name-keyed accessors,
 `ModuleImports` and `TypeLookup`'s import branch are deleted, and with them the
 name-scope half of `module_import_scope`; what survives it is `namespace_imports_of`,
 answering the one import fact the symbol table does not record — which module a
@@ -454,8 +457,7 @@ decides which declaration is meant.
 
 ## Enforcement
 
-Each mechanism states what it makes impossible, not what it discourages. One of
-them is a ratchet rather than an absolute, and says so.
+Each mechanism states what it makes impossible, not what it discourages.
 
 - `DefId`'s field and `DefTable::declare` are both private to `crate::defs`. A
   pass cannot mint an identity. Enforced by the module system.
@@ -471,17 +473,48 @@ them is a ratchet rather than an absolute, and says so.
 - `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
   for a reachable function taking a module and a name and handing back a
   declaration. That is the shape of the chain this design removes, and the one
-  property the type system cannot state. The ones that remain are listed in
-  `NAME_TO_IDENTITY` with the reason each survives, so the class cannot grow
-  while it is being emptied; the test fails on a new one, and equally on a
-  stale entry, so the list shrinks as the work lands. Remaining work says which
-  entries are still to go and which two belong there.
+  property the type system cannot state. Two remain, listed in
+  `NAME_TO_IDENTITY` with the reason each belongs there: `imported_as`, which
+  answers what a module imported under a local name rather than what a spelling
+  means, and `cm_decl_in`, the Component Model boundary. The test fails on a
+  third, and equally on a stale entry, so neither the class nor the list can
+  grow.
 
-## Remaining work
+## The frame derivation
 
-The design above is implemented far enough that the whole suite passes and the
-class of bug in Context is not reachable by any program the repository builds.
-It is not yet _unwritable_, which is what the design asks for.
+A name whose reference site is not at hand still has to reach a declaration:
+`find_struct_module_source` asked for a synthesis target, `symbol_named` for a
+mangled name, a `*_case(name)` lookup for a resolved type's rendered head.
+Nothing walks a module's scope for them. Three recorded facts answer instead, in
+order:
+
+1. `Resolutions::imported_as` — what this module `use`d under that local name.
+   The one import fact that is not a scope lookup: it cannot reach another
+   module's imports, and it answers with what an alias aliases.
+2. `TraitEnv::decls_named`, filtered to the module in hand — every declaration
+   written under the name, whichever module declares it. It holds what modules
+   _declare_, never what they import, so no alias can steer it.
+3. `Resolutions::prelude_decl` — what the prelude puts in scope under the name.
+   The prelude tier alone, and it takes no vantage because it cannot be given
+   one: the prelude is in scope in every module.
+
+The three are the module's own reach, so a declaration the module cannot see
+stays unseen here — the derivation never widens to the whole program, and a name
+no module brought into scope is unresolved, the same answer the walk gives.
+
+`TraitEnv::unique_decl_named` — the one declaration written under the name
+anywhere, declining when several modules write it — sits _outside_ the
+derivation, and only impl-target keying may fall through to it. A key must name
+some bucket: a receiver reached only through a return type, or a trait a
+bodiless derive names, would otherwise key to the call site and split one
+declaration's impls across modules. Widening a bucket is not widening scope, and
+nothing that decides whether a written name resolves reads it.
+
+Nor does any tier take a vantage it could get wrong: `decls_named` takes no
+module at all, and the caller that knows which module it means filters the
+iterator itself. That is why the derivation cannot be mistaken for a scope, and
+why `no_reachable_function_turns_a_name_into_an_identity` is a statement about
+production code rather than a ratchet over it.
 
 What still prevents some collisions by convention rather than by key is
 `name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
@@ -492,64 +525,3 @@ took seven separate fixes, at type resolution, the struct literal, the WIR
 lookup key, template admission, template lookup, the registration name, and the
 instantiation scan. Each was a distinct caller of the same first-wins index. A
 removed mechanism takes one fix.
-
-- [ ] `Resolutions::declaration_named` deleted, and the Enforcement bullet it
-      contradicts becomes true: a pass holding only a spelling cannot obtain an
-      identity. `DefTable` itself already has no such lookup; this one is what
-      remains.
-
-      `declared_in` and `value_named` are gone. `declared_in`'s callers each
-      held a pair standing in for something they already had, and
-      `TypeLookup`'s whole `*_in(name, module)` family went with it.
-      `value_named` — the same scope one tier longer, for a name in value or
-      pattern position — had one caller left, `find_struct_module_source`,
-      asking it about a struct-like spelling for which the case tier could not
-      answer anyway; the tier itself stays, inside the walk, where a value
-      site is what consults it.
-
-      `declaration_named` has five call sites left, and they are the hard tail
-      — each is a pass that genuinely has no site, rather than one that mislaid
-      it. Every remaining by-name chain in the elaborator funnels through one
-      of them:
-
-      - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
-        family. Every *written* type reference now reaches the family through
-        `declaration_at`, which asks the site; what is left on the by-name
-        forms is reached holding a resolved type's rendered head — a struct
-        literal's recorded name, a pattern's qualifier, a reflection subject —
-        each of which has the type it came from and should ask that instead.
-      - `decl_key_or_local` (19 callers) and the `canonical_decl_key` it is
-        built on (3 more) are the frame derivation: a name that reaches no import, no declaration of the
-        writing module and no prelude entry, for which only the declaration
-        indexes can answer.
-
-        A trait reference no longer goes through it. `fq_trait_name_undeclared`
-        existed for a bodiless derive naming a stdlib trait the module never
-        `use`d, and the premise was wrong: naming a trait is what `use` is for,
-        and the prelude — its implementation modules included — is in scope
-        everywhere without one, so a name reaching nothing at a bound's site
-        reaches nothing at all. It is deleted; no program in the repository
-        relied on it.
-      - `symbol_named` (8 callers) reads the symbol row behind a name. The four
-        that held an identifier now read its site through `symbol_at`; what is
-        left is reached from a mangled name or a synthesis target.
-        `find_struct_module_source` — which module a spelling means, for a
-        synthesised lookup that never had a site — reaches the scope through
-        this chain and nothing else now.
-      - `static_receiver_keys` files a static call under two vantages, because
-        a receiver that arrived through a namespace prefix lost its qualifier.
-        The call site's path still names the receiver with its owner segment,
-        which the walk answers for under `ns$Type` — the dispatch chain has to
-        carry that site down to here for it to be read.
-- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Three of the original
-      seven are left: `declaration_named` above, `imported_as`, which answers
-      what a module imported under a local name rather than what a spelling
-      means, and `cm_decl_in`, the Component Model boundary. `decl_named_in`,
-      `canonical_assoc_const_key`, `declare_for_test` and `value_named` are
-      gone. When only the last two are left, the Enforcement bullet above is a
-      statement about production code rather than a ratchet over it.
-
-      `declare_for_test` went with every `#[cfg(test)]` constructor that minted
-      a declaration outside the pass that declares, and with the unit tests
-      resting on them. A feature whose only unit test needs a hole cut in it is
-      covered by `tests/fixtures/` instead, which exercises the real path.

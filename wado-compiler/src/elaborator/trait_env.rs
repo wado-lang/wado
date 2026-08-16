@@ -758,6 +758,11 @@ pub struct TraitEnv {
     /// separately in [`Self::newtype_decl_modules`] because the query consults
     /// them only as a later fallback.
     pub(super) struct_like_decl_modules: IndexMap<String, Vec<DefId>>,
+    /// Every type declaration — struct, resource, variant, enum, flags,
+    /// newtype, builtin. The complete half of the frame derivation: the
+    /// name-keyed maps beside it cover only the kinds their own consumers ask
+    /// for, and a spelling has to reach whichever kind declared it.
+    pub(super) type_decl_index: IndexSet<DefId>,
     /// Type name → modules declaring a `newtype` of that name, in build order.
     /// The fallback half of `find_struct_module_source`'s module lookup.
     pub(super) newtype_decl_modules: IndexMap<String, Vec<DefId>>,
@@ -1299,6 +1304,7 @@ impl TraitEnv {
                 supertrait_closures,
                 function_type_params,
                 struct_like_decl_modules,
+                type_decl_index: type_decl_index.clone(),
                 newtype_decl_modules,
                 module_namespace_imports,
                 assoc_type_bound_index,
@@ -1372,38 +1378,48 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// The one trait declaration named `name`, when exactly one module
-    /// declares it.
-    ///
-    /// For a reference the module's own scope cannot answer — a bodiless
-    /// derive (`impl Deserialize for Point;`) naming a stdlib trait the module
-    /// never `use`d. Declines when several modules declare the name: guessing
-    /// between them is the mis-identification this design exists to prevent.
-    pub(crate) fn unique_trait_decl_key(&self, name: &str) -> Option<DefId> {
-        let mut hits = self
-            .decl_index
-            .iter()
-            .filter(|def| self.defs.name(**def) == name);
-        let first = *hits.next()?;
-        hits.next().is_none().then_some(first)
-    }
-
-    /// The one effect or resource declaration named `name`, when exactly one
-    /// module declares it. Declines on ambiguity, like
-    /// [`Self::unique_trait_decl_key`].
-    pub(crate) fn unique_effect_or_resource_decl_key(&self, name: &str) -> Option<DefId> {
-        let mut hits = self
-            .effect_decl_index
-            .iter()
-            .chain(self.resource_decl_index.iter())
-            .filter(|def| self.defs.name(**def) == name);
-        let first = *hits.next()?;
-        hits.next().is_none().then_some(first)
-    }
-
     /// Whether `key` names a trait declaration.
     pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
         self.decl_index.contains(key)
+    }
+
+    /// Every declaration written under `name`, whichever module declares it.
+    ///
+    /// The frame derivation's raw material, and not a scope: it holds what
+    /// modules *declare*, never what they import, so no alias can steer it, and
+    /// it takes no vantage — the caller filters for the module it means.
+    pub(crate) fn decls_named<'n>(&'n self, name: &'n str) -> impl Iterator<Item = DefId> + 'n {
+        // The indexes overlap — a struct is in the struct-like map and in the
+        // type index both — so one declaration must not read as two: a
+        // duplicate would make `unique_decl_named` decline a name that in fact
+        // picks out one declaration.
+        let mut seen: IndexSet<DefId> = IndexSet::default();
+        self.struct_like_decl_modules
+            .get(name)
+            .into_iter()
+            .flatten()
+            .chain(self.newtype_decl_modules.get(name).into_iter().flatten())
+            .chain(&self.type_decl_index)
+            .chain(&self.decl_index)
+            .chain(&self.effect_decl_index)
+            .chain(&self.resource_decl_index)
+            .copied()
+            .filter(move |def| self.defs.name(*def) == name && seen.insert(*def))
+    }
+
+    /// The one declaration written under `name` anywhere in the program, for a
+    /// caller that must produce *some* bucket for a name its own module cannot
+    /// see — a struct-like type reached only through a return type, a stdlib
+    /// trait a bodiless derive names. Several modules declaring it leaves the
+    /// name unresolved rather than guessing.
+    ///
+    /// Not a tier of the frame derivation: a *written* reference that reaches
+    /// nothing through a module's own three tiers is unresolved, and this would
+    /// resolve it. Only keying may fall through to here.
+    pub(crate) fn unique_decl_named(&self, name: &str) -> Option<DefId> {
+        let mut hits = self.decls_named(name);
+        let first = hits.next()?;
+        hits.next().is_none().then_some(first)
     }
 
     /// Declaring module of a struct-like type (struct / resource / variant /

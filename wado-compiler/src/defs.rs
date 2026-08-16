@@ -722,12 +722,6 @@ mod tests {
 #[cfg(test)]
 const NAME_TO_IDENTITY: &[(&str, &str)] = &[
     (
-        "declaration_named",
-        "crate::resolve's own scope lookup — the one place a name is allowed \
-         to become an identity. Its callers are what the WEP is emptying, not \
-         this.",
-    ),
-    (
         "imported_as",
         "answers the import tier alone, for a caller to whom the *aliasing* is \
          the question — the one import fact that is not a scope lookup",
