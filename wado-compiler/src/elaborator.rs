@@ -1782,6 +1782,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &effect_decl.methods,
                         |method| method.attrs.iter().any(|a| a.cm_boundary.is_some()),
                     );
+                    self.reject_unsupported_operation_clauses(
+                        &effect_decl.name,
+                        &effect_decl.methods,
+                    );
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.

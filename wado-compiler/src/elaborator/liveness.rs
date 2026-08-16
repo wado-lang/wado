@@ -139,6 +139,22 @@ pub(crate) fn compute(
                         graph.seed_export(key);
                     }
                 }
+                Item::Interface(interface_decl) => {
+                    // An operation's default body is a root: the only call to
+                    // it is the dispatch wrapper the synthesis emits later, so
+                    // nothing in the AST references it. Without the seed the
+                    // body is dead, and everything only it reaches goes with
+                    // it — reify drops the callee and WIR build then finds an
+                    // unresolved call.
+                    for method in &interface_decl.methods {
+                        if method.body.is_none() {
+                            continue;
+                        }
+                        let key = method.id;
+                        graph.add_function_edges(method, references, &key);
+                        graph.seed_export(key);
+                    }
+                }
                 Item::Test(test) => {
                     // Test blocks are roots of the `T` (test-reachable) closure
                     // only — never the production `E` closure. A function reached

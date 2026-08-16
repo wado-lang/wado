@@ -1782,6 +1782,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Reject the clauses on an operation that dispatch cannot honour, so a
+    /// declaration says only what the language delivers.
+    ///
+    /// An operation's effects reach no call site — the requirement to perform
+    /// `E` is `with E` at the handler, not per operation — so a `with` clause
+    /// here would let a default body perform a capability its caller never
+    /// declared. Type parameters have nowhere to go either: the dispatch record
+    /// holds one funcref slot per operation, not one per instantiation.
+    pub(super) fn reject_unsupported_operation_clauses(
+        &mut self,
+        owner: &str,
+        methods: &[ast::Function],
+    ) {
+        for method in methods {
+            if !method.effects.is_empty() {
+                let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    detail: "cannot declare effects: an operation's effects are not required at \
+                             its call sites, so a default implementation must be performable \
+                             wherever it is dispatched — reach for an `#[ambient]` function",
+                    span: method.span,
+                });
+            }
+            if method
+                .type_params
+                .iter()
+                .any(ast::GenericParam::is_real_type_param)
+            {
+                let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    detail: "cannot declare type parameters: dispatch holds one slot per \
+                             operation, not one per instantiation",
+                    span: method.span,
+                });
+            }
+        }
+    }
+
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
         let operations = self.declared_effect_ops(decl.id);
         self.sem

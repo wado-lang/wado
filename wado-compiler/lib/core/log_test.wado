@@ -502,3 +502,25 @@ test "NopSink is how a program asks for silence" {
         error(`dropped`);
     };
 }
+
+test "the raw event emitter runs the run-time gates too" {
+    // Only tier 1 is weaker for a computed level: a level that is not a
+    // literal is not a comparison the optimizer can fold. Tiers 2 and 3 apply.
+    let mut sink = CaptureSink { min: Level::Warn };
+    with Log => &mut sink do {
+        event(Level::Info, `dropped by the sink`);
+        event(Level::Error, `kept`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+
+    let mut sink2 = CaptureSink {};
+    set_log_level(Level::Error);
+    with Log => &mut sink2 do {
+        event(Level::Trace, `dropped by the process level`);
+        event(Level::Error, `kept`);
+    };
+    set_log_level(Level::Trace);
+    assert sink2.events.len() == 1;
+    assert sink2.events[0].message == "kept";
+}

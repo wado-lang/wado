@@ -1151,7 +1151,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed. Without one, an unhandled operation traps. A `#[cm]`-backed operation (and every `resource` method) cannot carry one.
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed. Without one, an unhandled operation traps. A `#[cm]`-backed operation (and every `resource` method) cannot carry one, and no operation may declare effects or type parameters.
 
 ```wado
 interface Log {

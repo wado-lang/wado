@@ -255,8 +255,10 @@ pub fn enabled(level: Level) -> bool {
     return Log::enabled(level);
 }
 
-/// Emit an event at a run-time level, skipping the static gate the level
-/// wrappers apply. Location defaults resolve at the call site.
+/// Emit an event at a level a caller computes. Every gate `trace` … `error`
+/// apply applies here too; only tier 1 comes out weaker, since a level that is
+/// not a literal is not a comparison the optimizer can fold. Location defaults
+/// resolve at the call site.
 #[ambient]
 pub fn event<T: Serialize = NoFields>(
     level: Level,
@@ -266,6 +268,17 @@ pub fn event<T: Serialize = NoFields>(
     file: String = #file,
     line: i32 = #line,
 ) {
+    if !enabled(level) {
+        return;
+    }
+    emit(level, message, fields, target, file, line);
+}
+
+/// Build the event and hand it to the subscriber, gates already passed. The
+/// level wrappers call this rather than [`event`] so an emitted event runs the
+/// tier-3 dispatch once, not twice.
+#[ambient]
+fn emit<T: Serialize = NoFields>(level: Level, message: String, fields: T, target: String, file: String, line: i32) {
     if DEPTH >= MAX_DEPTH {
         return;
     }
@@ -293,7 +306,7 @@ pub fn trace<T: Serialize = NoFields>(
     if !enabled(Level::Trace) {
         return;
     }
-    event(Level::Trace, message, fields, target, file, line);
+    emit(Level::Trace, message, fields, target, file, line);
 }
 
 #[ambient]
@@ -307,7 +320,7 @@ pub fn debug<T: Serialize = NoFields>(
     if !enabled(Level::Debug) {
         return;
     }
-    event(Level::Debug, message, fields, target, file, line);
+    emit(Level::Debug, message, fields, target, file, line);
 }
 
 #[ambient]
@@ -321,7 +334,7 @@ pub fn info<T: Serialize = NoFields>(
     if !enabled(Level::Info) {
         return;
     }
-    event(Level::Info, message, fields, target, file, line);
+    emit(Level::Info, message, fields, target, file, line);
 }
 
 #[ambient]
@@ -335,7 +348,7 @@ pub fn warn<T: Serialize = NoFields>(
     if !enabled(Level::Warn) {
         return;
     }
-    event(Level::Warn, message, fields, target, file, line);
+    emit(Level::Warn, message, fields, target, file, line);
 }
 
 #[ambient]
@@ -349,7 +362,7 @@ pub fn error<T: Serialize = NoFields>(
     if !enabled(Level::Error) {
         return;
     }
-    event(Level::Error, message, fields, target, file, line);
+    emit(Level::Error, message, fields, target, file, line);
 }
 
 /// A span is a first-class value, so a caller can carry one and re-enter it.

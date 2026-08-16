@@ -8929,7 +8929,12 @@ line 2
     }
 
     #[test]
-    fn interface_method_carries_a_with_clause_and_generics() {
+    fn interface_method_parses_the_whole_trait_member_grammar() {
+        // The grammar is the trait grammar, so a `with` clause and type
+        // parameters parse here rather than erroring out of the parser. Both
+        // are then rejected by the elaborator with a diagnostic that says why
+        // (`reject_unsupported_operation_clauses`) — the parser's job is to
+        // read the member, not to decide what dispatch can honour.
         let decl = parse_interface("interface Run { fn go<T>(v: T) -> T with Stdout; }");
         let method = &decl.methods[0];
         assert_eq!(method.type_params.len(), 1);

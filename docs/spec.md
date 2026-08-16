@@ -4581,6 +4581,8 @@ A default runs in the caller's scope, like any function call. It is what `..forw
 
 An operation backed by a Component Model import — one carrying `#[cm(...)]`, and every `resource` method — cannot carry a default: its no-handler case is the CM adapter, so a body there could never run and is rejected.
 
+An operation also declares no effects and no type parameters. An operation's effects are not required at its call sites, so a `with` clause would let a default perform a capability its caller never declared — a default must be performable wherever it is dispatched, which means pure or `#[ambient]` code. Type parameters have nowhere to go either: dispatch holds one slot per operation, not one per instantiation. Both are compile errors.
+
 #### Colorless Async
 
 - Effect declarations never use the `async` keyword—Wado is fully colorless
