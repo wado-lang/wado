@@ -688,12 +688,14 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
     symbol_by_type: TypeMap<crate::ast::AstId>,
-    /// `(type_name, module, trait_name)` triples that satisfied a `Serialize` /
+    /// `(receiver head, module, trait)` triples that satisfied a `Serialize` /
     /// `Deserialize` / `Eq` / `Ord` bound structurally during elaboration
-    /// (bound-driven synthesis, WEP 2026-06-25). Keyed nominally rather than by
-    /// `TypeId`, so a generic records once against its declaration. Lives on the
-    /// shared `TypeTable` because elaboration runs one `Elaborator` per module.
-    bound_driven_synth_requests: IndexSet<(String, ModuleSource, crate::defs::DefId)>,
+    /// (bound-driven synthesis, WEP 2026-06-25). Keyed by the receiver's head
+    /// rather than by `TypeId`, so a generic records once against its
+    /// declaration. Lives on the shared `TypeTable` because elaboration runs one
+    /// `Elaborator` per module.
+    bound_driven_synth_requests:
+        IndexSet<(crate::name::TypeHead, ModuleSource, crate::defs::DefId)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -1483,28 +1485,44 @@ impl TypeTable {
         &mut self.compiler_items
     }
 
-    /// Record that `type_name` (declared in `module_source`) satisfied a
-    /// `T: <trait_name>` bound structurally (bound-driven synthesis). A
-    /// no-op if already recorded for this triple — the same type is
-    /// typically rediscovered from many call sites, so the pre-check
-    /// avoids reallocating the key each time.
+    /// Record that the receiver `head` (declared in `module_source`) satisfied a
+    /// `T: <trait>` bound structurally (bound-driven synthesis). A no-op if
+    /// already recorded for this triple — the same type is typically
+    /// rediscovered from many call sites, so the pre-check avoids cloning the
+    /// key each time.
+    ///
+    /// The head is the identity synthesis compares: a declaration by its
+    /// [`crate::defs::DefId`], a shape no declaration names by its rendering.
     pub fn record_bound_driven_synth_request(
         &mut self,
-        type_name: &str,
+        head: &crate::name::TypeHead,
         module_source: &ModuleSource,
         trait_key: &crate::defs::DefId,
     ) {
         let already_recorded = self
             .bound_driven_synth_requests
             .iter()
-            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_key);
+            .any(|(h, m, t)| h == head && m == module_source && t == trait_key);
         if !already_recorded {
             self.bound_driven_synth_requests.insert((
-                type_name.to_string(),
+                head.clone(),
                 module_source.clone(),
                 *trait_key,
             ));
         }
+    }
+
+    /// [`Self::record_bound_driven_synth_request`] for a receiver held as a
+    /// type: the head comes off the type itself, so it is the same head
+    /// synthesis builds for that receiver.
+    pub fn record_bound_driven_synth_request_for(
+        &mut self,
+        receiver: TypeId,
+        module_source: &ModuleSource,
+        trait_key: &crate::defs::DefId,
+    ) {
+        let head = self.fq_base_type_name(receiver).head().clone();
+        self.record_bound_driven_synth_request(&head, module_source, trait_key);
     }
 
     /// Requests recorded by [`Self::record_bound_driven_synth_request`] so
@@ -1516,7 +1534,7 @@ impl TypeTable {
     pub fn bound_driven_synth_requests(
         &self,
         mut matches: impl FnMut(&crate::defs::DefId) -> bool,
-    ) -> Vec<(String, ModuleSource, crate::defs::DefId)> {
+    ) -> Vec<(crate::name::TypeHead, ModuleSource, crate::defs::DefId)> {
         self.bound_driven_synth_requests
             .iter()
             .filter(|(_, _, trait_key)| matches(trait_key))

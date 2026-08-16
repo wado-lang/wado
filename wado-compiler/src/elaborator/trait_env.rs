@@ -1693,18 +1693,6 @@ pub(crate) enum ImplReceiver<'a> {
     Declared(&'a name::DeclName),
 }
 
-impl ImplReceiver<'_> {
-    /// The spelling this query names its receiver by, for the callers that key
-    /// their own in-pass state on the same string.
-    pub(crate) fn spelling(self) -> String {
-        match self {
-            ImplReceiver::Of(r) => r.head_key().into_string(),
-            ImplReceiver::Instantiated(m) => m.as_mangled_str().to_string(),
-            ImplReceiver::Declared(d) => d.as_decl_str().to_string(),
-        }
-    }
-}
-
 /// A receiver a lookup may try, kept in the form the thing that produced it
 /// had. A candidate list is assembled from several sources — a method info's
 /// receiver, a mangled struct key — and they are not one namespace. Carrying

@@ -2197,9 +2197,10 @@ pub enum TypeHead {
     /// A declaration. Equality reads the [`crate::defs::DefId`], so two
     /// same-named declarations are two heads however they are spelled.
     Declared(DeclaredHead),
-    /// A struct shape no declaration names — an anonymous literal's, a closure
-    /// environment's, a synthesised adapter's. The type table interns it under
-    /// this `(module, name)` pair, so the rendering *is* the identity.
+    /// A shape no declaration names — an anonymous literal's, a closure
+    /// environment's, a synthesised adapter's, a monomorphized instantiation's.
+    /// Nothing declares it, so the rendering *is* the identity, and the
+    /// declaring module scopes it.
     Shape {
         module: crate::module_source::ModuleSource,
         name: String,
@@ -2217,6 +2218,17 @@ pub enum TypeHead {
 }
 
 impl TypeHead {
+    /// A monomorphized instantiation, named by the fused spelling it mangles to
+    /// (`Fn<1,i32>`, `List<…/Token>`). No declaration names one, so its
+    /// rendering is its identity — the same rule [`Self::Shape`] carries.
+    #[must_use]
+    pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
+        Self::Shape {
+            module: module.clone(),
+            name: mangled.to_string(),
+        }
+    }
+
     /// The head's own name, as its declaration writes it. Diagnostics; a mangle
     /// takes [`Self::rendered`], which disambiguates a function-local
     /// declaration.

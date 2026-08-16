@@ -3286,10 +3286,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if method_name == "default"
-            && self
+            && let Some(struct_type) = self
                 .tysys
                 .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
-                .is_some()
         {
             let default_trait_name = self
                 .tysys
@@ -3300,8 +3299,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .record_bound_driven_synth_request(
-                    struct_name,
+                .record_bound_driven_synth_request_for(
+                    struct_type,
                     &module_source,
                     &default_trait_name
                         .canonical()

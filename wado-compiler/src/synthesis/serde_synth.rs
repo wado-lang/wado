@@ -182,23 +182,24 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         return;
     }
 
-    // One pass to resolve every declared struct/enum/variant/flags name to
+    // One pass to resolve every declared struct/enum/variant/flags head to
     // its `TypeId` (`SynthesisRequest` needs one), instead of an O(requests
-    // × types) rescan per entry.
-    let by_name: IndexMap<(String, ModuleSource), TypeId> = {
+    // × types) rescan per entry. Keyed by the head the request recorded, so
+    // two modules' same-named declarations stay apart.
+    let by_head: IndexMap<crate::name::TypeHead, TypeId> = {
         let tt = type_table.borrow();
         tt.all_types()
             .filter_map(|(id, resolved)| match resolved {
                 ResolvedType::Struct { .. }
                 | ResolvedType::Enum { .. }
                 | ResolvedType::Variant { .. }
-                | ResolvedType::Flags { .. } => tt.nominal_head(id).map(|head| (head, id)),
+                | ResolvedType::Flags { .. } => Some((tt.fq_base_type_name(id).head().clone(), id)),
                 _ => None,
             })
             .collect()
     };
 
-    for (target_type_name, module_source, trait_key) in requests {
+    for (target_head, module_source, trait_key) in requests {
         let trait_ref = if Some(&trait_key) == serialize_key.as_ref() {
             SynthTrait::Serialize
         } else {
@@ -209,8 +210,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
             );
             SynthTrait::Deserialize
         };
-        let Some(&target_type_id) = by_name.get(&(target_type_name.clone(), module_source.clone()))
-        else {
+        let Some(&target_type_id) = by_head.get(&target_head) else {
             continue;
         };
         let Some(module) = project.tir_modules.get_mut(&module_source) else {
@@ -218,7 +218,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         };
         module.synthesis_requests.push(SynthesisRequest {
             trait_ref,
-            target_type_name,
+            target_type_name: target_head.rendered().to_string(),
             target_type_id,
             type_params: Vec::new(),
             span: Span::default(),

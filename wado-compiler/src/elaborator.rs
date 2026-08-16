@@ -1043,7 +1043,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(target_type_name, &module_source, &key);
+                    .record_bound_driven_synth_request_for(target_type_id, &module_source, &key);
             }
             return;
         }

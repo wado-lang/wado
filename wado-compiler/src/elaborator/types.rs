@@ -2256,7 +2256,7 @@ impl<'a> TypeLookup<'a> {
     /// [`Self::declaration`], falling back to the local-item rendering index
     /// for a caller that arrived holding a `{name}@{AstId}` spelling rather
     /// than the declaration it renders.
-    fn declaration_or_render(&self, name: &str) -> Option<crate::defs::DefId> {
+    pub(super) fn declaration_or_render(&self, name: &str) -> Option<crate::defs::DefId> {
         self.declaration(name).or_else(|| {
             self.local_item_renders
                 .get(&(name.to_string(), self.current_module_source.clone()))

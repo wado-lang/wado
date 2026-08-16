@@ -265,6 +265,16 @@ elaborated has contributed so far — are keyed by declaration, so a module-leve
 `struct Box` and a function-local one of that name are two entries rather than
 one the later insert wins. No separate tier is needed to keep the two apart.
 
+A key whose subject may also be a shape no declaration names takes the head
+rather than the declaration. `synthesis::traits::SynthRequests` — the
+`(receiver, module, trait)` triples a bound-driven derivation was asked for — is
+keyed by `TypeHead`: its `Declared` compares by `DefId`, its `Shape` — an
+anonymous literal, a monomorphized instantiation — by its rendering, which is
+all such a shape has. `SynthesisCtx::key` hands one over from `FqTypeName::head`
+instead of rendering it, and `TypeTable::record_bound_driven_synth_request` takes
+the same head off the receiver's own type, so the producer and the consumer
+cannot key two ways.
+
 This is what removes the consumers' need for a vantage. A pass reading a struct's
 fields does not need to know which module it is standing in, so it cannot stand
 in the wrong one, and `with_module_perspective_for` does not swap these tables
@@ -525,18 +535,6 @@ removed mechanism takes one fix.
       a declaration outside the pass that declares, and with the unit tests
       resting on them. A feature whose only unit test needs a hole cut in it is
       covered by `tests/fixtures/` instead, which exercises the real path.
-- [ ] The bound-driven synthesis request key stops carrying a receiver
-      spelling. `synthesis::traits::SynthRequests` holds
-      `(receiver, module, trait)`, and the trait is already a `DefId` while
-      `SynthesisCtx::key` renders the receiver's head to a `String` — a
-      spelling as an equality operand, which §4 and §9 forbid. It does not
-      become a `DefId`: `SynthesisCtx::instance_has_impl` keys a monomorphized
-      instantiation, which no declaration names. It becomes the
-      declaration-or-shape sum this design already has — `TypeHead`, whose
-      `Declared` compares by its `DefId` and whose `Shape` compares by its
-      rendering. `FqTypeName::head` hands one over and `key` discards it. The
-      producers are `TypeTable::record_bound_driven_synth_request` and its
-      elaborator callers.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and

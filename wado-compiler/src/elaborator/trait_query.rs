@@ -1072,7 +1072,7 @@ impl TypeSystem {
         let nominal = self.type_table.borrow().nominal_head(type_id);
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
-            && let Some((name, module_source)) = nominal
+            && let Some((_, module_source)) = nominal
         {
             let receiver = self.type_table.borrow().impl_receiver_key(type_id);
             let serde_blocked =
@@ -1085,7 +1085,7 @@ impl TypeSystem {
                 if let Some(key) = self.synth_trait_key(tr) {
                     self.type_table
                         .borrow_mut()
-                        .record_bound_driven_synth_request(&name, &module_source, &key);
+                        .record_bound_driven_synth_request_for(type_id, &module_source, &key);
                 }
                 return true;
             }
@@ -1106,7 +1106,7 @@ impl TypeSystem {
                     .clone();
                 self.type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(&name, &module_source, &key);
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
             }
             return true;
         }
@@ -1155,14 +1155,14 @@ impl TypeSystem {
             }
         {
             if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
-                let (name, module_source) = self
+                let (_, module_source) = self
                     .type_table
                     .borrow()
                     .nominal_head(type_id)
                     .expect("a generic instance names a declaration");
                 self.type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(&name, &module_source, &key);
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
             }
             return true;
         }
@@ -1400,30 +1400,33 @@ impl TypeSystem {
     /// variant, …). These have no impl blocks, so the name-based search misses
     /// them; a hit records the bound-driven synth request.
     ///
-    /// `type_name` is the declaration name: every lookup below goes through the
-    /// module scope, which keys declarations as source writes them.
+    /// `type_name` is the declaration name. One scope lookup turns it into the
+    /// subject's declaration; every kind check below is keyed by that
+    /// declaration, so the four kinds cannot each reach a different one.
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,
         type_name: &crate::name::DeclName,
         bound_name: &str,
     ) -> bool {
-        let type_name = type_name.as_decl_str();
         let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
+            return false;
+        };
+        let Some(def) = scope.declaration_or_render(type_name.as_decl_str()) else {
             return false;
         };
         let subject = match on_bound {
             OnBoundTrait::ReflectStruct => scope
-                .struct_fields(type_name)
+                .struct_fields_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectVariant => scope
-                .variant_case(type_name)
+                .variant_cases_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectEnum => scope
-                .enum_case(type_name)
+                .enum_cases_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectFlags => scope
-                .flags_case(type_name)
+                .flags_members_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
@@ -1442,9 +1445,13 @@ impl TypeSystem {
         let Some(key) = self.synth_trait_key(on_bound) else {
             return false;
         };
+        let head = {
+            let tt = self.type_table.borrow();
+            FqTypeName::declared(tt.defs(), def).head().clone()
+        };
         self.type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(type_name, &module_source, &key);
+            .record_bound_driven_synth_request(&head, &module_source, &key);
         true
     }
 }

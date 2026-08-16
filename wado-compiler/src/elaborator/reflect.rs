@@ -291,8 +291,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(
-                &self_name,
+            .record_bound_driven_synth_request_for(
+                self_ty,
                 &module_source,
                 &reflect_trait_name
                     .canonical()
@@ -925,8 +925,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(
-                &self_name,
+            .record_bound_driven_synth_request_for(
+                self_ty,
                 &module_source,
                 &trait_name
                     .canonical()
@@ -1197,8 +1197,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(
-                &self_name,
+            .record_bound_driven_synth_request_for(
+                self_ty,
                 &module_source,
                 &trait_name
                     .canonical()
