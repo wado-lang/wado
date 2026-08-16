@@ -32,10 +32,10 @@ use wasmtime_wasi_http::p3::bindings::http::types::ErrorCode as HttpErrorCode;
 use wasmtime_wasi_http::p3::bindings::{Service, ServicePre};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, OptLevel};
+use crate::compile::CompileFlags;
+use crate::knobs::{CompileKnobs, KnobOpt};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, WasiState};
-use wado_compiler::LogLevel;
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.
@@ -56,12 +56,8 @@ const DEFAULT_MAX_CONCURRENCY: usize = 1024;
 
 pub struct ServeOptions {
     pub input: String,
-    pub opt_level: OptLevel,
-    pub log_level: LogLevel,
+    pub knobs: CompileKnobs,
     pub addr: String,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    pub allocator: Option<String>,
     pub collector: wasmtime::Collector,
     /// Empty by default: unlike `wado run`, services don't preopen cwd
     /// automatically — the user must pass `--dir`.
@@ -73,30 +69,18 @@ pub struct ServeOptions {
     pub recycle_requests: u64,
     pub max_concurrency: usize,
     pub profile: ProfileMode,
-    pub no_cache: bool,
-    /// Generic codegen feature flags from `-f <flag>`.
-    pub codegen_flags: Vec<String>,
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Addr,
     Dir,
-    OptLevel,
-    InlineThreshold,
-    OptIterations,
-    LogLevel,
-    Allocator,
     Collector,
     Timeout,
     Workers,
     RecycleRequests,
     MaxConcurrency,
     Profile,
-    NoCache,
-    Feature,
     Help,
 }
 
@@ -139,20 +123,23 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Addr,
         Self::Dir,
-        Self::OptLevel,
-        Self::InlineThreshold,
-        Self::OptIterations,
-        Self::LogLevel,
-        Self::Allocator,
         Self::Collector,
         Self::Timeout,
         Self::Workers,
         Self::RecycleRequests,
         Self::MaxConcurrency,
         Self::Profile,
-        Self::NoCache,
-        Self::Feature,
         Self::Help,
+    ];
+
+    const KNOBS: &[KnobOpt] = &[
+        KnobOpt::OptLevel,
+        KnobOpt::InlineThreshold,
+        KnobOpt::OptIterations,
+        KnobOpt::LogLevel,
+        KnobOpt::Allocator,
+        KnobOpt::NoCache,
+        KnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -169,19 +156,12 @@ impl Opt {
             // intentionally diverge from `run`/`test` here rather than
             // accept a misleading no-op flag.
             Self::Dir => args::DIR_SPEC,
-            Self::OptLevel => args::OPT_LEVEL_SPEC,
-            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
-            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::LogLevel => args::LOG_LEVEL_SPEC,
-            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Collector => args::COLLECTOR_SPEC,
             Self::Timeout => TIMEOUT_SPEC,
             Self::Workers => WORKERS_SPEC,
             Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
             Self::MaxConcurrency => MAX_CONCURRENCY_SPEC,
             Self::Profile => PROFILE_SPEC,
-            Self::NoCache => args::NO_CACHE_SPEC,
-            Self::Feature => args::FEATURE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -205,31 +185,17 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     write!(
         buf,
         "{}",
-        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+        args::OptsHelp::default()
+            .add(Opt::ALL, |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .add(args::ParamOpt::ALL, |o| o.spec())
+            .render()
     )
     .unwrap();
     buf
-}
-
-pub fn print_usage() {
-    eprint!("{}", format_usage());
-}
-
-fn parse_timeout_arg(parser: &mut lexopt::Parser) -> Result<u64, CliExit> {
-    let s = args::require_string(parser)?;
-    let n = s.parse::<u64>().map_err(|_| {
-        CliExit::error(format!(
-            "--timeout requires a positive integer (seconds), got '{s}'"
-        ))
-    })?;
-    if n == 0 {
-        return Err(CliExit::error("--timeout must be > 0"));
-    }
-    Ok(n)
 }
 
 /// Parse a non-negative integer option. When `allow_zero` is false, `0`
@@ -249,15 +215,18 @@ fn parse_count_arg(
     Ok(n)
 }
 
+/// Parse a count that also has to fit the pooling allocator's `u32` instance /
+/// stack counts.
+fn parse_u32_count_arg(flag: &str, parser: &mut lexopt::Parser) -> Result<usize, CliExit> {
+    let n = parse_count_arg(flag, parser, false)?;
+    let n = u32::try_from(n).map_err(|_| CliExit::error(format!("{flag} value is too large")))?;
+    Ok(n as usize)
+}
+
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
-    let mut opt_level = OptLevel::default();
-    let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut addr = "0.0.0.0:8080".to_string();
-    let mut inline_threshold: Option<usize> = None;
-    let mut opt_iterations: Option<u32> = None;
-    let mut allocator: Option<String> = None;
     let mut collector = runtime::DEFAULT_COLLECTOR;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
@@ -265,56 +234,30 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
     let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
     let mut profile = ProfileMode::None;
-    let mut no_cache = false;
-    let mut codegen_flags: Vec<String> = Vec::new();
-    let mut param_args = args::ParamArgs::default();
+    let mut knobs = CompileKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            param_args.apply(p, &mut parser)?;
+        if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
+            knobs.apply(k, &mut parser)?;
+        } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            knobs.params.apply(p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Addr => addr = args::require_string(&mut parser)?,
                 Opt::Dir => preopened_dirs.push(args::parse_dir_arg(&mut parser)?),
-                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
-                Opt::InlineThreshold => {
-                    inline_threshold = Some(args::parse_inline_threshold_arg(
-                        "--optimize-inline-threshold",
-                        &mut parser,
-                    )?);
-                }
-                Opt::OptIterations => {
-                    opt_iterations = Some(args::parse_opt_iterations_arg(
-                        "--optimize-iterations",
-                        &mut parser,
-                    )?);
-                }
-                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
-                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Collector => {
                     let spec = args::require_string(&mut parser)?;
                     collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
                 }
-                Opt::Timeout => timeout_secs = parse_timeout_arg(&mut parser)?,
+                Opt::Timeout => timeout_secs = parse_count_arg("--timeout", &mut parser, false)?,
                 Opt::Workers => {
-                    let n = parse_count_arg("--workers", &mut parser, false)?;
-                    // Bound by `u32`: `workers` sizes the pooling allocator's
-                    // `u32` instance count.
-                    let n = u32::try_from(n)
-                        .map_err(|_| CliExit::error("--workers value is too large".to_string()))?;
-                    workers = Some(n as usize);
+                    workers = Some(parse_u32_count_arg("--workers", &mut parser)?);
                 }
                 Opt::RecycleRequests => {
                     recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
                 }
                 Opt::MaxConcurrency => {
-                    let n = parse_count_arg("--max-concurrency", &mut parser, false)?;
-                    // Bound by `u32`: `max_concurrency` sizes the pooling
-                    // allocator's `u32` stack count.
-                    let n = u32::try_from(n).map_err(|_| {
-                        CliExit::error("--max-concurrency value is too large".to_string())
-                    })?;
-                    max_concurrency = n as usize;
+                    max_concurrency = parse_u32_count_arg("--max-concurrency", &mut parser)?;
                 }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
@@ -325,8 +268,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                         ));
                     }
                 }
-                Opt::NoCache => no_cache = true,
-                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -350,12 +291,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
 
     Ok(ServeOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Service, &usage)?,
-        opt_level,
-        log_level,
+        knobs,
         addr,
-        inline_threshold,
-        opt_iterations,
-        allocator,
         collector,
         preopened_dirs,
         timeout_secs,
@@ -363,10 +300,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         recycle_requests,
         max_concurrency,
         profile,
-        no_cache,
-        codegen_flags,
-        param_overrides: param_args.overrides,
-        param_policy: param_args.policy,
     })
 }
 
@@ -1193,36 +1126,17 @@ fn log_connection_join_error(res: Result<(), tokio::task::JoinError>) {
 }
 
 pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
+    let cranelift_opt = opts.knobs.opt_level.to_wasmtime();
     let flags = CompileFlags {
-        opt_level: opts.opt_level,
-        log_level: opts.log_level,
+        knobs: opts.knobs,
         target_world: Some("wasi:http/service".to_string()),
-        skip_validation: false,
-        inline_threshold: opts.inline_threshold,
-        opt_iterations: opts.opt_iterations,
-        allocator: opts.allocator,
-        no_cache: opts.no_cache,
-        test_name_filters: Vec::new(),
-        codegen_flags: opts.codegen_flags.clone(),
-        lib_world: None,
-        lib_interface_export: false,
-        param_overrides: opts.param_overrides.clone(),
-        param_policy: opts.param_policy,
-        retain_wir: false,
-        embed_wit_contract: None,
+        ..CompileFlags::default()
     };
-    let cranelift_opt = opts.opt_level.to_wasmtime();
     // `serve` is a driver on the build tier: in a project it builds the
     // http/service world through the shared build core (metadata embedded,
     // written to build/), then serves it; a bare file with no project stays on
     // the in-memory compile primitive.
-    let wasm = crate::build::build_for_driver(
-        &opts.input,
-        "wasi:http/service",
-        "wasi-http-service",
-        &flags,
-    )
-    .await?;
+    let wasm = crate::build::build_for_driver(&opts.input, "wasi:http/service", &flags).await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against `--max-concurrency`

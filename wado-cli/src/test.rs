@@ -20,8 +20,9 @@ use wasmtime::Engine;
 use wasmtime::component::{Component, Linker};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, OptLevel};
+use crate::compile::{self, CompileFlags};
 use crate::discover;
+use crate::knobs::{CompileKnobs, KnobOpt, OptLevel};
 use crate::manifest as project_manifest;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, WasiState};
@@ -29,7 +30,6 @@ use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
-use wado_compiler::LogLevel;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s
@@ -41,25 +41,18 @@ pub struct TestOptions {
     /// project); later entries are sub-packages discovered recursively.
     pub package_runs: Vec<PackageRun>,
     pub jobs: usize,
-    pub opt_level: OptLevel,
-    pub log_level: LogLevel,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    /// `None` lets the compiler auto-select the debug allocator for the
-    /// `test` world; `--allocator` overrides.
-    pub allocator: Option<String>,
+    /// `knobs.allocator` stays `None` so the compiler auto-selects the debug
+    /// allocator for the `test` world; `--allocator` overrides.
+    pub knobs: CompileKnobs,
     pub preopened_dirs: Vec<(String, String)>,
     /// `--no-run`: compile every file (which still refreshes
     /// `<primary>.kiln.json` as a side-effect) but skip wasmtime execution.
     pub no_run: bool,
-    pub no_cache: bool,
     /// `--test-name <pattern>` substring filters (repeatable). When non-empty,
     /// only `test "name"` blocks whose name contains one of these strings are
     /// compiled and run; the rest are dropped before codegen so early DCE
     /// removes them. Empty means "run every test".
     pub test_name_filters: Vec<String>,
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
     pub format: TestFormat,
 }
 
@@ -94,22 +87,10 @@ impl TestOptions {
     // DCE prunes everything else.
     fn compile_flags(&self) -> CompileFlags {
         CompileFlags {
-            opt_level: self.opt_level,
-            log_level: self.log_level,
+            knobs: self.knobs.clone(),
             target_world: Some("test".to_string()),
-            skip_validation: false,
-            inline_threshold: self.inline_threshold,
-            opt_iterations: self.opt_iterations,
-            allocator: self.allocator.clone(),
-            no_cache: self.no_cache,
             test_name_filters: self.test_name_filters.clone(),
-            codegen_flags: Vec::new(),
-            lib_world: None,
-            lib_interface_export: false,
-            param_overrides: self.param_overrides.clone(),
-            param_policy: self.param_policy,
-            retain_wir: false,
-            embed_wit_contract: None,
+            ..CompileFlags::default()
         }
     }
 }
@@ -126,16 +107,10 @@ enum Opt {
     TestName,
     Exclude,
     Parallel,
-    OptLevel,
-    InlineThreshold,
-    OptIterations,
-    LogLevel,
-    Allocator,
     Format,
     Dir,
     NoDir,
     NoRun,
-    NoCache,
     Help,
 }
 
@@ -145,24 +120,29 @@ impl Opt {
         Self::TestName,
         Self::Exclude,
         Self::Parallel,
-        Self::OptLevel,
-        Self::InlineThreshold,
-        Self::OptIterations,
-        Self::LogLevel,
-        Self::Allocator,
         Self::Format,
         Self::Dir,
         Self::NoDir,
         Self::NoRun,
-        Self::NoCache,
         Self::Help,
+    ];
+
+    const KNOBS: &[KnobOpt] = &[
+        KnobOpt::OptLevel,
+        KnobOpt::InlineThreshold,
+        KnobOpt::OptIterations,
+        KnobOpt::LogLevel,
+        KnobOpt::Allocator,
+        KnobOpt::NoCache,
+        KnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
+            // No short form: `-f` is the codegen feature flag everywhere.
             Self::Filter => args::OptSpec {
                 long: Some("filter"),
-                short: Some('f'),
+                short: None,
                 value: Some("<pattern>"),
                 desc: "Keep only files whose path matches the wildcard pattern (`*`, `?`, `[...]`)",
             },
@@ -184,11 +164,6 @@ impl Opt {
                 value: Some("<N>"),
                 desc: "Number of parallel workers (default: num CPUs)",
             },
-            Self::OptLevel => args::OPT_LEVEL_SPEC,
-            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
-            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::LogLevel => args::LOG_LEVEL_SPEC,
-            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Format => args::OptSpec {
                 long: Some("format"),
                 short: None,
@@ -203,7 +178,6 @@ impl Opt {
                 value: None,
                 desc: "Compile (and refresh Kiln caches) but skip the wasmtime execution phase",
             },
-            Self::NoCache => args::NO_CACHE_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -225,18 +199,17 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     write!(
         buf,
         "{}",
-        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+        args::OptsHelp::default()
+            .add(Opt::ALL, |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .add(args::ParamOpt::ALL, |o| o.spec())
+            .render()
     )
     .unwrap();
     buf
-}
-
-pub fn print_usage() {
-    eprint!("{}", format_usage());
 }
 
 /// Cargo-workspace-style walk: one `PackageRun` for `root`, plus one per
@@ -442,21 +415,22 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut test_name_filters: Vec<String> = Vec::new();
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
-    let mut opt_level = OptLevel::O0;
-    let mut log_level = args::DEFAULT_LOG_LEVEL;
-    let mut inline_threshold: Option<usize> = None;
-    let mut opt_iterations: Option<u32> = None;
-    let mut allocator: Option<String> = None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
     let mut no_run = false;
-    let mut no_cache = false;
     let mut format = TestFormat::Heartbeat;
-    let mut param_args = args::ParamArgs::default();
+    // Tests compile unoptimized by default: the compile stage dominates a run,
+    // and `-O` opts back in.
+    let mut knobs = CompileKnobs {
+        opt_level: OptLevel::O0,
+        ..CompileKnobs::default()
+    };
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            param_args.apply(p, &mut parser)?;
+        if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
+            knobs.apply(k, &mut parser)?;
+        } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            knobs.params.apply(p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Filter => {
@@ -477,21 +451,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                         }
                     }
                 }
-                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
-                Opt::InlineThreshold => {
-                    inline_threshold = Some(args::parse_inline_threshold_arg(
-                        "--optimize-inline-threshold",
-                        &mut parser,
-                    )?);
-                }
-                Opt::OptIterations => {
-                    opt_iterations = Some(args::parse_opt_iterations_arg(
-                        "--optimize-iterations",
-                        &mut parser,
-                    )?);
-                }
-                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
-                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Format => {
                     let val = args::require_string(&mut parser)?;
                     format = TestFormat::parse(&val).ok_or_else(|| {
@@ -506,7 +465,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 }
                 Opt::NoDir => no_dir = true,
                 Opt::NoRun => no_run = true,
-                Opt::NoCache => no_cache = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -578,17 +536,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     Ok(TestOptions {
         package_runs,
         jobs,
-        opt_level,
-        log_level,
-        inline_threshold,
-        opt_iterations,
-        allocator,
+        knobs,
         preopened_dirs,
         no_run,
-        no_cache,
         test_name_filters,
-        param_overrides: param_args.overrides,
-        param_policy: param_args.policy,
         format,
     })
 }
@@ -1522,7 +1473,7 @@ async fn run_pipeline(
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
 ) -> PipelineOutcome {
-    let opt_level = flags.opt_level.to_wasmtime();
+    let opt_level = flags.knobs.opt_level.to_wasmtime();
     let budget = Arc::new(PipelineBudget::new(
         parallel_cap,
         compile_jobs,

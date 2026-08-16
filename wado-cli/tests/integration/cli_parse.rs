@@ -8,7 +8,8 @@ use lexopt::Parser;
 use wado_cli::args::CliExit;
 use wado_cli::build;
 use wado_cli::check;
-use wado_cli::compile::{self, OptLevel, OutputFormat};
+use wado_cli::compile::{self, OutputFormat};
+use wado_cli::knobs::OptLevel;
 use wado_cli::lsp;
 
 /// Assert that a `Result<T, CliExit>` is an error with exit code 1
@@ -60,9 +61,9 @@ fn compile_basic() {
     assert_eq!(opts.input, "input.wado");
     assert_eq!(opts.output, None);
     assert_eq!(opts.format, None);
-    assert_eq!(opts.opt_level, OptLevel::O2); // default
+    assert_eq!(opts.knobs.opt_level, OptLevel::O2); // default
     assert!(!opts.wat_to_stdout);
-    assert!(!opts.skip_validation);
+    assert!(!opts.knobs.skip_validation);
 }
 
 #[test]
@@ -105,7 +106,7 @@ fn compile_opt_levels() {
     ] {
         let parser = Parser::from_args(&[arg, "input.wado"]);
         let opts = compile::parse_args(parser).unwrap();
-        assert_eq!(opts.opt_level, expected, "failed for {arg}");
+        assert_eq!(opts.knobs.opt_level, expected, "failed for {arg}");
     }
 }
 
@@ -113,7 +114,7 @@ fn compile_opt_levels() {
 fn compile_no_validate() {
     let parser = Parser::from_args(&["--no-validate", "input.wado"]);
     let opts = compile::parse_args(parser).unwrap();
-    assert!(opts.skip_validation);
+    assert!(opts.knobs.skip_validation);
 }
 
 #[test]
@@ -168,7 +169,7 @@ fn compile_rejects_directory() {
 fn compile_log_level() {
     let parser = Parser::from_args(&["--log-level", "debug", "input.wado"]);
     let opts = compile::parse_args(parser).unwrap();
-    assert_eq!(opts.log_level, wado_compiler::LogLevel::Debug);
+    assert_eq!(opts.knobs.log_level, wado_compiler::LogLevel::Debug);
 }
 
 #[test]
@@ -226,10 +227,10 @@ fn compile_all_options() {
     assert_eq!(opts.input, "input.wado");
     assert_eq!(opts.output, Some("out.wat".to_string()));
     assert_eq!(opts.format, Some(OutputFormat::Wat));
-    assert_eq!(opts.opt_level, OptLevel::O3);
-    assert_eq!(opts.log_level, wado_compiler::LogLevel::Warn);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O3);
+    assert_eq!(opts.knobs.log_level, wado_compiler::LogLevel::Warn);
     assert_eq!(opts.target_world, Some("wasi:http/service".to_string()));
-    assert!(opts.skip_validation);
+    assert!(opts.knobs.skip_validation);
 }
 
 // ---- run ----
@@ -239,7 +240,7 @@ fn run_basic() {
     let parser = Parser::from_args(&["input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
     assert_eq!(opts.input, "input.wado");
-    assert_eq!(opts.opt_level, OptLevel::O2);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O2);
     // Default: current dir is preopened
     assert_eq!(
         opts.preopened_dirs,
@@ -301,14 +302,14 @@ fn run_unknown_option() {
 fn run_opt_level() {
     let parser = Parser::from_args(&["-O3", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert_eq!(opts.opt_level, OptLevel::O3);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O3);
 }
 
 #[test]
 fn run_log_level() {
     let parser = Parser::from_args(&["--log-level", "error", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert_eq!(opts.log_level, wado_compiler::LogLevel::Error);
+    assert_eq!(opts.knobs.log_level, wado_compiler::LogLevel::Error);
 }
 
 #[test]
@@ -331,7 +332,7 @@ fn run_profile_invalid() {
 fn run_allocator() {
     let parser = Parser::from_args(&["--allocator", "freelist", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert_eq!(opts.allocator, Some("freelist".to_string()));
+    assert_eq!(opts.knobs.allocator, Some("freelist".to_string()));
 }
 
 // ---- serve ----
@@ -388,21 +389,21 @@ fn serve_no_input() {
 fn serve_opt_level() {
     let parser = Parser::from_args(&["-Os", "input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
-    assert_eq!(opts.opt_level, OptLevel::Os);
+    assert_eq!(opts.knobs.opt_level, OptLevel::Os);
 }
 
 #[test]
 fn serve_log_level() {
     let parser = Parser::from_args(&["--log-level", "warn", "input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
-    assert_eq!(opts.log_level, wado_compiler::LogLevel::Warn);
+    assert_eq!(opts.knobs.log_level, wado_compiler::LogLevel::Warn);
 }
 
 #[test]
 fn serve_allocator() {
     let parser = Parser::from_args(&["--allocator", "debug", "input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
-    assert_eq!(opts.allocator, Some("debug".to_string()));
+    assert_eq!(opts.knobs.allocator, Some("debug".to_string()));
 }
 
 #[test]
@@ -485,7 +486,7 @@ fn test_with_files() {
 fn test_with_filter_keeps_matching_paths() {
     // --filter is a path-based wildcard applied during parse: `*.wado`
     // keeps `a.wado` and drops `b.txt`.
-    let parser = Parser::from_args(&["-f", "*.wado", "a.wado", "b.txt"]);
+    let parser = Parser::from_args(&["--filter", "*.wado", "a.wado", "b.txt"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(opts.package_runs.len(), 1);
     assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
@@ -495,7 +496,7 @@ fn test_with_filter_keeps_matching_paths() {
 fn test_with_filter_no_match_exits_cleanly() {
     // No discovered path matches the filter — the user gets a non-fatal exit
     // (code 0) with an explanatory message rather than running zero tests.
-    let parser = Parser::from_args(&["-f", "no_match", "a.wado"]);
+    let parser = Parser::from_args(&["--filter", "no_match", "a.wado"]);
     assert_help(
         wado_cli::test::parse_args(parser),
         "No .wado files match --filter",
@@ -504,7 +505,7 @@ fn test_with_filter_no_match_exits_cleanly() {
 
 #[test]
 fn test_with_invalid_filter_pattern() {
-    let parser = Parser::from_args(&["-f", "[unterminated", "a.wado"]);
+    let parser = Parser::from_args(&["--filter", "[unterminated", "a.wado"]);
     assert_err(
         wado_cli::test::parse_args(parser),
         "invalid --filter pattern",
@@ -534,14 +535,14 @@ fn test_with_exclude_drops_matching_explicit_file() {
 fn test_defaults_to_o0() {
     let parser = Parser::from_args(&["a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.opt_level, OptLevel::O0);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O0);
 }
 
 #[test]
 fn test_opt_level_override() {
     let parser = Parser::from_args(&["-O2", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.opt_level, OptLevel::O2);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O2);
 }
 
 #[test]
@@ -591,7 +592,7 @@ fn test_help() {
 fn test_log_level() {
     let parser = Parser::from_args(&["--log-level", "debug", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.log_level, wado_compiler::LogLevel::Debug);
+    assert_eq!(opts.knobs.log_level, wado_compiler::LogLevel::Debug);
 }
 
 #[test]
@@ -604,15 +605,15 @@ fn test_inline_threshold_and_iterations() {
         "a.wado",
     ]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.inline_threshold, Some(42));
-    assert_eq!(opts.opt_iterations, Some(7));
+    assert_eq!(opts.knobs.inline_threshold, Some(42));
+    assert_eq!(opts.knobs.opt_iterations, Some(7));
 }
 
 #[test]
 fn test_allocator() {
     let parser = Parser::from_args(&["--allocator", "bump", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.allocator, Some("bump".to_string()));
+    assert_eq!(opts.knobs.allocator, Some("bump".to_string()));
 }
 
 #[test]
@@ -716,7 +717,120 @@ fn dump_opt_level() {
     let parser = Parser::from_args(&["--nir", "-O3", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_nir);
-    assert_eq!(opts.opt_level, wado_compiler::OptLevel::O3);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O3);
+}
+
+/// Every compiling subcommand shares one `-O` parser, so the level is always
+/// attached and always explicit — a bare `-O` is an error, not `-O0`.
+#[test]
+fn a_bare_dash_o_is_rejected_by_every_subcommand() {
+    assert_err(
+        compile::parse_args(Parser::from_args(&["-O", "input.wado"])),
+        "-O requires a level",
+    );
+    assert_err(
+        build::parse_args(Parser::from_args(&["-O"])),
+        "-O requires a level",
+    );
+    assert_err(
+        wado_cli::run::parse_args(Parser::from_args(&["-O", "input.wado"])),
+        "-O requires a level",
+    );
+    assert_err(
+        wado_cli::serve::parse_args(Parser::from_args(&["-O", "input.wado"])),
+        "-O requires a level",
+    );
+    assert_err(
+        wado_cli::test::parse_args(Parser::from_args(&["-O", "input.wado"])),
+        "-O requires a level",
+    );
+    assert_err(
+        wado_cli::dump::parse_args(Parser::from_args(&["-O", "input.wado"])),
+        "-O requires a level",
+    );
+}
+
+/// `-f` is the codegen feature flag in every subcommand that compiles, `test`
+/// included; `--filter` is spelled long.
+#[test]
+fn dash_f_is_the_feature_flag_in_test() {
+    let parser = Parser::from_args(&["-f", "no-branch-hinting", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.knobs.codegen_flags, vec!["no-branch-hinting"]);
+    // The path argument survives: `-f` took its value, not the file.
+    assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
+}
+
+fn help_text<T>(result: Result<T, CliExit>) -> String {
+    match result {
+        Ok(_) => panic!("expected a help exit"),
+        Err(err) => err.message,
+    }
+}
+
+/// The column an option's description starts in, for a `  <label>  <desc>` line.
+fn description_column(line: &str) -> usize {
+    let gap = line[2..].find("  ").expect("option line has a label gap") + 2;
+    line.len() - line[gap..].trim_start_matches(' ').len()
+}
+
+/// A subcommand draws its options from several enums; the description column
+/// still lines up across all of them, so the help reads as one block.
+#[test]
+fn help_descriptions_share_one_column() {
+    let help_args = &["--help"];
+    for (name, help) in [
+        (
+            "compile",
+            help_text(compile::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "build",
+            help_text(build::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "check",
+            help_text(check::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "run",
+            help_text(wado_cli::run::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "serve",
+            help_text(wado_cli::serve::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "test",
+            help_text(wado_cli::test::parse_args(Parser::from_args(help_args))),
+        ),
+    ] {
+        let columns: Vec<usize> = help
+            .lines()
+            .filter(|l| l.starts_with("  -"))
+            .map(description_column)
+            .collect();
+        assert!(columns.len() > 1, "{name}: too few option lines to compare");
+        assert!(
+            columns.iter().all(|c| *c == columns[0]),
+            "{name}: description column varies {columns:?}\n{help}"
+        );
+    }
+}
+
+/// `-O` appears once in the help, not once per group that mentions it.
+#[test]
+fn dump_documents_the_opt_level_once() {
+    let help = help_text(wado_cli::dump::parse_args(Parser::from_args(&["--help"])));
+    let mentions = help.lines().filter(|l| l.starts_with("  -O")).count();
+    assert_eq!(mentions, 1, "-O documented {mentions} times:\n{help}");
+}
+
+#[test]
+fn dump_takes_a_log_level() {
+    let parser = Parser::from_args(&["--log-level", "debug", "input.wado"]);
+    let opts = wado_cli::dump::parse_args(parser).unwrap();
+    assert_eq!(opts.knobs.log_level, wado_compiler::LogLevel::Debug);
 }
 
 #[test]

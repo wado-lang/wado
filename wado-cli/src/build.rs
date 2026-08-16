@@ -11,10 +11,9 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use wado_compiler::LogLevel;
-
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, CompileOptions, OptLevel};
+use crate::compile::{self, CompileFlags, CompileOptions};
+use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
 use crate::manifest;
 
 pub struct BuildOptions {
@@ -24,20 +23,8 @@ pub struct BuildOptions {
     lib: bool,
     /// `-o`: output path; valid only when a single world is selected.
     output: Option<String>,
-    opt_level: OptLevel,
-    log_level: LogLevel,
-    skip_validation: bool,
-    no_cache: bool,
-    inline_threshold: Option<usize>,
-    opt_iterations: Option<u32>,
-    allocator: Option<String>,
-    codegen_flags: Vec<String>,
-    param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    param_policy: wado_compiler::param_resolution::ParamPolicy,
-    no_embed_wit: bool,
-    embed_wit: bool,
-    no_embed_metadata: bool,
-    embed_metadata: bool,
+    knobs: CompileKnobs,
+    embed: EmbedOptions,
 }
 
 #[derive(Clone, Copy)]
@@ -45,39 +32,21 @@ enum Opt {
     World,
     Lib,
     Output,
-    OptLevel,
-    InlineThreshold,
-    OptIterations,
-    LogLevel,
-    NoValidate,
-    NoCache,
-    Allocator,
-    Feature,
-    NoEmbedWit,
-    EmbedWit,
-    NoEmbedMetadata,
-    EmbedMetadata,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[
-        Self::World,
-        Self::Lib,
-        Self::Output,
-        Self::OptLevel,
-        Self::InlineThreshold,
-        Self::OptIterations,
-        Self::LogLevel,
-        Self::NoValidate,
-        Self::NoCache,
-        Self::Allocator,
-        Self::Feature,
-        Self::NoEmbedWit,
-        Self::EmbedWit,
-        Self::NoEmbedMetadata,
-        Self::EmbedMetadata,
-        Self::Help,
+    const ALL: &[Self] = &[Self::World, Self::Lib, Self::Output, Self::Help];
+
+    const KNOBS: &[KnobOpt] = &[
+        KnobOpt::OptLevel,
+        KnobOpt::InlineThreshold,
+        KnobOpt::OptIterations,
+        KnobOpt::LogLevel,
+        KnobOpt::NoValidate,
+        KnobOpt::NoCache,
+        KnobOpt::Allocator,
+        KnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -100,38 +69,6 @@ impl Opt {
                 value: Some("<file>"),
                 desc: "Output path (only with a single --world / --lib; default: build/<world>.wasm)",
             },
-            Self::OptLevel => args::OPT_LEVEL_SPEC,
-            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
-            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::LogLevel => args::LOG_LEVEL_SPEC,
-            Self::NoValidate => args::NO_VALIDATE_SPEC,
-            Self::NoCache => args::NO_CACHE_SPEC,
-            Self::Allocator => args::ALLOCATOR_SPEC,
-            Self::Feature => args::FEATURE_SPEC,
-            Self::NoEmbedWit => args::OptSpec {
-                long: Some("no-embed-wit"),
-                short: None,
-                value: None,
-                desc: "Do not embed the WIT `component-type` section in the output",
-            },
-            Self::EmbedWit => args::OptSpec {
-                long: Some("embed-wit"),
-                short: None,
-                value: None,
-                desc: "Force embedding the WIT section on (e.g. under -Os, where it is off by default)",
-            },
-            Self::NoEmbedMetadata => args::OptSpec {
-                long: Some("no-embed-metadata"),
-                short: None,
-                value: None,
-                desc: "Do not embed the [package] metadata sections in the output",
-            },
-            Self::EmbedMetadata => args::OptSpec {
-                long: Some("embed-metadata"),
-                short: None,
-                value: None,
-                desc: "Force embedding the [package] metadata on (e.g. under -Os, where it is off by default)",
-            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -148,11 +85,15 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     write!(
         buf,
         "{}",
-        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+        args::OptsHelp::default()
+            .add(Opt::ALL, |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .add(EmbedOpt::ALL, |o| o.spec())
+            .add(args::ParamOpt::ALL, |o| o.spec())
+            .render()
     )
     .unwrap();
     buf
@@ -163,50 +104,21 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
     let mut world: Option<String> = None;
     let mut lib = false;
     let mut output: Option<String> = None;
-    let mut opt_level = OptLevel::default();
-    let mut log_level = args::DEFAULT_LOG_LEVEL;
-    let mut skip_validation = false;
-    let mut no_cache = false;
-    let mut inline_threshold: Option<usize> = None;
-    let mut opt_iterations: Option<u32> = None;
-    let mut allocator: Option<String> = None;
-    let mut codegen_flags: Vec<String> = Vec::new();
-    let mut no_embed_wit = false;
-    let mut embed_wit = false;
-    let mut no_embed_metadata = false;
-    let mut embed_metadata = false;
-    let mut param_args = args::ParamArgs::default();
+    let mut knobs = CompileKnobs::default();
+    let mut embed = EmbedOptions::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            param_args.apply(p, &mut parser)?;
+        if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
+            knobs.apply(k, &mut parser)?;
+        } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            knobs.params.apply(p, &mut parser)?;
+        } else if let Some(e) = args::match_opt(&arg, EmbedOpt::ALL, |e| e.spec()) {
+            embed.apply(e)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::World => world = Some(args::require_string(&mut parser)?),
                 Opt::Lib => lib = true,
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
-                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
-                Opt::InlineThreshold => {
-                    inline_threshold = Some(args::parse_inline_threshold_arg(
-                        "--optimize-inline-threshold",
-                        &mut parser,
-                    )?);
-                }
-                Opt::OptIterations => {
-                    opt_iterations = Some(args::parse_opt_iterations_arg(
-                        "--optimize-iterations",
-                        &mut parser,
-                    )?);
-                }
-                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
-                Opt::NoValidate => skip_validation = true,
-                Opt::NoCache => no_cache = true,
-                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
-                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
-                Opt::NoEmbedWit => no_embed_wit = true,
-                Opt::EmbedWit => embed_wit = true,
-                Opt::NoEmbedMetadata => no_embed_metadata = true,
-                Opt::EmbedMetadata => embed_metadata = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else {
@@ -219,45 +131,23 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
             "`--lib` and `--world` are mutually exclusive",
         ));
     }
-    if no_embed_wit && embed_wit {
-        return Err(CliExit::error(
-            "`--no-embed-wit` and `--embed-wit` are mutually exclusive",
-        ));
-    }
-    if no_embed_metadata && embed_metadata {
-        return Err(CliExit::error(
-            "`--no-embed-metadata` and `--embed-metadata` are mutually exclusive",
-        ));
-    }
 
     Ok(BuildOptions {
         world,
         lib,
         output,
-        opt_level,
-        log_level,
-        skip_validation,
-        no_cache,
-        inline_threshold,
-        opt_iterations,
-        allocator,
-        codegen_flags,
-        param_overrides: param_args.overrides,
-        param_policy: param_args.policy,
-        no_embed_wit,
-        embed_wit,
-        no_embed_metadata,
-        embed_metadata,
+        knobs,
+        embed,
     })
 }
 
 /// One world to build: its entry module, the `build/<segment>.wasm` output, and
 /// the world selector (`--lib` FQ or `--world` FQ) passed to the compile core.
-struct BuildTarget {
-    entry: PathBuf,
-    output: PathBuf,
-    lib_world: Option<String>,
-    target_world: Option<String>,
+pub struct BuildTarget {
+    pub entry: PathBuf,
+    pub output: PathBuf,
+    pub lib_world: Option<String>,
+    pub target_world: Option<String>,
 }
 
 /// Every world the package declares: the library world (`[package].lib`) plus
@@ -341,114 +231,33 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
         ));
     }
 
-    let core = BuildCore {
-        opt_level: opts.opt_level,
-        log_level: opts.log_level,
-        skip_validation: opts.skip_validation,
-        no_cache: opts.no_cache,
-        inline_threshold: opts.inline_threshold,
-        opt_iterations: opts.opt_iterations,
-        allocator: opts.allocator.clone(),
-        codegen_flags: opts.codegen_flags.clone(),
-        param_overrides: opts.param_overrides.clone(),
-        param_policy: opts.param_policy,
-        no_embed_wit: opts.no_embed_wit,
-        embed_wit: opts.embed_wit,
-        no_embed_metadata: opts.no_embed_metadata,
-        embed_metadata: opts.embed_metadata,
-    };
     for target in targets {
         let output = match &opts.output {
             Some(path) => PathBuf::from(path),
             None => target.output.clone(),
         };
-        build_world_component(
-            &target.entry,
-            &output,
-            target.lib_world,
-            target.target_world,
-            &core,
-        )
-        .await?;
+        build_world_component(&target, &output, &opts.knobs, opts.embed).await?;
     }
     Ok(())
-}
-
-/// Build-time knobs the drivers (`build` / `run` / `serve`) forward to the
-/// compile core for one world. Separated from the world identity (entry /
-/// output / world selector) so the same core is reused across worlds.
-pub struct BuildCore {
-    pub opt_level: OptLevel,
-    pub log_level: LogLevel,
-    pub skip_validation: bool,
-    pub no_cache: bool,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    pub allocator: Option<String>,
-    pub codegen_flags: Vec<String>,
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
-    pub no_embed_wit: bool,
-    pub embed_wit: bool,
-    pub no_embed_metadata: bool,
-    pub embed_metadata: bool,
-}
-
-impl BuildCore {
-    /// A driver core from a `run` / `serve` [`CompileFlags`]. Metadata and WIT
-    /// embed at their defaults (on), matching `wado build`, so a run/serve
-    /// artifact is identical to a built one.
-    #[must_use]
-    pub fn from_flags(flags: &CompileFlags) -> Self {
-        Self {
-            opt_level: flags.opt_level,
-            log_level: flags.log_level,
-            skip_validation: flags.skip_validation,
-            no_cache: flags.no_cache,
-            inline_threshold: flags.inline_threshold,
-            opt_iterations: flags.opt_iterations,
-            allocator: flags.allocator.clone(),
-            codegen_flags: flags.codegen_flags.clone(),
-            param_overrides: flags.param_overrides.clone(),
-            param_policy: flags.param_policy,
-            no_embed_wit: false,
-            embed_wit: false,
-            no_embed_metadata: false,
-            embed_metadata: false,
-        }
-    }
 }
 
 /// The single project-build path: compile one world with `[package]` metadata
 /// embedded, write it to `output`, and return its bytes. Shared by `wado build`
 /// and the run/serve drivers so a run artifact matches a built one.
 pub async fn build_world_component(
-    entry: &Path,
+    target: &BuildTarget,
     output: &Path,
-    lib_world: Option<String>,
-    target_world: Option<String>,
-    core: &BuildCore,
+    knobs: &CompileKnobs,
+    embed: EmbedOptions,
 ) -> Result<Vec<u8>, CliExit> {
     let mut opts = CompileOptions::for_world_build(
-        entry.to_string_lossy().into_owned(),
+        target.entry.to_string_lossy().into_owned(),
         output.to_path_buf(),
-        lib_world,
-        target_world,
+        target.lib_world.clone(),
+        target.target_world.clone(),
     );
-    opts.opt_level = core.opt_level;
-    opts.log_level = core.log_level;
-    opts.skip_validation = core.skip_validation;
-    opts.no_cache = core.no_cache;
-    opts.inline_threshold = core.inline_threshold;
-    opts.opt_iterations = core.opt_iterations;
-    opts.allocator.clone_from(&core.allocator);
-    opts.codegen_flags.clone_from(&core.codegen_flags);
-    opts.param_overrides = core.param_overrides.clone();
-    opts.param_policy = core.param_policy;
-    opts.no_embed_wit = core.no_embed_wit;
-    opts.embed_wit = core.embed_wit;
-    opts.no_embed_metadata = core.no_embed_metadata;
-    opts.embed_metadata = core.embed_metadata;
+    opts.knobs = knobs.clone();
+    opts.embed = embed;
     // Use the bytes we just compiled rather than reading `output` back: a
     // concurrent build (e.g. parallel `serve` drivers sharing this project's
     // `build/<world>.wasm`) could leave the file torn or holding another
@@ -458,27 +267,27 @@ pub async fn build_world_component(
 
 /// Produce the runnable component for a driver (`run` / `serve`). In a project
 /// (a nearby `wado.toml`), build the world through the shared core — metadata
-/// embedded, written to `build/<segment>.wasm`, matching `wado build`. With no
-/// project, fall back to the standalone compile primitive (in-memory, no
-/// artifact on disk). `flags` supplies the build knobs and the fallback world.
+/// embedded, written to `build/<world segment>.wasm`, matching `wado build`.
+/// With no project, fall back to the standalone compile primitive (in-memory,
+/// no artifact on disk). `flags` supplies the build knobs and the fallback
+/// world. Metadata and WIT embed at their defaults, matching `wado build`, so a
+/// run/serve artifact is identical to a built one.
 pub async fn build_for_driver(
     entry: &str,
     target_world: &str,
-    world_segment: &str,
     flags: &CompileFlags,
 ) -> Result<Vec<u8>, CliExit> {
     match compile::load_nearest_manifest(Path::new(entry)) {
         Some(project) => {
-            let output = compile::build_output_path(&project.root, world_segment);
-            let core = BuildCore::from_flags(flags);
-            build_world_component(
-                Path::new(entry),
-                &output,
-                None,
-                Some(target_world.to_string()),
-                &core,
-            )
-            .await
+            let segment = compile::world_path_segment(target_world);
+            let output = compile::build_output_path(&project.root, &segment);
+            let target = BuildTarget {
+                entry: PathBuf::from(entry),
+                output: output.clone(),
+                lib_world: None,
+                target_world: Some(target_world.to_string()),
+            };
+            build_world_component(&target, &output, &flags.knobs, EmbedOptions::default()).await
         }
         None => compile::compile(entry, flags).await,
     }

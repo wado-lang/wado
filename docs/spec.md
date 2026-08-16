@@ -4415,7 +4415,6 @@ wado test path                 # walk path with the discovery rules
 
 # Filter discovered files by path (shell wildcard, not regex)
 wado test --filter '*addition*'
-wado test -f '*string*'
 
 # Show help
 wado test --help

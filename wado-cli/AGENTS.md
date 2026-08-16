@@ -10,6 +10,16 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 - Argument parsing is hand-rolled on `lexopt`. Do not introduce clap or another
   parser framework. Each subcommand parses its own options and owns its usage
   and help text in its own module.
+- The knobs every compiling subcommand shares (`-O`, `--log-level`,
+  `--allocator`, `-f`, `--no-cache`, `-D`, …) are declared once in `knobs.rs` as
+  `CompileKnobs` / `KnobOpt`. A subcommand lists the subset it accepts as
+  `Opt::KNOBS` and carries one `knobs: CompileKnobs` field; it declares no
+  fields, parse arms, or specs of its own for them. Add a shared knob in
+  `knobs.rs` only.
+- A short flag means one thing across the subcommands that compile: `-f` is
+  `--feature` there, never `--filter` or `--format`. Outside that family only
+  `init -f` (`--force`) claims it.
+- `-O` takes its level attached and explicit (`-O2`); a bare `-O` is an error.
 - `process::exit` belongs to `main()` alone. A subcommand returns `CliExit`
   (`args.rs`) from both its parse and its run, so there is exactly one exit
   path. Use `CliExit::silent_failure` when the subcommand has already printed

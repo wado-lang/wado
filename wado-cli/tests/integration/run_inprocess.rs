@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 use wado_cli::args::CliExit;
-use wado_cli::compile::{self, CompileOptions, OptLevel, OutputFormat};
+use wado_cli::compile::{self, CompileOptions, OutputFormat};
+use wado_cli::knobs::{CompileKnobs, EmbedOptions, OptLevel};
 
 fn fixture(rel: &str) -> PathBuf {
     crate::common::project_root().join(rel)
@@ -90,24 +91,12 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         input: fixture("example/hello.wado").to_string_lossy().into_owned(),
         output: Some(output_path.to_string_lossy().into_owned()),
         format,
-        opt_level: OptLevel::default(),
         wat_to_stdout: false,
-        log_level: wado_compiler::LogLevel::default(),
+        knobs: CompileKnobs::default(),
+        embed: EmbedOptions::default(),
         target_world: None,
-        skip_validation: false,
-        inline_threshold: None,
-        opt_iterations: None,
-        allocator: None,
-        no_cache: false,
-        codegen_flags: Vec::new(),
         lib_world: None,
         lib_interface_export: false,
-        param_overrides: wado_compiler::hashmap::IndexMap::default(),
-        param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
-        no_embed_wit: false,
-        embed_wit: false,
-        no_embed_metadata: false,
-        embed_metadata: false,
         // Input is an explicit `.wado` file, so this is not manifest-driven.
         manifest_driven: false,
     }
@@ -168,7 +157,7 @@ fn compile_succeeds_at_each_opt_level() {
     ] {
         let out = dir.path().join(format!("hello-{level:?}.wasm"));
         let mut opts = hello_compile_opts(&out, None);
-        opts.opt_level = level;
+        opts.knobs.opt_level = level;
         futures::executor::block_on(compile::run(opts))
             .unwrap_or_else(|e| panic!("compile failed at {level:?}: {:?}", e.message));
         assert!(

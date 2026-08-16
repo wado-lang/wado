@@ -10,42 +10,27 @@ use wasmtime::component::Component;
 use wasmtime::{GuestProfiler, UpdateDeadline};
 
 use crate::args::{self, CliExit};
-use crate::compile::{self, CompileFlags, OptLevel};
+use crate::compile::CompileFlags;
+use crate::knobs::{CompileKnobs, KnobOpt};
 use crate::manifest;
 use crate::runtime::{self, ProfileMode};
-use wado_compiler::LogLevel;
 
 pub struct RunOptions {
     pub input: String,
-    pub opt_level: OptLevel,
-    pub log_level: LogLevel,
+    pub knobs: CompileKnobs,
     pub profile: ProfileMode,
     /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
     /// Arguments forwarded to the guest via `wasi:cli/environment.get-arguments`.
     pub program_args: Vec<String>,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    pub allocator: Option<String>,
     pub collector: wasmtime::Collector,
-    pub no_cache: bool,
-    pub codegen_flags: Vec<String>,
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Dir,
     NoDir,
-    NoCache,
-    OptLevel,
-    InlineThreshold,
-    OptIterations,
-    LogLevel,
-    Allocator,
     Collector,
-    Feature,
     Profile,
     Help,
 }
@@ -54,16 +39,19 @@ impl Opt {
     const ALL: &[Self] = &[
         Self::Dir,
         Self::NoDir,
-        Self::NoCache,
-        Self::OptLevel,
-        Self::InlineThreshold,
-        Self::OptIterations,
-        Self::LogLevel,
-        Self::Allocator,
         Self::Collector,
-        Self::Feature,
         Self::Profile,
         Self::Help,
+    ];
+
+    const KNOBS: &[KnobOpt] = &[
+        KnobOpt::NoCache,
+        KnobOpt::OptLevel,
+        KnobOpt::InlineThreshold,
+        KnobOpt::OptIterations,
+        KnobOpt::LogLevel,
+        KnobOpt::Allocator,
+        KnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -77,14 +65,7 @@ impl Opt {
                 desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
             },
             Self::NoDir => args::NO_DIR_SPEC,
-            Self::NoCache => args::NO_CACHE_SPEC,
-            Self::OptLevel => args::OPT_LEVEL_SPEC,
-            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
-            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::LogLevel => args::LOG_LEVEL_SPEC,
-            Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Collector => args::COLLECTOR_SPEC,
-            Self::Feature => args::FEATURE_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
                 short: None,
@@ -107,11 +88,14 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     write!(
         buf,
         "{}",
-        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+        args::OptsHelp::default()
+            .add(Opt::ALL, |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .add(args::ParamOpt::ALL, |o| o.spec())
+            .render()
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -144,10 +128,6 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf, "  perf report --input perf.jit.data").unwrap();
     buf
-}
-
-pub fn print_usage() {
-    eprint!("{}", format_usage());
 }
 
 /// Parse `--profile`. Shared by `run` and `serve`.
@@ -188,24 +168,19 @@ pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let usage = format_usage();
     let mut input: Option<String> = None;
-    let mut opt_level = OptLevel::default();
-    let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut profile = ProfileMode::None;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut program_args: Vec<String> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
-    let mut inline_threshold: Option<usize> = None;
-    let mut opt_iterations: Option<u32> = None;
-    let mut allocator: Option<String> = None;
     let mut collector = runtime::DEFAULT_COLLECTOR;
-    let mut no_cache = false;
-    let mut codegen_flags: Vec<String> = Vec::new();
-    let mut param_args = args::ParamArgs::default();
+    let mut knobs = CompileKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            param_args.apply(p, &mut parser)?;
+        if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
+            knobs.apply(k, &mut parser)?;
+        } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            knobs.params.apply(p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Dir => {
@@ -213,27 +188,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                     explicit_dirs = true;
                 }
                 Opt::NoDir => no_dir = true,
-                Opt::NoCache => no_cache = true,
-                Opt::OptLevel => opt_level = compile::parse_opt_level_arg(&mut parser)?,
-                Opt::InlineThreshold => {
-                    inline_threshold = Some(args::parse_inline_threshold_arg(
-                        "--optimize-inline-threshold",
-                        &mut parser,
-                    )?);
-                }
-                Opt::OptIterations => {
-                    opt_iterations = Some(args::parse_opt_iterations_arg(
-                        "--optimize-iterations",
-                        &mut parser,
-                    )?);
-                }
-                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
-                Opt::Allocator => allocator = Some(args::require_string(&mut parser)?),
                 Opt::Collector => {
                     let spec = args::require_string(&mut parser)?;
                     collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
                 }
-                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
                     profile = parse_profile(&spec)?;
@@ -261,19 +219,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
 
     Ok(RunOptions {
         input: manifest::resolve_input(input, manifest::EntryPointKind::Command, &usage)?,
-        opt_level,
-        log_level,
+        knobs,
         profile,
         preopened_dirs,
         program_args,
-        inline_threshold,
-        opt_iterations,
-        allocator,
         collector,
-        no_cache,
-        codegen_flags,
-        param_overrides: param_args.overrides,
-        param_policy: param_args.policy,
     })
 }
 
@@ -370,34 +320,18 @@ async fn run_cli_component(
 }
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
-    // Pass `target_world: None` so the compiler picks the cli/command default
+    let cranelift_opt = opts.knobs.opt_level.to_wasmtime();
+    // Leave `target_world` unset so the compiler picks the cli/command default
     // (and bump allocator unless overridden).
     let flags = CompileFlags {
-        opt_level: opts.opt_level,
-        log_level: opts.log_level,
-        target_world: None,
-        skip_validation: false,
-        inline_threshold: opts.inline_threshold,
-        opt_iterations: opts.opt_iterations,
-        allocator: opts.allocator,
-        no_cache: opts.no_cache,
-        test_name_filters: Vec::new(),
-        codegen_flags: opts.codegen_flags,
-        lib_world: None,
-        lib_interface_export: false,
-        param_overrides: opts.param_overrides,
-        param_policy: opts.param_policy,
-        retain_wir: false,
-        embed_wit_contract: None,
+        knobs: opts.knobs,
+        ..CompileFlags::default()
     };
-    let cranelift_opt = opts.opt_level.to_wasmtime();
     // `run` is a driver on the build tier (like `cargo run`): in a project it
     // builds the cli/command world through the shared build core (metadata
     // embedded, written to build/), then executes it; a bare file with no
     // project stays on the in-memory compile primitive.
-    let wasm =
-        crate::build::build_for_driver(&opts.input, "wasi:cli/command", "wasi-cli-command", &flags)
-            .await?;
+    let wasm = crate::build::build_for_driver(&opts.input, "wasi:cli/command", &flags).await?;
 
     run_cli_component(
         &wasm,
