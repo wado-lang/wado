@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786863495921,
+  "lastUpdate": 1786872916622,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48653,6 +48653,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 283820,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "417c38179676436b9a24bdb60a477ccc2ecc5aca",
+          "message": "Merge pull request #1829 from wado-lang/claude/wado-performance-json-twitter-317y4z\n\nperf(optimizer): price inlining after the fold constant arguments cause",
+          "timestamp": "2026-08-16T18:22:02+09:00",
+          "tree_id": "c7d69549c479cac50b734332e232f03874da183e",
+          "url": "https://github.com/wado-lang/wado/commit/417c38179676436b9a24bdb60a477ccc2ecc5aca"
+        },
+        "date": 1786872916228,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
             "unit": "bytes"
           }
         ]
