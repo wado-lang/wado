@@ -248,10 +248,10 @@ impl TypeSystem {
     ) -> Result<(), TypeMismatchPayload> {
         let type_table = self.type_table.borrow();
         match check_assignable(actual, expected, &type_table) {
-            TypeCheckResult::Incompatible => Err(TypeMismatchPayload {
-                expected: type_table.type_name(expected),
-                found: type_table.type_name(actual),
-            }),
+            TypeCheckResult::Incompatible => {
+                let (expected, found) = type_table.type_names_for_mismatch(expected, actual);
+                Err(TypeMismatchPayload { expected, found })
+            }
             TypeCheckResult::Compatible | TypeCheckResult::Deferred => Ok(()),
         }
     }

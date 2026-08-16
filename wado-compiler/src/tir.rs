@@ -3272,6 +3272,54 @@ impl TypeTable {
 
     /// Get a human-readable name for a type
     pub fn type_name(&self, id: TypeId) -> String {
+        self.render_type_name(id, false)
+    }
+
+    /// [`Self::type_name`] with every declared head written in the spec's
+    /// `MODULE#SYMBOL` notation.
+    ///
+    /// For the one message a bare name cannot settle: two declarations that
+    /// share a name render identically, so a mismatch reads `expected 'Point',
+    /// found 'Point'`. The module is what separates them. Ask
+    /// [`Self::type_names_for_mismatch`] rather than this directly — qualifying
+    /// a name that was already unambiguous only makes the message longer.
+    #[must_use]
+    pub fn type_name_qualified(&self, id: TypeId) -> String {
+        self.render_type_name(id, true)
+    }
+
+    /// The two spellings a mismatch message prints.
+    ///
+    /// Equal renderings mean two declarations of one name — the only case a
+    /// reader cannot settle from the message — and only then is each qualified.
+    /// Every other mismatch keeps the short form it prints today.
+    #[must_use]
+    pub fn type_names_for_mismatch(&self, expected: TypeId, found: TypeId) -> (String, String) {
+        let (a, b) = (self.type_name(expected), self.type_name(found));
+        if a != b {
+            return (a, b);
+        }
+        let (qa, qb) = (
+            self.type_name_qualified(expected),
+            self.type_name_qualified(found),
+        );
+        // Two renderings that stay equal even qualified are the same type, or
+        // two shapes no module names. Neither is helped by the longer form.
+        if qa == qb { (a, b) } else { (qa, qb) }
+    }
+
+    /// The declared name of `def`, qualified by its module when `qualified`.
+    fn head_name(&self, def: crate::defs::DefId, qualified: bool) -> String {
+        let name = self.def_name(def);
+        if qualified {
+            crate::symbol_notation::render(&self.def_module(def).to_string(), name)
+        } else {
+            name.to_string()
+        }
+    }
+
+    fn render_type_name(&self, id: TypeId, qualified: bool) -> String {
+        let type_name = |t: TypeId| self.render_type_name(t, qualified);
         match self.get(id) {
             ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Unit => "()".to_string(),
@@ -3279,13 +3327,16 @@ impl TypeTable {
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
             ResolvedType::BuiltinArray(elem) => {
-                format!("Array<{}>", self.type_name(*elem))
+                format!("Array<{}>", type_name(*elem))
             }
             ResolvedType::Struct { def, type_args } => {
                 // The declared head, not the rendered one: a message shows
                 // `Box<i32>`, never the `Box@<local>` a local declaration is
                 // stored under.
-                let head = self.struct_head_decl_name(*def);
+                let head = match (qualified, def.decl()) {
+                    (true, Some(decl)) => self.head_name(decl, true),
+                    _ => self.struct_head_decl_name(*def),
+                };
                 if type_args.is_empty() {
                     head
                 } else {
@@ -3297,7 +3348,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
-                self.def_name(*def).to_string()
+                self.head_name(*def, qualified)
             }
             ResolvedType::Function {
                 is_mut,
@@ -3305,23 +3356,27 @@ impl TypeTable {
                 return_type,
                 ..
             } => {
-                let param_names: Vec<String> = params.iter().map(|p| self.type_name(*p)).collect();
+                let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
                 let keyword = if *is_mut { "fn mut" } else { "fn" };
                 format!(
                     "{}({}) -> {}",
                     keyword,
                     param_names.join(", "),
-                    self.type_name(*return_type)
+                    type_name(*return_type)
                 )
             }
-            ResolvedType::Ref(inner) => format!("&{}", self.type_name(*inner)),
-            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_name(*inner)),
-            ResolvedType::Variant { def } => self.def_name(*def).to_string(),
+            ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", type_name(*inner)),
+            ResolvedType::Variant { def } => self.head_name(*def, qualified),
             ResolvedType::GenericResource { def, type_args } => {
-                let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
-                format!("{}<{}>", self.def_name(*def), arg_names.join(", "))
+                let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                format!(
+                    "{}<{}>",
+                    self.head_name(*def, qualified),
+                    arg_names.join(", ")
+                )
             }
-            ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
+            ResolvedType::Reactive(inner) => format!("Reactive<{}>", type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
             ResolvedType::InferVar(var) => var.to_string(),
             ResolvedType::AssocTypeProjection {
@@ -3329,27 +3384,31 @@ impl TypeTable {
                 assoc_name,
                 ..
             } => {
-                format!("{}::{}", self.type_name(*param_id), assoc_name)
+                format!("{}::{}", type_name(*param_id), assoc_name)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
-                let name = self.def_name(*def);
-                if Self::is_tuple_type(name) {
+                let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                // A tuple is module-independent, so it has nothing to qualify.
+                if Self::is_tuple_type(self.def_name(*def)) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
-                    format!("{name}<{}>", arg_names.join(", "))
+                    format!(
+                        "{}<{}>",
+                        self.head_name(*def, qualified),
+                        arg_names.join(", ")
+                    )
                 }
             }
             ResolvedType::Newtype { def, type_args, .. } => {
-                let head = self.def_name(*def).to_string();
+                let head = self.head_name(*def, qualified);
                 if type_args.is_empty() {
                     head
                 } else {
-                    let args: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
+                    let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
                     format!("{head}<{}>", args.join(", "))
                 }
             }
-            ResolvedType::Flags { def } => self.def_name(*def).to_string(),
+            ResolvedType::Flags { def } => self.head_name(*def, qualified),
             ResolvedType::TypePack { name, .. } => format!("..{name}"),
         }
     }

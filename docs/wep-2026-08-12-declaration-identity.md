@@ -389,7 +389,10 @@ Two rules survive from the structured-name work and still apply to the renderer:
   instantiation. That is the same defect one layer down: a rendering standing in
   for an identity, and two things rendering the same.
 
-The rendered format is unchanged; the emitted Wasm is byte-identical.
+The rendered format is not itself a constraint. A mangle has to be injective and
+has to agree between the site that mints a name and the site that looks one up;
+what it spells is free to change, and the emitted Wasm changing with it is a
+golden-fixture update, not a regression.
 
 ### 9. What names are still for
 

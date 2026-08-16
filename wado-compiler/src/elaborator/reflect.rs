@@ -680,7 +680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if arg_ty != TypeTable::ERROR && arg_ty != fields_tuple_ty {
             let (expected, found) = {
                 let tt = self.tysys.type_table.borrow();
-                (tt.type_name(fields_tuple_ty), tt.type_name(arg_ty))
+                tt.type_names_for_mismatch(fields_tuple_ty, arg_ty)
             };
             let _ = self.emit(TypeError::TypeMismatch {
                 expected,
@@ -1355,7 +1355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if arg_types[0] != TypeTable::ERROR && arg_types[0] != spec.value_type {
                 let (expected, found) = {
                     let tt = self.tysys.type_table.borrow();
-                    (tt.type_name(spec.value_type), tt.type_name(arg_types[0]))
+                    tt.type_names_for_mismatch(spec.value_type, arg_types[0])
                 };
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected,

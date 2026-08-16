@@ -972,6 +972,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         head.decl() == Some(written)
     }
 
+    /// The two spellings a pattern mismatch prints.
+    ///
+    /// The written qualifier and the scrutinee's rendering can be the same
+    /// text — two declarations of one name is precisely what this mismatch
+    /// reports — so each takes its module then, in the same notation and under
+    /// the same rule as [`crate::tir::TypeTable::type_names_for_mismatch`].
+    fn pattern_mismatch_names(
+        &self,
+        site: Option<crate::ast::AstId>,
+        written: &str,
+        scrutinee: TypeId,
+    ) -> (String, String) {
+        let found = self.tysys.type_table.borrow().type_name(scrutinee);
+        let plain = || (written.to_string(), found.clone());
+        if found != written {
+            return plain();
+        }
+        let Some(def) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site)) else {
+            return plain();
+        };
+        let defs = self.tysys.resolutions.defs();
+        let expected =
+            crate::symbol_notation::render(&defs.module(def).to_string(), defs.name(def));
+        let qualified = self.tysys.type_table.borrow().type_name_qualified(scrutinee);
+        if expected == qualified {
+            return plain();
+        }
+        (expected, qualified)
+    }
+
     fn resolve_let_pattern_inner(
         &mut self,
         pattern: &ast::Pattern,
@@ -1073,9 +1103,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (Some(written), Some(head)) => {
                         let matches = self.pattern_qualifier_matches(*type_name_id, head);
                         if !matches {
+                            let (expected, found) =
+                                self.pattern_mismatch_names(*type_name_id, written, type_id);
                             let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected: written.clone(),
-                                found: self.tysys.type_table.borrow().type_name(type_id),
+                                expected,
+                                found,
                                 span: *pat_span,
                             });
                         }
@@ -1725,9 +1757,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let ResolvedType::Struct { def, .. } = resolved
                         && !self.pattern_qualifier_matches(*type_name_id, def)
                     {
+                        let (expected, found) = self.pattern_mismatch_names(
+                            *type_name_id,
+                            expected_name,
+                            scrutinee_type,
+                        );
                         let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: expected_name.clone(),
-                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                            expected,
+                            found,
                             span: *pat_span,
                         });
                         type_name_matches = false;
