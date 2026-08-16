@@ -484,8 +484,6 @@ fn test_with_files() {
 
 #[test]
 fn test_defaults_to_preopening_cwd() {
-    // `test` shares `run`'s directory-grant rule: the current directory is
-    // preopened unless --dir or --no-dir says otherwise.
     let parser = Parser::from_args(&["a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(

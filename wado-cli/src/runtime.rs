@@ -311,7 +311,7 @@ pub enum ProfileMode {
 ///
 /// # Errors
 ///
-/// Returns an error if the mode name or the sampling interval is unparseable.
+/// Returns an error if the mode name or the interval is unparseable.
 pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     if s == "jitdump" {
         return Ok(ProfileMode::JitDump);

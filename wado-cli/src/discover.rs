@@ -6,8 +6,7 @@
 //! - submodule directories listed in the root `.gitmodules`
 //! - dot-prefixed files and directories
 //! - subtrees rooted at a nested `wado.toml` (separate package boundaries)
-//! - the caller's exclude / include globs (`[test]` or `[format]` in the
-//!   manifest, plus `wado test --exclude`)
+//! - the caller's exclude / include globs, from the manifest or the CLI
 //! - symbolic links (followed once each, with cycle detection on canonical paths)
 
 use std::fs;
@@ -22,19 +21,16 @@ use glob::{Pattern, PatternError};
 /// workspace-member matching and file discovery interpret patterns identically.
 pub use wado_lsp::workspace::WALK_MATCH_OPTIONS;
 
-/// Which filter layer a [`GlobSet`] belongs to. Only affects how an
-/// uncompilable pattern is reported.
+/// Which filter layer a [`GlobSet`] is, selecting only its error variant.
 pub trait GlobRole {
     fn invalid(pattern: String, source: PatternError) -> WalkError;
 }
 
-/// `[test].exclude` / `[format].exclude` / `--exclude`: patterns that drop a
-/// path from discovery.
+/// `[test].exclude` / `[format].exclude` / `--exclude`.
 #[derive(Debug)]
 pub struct Exclude;
 
-/// `[test].include` / `[format].include`: positive overrides that keep files
-/// visible even when they match the exclude layer.
+/// `[test].include` / `[format].include`: overrides that survive the exclude layer.
 #[derive(Debug)]
 pub struct Include;
 
@@ -56,8 +52,7 @@ impl GlobRole for Include {
 /// the walker, the discovery driver, and any explicit-arg filtering all
 /// interpret patterns identically — including the `dir/**` augmentation
 /// (`glob`'s `**` requires at least one trailing path component, so `dir/**`
-/// alone would not stop the walker from descending into `dir`). Both layers
-/// share this one matcher so exclude and include can never drift apart.
+/// alone would not stop the walker from descending into `dir`).
 #[derive(Debug)]
 pub struct GlobSet<R> {
     patterns: Vec<Pattern>,
@@ -75,8 +70,7 @@ impl<R> Default for GlobSet<R> {
 
 impl<R: GlobRole> GlobSet<R> {
     /// Compile every glob in `patterns`. Errors carry the user-supplied
-    /// source string and the layer's name so the CLI can surface
-    /// "invalid exclude pattern …" / "invalid include pattern …".
+    /// source string so the CLI can name the pattern that failed.
     pub fn compile<S: AsRef<str>>(patterns: &[S]) -> Result<Self, WalkError> {
         let compiled = patterns
             .iter()
@@ -101,9 +95,8 @@ impl<R: GlobRole> GlobSet<R> {
         self.matches(Path::new(path))
     }
 
-    /// True when no patterns were compiled. The walker asks this of the
-    /// include layer to decide how strong the exclude layer is: with no
-    /// includes, exclude prunes whole directories; with any, an excluded
+    /// True when no patterns were compiled. Asked of the include layer: with
+    /// no includes, exclude prunes whole directories; with any, an excluded
     /// directory must still be descended in case it holds an included file.
     pub fn is_empty(&self) -> bool {
         self.patterns.is_empty()

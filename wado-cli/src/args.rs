@@ -366,13 +366,9 @@ pub fn parse_dir_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
     }
 }
 
-/// Accumulated `--dir` / `--no-dir` grants for the subcommands that launch a
-/// guest from the developer's own shell (`run`, `test`).
-///
-/// Both preopen the current directory when neither flag appears, and either
-/// flag replaces that default outright: the guest reaches exactly the `--dir`
-/// grants, or nothing. `serve` has no `DirGrants` — a service starts with no
-/// preopens and only ever gets what `--dir` names.
+/// `--dir` / `--no-dir` grants for `run` and `test`: the current directory is
+/// preopened when neither flag appears, and either flag replaces that default
+/// outright. `serve` has none — a service starts with no preopens.
 #[derive(Default)]
 pub struct DirGrants {
     dirs: Vec<(String, String)>,
@@ -381,7 +377,6 @@ pub struct DirGrants {
 }
 
 impl DirGrants {
-    /// Handle `--dir`, consuming its value from the parser.
     pub fn add(&mut self, parser: &mut Parser) -> Result<(), CliExit> {
         self.dirs.push(parse_dir_arg(parser)?);
         self.explicit = true;
@@ -392,7 +387,6 @@ impl DirGrants {
         self.suppressed = true;
     }
 
-    /// The final `(host_path, guest_path)` preopens, with the default applied.
     #[must_use]
     pub fn finish(mut self) -> Vec<(String, String)> {
         if !self.explicit && !self.suppressed {
