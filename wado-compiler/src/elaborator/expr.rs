@@ -3142,24 +3142,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .name_id
             .and_then(|id| self.tysys.resolutions.declared(id));
         let declared = struct_decl.and_then(|def| self.lookup_struct_fields_of_decl(def));
-        let (struct_name, struct_module_source) = match declared {
-            // The canonical name, not the import alias — and for a
-            // function-local `struct` its mangled storage name, which is what
-            // makes the instance's `TypeId` its own.
-            Some(info) => (info.name.clone(), info.module_source.clone()),
-            None => {
-                // The name is not a struct, or reaches no declaration at all.
-                // Diagnose rather than silently falling back — that fallback
-                // creates a TypeId whose key does not match the registered
-                // struct in WIR build, which used to surface as a downstream
-                // `StructLiteral expected Ref WirType` panic. The best-effort
-                // pair is still returned so later passes have something.
-                let _ = self.emit(TypeError::UnknownType {
-                    name: name.clone(),
-                    span: struct_lit.span,
-                });
-                (name.clone(), self.current_module_source.clone())
-            }
+        // The canonical name, not the import alias — and for a function-local
+        // `struct` its mangled storage name, which is what makes the
+        // instance's `TypeId` its own.
+        let (struct_name, struct_module_source) = if let Some(info) = declared {
+            (info.name.clone(), info.module_source.clone())
+        } else {
+            // The name is not a struct, or reaches no declaration at all.
+            // Diagnose rather than silently falling back — that fallback
+            // creates a TypeId whose key does not match the registered struct
+            // in WIR build, which used to surface as a downstream
+            // `StructLiteral expected Ref WirType` panic. The best-effort pair
+            // is still returned so later passes have something.
+            let _ = self.emit(TypeError::UnknownType {
+                name: name.clone(),
+                span: struct_lit.span,
+            });
+            (name.clone(), self.current_module_source.clone())
         };
 
         // Get expected field types using (name, module_source) lookup.

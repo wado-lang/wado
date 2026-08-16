@@ -288,7 +288,7 @@ impl TcpSocket for MinimalTcp {
 }
 ```
 
-`..forward` desugars each missing operation to `fn op(args) { resume Effect::op(args) }`. A handler body runs in the outer scope (see Effect Forwarding), so the call reaches the outer handler, not itself. With no outer handler installed it traps like any unhandled operation — so `..forward` on the outermost handler of an effect behaves like `..trap` for the operations it omits; a leaf sink that wants a no-op must implement that operation explicitly.
+`..forward` desugars each missing operation to `fn op(args) { resume Effect::op(args) }`. A handler body runs in the outer scope (see Effect Forwarding), so the call reaches the outer handler, not itself. With no outer handler installed it reaches the operation's default implementation — the body the `interface` declared for it — and traps only if the declaration gave it none. So `..forward` on the outermost handler is `..trap` for the operations it omits _and_ the interface leaves undefaulted; where a default exists, a layer that decorates one operation is installable on its own.
 
 ### Resume Keyword
 
@@ -852,7 +852,7 @@ Nesting composes naturally — each `with` block links to the previous dispatch 
 
 ### Rest clause: `..trap` / `..forward`
 
-Each unimplemented operation gets a stub funcref in the dispatch record. `..trap` installs a trap stub: `(func $trap (...) (unreachable))`. `..forward` installs a forward stub that calls the operation's wrapper with `outer` already restored, reaching the outer handler — the codegen of `fn op(args) { resume Effect::op(args) }`. With no outer handler the wrapper falls through to the default / CM adapter, or traps if the effect has none.
+Each unimplemented operation gets a stub funcref in the dispatch record. `..trap` installs a trap stub: `(func $trap (...) (unreachable))`. `..forward` installs a forward stub that calls the operation's wrapper with `outer` already restored, reaching the outer handler — the codegen of `fn op(args) { resume Effect::op(args) }`. With no outer handler the wrapper falls through to its no-handler branch: the operation's default implementation (`$effect_default$<Interface>$<op>`, the body the `interface` declared), the CM adapter for a `#[cm]`-backed operation, or a trap when there is neither.
 
 ### Binary Size
 

@@ -237,18 +237,6 @@ impl AstVisitor for LocalRenderer<'_> {
         }
     }
 
-    fn visit_interface_method(&mut self, method: &ast::InterfaceMethod) {
-        if self.result.is_some() {
-            return;
-        }
-        self.result = self.render_param(&method.params);
-        if self.result.is_none() {
-            // No body to search today; walk anyway so a future one is not
-            // silently missed.
-            ast::walk_interface_method(self, method);
-        }
-    }
-
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if self.result.is_some() {
             return;

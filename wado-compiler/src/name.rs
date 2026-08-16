@@ -69,6 +69,15 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the function holding an effect operation's default
+/// implementation — the body that runs when the operation is dispatched with
+/// no handler installed. `$`-prefixed like the other synthesized helpers, so it
+/// never collides with a source-level function: `core:log` declares both a
+/// `Log::event` default and an `event` facade in one module.
+pub fn effect_default_impl_name(interface: &str, op: &str) -> String {
+    format!("$effect_default${interface}${op}")
+}
+
 /// The name of a `param_spec` clone: the original's name plus the clone's
 /// ordinal among that callee's specializations. Unique package-wide, since the
 /// original's name already is.

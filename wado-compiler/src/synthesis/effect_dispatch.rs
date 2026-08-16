@@ -274,6 +274,7 @@ fn substitute_operations(
                 span: op.span,
                 cm_name: op.cm_name.clone(),
                 is_async: op.is_async,
+                has_default: op.has_default,
             }
         })
         .collect()
@@ -719,7 +720,46 @@ fn build_dispatch_wrapper_function(
     // and cm_binding rewrites both uniformly. A user-defined effect never gets
     // here: effect-check insists on a handler at every call site.
     let mut else_stmts: Vec<TirStmt> = Vec::new();
-    if is_resource {
+    if op.has_default {
+        // The declaration gave the operation a body: that is what "no handler
+        // installed" does. A `#[cm]`-backed operation never gets here — the
+        // elaborator rejects a body on one, since its fallback is the adapter.
+        assert!(
+            type_args.is_empty(),
+            "a default implementation is one monomorphic function, so only a \
+             non-generic declaration can carry one: `{base_name}::{op_name}`"
+        );
+        let default_call = TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(FunctionRef {
+                    module_source: effect_module.clone(),
+                    name: crate::name::effect_default_impl_name(base_name, op_name),
+                    monomorph_info: None,
+                    method_info: None,
+                }),
+                type_args: vec![],
+                args: arg_exprs
+                    .iter()
+                    .cloned()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
+                has_receiver: false,
+            },
+            return_type,
+            span,
+        );
+        if return_type == TypeTable::UNIT {
+            else_stmts.push(TirStmt::new(TirStmtKind::Expr(default_call), span));
+            else_stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
+        } else {
+            else_stmts.push(TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(default_call),
+                },
+                span,
+            ));
+        }
+    } else if is_resource {
         let placeholder_call = build_resource_fallback_call(
             effect_module,
             base_name,

@@ -231,6 +231,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An operation carries a default body where none could ever run: a
+    /// `#[cm]`-tagged operation and every resource method are backed by a
+    /// Component Model import, so "no handler installed" is not a case they
+    /// have.
+    OperationBodyNotAllowed {
+        owner: String,
+        operation: String,
+        span: Span,
+    },
+
     /// Invalid numeric literal
     InvalidLiteral {
         message: String,
@@ -905,6 +915,18 @@ impl TypeError {
             TypeError::CalleeNotCallable { type_name, span } => (
                 Code::TypeMismatch,
                 format!("expression is not callable: type '{type_name}' is not a function"),
+                *span,
+            ),
+            TypeError::OperationBodyNotAllowed {
+                owner,
+                operation,
+                span,
+            } => (
+                Code::InvalidSyntax,
+                format!(
+                    "`{owner}::{operation}` is backed by a Component Model import, so it cannot \
+                     carry a default implementation; drop the body and leave the signature"
+                ),
                 *span,
             ),
             TypeError::InvalidLiteral { message, span } => {

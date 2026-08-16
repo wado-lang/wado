@@ -454,3 +454,51 @@ test "nop sink drops everything and gates at tier 3" {
     };
     assert reached == 1;
 }
+
+// === The default subscriber ===
+//
+// With no handler installed the interface's own default implementations run:
+// `Info` and above, one text line per event on stderr. `wado test` captures a
+// test's stderr and shows it only when the test fails, so these lines are
+// post-mortem detail rather than noise.
+
+test "logging with no sink installed neither traps nor is silent" {
+    // No `with Log` anywhere: every call lands on a default implementation.
+    info(`default subscriber`, { k: "v" });
+    warn(`still fine`);
+    debug(`below the default threshold`);
+    assert enabled(Level::Info);
+    assert enabled(Level::Error);
+    assert !enabled(Level::Debug);
+    assert !enabled(Level::Trace);
+}
+
+test "spans work against the default subscriber" {
+    assert current() matches { None };
+    let n = in_span(&span(Level::Info, `default span`), || {
+        assert current() matches { Some(_) };
+        return 5;
+    });
+    assert n == 5;
+    assert current() matches { None };
+}
+
+test "an installed sink overrides the default for its scope" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        // Below the default threshold, but the installed sink admits it.
+        debug(`captured`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "captured";
+    // Outside the block the default is back, and it drops this one.
+    assert !enabled(Level::Debug);
+}
+
+test "NopSink is how a program asks for silence" {
+    let mut sink = NopSink {};
+    with Log => &mut sink do {
+        assert !enabled(Level::Error);
+        error(`dropped`);
+    };
+}

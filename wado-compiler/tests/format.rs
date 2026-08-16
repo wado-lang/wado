@@ -1770,6 +1770,24 @@ fn test_format_long_signature_wraps_params() {
 }
 
 #[test]
+fn test_format_interface_method_default_body() {
+    // An interface member formats as a trait member does, body included: the
+    // body is the operation's default implementation, not a signature quirk.
+    let source = concat!(
+        "interface Log {\n",
+        "    fn label() -> String {\n",
+        "        return \"default\";\n",
+        "    }\n",
+        "\n",
+        "    fn emit(message: String);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
+#[test]
 fn test_format_long_interface_method_wraps_params() {
     // An interface method whose inline signature overflows must wrap its
     // parameters one-per-line, like a free function.

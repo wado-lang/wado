@@ -4563,6 +4563,24 @@ interface Dom {
 }
 ```
 
+#### Default Implementations
+
+An `interface` is a trait with a different dispatch story, and its members are written exactly as a trait's are: an operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's **default implementation** — what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
+
+```wado
+interface Log {
+    fn emit(message: String) {
+        log_stderr(message);          // no handler installed: degrade, don't trap
+    }
+
+    fn level() -> i32;                // no default: unhandled dispatch traps
+}
+```
+
+A default runs in the caller's scope, like any function call. It is what `..forward` reaches when the outermost handler forwards an operation it does not implement, so a layer that only decorates one operation is installable on its own.
+
+An operation backed by a Component Model import — one carrying `#[cm(...)]`, and every `resource` method — cannot carry a default: its no-handler case is the CM adapter, so a body there could never run and is rejected.
+
 #### Colorless Async
 
 - Effect declarations never use the `async` keyword—Wado is fully colorless

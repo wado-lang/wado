@@ -1151,6 +1151,18 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed. Without one, an unhandled operation traps. A `#[cm]`-backed operation (and every `resource` method) cannot carry one.
+
+```wado
+interface Log {
+    fn emit(message: String) {
+        log_stderr(message);   // no handler installed: degrade, don't trap
+    }
+
+    fn level() -> i32;         // no default: unhandled dispatch traps
+}
+```
+
 ## Entrypoints
 
 The entrypoint is defined in a world, which requires `export` keyword.

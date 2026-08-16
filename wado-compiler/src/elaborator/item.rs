@@ -1577,7 +1577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
-        methods: &[ast::InterfaceMethod],
+        methods: &[ast::Function],
         resource_self: Option<crate::defs::DefId>,
     ) -> Vec<TirEffectOp> {
         let mut scope = self.enter_inherited_type_param_scope();
@@ -1753,9 +1753,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: method.span,
                 cm_name,
                 is_async: method.is_async,
+                has_default: method.body.is_some(),
             });
         }
         ops
+    }
+
+    /// Reject a default body on an operation whose dispatch has no no-handler
+    /// case: `is_cm` marks the ones a Component Model import backs, where the
+    /// wrapper's fallback is the CM adapter and a body could never run.
+    pub(super) fn reject_cm_operation_bodies(
+        &mut self,
+        owner: &str,
+        methods: &[ast::Function],
+        is_cm: impl Fn(&ast::Function) -> bool,
+    ) {
+        for method in methods {
+            let Some(body) = &method.body else {
+                continue;
+            };
+            if is_cm(method) {
+                let _ = self.emit(TypeError::OperationBodyNotAllowed {
+                    owner: owner.to_string(),
+                    operation: method.name.clone(),
+                    span: body.span,
+                });
+            }
+        }
     }
 
     pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {

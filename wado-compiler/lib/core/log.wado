@@ -23,8 +23,10 @@
 //! to build.
 //!
 //! The facade is `#[ambient]`, so performing `Log` adds no `with Log` to a
-//! caller's signature — but an operation with no handler traps, so a program
-//! that logs must install a sink.
+//! caller's signature, and every operation carries a default implementation, so
+//! a program that installs nothing still logs — `Info` and above, one text line
+//! per event on stderr. Installing a sink replaces that for its scope; `NopSink`
+//! is how a program asks for silence.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
@@ -178,17 +180,60 @@ fn box_fields<T: Serialize>(fields: T) -> Value {
 /// handler nesting and dispatch stays static. Operations are best-effort: a
 /// handler swallows its own write and serialize errors and never fails the
 /// program.
+///
+/// Every operation carries a default implementation, so a program that installs
+/// no sink logs to stderr rather than trapping — logging is a debugging aid, and
+/// one that crashes the program for want of setup is worse than no logging. The
+/// defaults are the [`DEFAULT_SINK`] below; installing any handler replaces them
+/// for its scope.
 pub interface Log {
-    fn enabled(level: Level) -> bool;
-    fn current_span() -> Option<SpanId>;
-    fn new_span(attrs: SpanAttrs) -> SpanId;
-    fn record_fields(span: SpanId, fields: Value);
-    fn follows_from(span: SpanId, cause: SpanId);
-    fn enter(span: SpanId);
-    fn exit(span: SpanId);
-    fn close(span: SpanId);
-    fn event(event: Event);
+    fn enabled(level: Level) -> bool {
+        return level >= DEFAULT_LEVEL;
+    }
+
+    fn current_span() -> Option<SpanId> {
+        return DEFAULT_SINK.spans.current();
+    }
+
+    fn new_span(attrs: SpanAttrs) -> SpanId {
+        return DEFAULT_SINK.spans.open();
+    }
+
+    fn record_fields(span: SpanId, fields: Value) {
+    }
+
+    fn follows_from(span: SpanId, cause: SpanId) {
+    }
+
+    fn enter(span: SpanId) {
+        DEFAULT_SINK.spans.enter(span);
+    }
+
+    fn exit(span: SpanId) {
+        DEFAULT_SINK.spans.exit();
+    }
+
+    fn close(span: SpanId) {
+    }
+
+    fn event(event: Event) {
+        if event.meta.level >= DEFAULT_LEVEL {
+            log_stderr(DEFAULT_SINK.render(&event));
+        }
+    }
 }
+
+// The subscriber of last resort, and the level it admits. An application that
+// wants another format, destination or threshold installs a handler; one that
+// wants silence installs `NopSink`.
+//
+// `Info` rather than `Trace`: a program nobody configured should say what it is
+// doing, not everything it is thinking. `Warn` would be quieter still, but then
+// a `debug`/`info` added while debugging prints nothing, which is the papercut
+// this whole default exists to avoid.
+global DEFAULT_LEVEL: Level = Level::Info;
+
+global mut DEFAULT_SINK: TextSink = TextSink {};
 
 /// The three tiers, cheapest first, each narrowing what the one before
 /// admitted. Exposed as a predicate too, for guarding fields too expensive to

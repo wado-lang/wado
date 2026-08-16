@@ -1,6 +1,6 @@
 # WEP: Structured Logging and Tracing Standard Library (`core:log`)
 
-Status: Implemented, less the default sink install (see [Default sink and scoped overrides](#default-sink-and-scoped-overrides))
+Status: Implemented
 
 ## Context
 
@@ -65,10 +65,9 @@ built-in types today, hence the conversion through `level_from_str` — see
 
 Tier 2 — process-wide runtime threshold: a global read and a comparison, no call
 and no allocation. The threshold belongs to `core:log`, not to the installed
-sink, and is set explicitly through `set_log_level` (read back with `log_level`)
-— the bootstrap reads `WADO_LOG`, an application may call it at any time — so no
-sink contract and no cache invalidation exist to get wrong. A layer narrows
-further through tier 3.
+sink, and is set explicitly through `set_log_level` (read back with `log_level`),
+which an application may call at any time — so no sink contract and no cache
+invalidation exist to get wrong. A layer narrows further through tier 3.
 
 Tier 3 — the subscriber. `Log::enabled` runs the installed layer stack, so a
 `Filter` layer's per-target directives decide. It costs one indirect call, on
@@ -224,21 +223,31 @@ outermost handler for a scope. The facade functions are `#[ambient]`, so
 performing `Log` adds no `with Log` to callers — logging is callable anywhere
 without infecting signatures.
 
-Something must own the default install, since an operation with no handler traps.
-Not the library: an `interface` operation has no default body to fall back to, so
-`core:log` alone cannot make an uninstalled `info()` degrade instead of trap.
-Until the compiler side lands, a program that logs installs its sink itself —
-one `with Log => &mut TextSink {} do` around the entry body, the same shape every
-other effect takes.
+Something must own the default, since `info()` must never be the reason a
+program stops. The library owns it: every `Log` operation carries a default
+implementation ([Effect Handler](./wep-2026-04-11-effect-handler.md)) — a
+`TextSink` on stderr, admitting `Info` and above — so a program that installs
+nothing still logs, and one that installs a handler replaces the defaults for
+that scope. `NopSink` is how a program asks for silence.
 
-The export shim the compiler already synthesises around an entry point is where
-the default belongs: for a program whose module graph reaches `core:log`, the
-shim would install the default sink and seed `set_log_level` from `WADO_LOG`
-before calling the entry function.
+That answers the question an entry-shim install could not. A shim wraps the
+entry point only, so a test block, a Kiln generator, or anything reached outside
+it would still trap; and it would put "which sink" — a library policy — in the
+compiler. Defaults in the interface cover every call site, in every world, and
+keep the policy in `core:log`. The test world needs no special case either:
+`wado test` already captures a test's stderr and attaches it to the failure,
+discarding it when the test passes, which is exactly the attribution a
+`CaptureSink`-under-test default was reaching for. `CaptureSink` stays what it
+should be — the sink a test installs to assert on events.
 
-TODO: decide the default sink per world — `TextSink` everywhere is the obvious
-choice, but `wado test` wants output attributed to the failing test, which may
-mean `CaptureSink` under the test world.
+`Info` rather than `Warn` for the default threshold: a program nobody configured
+should say what it is doing, not everything it is thinking, and a `debug`/`info`
+added while debugging that prints nothing is the papercut the default exists to
+avoid.
+
+TODO: seed the default threshold from `WADO_LOG` on first use, so a deployment
+retunes it without a recompile (`parse_directives` already reads the syntax).
+Reading the environment ambiently degrades where a world has none.
 
 ### Error handling and reentrancy
 
@@ -311,17 +320,18 @@ only.
   filtering) built from existing language features.
 - Layer composition, scoped context, and automatic context restore from
   effect-handler nesting — static dispatch throughout.
-- `#[ambient]` keeps logging out of signatures, so one sink installed at the entry
-  serves every call under it. Caller source location without macros; testable
-  with a capturing sink.
+- `#[ambient]` keeps logging out of signatures, and the interface's default
+  implementations mean zero setup: `info()` works in any program, in any world,
+  with no sink installed. Caller source location without macros; testable with a
+  capturing sink.
 - The two cheap tiers keep the disabled path off the effect-dispatch path, so the
   common case is a fold or a global read.
 
 ### Trade-offs
 
 - `#[ambient]` hides a sink's I/O from signatures (the existing ambient-logging
-  trade-off), and an operation with no handler traps — so the entry point must
-  install a sink, by hand until the shim does it.
+  trade-off), and the default subscriber writes to stderr without being asked —
+  the deliberate trade for `info()` never being the reason a program stops.
 - Eager message: the optimizer, not a macro, is what drops it. Tier 1 already
   does; tier 2 needs the sinking pass, and `enabled()` is the manual guard until
   then.
@@ -341,7 +351,9 @@ only.
 - [x] `..forward` effect forwarding.
 - [x] A remark when a compile-time parameter still decides a branch.
 - [x] `core:log` itself — see [Module surface](#module-surface).
-- [ ] The default sink install in the entry shim — see
+- [x] Default implementations on `interface` operations, so an uninstalled
+      `Log` degrades to the default subscriber instead of trapping.
+- [ ] Seeding the default threshold from `WADO_LOG` — see
       [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
 - [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
