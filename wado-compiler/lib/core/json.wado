@@ -68,6 +68,34 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
 /// Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
 /// runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
+    if json_escape_free(s) {
+        buf.push('"');
+        buf.push_str(s);
+        buf.push('"');
+        return;
+    }
+    write_escaped_string_slow(buf, s);
+}
+
+/// True when `s` holds no byte JSON must escape.
+///
+/// Pure and closed over `s` alone, so a constant argument — every wire key a
+/// `Serialize` derivation writes — folds at compile time and leaves the caller
+/// with the bare copy.
+fn json_escape_free(s: &String) -> bool {
+    let n = s.len();
+    for let mut i = 0; i < n; i += 1 {
+        let b = s.get_byte_unchecked(i);
+        if b >= 0x20 && b != 0x22 && b != 0x5C {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+#[inline(never)]
+fn write_escaped_string_slow(buf: &mut String, s: &String) {
     buf.push('"');
     let n = s.len();
     let mut run_start = 0;
@@ -279,13 +307,38 @@ impl SerializeMap for JsonMapSerializer {
     }
 }
 
+/// Writes `"name":`, preceded by `,` when the struct already has a field.
+/// Out of line so the `field` body that inlines into a `Serialize` derivation
+/// stays one call per key rather than a run of buffer appends.
+#[inline(never)]
+fn write_plain_key(buf: &mut String, name: &String, count: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    buf.push('"');
+    buf.push_str(name);
+    buf.push_str(&"\":");
+}
+
+#[inline(never)]
+fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    write_escaped_string_slow(buf, name);
+    buf.push(':');
+}
+
 impl SerializeStruct for JsonStructSerializer {
+    // Inlined so a derivation's constant wire key reaches `json_escape_free`,
+    // which folds at compile time and leaves only `write_plain_key`.
+    #[inline]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.push_str(&",");
+        if json_escape_free(name) {
+            write_plain_key(self.buf, name, self.count);
+        } else {
+            write_escaping_key(self.buf, name, self.count);
         }
-        write_escaped_string(self.buf, name);
-        self.buf.push_str(&":");
         let mut ser = JsonSerializer { buf: self.buf };
         let r = value.serialize(&mut ser);
         self.buf = ser.buf;
