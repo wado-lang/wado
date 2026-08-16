@@ -74,8 +74,15 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::KNOBS, |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::OptsHelp::default()
+            .add(Opt::ALL, |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .render()
+    )
+    .unwrap();
     buf
 }
 

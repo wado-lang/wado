@@ -761,6 +761,71 @@ fn dash_f_is_the_feature_flag_in_test() {
     assert_eq!(opts.package_runs[0].paths, vec!["a.wado"]);
 }
 
+fn help_text<T>(result: Result<T, CliExit>) -> String {
+    match result {
+        Ok(_) => panic!("expected a help exit"),
+        Err(err) => err.message,
+    }
+}
+
+/// The column an option's description starts in, for a `  <label>  <desc>` line.
+fn description_column(line: &str) -> usize {
+    let gap = line[2..].find("  ").expect("option line has a label gap") + 2;
+    line.len() - line[gap..].trim_start_matches(' ').len()
+}
+
+/// A subcommand draws its options from several enums; the description column
+/// still lines up across all of them, so the help reads as one block.
+#[test]
+fn help_descriptions_share_one_column() {
+    let help_args = &["--help"];
+    for (name, help) in [
+        (
+            "compile",
+            help_text(compile::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "build",
+            help_text(build::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "check",
+            help_text(check::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "run",
+            help_text(wado_cli::run::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "serve",
+            help_text(wado_cli::serve::parse_args(Parser::from_args(help_args))),
+        ),
+        (
+            "test",
+            help_text(wado_cli::test::parse_args(Parser::from_args(help_args))),
+        ),
+    ] {
+        let columns: Vec<usize> = help
+            .lines()
+            .filter(|l| l.starts_with("  -"))
+            .map(description_column)
+            .collect();
+        assert!(columns.len() > 1, "{name}: too few option lines to compare");
+        assert!(
+            columns.iter().all(|c| *c == columns[0]),
+            "{name}: description column varies {columns:?}\n{help}"
+        );
+    }
+}
+
+/// `-O` appears once in the help, not once per group that mentions it.
+#[test]
+fn dump_documents_the_opt_level_once() {
+    let help = help_text(wado_cli::dump::parse_args(Parser::from_args(&["--help"])));
+    let mentions = help.lines().filter(|l| l.starts_with("  -O")).count();
+    assert_eq!(mentions, 1, "-O documented {mentions} times:\n{help}");
+}
+
 #[test]
 fn dump_takes_a_log_level() {
     let parser = Parser::from_args(&["--log-level", "debug", "input.wado"]);

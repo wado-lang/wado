@@ -337,7 +337,7 @@ fn render_combined(
 }
 
 /// Normalize Markdown via dprint. The contract for `wado doc --format markdown`
-/// and `-f simple` is that emitted output is always dprint-stable: re-running
+/// and `--format simple` is that emitted output is always dprint-stable: re-running
 /// `dprint` over the output is a no-op. This lets downstream tooling avoid a
 /// post-format pass.
 fn format_markdown(content: &str) -> String {

@@ -124,7 +124,7 @@ impl KnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy      native Wasm array.copy instead of a loop (default: on)\nbranch-hinting  emit metadata.code.branch_hint entries (default: on)\nbare-asserts    assertion failures trap without a message (default: on at -Os)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\narray-copy       native Wasm array.copy instead of a loop (default: on)\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),

@@ -63,6 +63,7 @@ impl Opt {
         KnobOpt::OptIterations,
         KnobOpt::LogLevel,
         KnobOpt::Allocator,
+        KnobOpt::NoCache,
         KnobOpt::Feature,
     ];
 
@@ -171,29 +172,15 @@ fn format_usage() -> String {
     )
     .unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Optimization Level:").unwrap();
-    writeln!(buf, "  -O0          No optimizations").unwrap();
-    writeln!(
-        buf,
-        "  -O1          Development optimizations (all passes except DCE)"
-    )
-    .unwrap();
-    writeln!(buf, "  -O2          Production optimizations (default)").unwrap();
-    writeln!(buf, "  -O3          Aggressive optimizations").unwrap();
-    writeln!(buf, "  -Os          Size optimizations (O2 + strip names)").unwrap();
-    writeln!(buf).unwrap();
     writeln!(buf, "Other:").unwrap();
     write!(
         buf,
         "{}",
-        args::format_opts_help(&[Opt::World, Opt::Help], |o| o.spec())
-    )
-    .unwrap();
-    write!(buf, "{}", args::format_opts_help(Opt::KNOBS, |o| o.spec())).unwrap();
-    write!(
-        buf,
-        "{}",
-        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+        args::OptsHelp::default()
+            .add(&[Opt::World, Opt::Help], |o| o.spec())
+            .add(Opt::KNOBS, |o| o.spec())
+            .add(args::ParamOpt::ALL, |o| o.spec())
+            .render()
     )
     .unwrap();
     buf

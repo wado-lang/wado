@@ -284,21 +284,42 @@ fn format_opt_label(spec: &OptSpec) -> String {
     result
 }
 
-pub fn format_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) -> String {
-    let labels: Vec<String> = all.iter().map(|t| format_opt_label(&spec(t))).collect();
-    let max_w = labels.iter().map(String::len).max().unwrap_or(0);
-    let mut buf = String::new();
-    for (label, t) in labels.iter().zip(all) {
-        let s = spec(t);
-        let mut lines = s.desc.lines();
-        if let Some(first) = lines.next() {
-            writeln!(buf, "  {label:<max_w$}  {first}").unwrap();
-            for cont in lines {
-                writeln!(buf, "  {:<max_w$}  {cont}", "").unwrap();
+/// One help block, accumulated from however many option enums a subcommand
+/// draws on. Collecting them before rendering is what keeps the description
+/// column aligned: the width is computed once over every option, not per group.
+#[derive(Default)]
+pub struct OptsHelp {
+    specs: Vec<OptSpec>,
+}
+
+impl OptsHelp {
+    /// Append a group, in the order it should appear.
+    #[must_use]
+    pub fn add<T>(mut self, all: &[T], spec: impl Fn(&T) -> OptSpec) -> Self {
+        self.specs.extend(all.iter().map(spec));
+        self
+    }
+
+    #[must_use]
+    pub fn render(&self) -> String {
+        let labels: Vec<String> = self.specs.iter().map(format_opt_label).collect();
+        let max_w = labels.iter().map(String::len).max().unwrap_or(0);
+        let mut buf = String::new();
+        for (label, s) in labels.iter().zip(&self.specs) {
+            let mut lines = s.desc.lines();
+            if let Some(first) = lines.next() {
+                writeln!(buf, "  {label:<max_w$}  {first}").unwrap();
+                for cont in lines {
+                    writeln!(buf, "  {:<max_w$}  {cont}", "").unwrap();
+                }
             }
         }
+        buf
     }
-    buf
+}
+
+pub fn format_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) -> String {
+    OptsHelp::default().add(all, spec).render()
 }
 
 #[must_use]
