@@ -398,6 +398,11 @@ Three things, none of them comparable:
 - Source syntax. The AST holds what the programmer wrote, so the formatter and the
   LSP reproduce it.
 - Diagnostics. A message says what the programmer wrote, read off the site.
+  Which leaves the one case where what the programmer wrote does not separate
+  the two sides — `expected 'Point', found 'Point'`, two declarations of that
+  name. Qualifying a type name exactly where the bare names collide, in the
+  spec's `MODULE#SYMBOL` notation and across every message that prints one, is
+  issue #1807; nothing here should introduce a second notation ahead of it.
 - The Component Model boundary. An export name is an ABI fact derived from a
   `DefId`. The one direction that runs the other way is a WIT type name inside
   a generated `wasi:*` / `core:kiln/*` module, which `TypeTable::cm_decl_in`
