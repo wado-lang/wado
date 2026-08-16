@@ -283,11 +283,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b10 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b10 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l11;
         };
     };
@@ -334,13 +330,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::add_items"(self, count) {
     let i: i32;
     i = 0;
-    b17: block {
-        l18: loop {
-            break_if b17 i >= count;
+    b16: block {
+        l17: loop {
+            break_if b16 i >= count;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, i);
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, i * 2);
             i = i + 1;
-            continue l18;
+            continue l17;
         };
     };
 }
@@ -358,26 +354,26 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     i = 0;
     _licm_used_27 = self.used;
     _licm_repr_28 = self.repr;
-    b19: block {
-        l20: loop {
-            break_if b19 i >= _licm_used_27;
+    b18: block {
+        l19: loop {
+            break_if b18 i >= _licm_used_27;
             val = builtin::array_get<i32>(_licm_repr_28, i);
             if (val % 2) == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(temp, val);
             }
             i = i + 1;
-            continue l20;
+            continue l19;
         };
     };
     j = 0;
     _licm_used_29 = temp.used;
     _licm_repr_30 = temp.repr;
-    b22: block {
-        l23: loop {
-            break_if b22 j >= _licm_used_29;
+    b21: block {
+        l22: loop {
+            break_if b21 j >= _licm_used_29;
             "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, builtin::array_get<i32>(_licm_repr_30, j) + 100);
             j = j + 1;
-            continue l23;
+            continue l22;
         };
     };
 }
@@ -420,12 +416,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b26: block {
-            l27: loop {
-                break_if b26 t <= 0_i64;
+        b25: block {
+            l26: loop {
+                break_if b25 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l27;
+                continue l26;
             };
         };
         break __inline_count_digits_i64_0: n;

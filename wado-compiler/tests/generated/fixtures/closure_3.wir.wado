@@ -1446,11 +1446,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b94 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b94 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l95;
         };
     };
@@ -1475,12 +1471,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b99: block {
-            l100: loop {
-                break_if b99 t <= 0_i64;
+        b98: block {
+            l99: loop {
+                break_if b98 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l100;
+                continue l99;
             };
         };
         break __inline_count_digits_i64_0: n;
@@ -1625,11 +1621,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     prefix_len = prefix.used;
     content_len = (sign_len + prefix_len) + digit_count;
     _av_66 = self.width;
-    if (if _av_66 <= 0 -> i32 {
-        1;
-    } else {
-        content_len >= _av_66;
-    }) {
+    if select i32(_av_66 <= 0, 1, content_len >= _av_66) {
         if sign_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, sign);
         }
@@ -1651,12 +1643,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         i_24 = 0;
         _licm_buf_61 = self.buf;
-        b118: block {
-            l119: loop {
-                break_if b118 i_24 >= padding;
+        b116: block {
+            l117: loop {
+                break_if b116 i_24 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(_licm_buf_61, 48);
                 i_24 = i_24 + 1;
-                continue l119;
+                continue l117;
             };
         };
         return self_25 = self.buf, new_used_27 = self_25.used + digit_count, if @unlikely(new_used_27 > builtin::array_len(self_25.repr)) {
@@ -1683,12 +1675,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_36 = self.fill;
         i_38 = 0;
         _licm_buf_62 = self.buf;
-        b125: block {
-            l126: loop {
-                break_if b125 i_38 >= padding;
+        b123: block {
+            l124: loop {
+                break_if b123 i_38 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_62, c_36);
                 i_38 = i_38 + 1;
-                continue l126;
+                continue l124;
             };
         };
         return start_33;
@@ -1698,12 +1690,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_40 = self.fill;
         i_42 = 0;
         _licm_buf_63 = self.buf;
-        b128: block {
-            l129: loop {
-                break_if b128 i_42 >= left_pad;
+        b126: block {
+            l127: loop {
+                break_if b126 i_42 >= left_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_63, c_40);
                 i_42 = i_42 + 1;
-                continue l129;
+                continue l127;
             };
         };
         if sign_len > 0 {
@@ -1723,12 +1715,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_49 = self.fill;
         i_51 = 0;
         _licm_buf_64 = self.buf;
-        b133: block {
-            l134: loop {
-                break_if b133 i_51 >= right_pad;
+        b131: block {
+            l132: loop {
+                break_if b131 i_51 >= right_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_64, c_49);
                 i_51 = i_51 + 1;
-                continue l134;
+                continue l132;
             };
         };
         return start_46;
@@ -1736,12 +1728,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_53 = self.fill;
         i_55 = 0;
         _licm_buf_65 = self.buf;
-        b135: block {
-            l136: loop {
-                break_if b135 i_55 >= padding;
+        b133: block {
+            l134: loop {
+                break_if b133 i_55 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_65, c_53);
                 i_55 = i_55 + 1;
-                continue l136;
+                continue l134;
             };
         };
         if sign_len > 0 {
@@ -1783,15 +1775,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
     buf = builtin::array_new<i32>(n);
     width = 1;
     _licm_repr_36 = self.repr;
-    b141: block {
-        l142: loop {
-            break_if b141 width >= n;
+    b139: block {
+        l140: loop {
+            break_if b139 width >= n;
             start = 0;
             _licm_arith_37 = width * 2;
             _licm_arith_38 = width * 2;
-            b143: block {
-                l144: loop {
-                    break_if b143 start >= n;
+            b141: block {
+                l142: loop {
+                    break_if b141 start >= n;
                     mid = start + width;
                     if mid < n {
                         a_14 = start + _licm_arith_37;
@@ -1799,9 +1791,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                         i = start;
                         j = mid;
                         k = start;
-                        b146: block {
-                            l147: loop {
-                                break_if b146 k >= end;
+                        b144: block {
+                            l145: loop {
+                                break_if b144 k >= end;
                                 if i < mid {
                                     if j < end {
                                         a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(_licm_repr_36, i) };
@@ -1829,17 +1821,17 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                                     j = j + 1;
                                 }
                                 k = k + 1;
-                                continue l147;
+                                continue l145;
                             };
                         };
                         builtin::array_copy<i32>(_licm_repr_36, start, buf, start, end - start);
                     }
                     start = start + _licm_arith_38;
-                    continue l144;
+                    continue l142;
                 };
             };
             width = width * 2;
-            continue l142;
+            continue l140;
         };
     };
 }
@@ -1858,17 +1850,17 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, value) 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>,i32>>"(iter) {
     let result: ref "core:prelude//List<i32>";
     result = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    b153: block {
-        l154: loop {
+    b151: block {
+        l152: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
             multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_4_mv_0 == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_4_mv_1);
             } else {
-                break b153;
+                break b151;
             }
-            continue l154;
+            continue l152;
         };
     };
     return result;
@@ -1892,17 +1884,17 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>>"(iter) {
     let result: ref "core:prelude//List<i32>";
     result = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    b158: block {
-        l159: loop {
+    b156: block {
+        l157: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
             multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/ArrayIter<i32>>^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_4_mv_0 == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_4_mv_1);
             } else {
-                break b158;
+                break b156;
             }
-            continue l159;
+            continue l157;
         };
     };
     return result;
@@ -1923,17 +1915,17 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>>"(iter) {
     let result: ref "core:prelude//List<i32>";
     result = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
-    b162: block {
-        l163: loop {
+    b160: block {
+        l161: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
             multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_4_mv_0 == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(result, __match_4_mv_1);
             } else {
-                break b162;
+                break b160;
             }
-            continue l163;
+            continue l161;
         };
     };
     return result;
@@ -1945,7 +1937,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
     _licm_inner_3 = self.inner;
     _licm_pred_4 = self.pred;
     block {
-        l166: loop {
+        l164: loop {
             let __match_2_mv_0: i32;
             let __match_2_mv_1: i32;
             multivalue_bind [__match_2_mv_0, __match_2_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(_licm_inner_3);
@@ -1960,7 +1952,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
             } else {
                 return 1, 0;
             }
-            continue l166;
+            continue l164;
         };
     };
 }
@@ -2072,15 +2064,15 @@ fn "closure_3.wado/core:prelude/list.wado/List<i32>::sort_by$__Closure_16"(self)
     buf = builtin::array_new<i32>(n);
     width = 1;
     _licm_repr_38 = self.repr;
-    b175: block {
-        l176: loop {
-            break_if b175 width >= n;
+    b173: block {
+        l174: loop {
+            break_if b173 width >= n;
             start = 0;
             _licm_arith_39 = width * 2;
             _licm_arith_40 = width * 2;
-            b177: block {
-                l178: loop {
-                    break_if b177 start >= n;
+            b175: block {
+                l176: loop {
+                    break_if b175 start >= n;
                     mid = start + width;
                     if mid < n {
                         a_13 = start + _licm_arith_39;
@@ -2088,9 +2080,9 @@ fn "closure_3.wado/core:prelude/list.wado/List<i32>::sort_by$__Closure_16"(self)
                         i = start;
                         j = mid;
                         k = start;
-                        b180: block {
-                            l181: loop {
-                                break_if b180 k >= end;
+                        b178: block {
+                            l179: loop {
+                                break_if b178 k >= end;
                                 if i < mid {
                                     if j < end {
                                         __sroa_a_value = builtin::array_get<i32>(_licm_repr_38, i);
@@ -2122,17 +2114,17 @@ fn "closure_3.wado/core:prelude/list.wado/List<i32>::sort_by$__Closure_16"(self)
                                     j = j + 1;
                                 }
                                 k = k + 1;
-                                continue l181;
+                                continue l179;
                             };
                         };
                         builtin::array_copy<i32>(_licm_repr_38, start, buf, start, end - start);
                     }
                     start = start + _licm_arith_40;
-                    continue l178;
+                    continue l176;
                 };
             };
             width = width * 2;
-            continue l176;
+            continue l174;
         };
     };
 }
@@ -2163,15 +2155,15 @@ fn "closure_3.wado/core:prelude/list.wado/List<i32>::sort_by$__Closure_17"(self)
     buf = builtin::array_new<i32>(n);
     width = 1;
     _licm_repr_38 = self.repr;
-    b188: block {
-        l189: loop {
-            break_if b188 width >= n;
+    b186: block {
+        l187: loop {
+            break_if b186 width >= n;
             start = 0;
             _licm_arith_39 = width * 2;
             _licm_arith_40 = width * 2;
-            b190: block {
-                l191: loop {
-                    break_if b190 start >= n;
+            b188: block {
+                l189: loop {
+                    break_if b188 start >= n;
                     mid = start + width;
                     if mid < n {
                         a_13 = start + _licm_arith_39;
@@ -2179,9 +2171,9 @@ fn "closure_3.wado/core:prelude/list.wado/List<i32>::sort_by$__Closure_17"(self)
                         i = start;
                         j = mid;
                         k = start;
-                        b193: block {
-                            l194: loop {
-                                break_if b193 k >= end;
+                        b191: block {
+                            l192: loop {
+                                break_if b191 k >= end;
                                 if i < mid {
                                     if j < end {
                                         __sroa_a_value = builtin::array_get<i32>(_licm_repr_38, i);
@@ -2213,17 +2205,17 @@ fn "closure_3.wado/core:prelude/list.wado/List<i32>::sort_by$__Closure_17"(self)
                                     j = j + 1;
                                 }
                                 k = k + 1;
-                                continue l194;
+                                continue l192;
                             };
                         };
                         builtin::array_copy<i32>(_licm_repr_38, start, buf, start, end - start);
                     }
                     start = start + _licm_arith_40;
-                    continue l191;
+                    continue l189;
                 };
             };
             width = width * 2;
-            continue l189;
+            continue l187;
         };
     };
 }

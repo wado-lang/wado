@@ -4801,11 +4801,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b296 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b296 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l297;
         };
     };
@@ -4865,12 +4861,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b304: block {
-            l305: loop {
-                break_if b304 t <= 0_i64;
+        b303: block {
+            l304: loop {
+                break_if b303 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l305;
+                continue l304;
             };
         };
         break __inline_count_digits_i64_0: n;
@@ -4905,12 +4901,12 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$spec0"(self, f) {
             }
             n_17 = 0;
             t_18 = abs_val;
-            b308: block {
-                l309: loop {
-                    break_if b308 t_18 <= 0_i64;
+            b307: block {
+                l308: loop {
+                    break_if b307 t_18 <= 0_i64;
                     n_17 = n_17 + 1;
                     t_18 = t_18 / 10_i64;
-                    continue l309;
+                    continue l308;
                 };
             };
             break __inline_count_digits_i64_2: n_17;
@@ -4934,12 +4930,12 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b311: block {
-            l312: loop {
-                break_if b311 t <= 0_i64;
+        b310: block {
+            l311: loop {
+                break_if b310 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l312;
+                continue l311;
             };
         };
         break __inline_count_digits_i64_0: n;
@@ -4971,9 +4967,9 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
     }
     digit_count = 0;
     temp = self;
-    b314: block {
-        l315: loop {
-            break_if b314 temp == 0_i64;
+    b313: block {
+        l314: loop {
+            break_if b313 temp == 0_i64;
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
                 temp = temp / 10_i64;
@@ -4986,7 +4982,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
                 }
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             }
-            continue l315;
+            continue l314;
         };
     };
     offset_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, global:core:prelude/primitive.wado::__const_obj_26, digit_count);
@@ -4994,9 +4990,9 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
     repr = self_20.repr;
     pos = offset_11 + digit_count;
     temp = self;
-    b318: block {
-        l319: loop {
-            break_if b318 temp == 0_i64;
+    b317: block {
+        l318: loop {
+            break_if b317 temp == 0_i64;
             pos = pos - 1;
             digit = 0;
             if temp >= 0_i64 {
@@ -5017,7 +5013,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             }
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l319;
+            continue l318;
         };
     };
 }
