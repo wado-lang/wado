@@ -5,8 +5,8 @@
 //! turbofish lookups don't depend on which exports the user happens to
 //! mention). The codegen then prunes the embedded core module down to
 //! the union of exports that actually survive DCE — see
-//! `embed_imported_wasm_modules` and `postprocess::eliminate_dead_code`
-//! in `wado-compiler/src/codegen/`.
+//! `embed_imported_wasm_modules` in `wado-compiler/src/codegen/` and the
+//! `wado-wasm-embed` crate it calls.
 //!
 //! This test holds that contract honest by inspecting the compiled
 //! component bytes: it walks the embedded core wasm module's export

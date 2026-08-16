@@ -570,7 +570,7 @@ fn synthesize_wasm_bindings_source(namespace: &str, exports: &[WasmExportSig]) -
 }
 
 /// An embedded asset is wired to the component's memory, so its own memory
-/// must have that memory's shape: 32-bit, default page size.
+/// must have that memory's shape: 32-bit, unshared, default page size.
 fn check_shared_memory_shape(
     source: &ModuleSource,
     mem: wasmparser::MemoryType,
@@ -580,6 +580,14 @@ fn check_shared_memory_shape(
             module_source: source.clone(),
             message: "Phase 1 wasm import does not allow a 64-bit memory; the asset shares the \
                       component's 32-bit memory"
+                .to_string(),
+        });
+    }
+    if mem.shared {
+        return Err(LoadError::WasmImport {
+            module_source: source.clone(),
+            message: "Phase 1 wasm import does not allow a shared memory; the asset shares the \
+                      component's unshared memory"
                 .to_string(),
         });
     }
@@ -649,6 +657,9 @@ fn parse_wasm_module_exports(
                     }
                     if let wasmparser::TypeRef::Memory(mem) = import.ty {
                         check_shared_memory_shape(source, mem)?;
+                        // Counted with the defined ones: only one memory can be
+                        // wired to the component's.
+                        memory_count += 1;
                     }
                     if let wasmparser::TypeRef::Func(_) = import.ty {
                         imported_func_count += 1;

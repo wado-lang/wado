@@ -24,6 +24,9 @@ pub(crate) struct Live {
     pub types: BTreeSet<u32>,
     pub elems: BTreeSet<u32>,
     pub datas: BTreeSet<u32>,
+    /// Functions a surviving `ref.func` names that nothing left in the module
+    /// declares. They need a declarative segment of their own.
+    pub declare: Vec<u32>,
 }
 
 pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Result<Live, Error> {
@@ -31,7 +34,14 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
         asset,
         live: Live::default(),
         queue: Vec::new(),
+        ref_funcs: BTreeSet::new(),
     };
+
+    // An imported table is kept whole, so the segments filling it are live for
+    // the same reason active data segments are.
+    for index in 0..asset.imported.tables {
+        walk.mark_table(index);
+    }
 
     // Imports are kept whole, so the types they name are live from the start.
     for import in &asset.imports {
@@ -76,6 +86,7 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
 
     walk.run()?;
 
+    let ref_funcs = walk.ref_funcs;
     let mut live = walk.live;
     // A declarative segment of function indices is filtered down to the
     // functions that survived, and dropped when none did.
@@ -90,6 +101,29 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
             }
         }
     }
+
+    // `ref.func` only validates for a function the module declares, and an
+    // export, a global, a table or any element segment is a declaration. The
+    // prune can take the last one away while the function itself lives on, so
+    // whatever is left undeclared gets a declarative segment at emission.
+    let mut declared: BTreeSet<u32> = BTreeSet::new();
+    for export in &asset.exports {
+        if matches!(export.kind, ExternalKind::Func | ExternalKind::FuncExact)
+            && keep_export(export.name)
+        {
+            declared.insert(export.index);
+        }
+    }
+    for index in &live.elems {
+        // Expression items are opaque here; missing one only costs a redundant
+        // declaration, never a missing one.
+        if let ElementItems::Functions(items) = &asset.elems[*index as usize].items {
+            for func in items.clone() {
+                declared.insert(func?);
+            }
+        }
+    }
+    live.declare = ref_funcs.difference(&declared).copied().collect();
     Ok(live)
 }
 
@@ -107,6 +141,8 @@ struct Walk<'a, 'b> {
     asset: &'a Asset<'b>,
     live: Live,
     queue: Vec<Item>,
+    /// Targets of every `ref.func` reached, live by construction.
+    ref_funcs: BTreeSet<u32>,
 }
 
 impl Walk<'_, '_> {
@@ -212,6 +248,7 @@ impl Walk<'_, '_> {
     {
         let mut refs = Refs::default();
         f(&mut Recorder(&mut refs))?;
+        self.ref_funcs.extend(refs.ref_funcs);
         for i in refs.funcs {
             self.mark_func(i);
         }
@@ -283,6 +320,7 @@ impl Walk<'_, '_> {
 #[derive(Default)]
 struct Refs {
     funcs: Vec<u32>,
+    ref_funcs: Vec<u32>,
     tables: Vec<u32>,
     globals: Vec<u32>,
     tags: Vec<u32>,
@@ -297,6 +335,19 @@ struct Recorder<'a>(&'a mut Refs);
 
 impl Reencode for Recorder<'_> {
     type Error = Infallible;
+
+    /// `call x` and `ref.func x` both reach `function_index`, but only the
+    /// second one needs `x` declared, so it is picked out here.
+    fn parse_instruction<'a>(
+        &mut self,
+        reader: &mut wasmparser::OperatorsReader<'a>,
+    ) -> Result<wasm_encoder::Instruction<'a>, ReencodeError> {
+        let instruction = wasm_encoder::reencode::utils::parse_instruction(self, reader)?;
+        if let wasm_encoder::Instruction::RefFunc(index) = instruction {
+            self.0.ref_funcs.push(index);
+        }
+        Ok(instruction)
+    }
 
     fn function_index(&mut self, func: u32) -> Result<u32, ReencodeError> {
         self.0.funcs.push(func);

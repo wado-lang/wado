@@ -126,6 +126,14 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
             remap.parse_element(&mut elems, elem.clone())?;
         }
     }
+    if !live.declare.is_empty() {
+        let declared = live
+            .declare
+            .iter()
+            .map(|func| remap.function_index(*func))
+            .collect::<Result<Vec<_>, _>>()?;
+        elems.declared(wasm_encoder::Elements::Functions(Cow::Owned(declared)));
+    }
     if !elems.is_empty() {
         module.section(&elems);
     }
@@ -158,7 +166,7 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
 
     if !opts.strip_custom_sections {
         if let Some(names) = &asset.names
-            && let Some(section) = name_section(names.clone(), &remap)?
+            && let Some(section) = name_section(names.clone(), &remap)
         {
             module.section(&section);
         }
@@ -173,16 +181,18 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
     Ok(module.finish())
 }
 
-/// Carry over the module and function names of what survived. The rest of the
-/// asset's custom sections describe the index space it no longer has.
+/// Carry over the module and function names of what survived.
+///
+/// No validator reads the `name` section, so an asset can carry a broken one
+/// and still be a valid module. That costs the asset its names, not the build.
 fn name_section(
     reader: wasmparser::NameSectionReader<'_>,
     remap: &Remap,
-) -> Result<Option<wasm_encoder::NameSection>, Error> {
+) -> Option<wasm_encoder::NameSection> {
     let mut section = wasm_encoder::NameSection::new();
     let mut wrote = false;
     for name in reader {
-        match name? {
+        match name.ok()? {
             wasmparser::Name::Module { name, .. } => {
                 section.module(name);
                 wrote = true;
@@ -191,7 +201,7 @@ fn name_section(
                 let mut names = wasm_encoder::NameMap::new();
                 let mut kept = false;
                 for naming in map {
-                    let naming = naming?;
+                    let naming = naming.ok()?;
                     if let Some(index) = remap.funcs.get(naming.index as usize).copied().flatten() {
                         names.append(index, naming.name);
                         kept = true;
@@ -215,7 +225,7 @@ fn name_section(
             | wasmparser::Name::Unknown { .. } => {}
         }
     }
-    Ok(wrote.then_some(section))
+    wrote.then_some(section)
 }
 
 /// Old index -> new index, per index space. `None` is an item that was pruned;

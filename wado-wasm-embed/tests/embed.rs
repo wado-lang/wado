@@ -349,3 +349,68 @@ fn stripping_drops_every_custom_section() {
     let pruned = prune_with(WITH_CUSTOM_SECTIONS, &["live"], true);
     assert!(custom_sections(&pruned).is_empty());
 }
+
+/// `ref.func` needs its target declared, and an export is a declaration. When
+/// the prune drops that export the function is still live, so the declaration
+/// has to be put back or the module no longer validates.
+#[test]
+fn a_ref_func_target_that_loses_its_declaring_export_is_redeclared() {
+    let source = r#"
+        (module
+          (memory 1)
+          (func $helper (export "helper") (result i32) (i32.const 1))
+          (func (export "setup") (result funcref) (ref.func $helper)))
+    "#;
+    let pruned = prune(source, &["setup"]);
+    assert_eq!(
+        function_count(&pruned),
+        2,
+        "helper stays, ref.func names it"
+    );
+}
+
+/// Same loss through an active segment: the table it filled went dead with it.
+#[test]
+fn a_ref_func_target_that_loses_its_declaring_segment_is_redeclared() {
+    let source = r#"
+        (module
+          (memory 1)
+          (table 1 funcref)
+          (elem (i32.const 0) $helper)
+          (func $helper (result i32) (i32.const 1))
+          (func (export "setup") (result funcref) (ref.func $helper)))
+    "#;
+    let pruned = prune(source, &["setup"]);
+    assert_eq!(function_count(&pruned), 2);
+}
+
+/// An imported table is kept whole, so the segments that fill it are still
+/// live — the same rule active data segments follow.
+#[test]
+fn active_segments_of_an_imported_table_survive() {
+    let source = r#"
+        (module
+          (import "env" "table" (table 1 funcref))
+          (memory 1)
+          (type $unary (func (result i32)))
+          (elem (i32.const 0) $filled)
+          (func $filled (type $unary) (i32.const 1))
+          (func (export "f") (result i32) (i32.const 2)))
+    "#;
+    let pruned = prune(source, &["f"]);
+    assert_eq!(function_count(&pruned), 2, "f and the segment's function");
+}
+
+/// The `name` section is metadata a validator never looks at, so a broken one
+/// costs the asset its names, not the build.
+#[test]
+fn a_broken_name_section_is_dropped_rather_than_failing() {
+    let source = r#"
+        (module
+          (@custom "name" "\ff\ff\ff\ff")
+          (memory 1)
+          (func (export "f") (result i32) (i32.const 1)))
+    "#;
+    let pruned = prune(source, &["f"]);
+    assert!(!custom_sections(&pruned).contains(&"name".to_string()));
+}
