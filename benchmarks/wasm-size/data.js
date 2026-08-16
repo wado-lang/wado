@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786873787465,
+  "lastUpdate": 1786874893712,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48721,6 +48721,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf989730d4519a56797c23f135efde8271c92783"
         },
         "date": 1786873786979,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa2a4a78d557a33987d0031dabc49b5cd771165e",
+          "message": "Merge pull request #1831 from wado-lang/claude/walrus-crate-dependency-removal-3on6n5\n\nrefactor(codegen): embed wasm assets with an in-house crate instead of walrus",
+          "timestamp": "2026-08-16T18:47:19+09:00",
+          "tree_id": "69296847d8bb14f12e85ffeafc6b60d4c45f602e",
+          "url": "https://github.com/wado-lang/wado/commit/aa2a4a78d557a33987d0031dabc49b5cd771165e"
+        },
+        "date": 1786874893264,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
