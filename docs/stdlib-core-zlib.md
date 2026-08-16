@@ -30,40 +30,28 @@ All compression entry points share the same shape: the input buffer is
 required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 `Z_DEFAULT_STRATEGY` respectively.
 
-Compression:
-
-```wado
-let input: ByteList = [...];
-let compressed = zlib_compress(&input);                            // zlib, default level/strategy
-let fast       = zlib_compress(&input, Z_BEST_SPEED);              // override level only
-let best       = zlib_compress(&input, Z_BEST_COMPRESSION);
-let gz         = gzip_compress(&input);                            // gzip wrapper
-let raw        = deflate_raw(&input);                              // raw DEFLATE, no header/trailer
-```
-
-Decompression:
-
-```wado
-let z   = inflate_zlib(&compressed)?;                              // RFC 1950
-let gz  = inflate_gzip(&gzipped)?;                                 // RFC 1952
-let any = uncompress(&data)?;                                      // auto-detect zlib/gzip
-```
-
-Streaming (chunked input):
-
-```wado
-let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
-stream.update(&chunk1);
-stream.update(&chunk2);
-let compressed = stream.finish();
-```
-
 ## Synopsis
 
 ```wado
 let data: ByteList = b"wado wado wado wado";
-let compressed = zlib_compress(&data);
+
+// One call per container format; level and strategy default.
+let compressed = zlib_compress(&data);                    // RFC 1950
+let smallest = zlib_compress(&data, Z_BEST_COMPRESSION);  // override the level
+let gz = gzip_compress(&data);                            // RFC 1952
+let raw = deflate_raw(&data);                             // no header or trailer
+
+// `uncompress` tells zlib from gzip; the rest name the format they read.
 assert uncompress(&compressed) matches { Ok(round) && round == data };
+assert inflate_zlib(&smallest) matches { Ok(round) && round == data };
+assert inflate_gzip(&gz) matches { Ok(round) && round == data };
+assert inflate_raw(&raw) == data;
+
+// A stream, for input arriving in pieces.
+let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+stream.update(&(b"wado wado " as ByteList));
+stream.update(&(b"wado wado" as ByteList));
+assert uncompress(&stream.finish()) matches { Ok(round) && round == data };
 ```
 
 ## Globals

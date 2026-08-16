@@ -16,37 +16,22 @@ unit is chosen so the number is meaningful for the workload:
   (`MB/s`).
 - Otherwise, throughput falls back to iterations per second (`ops/s`).
 
-Used by files in `benchmark/`. A benchmark typically looks like:
-
-```wado
-use { Benchmark } from "core:benchmark";
-
-test "benchmark" { run(); }
-
-export fn run() with Stdout, MonotonicClock {
-    let mut b = Benchmark { name: "count-prime" };
-    b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
-    b.unit = "numbers";
-    let count = b.run("", || count_primes(10_000_000));
-    b.println(`count = ${count}`);
-}
-```
-
-For multi-phase benchmarks, call `run` once per phase. A byte-sized input
-reports `MB/s` automatically:
-
-```wado
-let mut b = Benchmark { name: "zlib" };
-b.input_size = Option::Some(data.len());  // → MB/s
-let compressed = b.run("compress", || zlib_compress(&data));
-let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
-```
+A benchmark program is an `export fn run() with Stdout, MonotonicClock`
+called from a `test` block, so one file both runs under `wado run` and is
+checked by `wado test`; `benchmark/` holds the real ones.
 
 ## Synopsis
 
 ```wado
 let mut bench = Benchmark { name: "sum" };
+// A real benchmark leaves `target_ms` alone and repeats each phase until
+// it has timed enough of them; one iteration keeps this example quick.
 bench.target_ms = 0;
+// A natural unit of work reports a work rate. Without one a phase reports
+// ops/s, or MB/s when `input_size` is set instead.
+bench.work_per_iter = Option::Some(100.0);
+bench.unit = "numbers";
+
 let total = bench.run("1..=100", || {
     let mut n = 0;
     for let i of 1..=100 {
@@ -55,6 +40,10 @@ let total = bench.run("1..=100", || {
     return n;
 });
 assert total == 5050;
+
+// One `run` per phase; each reports its own line.
+let doubled = bench.run("double", || total * 2);
+assert doubled == 10100;
 ```
 
 ## Functions
