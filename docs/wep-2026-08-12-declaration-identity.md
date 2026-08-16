@@ -503,6 +503,18 @@ caller of the same first-wins index. A removed mechanism takes one fix.
       a declaration outside the pass that declares, and with the unit tests
       resting on them. A feature whose only unit test needs a hole cut in it is
       covered by `tests/fixtures/` instead, which exercises the real path.
+- [ ] The bound-driven synthesis request key stops carrying a receiver
+      spelling. `synthesis::traits::SynthRequests` holds
+      `(receiver, module, trait)`, and the trait is already a `DefId` while
+      `SynthesisCtx::key` renders the receiver's head to a `String` — a
+      spelling as an equality operand, which §4 and §9 forbid. It does not
+      become a `DefId`: `SynthesisCtx::instance_has_impl` keys a monomorphized
+      instantiation, which no declaration names. It becomes the
+      declaration-or-shape sum this design already has — `TypeHead`, whose
+      `Declared` compares by its `DefId` and whose `Shape` compares by its
+      rendering. `FqTypeName::head` hands one over and `key` discards it. The
+      producers are `TypeTable::record_bound_driven_synth_request` and its
+      elaborator callers.
 - [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
       structured identity a name renders from, and nothing parses a rendering
       back. What is left is that `FqTraitName::args` and

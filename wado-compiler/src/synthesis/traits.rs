@@ -68,6 +68,14 @@ pub(crate) struct TraitsStdlibNames {
 /// always available; a `None` here means the registry was not populated.
 const KEYED: &str = "a compiler trait item names a declaration";
 
+/// The `(receiver, module, trait)` triples a demand-driven synthesis was asked
+/// for, and the shape the still-pending ones are accumulated in. The receiver
+/// is [`SynthesisCtx::key`]'s rendered head; the trait is its declaration.
+// TODO(declaration-identity): the receiver half is a spelling used as a set
+// key, which WEP 2026-08-12 forbids. Its Remaining work says what replaces it
+// and why a bare `DefId` is not it.
+pub(crate) type SynthRequests = IndexSet<(String, ModuleSource, crate::defs::DefId)>;
+
 impl TraitsStdlibNames {
     pub(crate) fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
         let items = type_table.compiler_items();
@@ -330,7 +338,7 @@ pub fn synthesize_traits(project: Package) -> Package {
         )
     };
     // `Default` is drained later by `synthesize_defaults` (after `serde_synth`).
-    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = first_module
+    let requested: SynthRequests = first_module
         .type_table
         .borrow()
         .bound_driven_synth_requests(|key| *key == eq_trait_key || *key == ord_trait_key)
@@ -346,7 +354,7 @@ pub fn synthesize_traits(project: Package) -> Package {
     // canonical project-wide synthesis layer is rebuilt afterwards by
     // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
     // and captures concrete-ness from the synthesized function itself.
-    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
+    let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -392,14 +400,14 @@ pub fn synthesize_defaults(project: &mut Package) {
         .compiler_items()
         .trait_fq(CompilerItem::Default);
     let default_trait_key = default_trait_name.canonical();
-    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = first_module
+    let requested: SynthRequests = first_module
         .type_table
         .borrow()
         .bound_driven_synth_requests(|key| Some(key) == default_trait_key.as_ref())
         .into_iter()
         .collect();
 
-    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
+    let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -417,25 +425,47 @@ pub fn synthesize_defaults(project: &mut Package) {
     }
 }
 
-/// Generate `Struct^ReflectStruct::type_name()` for each eligible struct
+/// Generate the `ReflectStruct` impl of each eligible struct
 /// (WEP 2026-06-13 §1).
 pub fn synthesize_reflect(project: &mut Package) {
-    let trait_env = project.trait_env.clone();
-    let first_module = project
+    let trait_name = reflect_trait_fq(project, CompilerItem::ReflectStruct);
+    // Not demand-driven: `TypeTable::is_reflect_eligible` decides coverage, and
+    // the bound check reads the same predicate.
+    let requested = SynthRequests::default();
+    run_reflect_synthesis(
+        project,
+        &trait_name,
+        &requested,
+        generate_struct_reflect_impls,
+    );
+}
+
+/// A reflect trait's fully-qualified name, read off the compiler-item registry
+/// any module shares.
+fn reflect_trait_fq(project: &Package, trait_item: CompilerItem) -> crate::name::FqTraitName {
+    project
         .tir_modules
         .values()
         .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
-    let reflect_trait_name = first_module
+        .expect("tir_modules must contain at least the entry module during synthesis")
         .type_table
         .borrow()
         .compiler_items()
-        .trait_fq(CompilerItem::ReflectStruct);
-    // Not demand-driven: `TypeTable::is_reflect_eligible` decides coverage, and
-    // the bound check reads the same predicate.
-    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
+        .trait_fq(trait_item)
+}
 
-    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
+/// Run one reflect kind's per-module impl generator across the project,
+/// threading a fresh [`SynthesisCtx`] into each module. `requested` is the
+/// demand set the generator filters on — empty for a kind whose coverage a
+/// predicate decides instead.
+fn run_reflect_synthesis(
+    project: &mut Package,
+    trait_name: &crate::name::FqTraitName,
+    requested: &SynthRequests,
+    generate_impls: fn(&mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &crate::name::FqTraitName),
+) {
+    let trait_env = project.trait_env.clone();
+    let mut pending = SynthRequests::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
         let names = {
@@ -445,11 +475,11 @@ pub fn synthesize_reflect(project: &mut Package) {
         let mut ctx = SynthesisCtx {
             trait_env: &trait_env,
             pending: &mut pending,
-            requested: &requested,
+            requested,
             module: module_source,
             names: &names,
         };
-        generate_struct_reflect_impls(module, &mut ctx, &reflect_trait_name);
+        generate_impls(module, &mut ctx, trait_name);
     }
 }
 
@@ -767,18 +797,25 @@ struct ReflectSynthEnv {
     wire_name_policy_method: String,
 }
 
+/// The member-handle struct a reflect kind's synthesised bodies construct
+/// (`StructField` / `VariantCase` / `EnumCase` / `FlagsBit`): its declaration
+/// and the name those bodies spell it by.
+fn resolve_member_struct(tt: &TypeTable, item: CompilerItem) -> (String, crate::defs::DefId) {
+    let (_, name) = tt.compiler_items().require_struct(item);
+    let name = name.to_string();
+    let def = tt
+        .compiler_item_def(item)
+        .expect("a reflect kind's member-handle struct is declared");
+    (name, def)
+}
+
 impl ReflectSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let (member_struct_name, member_struct_def) =
+            resolve_member_struct(tt, CompilerItem::ReflectStructField);
         let items = tt.compiler_items();
-        let member_struct_name = {
-            let (_, n) = items.require_struct(CompilerItem::ReflectStructField);
-            n.to_string()
-        };
-        let member_struct_def = tt
-            .compiler_item_def(CompilerItem::ReflectStructField)
-            .expect("the Member compiler item is declared");
         Self {
             string_type,
             case_style_type,
@@ -812,41 +849,19 @@ fn synthesize_reflect_kind(
     trait_item: CompilerItem,
     generate_impls: fn(&mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &crate::name::FqTraitName),
 ) {
-    let trait_env = project.trait_env.clone();
-    let first_module = project
+    let trait_name = reflect_trait_fq(project, trait_item);
+    let trait_key = trait_name.canonical();
+    let requested: SynthRequests = project
         .tir_modules
         .values()
         .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
-    let trait_name = first_module
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_fq(trait_item);
-    let trait_key = trait_name.canonical();
-    let requested: IndexSet<(String, ModuleSource, crate::defs::DefId)> = first_module
+        .expect("tir_modules must contain at least the entry module during synthesis")
         .type_table
         .borrow()
         .bound_driven_synth_requests(|key| Some(key) == trait_key.as_ref())
         .into_iter()
         .collect();
-
-    let mut pending: IndexSet<(String, ModuleSource, crate::defs::DefId)> = IndexSet::default();
-    for module in project.tir_modules.values_mut() {
-        let module_source = module.module_source.clone();
-        let names = {
-            let tt = module.type_table.borrow();
-            TraitsStdlibNames::from_type_table(&tt)
-        };
-        let mut ctx = SynthesisCtx {
-            trait_env: &trait_env,
-            pending: &mut pending,
-            requested: &requested,
-            module: module_source.clone(),
-            names: &names,
-        };
-        generate_impls(module, &mut ctx, &trait_name);
-    }
+    run_reflect_synthesis(project, &trait_name, &requested, generate_impls);
 }
 
 /// `members()` for a payload-free kind: one member struct literal per case /
@@ -1388,7 +1403,6 @@ fn generate_variant_reflect_impls(
         return;
     }
 
-    let _module_source = module.module_source.clone();
     let env = ReflectVariantSynthEnv::resolve(&mut module.type_table.borrow_mut());
 
     let mut generated = Vec::new();
@@ -1472,14 +1486,9 @@ impl ReflectVariantSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let (member_struct_name, member_struct_def) =
+            resolve_member_struct(tt, CompilerItem::ReflectVariantCase);
         let items = tt.compiler_items();
-        let member_struct_name = {
-            let (_, n) = items.require_struct(CompilerItem::ReflectVariantCase);
-            n.to_string()
-        };
-        let member_struct_def = tt
-            .compiler_item_def(CompilerItem::ReflectVariantCase)
-            .expect("the Member compiler item is declared");
         Self {
             string_type,
             member_struct_name,
@@ -2106,8 +2115,8 @@ fn generate_enum_reflect_impls(
         return;
     }
 
-    let _module_source = module.module_source.clone();
-    let env = ReflectEnumSynthEnv::resolve(&mut module.type_table.borrow_mut());
+    let env =
+        ScalarReflectSynthEnv::resolve(&mut module.type_table.borrow_mut(), &REFLECT_ENUM_ITEMS);
 
     let mut generated = Vec::new();
     for target in &targets {
@@ -2133,54 +2142,84 @@ struct ReflectEnumTarget {
     wire_name_policy: Option<String>,
 }
 
+/// Which payload-free kind an env was resolved for: one env type serves both,
+/// so only this keeps a flags env out of the enum generator.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ScalarKind {
+    Enum,
+    Flags,
+}
+
+/// The compiler items one payload-free reflect kind names. `ReflectEnum` and
+/// `ReflectFlags` declare the same five members — differing only in the scalar
+/// they bridge through (`i32` discriminant / `u64` bits) — so one env serves
+/// both, as `ScalarReflectSpec` does on the elaborator side.
+struct ScalarReflectItems {
+    kind: ScalarKind,
+    member_struct: CompilerItem,
+    type_name: CompilerItem,
+    value: CompilerItem,
+    from_value: CompilerItem,
+    members: CompilerItem,
+    wire_name_policy: CompilerItem,
+}
+
+const REFLECT_ENUM_ITEMS: ScalarReflectItems = ScalarReflectItems {
+    kind: ScalarKind::Enum,
+    member_struct: CompilerItem::ReflectEnumCase,
+    type_name: CompilerItem::ReflectEnumTypeName,
+    value: CompilerItem::ReflectEnumDiscriminant,
+    from_value: CompilerItem::ReflectEnumFromDiscriminant,
+    members: CompilerItem::ReflectEnumMembers,
+    wire_name_policy: CompilerItem::ReflectEnumWireNamePolicy,
+};
+
+const REFLECT_FLAGS_ITEMS: ScalarReflectItems = ScalarReflectItems {
+    kind: ScalarKind::Flags,
+    member_struct: CompilerItem::ReflectFlagsBit,
+    type_name: CompilerItem::ReflectFlagsTypeName,
+    value: CompilerItem::ReflectFlagsBits,
+    from_value: CompilerItem::ReflectFlagsFromBits,
+    members: CompilerItem::ReflectFlagsMembers,
+    wire_name_policy: CompilerItem::ReflectFlagsWireNamePolicy,
+};
+
 /// Module-level types and method names resolved once from the compiler-item
-/// registry and reused across every enum's `ReflectEnum` synthesis.
-struct ReflectEnumSynthEnv {
+/// registry and reused across every payload-free type's reflect synthesis.
+struct ScalarReflectSynthEnv {
+    kind: ScalarKind,
     string_type: TypeId,
+    case_style_type: TypeId,
     member_struct_name: String,
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
     member_struct_def: crate::defs::DefId,
     type_name_method: String,
-    discriminant_method: String,
-    from_discriminant_method: String,
+    /// `discriminant(&self)` on an enum, `bits(&self)` on a flags type.
+    value_method: String,
+    /// `from_discriminant(raw)` / `from_bits(raw)`.
+    from_value_method: String,
     members_method: String,
-    case_style_type: TypeId,
     wire_name_policy_method: String,
 }
 
-impl ReflectEnumSynthEnv {
-    fn resolve(tt: &mut TypeTable) -> Self {
+impl ScalarReflectSynthEnv {
+    fn resolve(tt: &mut TypeTable, kind: &ScalarReflectItems) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let (member_struct_name, member_struct_def) = resolve_member_struct(tt, kind.member_struct);
         let items = tt.compiler_items();
-        let member_struct_name = {
-            let (_, n) = items.require_struct(CompilerItem::ReflectEnumCase);
-            n.to_string()
-        };
-        let member_struct_def = tt
-            .compiler_item_def(CompilerItem::ReflectEnumCase)
-            .expect("the Member compiler item is declared");
         Self {
+            kind: kind.kind,
             string_type,
+            case_style_type,
             member_struct_name,
             member_struct_def,
-            type_name_method: items
-                .method_name(CompilerItem::ReflectEnumTypeName)
-                .to_string(),
-            discriminant_method: items
-                .method_name(CompilerItem::ReflectEnumDiscriminant)
-                .to_string(),
-            from_discriminant_method: items
-                .method_name(CompilerItem::ReflectEnumFromDiscriminant)
-                .to_string(),
-            members_method: items
-                .method_name(CompilerItem::ReflectEnumMembers)
-                .to_string(),
-            case_style_type,
-            wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectEnumWireNamePolicy)
-                .to_string(),
+            type_name_method: items.method_name(kind.type_name).to_string(),
+            value_method: items.method_name(kind.value).to_string(),
+            from_value_method: items.method_name(kind.from_value).to_string(),
+            members_method: items.method_name(kind.members).to_string(),
+            wire_name_policy_method: items.method_name(kind.wire_name_policy).to_string(),
         }
     }
 }
@@ -2189,10 +2228,11 @@ impl ReflectEnumSynthEnv {
 /// `from_discriminant(disc)`, and `members()` methods.
 fn generate_enum_reflect_methods(
     type_table: &RefCell<TypeTable>,
-    env: &ReflectEnumSynthEnv,
+    env: &ScalarReflectSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
 ) -> Vec<TirFunction> {
+    assert_eq!(env.kind, ScalarKind::Enum);
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
@@ -2277,7 +2317,7 @@ fn generate_enum_reflect_methods(
 /// homogeneous `Members` tuple.
 fn generate_enum_members_fn(
     type_table: &RefCell<TypeTable>,
-    env: &ReflectEnumSynthEnv,
+    env: &ScalarReflectSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
     enum_type: TypeId,
@@ -2357,15 +2397,14 @@ fn generate_enum_members_fn(
 /// — an enum value is its i32 discriminant, so a direct cast reads the tag (the
 /// enum analog of `ReflectFlags::bits`'s `*self as u32`).
 fn generate_enum_discriminant_fn(
-    env: &ReflectEnumSynthEnv,
+    env: &ScalarReflectSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
     enum_type: TypeId,
     ref_enum_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info =
-        trait_method_info(&target.receiver, enum_trait_name, &env.discriminant_method);
+    let method_info = trait_method_info(&target.receiver, enum_trait_name, &env.value_method);
     let qualified_name = method_info.to_mangled_name();
 
     let as_i32 = crate::synthesis::common::cast(
@@ -2396,18 +2435,14 @@ fn generate_enum_discriminant_fn(
 /// an `if disc == k { return Some(Case_k); }` chain ending in `None`.
 fn generate_enum_from_discriminant_fn(
     type_table: &RefCell<TypeTable>,
-    env: &ReflectEnumSynthEnv,
+    env: &ScalarReflectSynthEnv,
     enum_trait_name: &crate::name::FqTraitName,
     target: &ReflectEnumTarget,
     enum_type: TypeId,
     option_enum_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(
-        &target.receiver,
-        enum_trait_name,
-        &env.from_discriminant_method,
-    );
+    let method_info = trait_method_info(&target.receiver, enum_trait_name, &env.from_value_method);
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
@@ -2505,7 +2540,6 @@ fn generate_flags_reflect_impls(
         return;
     }
 
-    let _module_source = module.module_source.clone();
     let targets: Vec<ReflectFlagsTarget> = module
         .flags
         .iter()
@@ -2528,7 +2562,8 @@ fn generate_flags_reflect_impls(
         return;
     }
 
-    let env = ReflectFlagsSynthEnv::resolve(&mut module.type_table.borrow_mut());
+    let env =
+        ScalarReflectSynthEnv::resolve(&mut module.type_table.borrow_mut(), &REFLECT_FLAGS_ITEMS);
 
     let mut generated = Vec::new();
     for target in &targets {
@@ -2555,66 +2590,15 @@ struct ReflectFlagsTarget {
     wire_name_policy: Option<String>,
 }
 
-/// Module-level types and method names resolved once from the compiler-item
-/// registry and reused across every flags type's `ReflectFlags` synthesis.
-struct ReflectFlagsSynthEnv {
-    string_type: TypeId,
-    member_struct_name: String,
-    /// The declaration `member_struct_name` spells; the name is only rendered
-    /// into the synthesised bodies.
-    member_struct_def: crate::defs::DefId,
-    type_name_method: String,
-    bits_method: String,
-    from_bits_method: String,
-    members_method: String,
-    case_style_type: TypeId,
-    wire_name_policy_method: String,
-}
-
-impl ReflectFlagsSynthEnv {
-    fn resolve(tt: &mut TypeTable) -> Self {
-        let string_type = tt.make_compiler_struct(CompilerItem::String);
-        let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
-        let items = tt.compiler_items();
-        let member_struct_name = {
-            let (_, n) = items.require_struct(CompilerItem::ReflectFlagsBit);
-            n.to_string()
-        };
-        let member_struct_def = tt
-            .compiler_item_def(CompilerItem::ReflectFlagsBit)
-            .expect("the Member compiler item is declared");
-        Self {
-            string_type,
-            member_struct_name,
-            member_struct_def,
-            type_name_method: items
-                .method_name(CompilerItem::ReflectFlagsTypeName)
-                .to_string(),
-            bits_method: items
-                .method_name(CompilerItem::ReflectFlagsBits)
-                .to_string(),
-            from_bits_method: items
-                .method_name(CompilerItem::ReflectFlagsFromBits)
-                .to_string(),
-            members_method: items
-                .method_name(CompilerItem::ReflectFlagsMembers)
-                .to_string(),
-            case_style_type,
-            wire_name_policy_method: items
-                .method_name(CompilerItem::ReflectFlagsWireNamePolicy)
-                .to_string(),
-        }
-    }
-}
-
 /// Synthesize one flags type's `type_name()`, `bits(&self)`, `from_bits(raw)`,
 /// and `members()` methods.
 fn generate_flags_reflect_methods(
     type_table: &RefCell<TypeTable>,
-    env: &ReflectFlagsSynthEnv,
+    env: &ScalarReflectSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
 ) -> Vec<TirFunction> {
+    assert_eq!(env.kind, ScalarKind::Flags);
     let span = target.span;
 
     let type_name_fn = generate_type_name_fn(
@@ -2693,7 +2677,7 @@ fn generate_flags_reflect_methods(
 /// one `FlagsBit<Flags>` per member, packed into the homogeneous `Members`
 /// tuple.
 fn generate_flags_members_fn(
-    env: &ReflectFlagsSynthEnv,
+    env: &ScalarReflectSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
     member_type: TypeId,
@@ -2748,13 +2732,13 @@ fn generate_flags_members_fn(
 /// Build `Flags^ReflectFlags::bits(&self) -> u64` as
 /// `return (*self as u32) as u64;` — the widening is lossless.
 fn generate_flags_bits_fn(
-    env: &ReflectFlagsSynthEnv,
+    env: &ScalarReflectSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
     ref_flags_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.receiver, flags_trait_name, &env.bits_method);
+    let method_info = trait_method_info(&target.receiver, flags_trait_name, &env.value_method);
     let qualified_name = method_info.to_mangled_name();
 
     let as_u32 = crate::synthesis::common::cast(
@@ -2787,13 +2771,13 @@ fn generate_flags_bits_fn(
 /// — unknown bits are rejected (CM semantics).
 fn generate_flags_from_bits_fn(
     type_table: &RefCell<TypeTable>,
-    env: &ReflectFlagsSynthEnv,
+    env: &ScalarReflectSynthEnv,
     flags_trait_name: &crate::name::FqTraitName,
     target: &ReflectFlagsTarget,
     option_flags_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(&target.receiver, flags_trait_name, &env.from_bits_method);
+    let method_info = trait_method_info(&target.receiver, flags_trait_name, &env.from_value_method);
     let qualified_name = method_info.to_mangled_name();
 
     let valid_mask: u64 = target
@@ -2891,7 +2875,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// component, the second derivation would be silently skipped and the
     /// receiver type from the second module would dispatch to the first
     /// module's impl.
-    pub(crate) pending: &'pend mut IndexSet<(String, ModuleSource, crate::defs::DefId)>,
+    pub(crate) pending: &'pend mut SynthRequests,
     /// `(type_name, module, trait_name)` triples that a real `T: Eq` /
     /// `T: Ord` bound or explicit marker actually demanded (WEP
     /// 2026-06-25-trait-derivation), snapshotted from
@@ -2900,7 +2884,7 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// `generate_variant_eq_impls` — an impl is emitted only for a pair
     /// recorded here, not for every declared type. Default / Inspect /
     /// Display and their `Alt` siblings stay unconditional.
-    pub(crate) requested: &'req IndexSet<(String, ModuleSource, crate::defs::DefId)>,
+    pub(crate) requested: &'req SynthRequests,
     /// Module currently being synthesised. Auto-derived impls live in this
     /// module by convention.
     pub(crate) module: ModuleSource,
@@ -3235,7 +3219,6 @@ fn generate_enum_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
         return;
     }
 
-    let _module_source = module.module_source.clone();
     let (eq_trait_name, ord_trait_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
@@ -3294,7 +3277,6 @@ fn generate_flags_trait_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         return;
     }
 
-    let _module_source = module.module_source.clone();
     let (eq_trait_name, ord_trait_name) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
@@ -3469,7 +3451,6 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
         return;
     }
 
-    let _module_source = module.module_source.clone();
     let mut generated = Vec::new();
 
     let default_trait_name = module
@@ -3836,7 +3817,6 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
         return;
     }
 
-    let _module_source = module.module_source.clone();
     let display_fq = ctx.names.display_fq.clone();
     let display_method = ctx.names.display_method.clone();
     let formatter_fq = ctx.names.formatter_fq.clone();
