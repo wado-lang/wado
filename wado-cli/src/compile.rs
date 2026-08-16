@@ -6,8 +6,6 @@ use std::sync::Arc;
 use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
-use lexopt::Parser;
-use wado_compiler::LogLevel;
 use wado_compiler::Severity;
 use wado_compiler::wit_bundle;
 
@@ -15,36 +13,10 @@ use crate::args::{self, CliExit};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::CliGeneratorProvider;
+use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
 use crate::manifest;
 use crate::run_cache::RunCache;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum OptLevel {
-    O0,
-    /// All passes except DCE. Iterations: 2, inline threshold: 10.
-    O1,
-    /// Production: all passes, including DCE. Iterations: 10, inline threshold: 10.
-    #[default]
-    O2,
-    /// Aggressive. Iterations: 100, inline threshold: 20.
-    O3,
-    /// `O2` plus name-section stripping.
-    Os,
-}
-
-impl OptLevel {
-    /// wasmtime exposes only `None`/`Speed`/`SpeedAndSize`, so `O1`/`O2`/
-    /// `O3` collapse to `Speed` — mirroring the `wasmtime` CLI's own `-O`
-    /// mapping.
-    #[must_use]
-    pub const fn to_wasmtime(self) -> wasmtime::OptLevel {
-        match self {
-            OptLevel::O0 => wasmtime::OptLevel::None,
-            OptLevel::O1 | OptLevel::O2 | OptLevel::O3 => wasmtime::OptLevel::Speed,
-            OptLevel::Os => wasmtime::OptLevel::SpeedAndSize,
-        }
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -76,16 +48,15 @@ pub struct CompileOptions {
     pub input: String,
     pub output: Option<String>,
     pub format: Option<OutputFormat>,
-    pub opt_level: OptLevel,
     pub wat_to_stdout: bool,
-    pub log_level: LogLevel,
+    /// The build knobs, shared with every other compiling subcommand.
+    pub knobs: CompileKnobs,
+    /// Whether the WIT and `[package]` metadata sections are embedded. The
+    /// embedded WIT section is always the self-contained full closure (a
+    /// `local`, registry-referencing section is not encodable; see WEP
+    /// §"Text and section are different deliverables").
+    pub embed: EmbedOptions,
     pub target_world: Option<String>,
-    pub skip_validation: bool,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    pub allocator: Option<String>,
-    pub no_cache: bool,
-    pub codegen_flags: Vec<String>,
     /// Library world FQ (`namespace:name/name@version`) for `--lib`. When set,
     /// the compiler synthesizes a library world from the entry module's
     /// `export fn`s and exports each one as a Component Model function.
@@ -94,23 +65,6 @@ pub struct CompileOptions {
     /// exports are forced into the interface named by `lib_world`, so the
     /// artifact satisfies another component's import of that interface.
     pub lib_interface_export: bool,
-    /// `-D NAME=value` compile-time parameter overrides.
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    /// `--param-*` policy levels.
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
-    /// `--no-embed-wit`: opt out of embedding the `component-type` WIT section.
-    pub no_embed_wit: bool,
-    /// `--embed-wit`: force embedding on, overriding the `-Os` default-off.
-    /// Takes no value — the embedded section is always the self-contained full
-    /// closure (a `local`, registry-referencing section is not encodable; see
-    /// WEP §"Text and section are different deliverables"). Mutually exclusive
-    /// with `--no-embed-wit`.
-    pub embed_wit: bool,
-    /// `--no-embed-metadata`: opt out of embedding the `[package]` metadata.
-    pub no_embed_metadata: bool,
-    /// `--embed-metadata`: force embedding on, overriding the `-Os` default-off.
-    /// Mutually exclusive with `--no-embed-metadata`.
-    pub embed_metadata: bool,
     /// The entry came from a manifest (no path argument, or a directory
     /// argument), so the build is the package's declared artifact and carries
     /// its metadata. False for an explicit `.wado` file argument.
@@ -121,8 +75,8 @@ impl CompileOptions {
     /// A manifest-driven build of one world: metadata embedded, output at
     /// `output`. Exactly one of `lib_world` / `target_world` is `Some`, selecting
     /// the world as `--lib` / `--world` do. Shared by `wado build` and
-    /// `wado publish`; callers override optimization / allocator / embed / param
-    /// fields as needed before calling [`run`].
+    /// `wado publish`; callers override `knobs` / `embed` as needed before
+    /// calling [`run`].
     #[must_use]
     pub fn for_world_build(
         input: String,
@@ -134,36 +88,14 @@ impl CompileOptions {
             input,
             output: Some(output.to_string_lossy().into_owned()),
             format: Some(OutputFormat::Wasm),
-            opt_level: OptLevel::default(),
             wat_to_stdout: false,
-            log_level: LogLevel::default(),
+            knobs: CompileKnobs::default(),
+            embed: EmbedOptions::default(),
             target_world,
-            skip_validation: false,
-            inline_threshold: None,
-            opt_iterations: None,
-            allocator: None,
-            no_cache: false,
-            codegen_flags: Vec::new(),
             lib_world,
             lib_interface_export: false,
-            param_overrides: wado_compiler::hashmap::IndexMap::default(),
-            param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
-            no_embed_wit: false,
-            embed_wit: false,
-            no_embed_metadata: false,
-            embed_metadata: false,
             manifest_driven: true,
         }
-    }
-
-    /// Resolve whether to embed the `component-type` WIT section. Returns
-    /// `Some(explicit)`, where `explicit` is true when the user passed
-    /// `--embed-wit` (so an embedding failure is fatal rather than a warning),
-    /// or `None` to skip. Embedding is default-on except under `-Os` (frontend
-    /// delivery, where the WIT metadata never reaches a CM host). See WEP
-    /// `wep-2026-05-02-wit-interoperability.md` §"Embedding policy".
-    fn embed_decision(&self) -> Option<bool> {
-        resolve_embed_decision(self.no_embed_wit, self.embed_wit, self.opt_level)
     }
 
     /// The Component Model world FQ this build targets: the `--lib` world, then
@@ -184,62 +116,24 @@ const DEFAULT_WORLD: &str = "wasi:cli/command";
 /// `build/kiln/...` layout (see `kiln_provider`).
 const BUILD_DIR: &str = "build";
 
-/// Pure embedding-policy resolution, factored out of [`CompileOptions`] for
-/// testing. See [`CompileOptions::embed_decision`].
-fn resolve_embed_decision(
-    no_embed_wit: bool,
-    embed_wit: bool,
-    opt_level: OptLevel,
-) -> Option<bool> {
-    if no_embed_wit {
-        return None;
-    }
-    if embed_wit {
-        return Some(true);
-    }
-    if opt_level == OptLevel::Os {
-        return None;
-    }
-    Some(false)
-}
-
-/// Compile-time options shared by `compile`/`run`/`serve`/`test`.
+/// What one compile needs beyond the shared [`CompileKnobs`]: which world it
+/// targets and what the caller wants retained from the result.
 ///
-/// `target_world` and `allocator` stay `Option` so each subcommand can
-/// pin its own default (`run` → cli/command, `serve` → http/service,
-/// `test` → test) while letting `compile` accept `--world`.
+/// `target_world` stays `Option` so each subcommand can pin its own default
+/// (`run` → cli/command, `serve` → http/service, `test` → test) while letting
+/// `compile` accept `--world`.
 #[derive(Clone, Debug, Default)]
 pub struct CompileFlags {
-    pub opt_level: OptLevel,
-    pub log_level: LogLevel,
+    pub knobs: CompileKnobs,
     pub target_world: Option<String>,
-    pub skip_validation: bool,
-    pub inline_threshold: Option<usize>,
-    pub opt_iterations: Option<u32>,
-    pub allocator: Option<String>,
-    /// When true, ignore all build caches: every Kiln invocation re-runs
-    /// its generator, and the generator wasm itself is recompiled from
-    /// source instead of reused from `build/kiln/generators/`. Cache
-    /// *writes* still happen, so a follow-up run without `--no-cache`
-    /// benefits from a warm cache again.
-    pub no_cache: bool,
     /// `--test-name` substring filters for the test world (empty elsewhere).
     /// Forwarded to `CompilerOptions::test_name_filters`.
     pub test_name_filters: Vec<String>,
-    /// Generic codegen feature flags from `-f <flag>` (e.g. `["array-copy"]`).
-    /// Forwarded verbatim to `CompilerOptions::codegen_flags`; the compiler
-    /// validates them.
-    pub codegen_flags: Vec<String>,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
     /// Force library exports into the `lib_world` interface (`--implement`).
     /// Forwarded to `CompilerOptions::lib_interface_export`.
     pub lib_interface_export: bool,
-    /// `-D NAME=value` compile-time parameter overrides. Forwarded to
-    /// `CompilerOptions::param_overrides`.
-    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    /// `--param-*` policy levels. Forwarded to `CompilerOptions::param_policy`.
-    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
     /// Retain the WIR module in the result. `wado compile` sets it when
     /// embedding WIT, to read the faithful import plan
     /// (`imported_cm_interfaces`) without a second compile.
@@ -254,22 +148,11 @@ impl CompileOptions {
     #[must_use]
     pub fn flags(&self) -> CompileFlags {
         CompileFlags {
-            opt_level: self.opt_level,
-            log_level: self.log_level,
+            knobs: self.knobs.clone(),
             target_world: self.target_world.clone(),
-            skip_validation: self.skip_validation,
-            inline_threshold: self.inline_threshold,
-            opt_iterations: self.opt_iterations,
-            allocator: self.allocator.clone(),
-            no_cache: self.no_cache,
-            test_name_filters: Vec::new(),
-            codegen_flags: self.codegen_flags.clone(),
             lib_world: self.lib_world.clone(),
             lib_interface_export: self.lib_interface_export,
-            param_overrides: self.param_overrides.clone(),
-            param_policy: self.param_policy,
-            retain_wir: false,
-            embed_wit_contract: None,
+            ..CompileFlags::default()
         }
     }
 }
@@ -280,16 +163,6 @@ enum Opt {
     Format,
     WatToStdout,
     World,
-    OptLevel,
-    InlineThreshold,
-    OptIterations,
-    LogLevel,
-    NoValidate,
-    NoCache,
-    Allocator,
-    Feature,
-    NoEmbedWit,
-    EmbedWit,
     Help,
 }
 
@@ -299,17 +172,18 @@ impl Opt {
         Self::Format,
         Self::WatToStdout,
         Self::World,
-        Self::OptLevel,
-        Self::InlineThreshold,
-        Self::OptIterations,
-        Self::LogLevel,
-        Self::NoValidate,
-        Self::NoCache,
-        Self::Allocator,
-        Self::Feature,
-        Self::NoEmbedWit,
-        Self::EmbedWit,
         Self::Help,
+    ];
+
+    const KNOBS: &[KnobOpt] = &[
+        KnobOpt::OptLevel,
+        KnobOpt::InlineThreshold,
+        KnobOpt::OptIterations,
+        KnobOpt::LogLevel,
+        KnobOpt::NoValidate,
+        KnobOpt::NoCache,
+        KnobOpt::Allocator,
+        KnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -333,26 +207,6 @@ impl Opt {
                 desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
             },
             Self::World => args::WORLD_SPEC,
-            Self::OptLevel => args::OPT_LEVEL_SPEC,
-            Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
-            Self::OptIterations => args::OPT_ITERATIONS_SPEC,
-            Self::LogLevel => args::LOG_LEVEL_SPEC,
-            Self::NoValidate => args::NO_VALIDATE_SPEC,
-            Self::NoCache => args::NO_CACHE_SPEC,
-            Self::Allocator => args::ALLOCATOR_SPEC,
-            Self::Feature => args::FEATURE_SPEC,
-            Self::NoEmbedWit => args::OptSpec {
-                long: Some("no-embed-wit"),
-                short: None,
-                value: None,
-                desc: "Do not embed the WIT `component-type` section in the output",
-            },
-            Self::EmbedWit => args::OptSpec {
-                long: Some("embed-wit"),
-                short: None,
-                value: None,
-                desc: "Force embedding the WIT section on (e.g. under -Os, where it is off by default)",
-            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -366,6 +220,13 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::KNOBS, |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(EmbedOpt::WIT_ONLY, |o| o.spec())
+    )
+    .unwrap();
     write!(
         buf,
         "{}",
@@ -375,31 +236,22 @@ fn format_usage() -> String {
     buf
 }
 
-pub fn print_usage() {
-    eprint!("{}", format_usage());
-}
-
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit> {
     let usage = format_usage();
     let mut output: Option<String> = None;
     let mut format: Option<OutputFormat> = None;
     let mut input: Option<String> = None;
-    let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
-    let mut log_level = args::DEFAULT_LOG_LEVEL;
     let mut target_world: Option<String> = None;
-    let mut skip_validation = false;
-    let mut inline_threshold: Option<usize> = None;
-    let mut opt_iterations: Option<u32> = None;
-    let mut allocator: Option<String> = None;
-    let mut codegen_flags: Vec<String> = Vec::new();
-    let mut no_cache = false;
-    let mut no_embed_wit = false;
-    let mut embed_wit = false;
-    let mut param_args = args::ParamArgs::default();
+    let mut knobs = CompileKnobs::default();
+    let mut embed = EmbedOptions::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            param_args.apply(p, &mut parser)?;
+        if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
+            knobs.apply(k, &mut parser)?;
+        } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            knobs.params.apply(p, &mut parser)?;
+        } else if let Some(e) = args::match_opt(&arg, EmbedOpt::WIT_ONLY, |e| e.spec()) {
+            embed.apply(e)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
@@ -411,28 +263,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 }
                 Opt::WatToStdout => wat_to_stdout = true,
                 Opt::World => target_world = Some(args::require_string(&mut parser)?),
-                Opt::OptLevel => opt_level = parse_opt_level_arg(&mut parser)?,
-                Opt::InlineThreshold => {
-                    inline_threshold = Some(args::parse_inline_threshold_arg(
-                        "--optimize-inline-threshold",
-                        &mut parser,
-                    )?);
-                }
-                Opt::OptIterations => {
-                    opt_iterations = Some(args::parse_opt_iterations_arg(
-                        "--optimize-iterations",
-                        &mut parser,
-                    )?);
-                }
-                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
-                Opt::NoValidate => skip_validation = true,
-                Opt::NoCache => no_cache = true,
-                Opt::Allocator => {
-                    allocator = Some(args::require_string(&mut parser)?);
-                }
-                Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
-                Opt::NoEmbedWit => no_embed_wit = true,
-                Opt::EmbedWit => embed_wit = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -441,12 +271,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
-    }
-
-    if no_embed_wit && embed_wit {
-        return Err(CliExit::error(
-            "`--no-embed-wit` and `--embed-wit` are mutually exclusive",
-        ));
     }
 
     // `compile` is the file-scoped primitive: it takes one explicit `.wado`
@@ -471,56 +295,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         input,
         output,
         format,
-        opt_level,
         wat_to_stdout,
-        log_level,
+        knobs,
+        embed,
         target_world,
-        skip_validation,
-        inline_threshold,
-        opt_iterations,
-        allocator,
-        no_cache,
-        codegen_flags,
-        lib_interface_export: false,
         lib_world: None,
-        param_overrides: param_args.overrides,
-        param_policy: param_args.policy,
-        no_embed_wit,
-        embed_wit,
-        no_embed_metadata: false,
-        embed_metadata: false,
+        lib_interface_export: false,
         manifest_driven: false,
     })
-}
-
-fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
-    match level {
-        OptLevel::O0 => wado_compiler::OptLevel::O0,
-        OptLevel::O1 => wado_compiler::OptLevel::O1,
-        OptLevel::O2 => wado_compiler::OptLevel::O2,
-        OptLevel::O3 => wado_compiler::OptLevel::O3,
-        OptLevel::Os => wado_compiler::OptLevel::Os,
-    }
-}
-
-/// Parse `-O<n>` (with optional bare-`-O`). Shared by every subcommand
-/// that exposes optimization-level control.
-pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
-    let val = parser.optional_value();
-    let level_str = val
-        .as_ref()
-        .map(|v| v.to_string_lossy())
-        .unwrap_or_default();
-    match level_str.as_ref() {
-        "" | "0" | "g" => Ok(OptLevel::O0),
-        "1" => Ok(OptLevel::O1),
-        "2" => Ok(OptLevel::O2),
-        "3" => Ok(OptLevel::O3),
-        "s" => Ok(OptLevel::Os),
-        _ => Err(CliExit::error(format!(
-            "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-        ))),
-    }
 }
 
 pub struct TryCompileError {
@@ -571,7 +353,8 @@ pub async fn try_compile_with_run_cache(
     // Load the nearest manifest once: it seeds both the host's `[dependencies]`
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
-    let base_host = FilesystemCompilerHost::with_log_level(base_path.clone(), flags.log_level);
+    let base_host =
+        FilesystemCompilerHost::with_log_level(base_path.clone(), flags.knobs.log_level);
     let base_host = match run_cache {
         Some(cache) => base_host.with_shared_run_cache(cache),
         None => base_host,
@@ -603,7 +386,7 @@ pub async fn try_compile_with_run_cache(
     };
 
     let pipeline_outcome =
-        match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {
+        match maybe_run_pipeline(path, &host, flags.knobs.no_cache, manifest_pair).await {
             Ok(outcome) => outcome,
             Err(e) => {
                 let message = e.to_string();
@@ -615,21 +398,22 @@ pub async fn try_compile_with_run_cache(
             }
         };
 
+    let knobs = &flags.knobs;
     let options = wado_compiler::CompilerOptions {
-        opt_level: to_compiler_opt_level(flags.opt_level),
+        opt_level: knobs.opt_level.to_compiler(),
+        skip_validation: knobs.skip_validation,
+        inline_threshold: knobs.inline_threshold,
+        opt_iterations: knobs.opt_iterations,
+        log_level: Some(knobs.log_level),
+        allocator: knobs.allocator.clone(),
+        codegen_flags: knobs.codegen_flags.clone(),
+        param_overrides: knobs.params.overrides.clone(),
+        param_policy: knobs.params.policy,
         target_world: flags.target_world.clone(),
-        skip_validation: flags.skip_validation,
-        inline_threshold: flags.inline_threshold,
-        opt_iterations: flags.opt_iterations,
-        log_level: Some(flags.log_level),
-        allocator: flags.allocator.clone(),
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),
-        codegen_flags: flags.codegen_flags.clone(),
         lib_world: flags.lib_world.clone(),
         lib_interface_export: flags.lib_interface_export,
-        param_overrides: flags.param_overrides.clone(),
-        param_policy: flags.param_policy,
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),
         ..Default::default()
@@ -810,6 +594,111 @@ async fn materialize_git_dependencies(
     Ok(())
 }
 
+/// Everything one entry's Kiln generators need to run: the invocations, the
+/// manifest they are anchored in, the provider that resolves their generators,
+/// and a host rebased on the manifest root.
+pub(crate) struct KilnSetup {
+    pub manifest: wado_manifest::Manifest,
+    pub manifest_root: std::path::PathBuf,
+    pub invocations: Vec<wado_compiler::kiln::Invocation>,
+    pub provider: CliGeneratorProvider,
+    /// Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
+    /// root, so schemas must be loaded relative to it — not the entry file's
+    /// directory, where the main compile host is based.
+    pub host: FilesystemCompilerHost,
+    /// Loader identities the harvested (full-path-keyed) index is remapped onto.
+    identities: wado_compiler::hashmap::IndexMap<String, String>,
+}
+
+/// Collect the inline `with { generator: { ... } }` clauses `entry_file`
+/// declares and assemble everything the Kiln pipeline needs from them.
+/// `Ok(None)` when the entry declares no generators.
+///
+/// Shared by [`maybe_run_pipeline`] (which runs them) and `wado check` (which
+/// dry-runs them and byte-compares), so both tiers resolve generators through
+/// one identical setup.
+pub(crate) fn prepare_kiln(
+    entry_file: &Path,
+    host: &FilesystemCompilerHost,
+    no_cache: bool,
+    project: Option<manifest::ProjectManifest>,
+) -> Result<Option<KilnSetup>, PipelineError> {
+    let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
+        entry_file
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+    });
+    let (mut invocations, identities, inline_diagnostics) =
+        collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root);
+
+    // Fail on a malformed clause here, with its own diagnostics, so the clear
+    // error is not buried under the downstream failure of the unredirected
+    // `use` falling through to the lexer.
+    let inline_errors = inline_diagnostics
+        .iter()
+        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .count();
+    for d in inline_diagnostics {
+        wado_compiler::CompilerHost::emit_diagnostic(host, d);
+    }
+    if inline_errors > 0 {
+        return Err(PipelineError::InlineClause(inline_errors));
+    }
+
+    if invocations.is_empty() {
+        return Ok(None);
+    }
+    let (manifest, manifest_root) = match project {
+        Some(p) => (p.manifest, p.root),
+        None => (empty_manifest(), probe_manifest_root),
+    };
+    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root);
+    rewrite_local_dir_modules(&mut invocations, &manifest_root);
+    // A generator's outputs are products of this run, not a tree moving under
+    // it. Declared here but applied when the watch is asked, so the order
+    // fixtures compile in does not matter.
+    for invocation in &invocations {
+        host.run_cache()
+            .inputs()
+            .mark_generated_dir(manifest_root.join(invocation.output_dir.as_str()));
+    }
+    let provider = CliGeneratorProvider::new(manifest_root.clone())
+        .with_run_cache(host.run_cache())
+        .with_no_cache(no_cache)
+        .with_registry_context(crate::kiln_provider::RegistryContext {
+            build_dependencies: manifest.build_dependencies.clone(),
+            registries: manifest.registries.clone(),
+            locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
+        });
+    let kiln_host = host.rebased(manifest_root.clone());
+    Ok(Some(KilnSetup {
+        manifest,
+        manifest_root,
+        invocations,
+        provider,
+        host: kiln_host,
+        identities,
+    }))
+}
+
+impl KilnSetup {
+    /// Remap a pipeline's harvested index (keyed by full path) onto the loader
+    /// identities collected with the invocations, reporting any redirect that
+    /// two declarations disagree on through `host`.
+    pub(crate) fn remap_conflicts(
+        &self,
+        invocations: &mut wado_compiler::kiln::InvocationIndex,
+        host: &FilesystemCompilerHost,
+    ) -> Result<(), PipelineError> {
+        let conflicts = remap_and_report_conflicts(invocations, &self.identities, host);
+        if conflicts > 0 {
+            return Err(PipelineError::RedirectConflict(conflicts));
+        }
+        Ok(())
+    }
+}
+
 /// Collect inline `with { generator: { ... } }` clauses from `entry_file`
 /// (and any sibling manifest's directory if one is found), then drive the
 /// Kiln pipeline via [`run_pipeline`]. Returns `Ok(PipelineOutcome::default())`
@@ -824,80 +713,19 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let manifest_root_for_inline = project.as_ref().map(|p| p.root.clone());
-    let probe_manifest_root = manifest_root_for_inline.clone().unwrap_or_else(|| {
-        entry_file
-            .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-    });
-    let (inline, identities, inline_diagnostics) =
-        collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root);
-
-    // Fail on a malformed clause here, with its own diagnostics, so the clear
-    // error is not buried under the downstream failure of the unredirected
-    // `use` falling through to the lexer.
-    let inline_errors = inline_diagnostics
-        .iter()
-        .filter(|d| d.severity == wado_compiler::Severity::Error)
-        .count();
-    for d in inline_diagnostics {
-        wado_compiler::CompilerHost::emit_diagnostic(host, d);
-    }
-    if inline_errors > 0 {
-        return Err(crate::kiln_driver::PipelineError::InlineClause(
-            inline_errors,
-        ));
-    }
-
-    let (manifest, manifest_root) = match project {
-        Some(p) => (p.manifest, p.root),
-        None if inline.is_empty() => return Ok(PipelineOutcome::default()),
-        None => (empty_manifest(), probe_manifest_root),
-    };
-
-    if inline.is_empty() {
+    let Some(mut kiln) = prepare_kiln(entry_file, host, no_cache, project)? else {
         return Ok(PipelineOutcome::default());
-    }
-    let mut inline = inline;
-    rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
-    rewrite_local_dir_modules(&mut inline, &manifest_root);
-    // A generator's outputs are products of this run, not a tree moving under
-    // it. Declared here but applied when the watch is asked, so the order
-    // fixtures compile in does not matter.
-    for invocation in &inline {
-        host.run_cache()
-            .inputs()
-            .mark_generated_dir(manifest_root.join(invocation.output_dir.as_str()));
-    }
-    let provider = CliGeneratorProvider::new(manifest_root.clone())
-        .with_run_cache(host.run_cache())
-        .with_no_cache(no_cache)
-        .with_registry_context(crate::kiln_provider::RegistryContext {
-            build_dependencies: manifest.build_dependencies.clone(),
-            registries: manifest.registries.clone(),
-            locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
-        });
-    // Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
-    // root, so schemas must be loaded relative to it — not the entry file's
-    // directory, where the main compile host is based.
-    let kiln_host = host.rebased(manifest_root.clone());
+    };
     let mut outcome = crate::kiln_driver::run_pipeline(
-        &manifest,
-        &manifest_root,
-        &kiln_host,
-        &provider,
-        inline,
+        &kiln.manifest,
+        &kiln.manifest_root,
+        &kiln.host,
+        &kiln.provider,
+        std::mem::take(&mut kiln.invocations),
         no_cache,
     )
     .await?;
-    // The harvested index is keyed by full path; remap to loader identities.
-    let conflict_errors = remap_and_report_conflicts(&mut outcome.invocations, &identities, host);
-    if conflict_errors > 0 {
-        return Err(crate::kiln_driver::PipelineError::RedirectConflict(
-            conflict_errors,
-        ));
-    }
+    kiln.remap_conflicts(&mut outcome.invocations, host)?;
     Ok(outcome)
 }
 
@@ -1023,7 +851,7 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
 /// keys through this map (see `remap_index_decl_files`). The loader identity is
 /// canonical (see [`wado_compiler::name::canonical_local_path`]), so the map is
 /// single-valued.
-pub(crate) fn collect_inline_invocations_for_entry_with_identities(
+fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     manifest_root: &Path,
 ) -> (
@@ -1131,7 +959,7 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 /// matching targets are a harmless duplicate. Unreachable with canonical
 /// identities; guards against a future identity-scheme regression.
 #[must_use]
-pub(crate) fn remap_index_decl_files(
+fn remap_index_decl_files(
     index: &mut wado_compiler::kiln::InvocationIndex,
     identities: &wado_compiler::hashmap::IndexMap<String, String>,
 ) -> Vec<wado_compiler::Diagnostic> {
@@ -1171,9 +999,9 @@ pub(crate) fn remap_index_decl_files(
 
 /// Remap `index` to loader identities via [`remap_index_decl_files`], emit any
 /// conflict diagnostics through `host`, and return the count of `Error`-severity
-/// conflicts. Shared by `compile` and `check`, which differ only in how a
-/// non-zero count maps to their own error type.
-pub(crate) fn remap_and_report_conflicts(
+/// conflicts. Reached through [`KilnSetup::remap_conflicts`], which both
+/// `compile` and `check` use.
+fn remap_and_report_conflicts(
     index: &mut wado_compiler::kiln::InvocationIndex,
     identities: &wado_compiler::hashmap::IndexMap<String, String>,
     host: &FilesystemCompilerHost,
@@ -1257,10 +1085,7 @@ fn embed_package_metadata(
     project: Option<&manifest::ProjectManifest>,
     wasm: Vec<u8>,
 ) -> Vec<u8> {
-    if opts.no_embed_metadata || !opts.manifest_driven {
-        return wasm;
-    }
-    if opts.opt_level == OptLevel::Os && !opts.embed_metadata {
+    if !opts.manifest_driven || opts.embed.metadata.resolve(opts.knobs.opt_level).is_none() {
         return wasm;
     }
     let Some(project) = project else {
@@ -1322,7 +1147,7 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
         .unwrap_or(OutputFormat::Wasm);
     // WAT is a debug/inspection format, so it is left un-embedded.
     let embed = (!opts.wat_to_stdout && format == OutputFormat::Wasm)
-        .then(|| opts.embed_decision())
+        .then(|| opts.embed.wit.resolve(opts.knobs.opt_level))
         .flatten();
 
     let mut flags = opts.flags();
@@ -1467,41 +1292,6 @@ mod world_segment_tests {
         assert_eq!(world_path_segment("wasi:cli/command"), "wasi-cli-command");
         assert_eq!(world_path_segment("wasi:http/service"), "wasi-http-service");
         assert_eq!(world_path_segment("foo:bar/baz@1.2.3"), "foo-bar-baz");
-    }
-}
-
-#[cfg(test)]
-mod embed_policy_tests {
-    use super::{OptLevel, resolve_embed_decision};
-
-    #[test]
-    fn default_on_except_os() {
-        // Default (no flags): embed, non-explicit.
-        assert_eq!(
-            resolve_embed_decision(false, false, OptLevel::O2),
-            Some(false)
-        );
-        // `-Os`: default off (frontend delivery; WIT is dead weight).
-        assert_eq!(resolve_embed_decision(false, false, OptLevel::Os), None);
-    }
-
-    #[test]
-    fn no_embed_wit_opts_out_everywhere() {
-        assert_eq!(resolve_embed_decision(true, false, OptLevel::O2), None);
-        assert_eq!(resolve_embed_decision(true, false, OptLevel::Os), None);
-    }
-
-    #[test]
-    fn explicit_embed_wit_forces_on_even_under_os() {
-        // `--embed-wit` marks the decision explicit, so failures become fatal.
-        assert_eq!(
-            resolve_embed_decision(false, true, OptLevel::O2),
-            Some(true)
-        );
-        assert_eq!(
-            resolve_embed_decision(false, true, OptLevel::Os),
-            Some(true)
-        );
     }
 }
 

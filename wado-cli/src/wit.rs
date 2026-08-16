@@ -81,10 +81,6 @@ fn format_usage() -> String {
     buf
 }
 
-pub fn print_usage() {
-    eprint!("{}", format_usage());
-}
-
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
     let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
