@@ -755,12 +755,9 @@ fn within_node_budget(instr: &WirInstr, budget: u32) -> bool {
 /// Fold `if c { a } else { b }` → `select(c, a, b)` for two cheap, pure,
 /// trap-free arms — the branchless form of a value-producing `if`.
 ///
-/// This is the WIR dual of `nir/select_lowering`, which cannot see the shape:
-/// `&&` / `||` stay one `Binary` node through NIR and only become a
-/// value-producing `if` when `wir_build::emit_binary_wir` lowers the
-/// short-circuit. A byte-classifying loop condition (`b >= 0x20 && b != 0x22`)
-/// therefore reaches Wasm as two nested branches per byte until this rule
-/// straightens it.
+/// The WIR dual of `nir/select_lowering`, which cannot see the shape: `&&` /
+/// `||` stay one `Binary` node through NIR and become a value-producing `if`
+/// only when `wir_build::emit_binary_wir` lowers the short-circuit.
 ///
 /// `select` evaluates both arms, so both must be observation-free and unable to
 /// trap; the node budget keeps the speculated work smaller than the branch it
@@ -781,7 +778,10 @@ fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     // A `select` operand is one value on the stack: reference results would
     // need the typed form and buy nothing here, where the win is a straightened
     // scalar condition.
-    if !matches!(ty, WirType::I32 | WirType::I64 | WirType::F32 | WirType::F64) {
+    if !matches!(
+        ty,
+        WirType::I32 | WirType::I64 | WirType::F32 | WirType::F64
+    ) {
         return false;
     }
     // A decided condition is `try_eliminate_const_if`'s to fold away entirely.

@@ -1244,10 +1244,9 @@ impl Gate<'_> {
     /// referent's storage out of the callee. Unknown callees count as leaking.
     ///
     /// The walk asks the same question of the callees it hands the borrow on
-    /// to, so a recursive (or mutually recursive) helper would re-enter this
-    /// query for a key already in flight. Seeding the memo with the leaking
-    /// verdict cuts the cycle the conservative way and is overwritten by the
-    /// real answer once the walk returns.
+    /// to, so a recursive helper re-enters this query for a key already in
+    /// flight. Seeding the memo with the leaking verdict cuts the cycle the
+    /// conservative way.
     fn callee_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
@@ -1279,7 +1278,10 @@ impl Gate<'_> {
             };
             f.body.is_some()
                 && !self.param_borrows_mutably(param)
-                && matches!(self.type_table.borrow().get(param.type_id), ResolvedType::Ref(_))
+                && matches!(
+                    self.type_table.borrow().get(param.type_id),
+                    ResolvedType::Ref(_)
+                )
         };
         borrows && !self.callee_ref_param_leaks(func_id, pos)
     }
@@ -1288,13 +1290,11 @@ impl Gate<'_> {
     /// reference reachable from it survive the call.
     ///
     /// A plain instruction has no place to put one: the operand stack does not
-    /// outlive the call, and the stores it can perform (`array.set`,
-    /// `array.copy`'s destination, a linear-memory write) all travel through a
+    /// outlive the call, and every store it can perform travels through a
     /// `&mut` operand, which the caller side excludes. Two channels are left,
-    /// and each gets a gate: what the instruction returns (`array.get`'s
-    /// element, `array.new_fixed`'s array *of* its arguments) must be a
-    /// primitive, and what it moves elementwise (`array.copy`) means the
-    /// argument may only be a primitive or an array of them.
+    /// and each gets a gate: what it returns must be a primitive, and what it
+    /// moves elementwise (`array.copy`) means the argument may only be a
+    /// primitive or an array of them.
     fn instruction_arg_captures(&self, func_id: crate::nir::FuncId, arg_ty: TypeId) -> bool {
         use cranelift_entity::EntityRef;
         if !self
@@ -1332,7 +1332,10 @@ impl Gate<'_> {
             let ResolvedType::BuiltinArray(elem) = resolved else {
                 return true;
             };
-            return !matches!(tt.get(*elem), ResolvedType::Primitive(_) | ResolvedType::Unit);
+            return !matches!(
+                tt.get(*elem),
+                ResolvedType::Primitive(_) | ResolvedType::Unit
+            );
         }
     }
 
@@ -1532,12 +1535,7 @@ enum AliasRoots {
     WithReassigned,
 }
 
-fn projection_alias_roots(
-    body: &Body,
-    idx: u32,
-    gate: &Gate<'_>,
-    which: AliasRoots,
-) -> Vec<u32> {
+fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRoots) -> Vec<u32> {
     let mut roots = vec![idx];
     let mut i = 0;
     while i < roots.len() {

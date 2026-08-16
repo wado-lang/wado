@@ -506,13 +506,9 @@ fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef])
 }
 
 /// What the caller pays for `body` once constant folding has run on it, given
-/// the parameters in `view` arrive constant at every call site.
-///
-/// Pricing the body as written is what a constant argument makes wrong: the
-/// branch it decides keeps one arm, and the pure call over it becomes a
-/// literal. A reflection bridge dispatching on a constant index, or a writer
-/// whose constant key decides an escape check, prices as its whole body and
-/// stays out of line for a cost it will not pay.
+/// the parameters in `view` arrive constant at every call site: a branch a
+/// constant decides keeps one arm, and a pure call over constants becomes a
+/// literal.
 fn inline_cost_folded(
     body: &Body,
     type_table: &TypeTable,
@@ -550,12 +546,9 @@ fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<Stri
 }
 
 /// Whether the folds `view` licenses delete a loop — directly, or inside a
-/// call they turn into a literal.
-///
-/// Size alone cannot tell a worthwhile fold from a trivial one: the model
-/// prices a loop at three instructions, and what it is worth is however many
-/// times it spins. Deleting one is the evidence that inlining a body over
-/// budget pays for itself; deleting two operations is not.
+/// call they turn into a literal. The model prices a loop at three
+/// instructions; what it is worth is however many times it spins, so size
+/// alone cannot tell a worthwhile fold from a trivial one.
 fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bool {
     for node in arena_query::reachable_nodes(body) {
         let decided_arms: Vec<BlockId> = match node {
@@ -701,8 +694,7 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
-        // `promote_pure_values_early` freezes it — the very shape a wire key
-        // arrives in, and the one this scan exists for.
+        // `promote_pure_values_early` freezes it.
         Operand::Value(v) => {
             let kind = body.values.kind(v);
             kind.is_operand_constant() || matches!(kind, ValueKind::Const(..))
@@ -712,9 +704,9 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
             ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => {
                 is_constant_arg(body, *expr, const_locals)
             }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                elements.iter().all(|&e| is_constant_arg(body, e, const_locals))
-            }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
+                .iter()
+                .all(|&e| is_constant_arg(body, e, const_locals)),
             ExprKind::StructLiteral { fields, .. } => fields
                 .iter()
                 .all(|f| is_constant_arg(body, f.value, const_locals)),
@@ -748,9 +740,9 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
 /// For each callee, the parameter positions *every* call site in the program
 /// fills with a compile-time constant.
 ///
-/// Whole-program rather than per-site on purpose: admission stays a property of
-/// the callee, so a body taken on its folded cost is never spliced at a site
-/// that would not fold it. A callee nothing calls is absent.
+/// Whole-program rather than per-site: admission stays a property of the
+/// callee, so a body taken on its folded cost is never spliced at a site that
+/// would not fold it. A callee nothing calls is absent.
 fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
     let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
     for func_rc in &project.functions {
@@ -792,13 +784,9 @@ struct Verdict {
     /// Keep it as a template: splice nothing *into* it.
     ///
     /// A body whose parameters, were they constant, delete a loop from it is
-    /// worth more as something callers copy than as something callers call.
-    /// Growing it destroys that — it passes the budget, and every caller loses
-    /// the fold with it — and growth is one-way. The two roles need two bodies,
-    /// and the cheapest second body is the one nobody wrote into.
-    ///
-    /// This is what an `#[inline(never)]` on each leaf otherwise applies by
-    /// hand.
+    /// worth more as something callers copy than as something callers call, and
+    /// growing it past the budget is one-way. This is what an
+    /// `#[inline(never)]` on each leaf otherwise applies by hand.
     hold: bool,
 }
 
@@ -845,7 +833,10 @@ fn classify_callee(
     // #[inline(always)] skips the remaining heuristic checks (but still requires
     // a body, a non-adapter, and non-recursion, all checked above)
     if func.inline_hint == InlineHint::Always {
-        return Verdict { inline: true, hold: false };
+        return Verdict {
+            inline: true,
+            hold: false,
+        };
     }
 
     // Don't inline functions that return Never (!)
@@ -873,10 +864,8 @@ fn classify_callee(
         };
     }
 
-    // Over budget as written. It may still be worth splicing once the caller's
-    // constants have folded it — and if it might be, it has to be protected
-    // from its own leaves in the meantime.
-    // `(fits, drops a loop)` for one reading of the body.
+    // Over budget as written, but the caller's constants may still fold it
+    // under. `(fits, drops a loop)` for one reading of the body.
     let weigh = |view: &ConstView<'_>| {
         let folded = inline_cost_folded(body, type_table, descriptors, view);
         if folded > effective_threshold {
@@ -888,52 +877,29 @@ fn classify_callee(
             descriptors,
             consts: Some(view),
         };
-        // Fitting folded is not enough on its own: admitting every marginal
-        // fold measured -9% on cbor-twitter, more inlining and none of it
-        // paying. The fold must also delete a loop — the model prices one at
-        // three instructions, and it is worth however many times it spins — or
+        // Fitting folded is not enough on its own — admitting every marginal
+        // fold measured -9% on cbor-twitter. It must also delete a loop, or
         // halve the body.
         (folded * 2 <= plain, fold_drops_loop(body, view, &walk))
     };
 
-    // The hold asks optimistically, with every parameter assumed constant,
-    // because the constant can arrive late: a derivation computes its wire key
-    // with a compile-time call, so the key is a literal only after several
-    // rounds of folding, by which time the leaves are already spliced in.
+    // `inline` reads the call sites, because splicing has to pay at the sites
+    // that exist. The hold reads the body alone, because it protects an option
+    // whose evidence has not arrived yet: a `field<T>` in a derived serializer
+    // is admitted at plain=18 against a budget of 13, on a folded price that
+    // exists only once the reflection walk has unrolled its keys into literals
+    // — rounds after the leaves would have been spliced in.
     //
-    // Only the loop counts here. Assuming the receiver constant halves almost
-    // any body, so admitting the hold on that would suppress bottom-up
-    // inlining across the whole program — it stopped `String::get_byte_unchecked`
-    // reaching a two-line `peek`. A loop the fold deletes is the option worth
-    // holding open.
+    // Only a deleted loop counts. Assuming the receiver constant halves almost
+    // any body, so holding on that suppressed bottom-up inlining across the
+    // whole program: `String::get_byte_unchecked` stopped reaching a two-line
+    // `peek`.
     //
-    // The two questions are asked of different things on purpose. `inline`
-    // reads the call sites, because splicing has to pay at the sites that
-    // exist. The hold reads the body alone, because it protects an option
-    // whose evidence has not arrived yet: every `field<T>` in a derived
-    // serializer is admitted at plain=18 against a budget of 13, on a folded
-    // price that only exists once the reflection walk has unrolled its keys
-    // into literals — several rounds after the leaves would have been spliced
-    // in. Waiting for the fact means never seeing it.
-    //
-    // Three ways of not guessing were measured on json-twitter ser, against
-    // 375 MB/s / 167 KB for the reading below:
-    //
-    //     hold only what the call sites already admit  288 MB/s, 174 KB
-    //     hold every candidate                         293 MB/s, 179 KB
-    //     hold nothing                                 287 MB/s, 174 KB
-    //
-    // The first is byte-identical to the last: on the real view these bodies
-    // are never candidates at all, which is the point.
-    //
-    // Keeping a frozen copy to splice from instead — the honest form of "two
-    // bodies for two roles" — was also built and measured: 306 MB/s alone, and
-    // 340 MB/s alongside the hold, i.e. worse than the hold by itself. A
-    // detached copy is code no other pass can reach, so `sroa_param` and `dae`
-    // rewrite a signature under it and it has to be thrown away — on exactly
-    // the functions this is about, and by then the live body has already grown.
-    // A copy that stayed current would have to be walked by every pass that
-    // rewrites a body. Not growing the original costs nothing and gets there.
+    // Measured slower and not worth retrying: holding only what the call sites
+    // already admit (identical output to holding nothing), holding every
+    // candidate, and keeping a frozen copy to splice from so the original could
+    // grow freely — a detached copy is code no other pass can reach, so
+    // `sroa_param` rewrites a signature under it and it has to be discarded.
     let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,

@@ -6,12 +6,11 @@
 // pays is the short arm, which fits. Pricing the body as written keeps the
 // call, and with it a scan loop per key at run time.
 //
-// The ordering matters as much as the price. `write_plain` is small enough to
-// inline into `emit`, and doing so first pushes `emit` back over the budget
-// folded — after which nothing below survives. A callee only inlinable folded
-// is therefore held back from receiving inlining until it has been spliced
-// itself; that hold is what a stdlib `#[inline(never)]` on the leaf otherwise
-// applies by hand.
+// Ordering matters as much as the price. `write_plain` is small enough to
+// inline into `emit`, and doing so first pushes `emit` back over the folded
+// budget — after which nothing below survives. So a callee inlinable only
+// folded receives no inlining itself, which is what a stdlib
+// `#[inline(never)]` on the leaf otherwise applies by hand.
 
 use { println, Stdout } from "core:cli";
 
