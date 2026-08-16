@@ -972,23 +972,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         head.decl() == Some(written)
     }
 
-    /// How to spell the scrutinee's type in a pattern-mismatch message.
-    ///
-    /// The bare rendering is what the programmer would recognise, except in the
-    /// case that produced the mismatch: two declarations of the same name, which
-    /// render identically and leave the message saying `expected 'Pair', found
-    /// 'Pair'`. There the declaring module is what separates them.
-    fn pattern_mismatch_found(&self, type_id: TypeId, written: &str) -> String {
-        let rendered = self.tysys.type_table.borrow().type_name(type_id);
-        if rendered != written {
-            return rendered;
-        }
-        match self.tysys.type_def(type_id) {
-            Some(def) => format!("{}/{rendered}", self.tysys.resolutions.defs().module(def)),
-            None => rendered,
-        }
-    }
-
     fn resolve_let_pattern_inner(
         &mut self,
         pattern: &ast::Pattern,
@@ -1090,10 +1073,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     (Some(written), Some(head)) => {
                         let matches = self.pattern_qualifier_matches(*type_name_id, head);
                         if !matches {
-                            let found = self.pattern_mismatch_found(type_id, written);
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: written.clone(),
-                                found,
+                                found: self.tysys.type_table.borrow().type_name(type_id),
                                 span: *pat_span,
                             });
                         }
@@ -1743,10 +1725,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let ResolvedType::Struct { def, .. } = resolved
                         && !self.pattern_qualifier_matches(*type_name_id, def)
                     {
-                        let found = self.pattern_mismatch_found(scrutinee_type, expected_name);
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: expected_name.clone(),
-                            found,
+                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                             span: *pat_span,
                         });
                         type_name_matches = false;

@@ -3,6 +3,10 @@
 // own `Pair` with the fields reversed; naming it in a pattern whose scrutinee
 // is the *imported* `Pair` is a mismatch, not a silent rebinding of `a` and `b`
 // onto the local declaration's field order.
+//
+// Both sides of the message spell `Pair`, which is issue #1807: a type name is
+// qualified only where the bare names collide, in the spec's `MODULE#SYMBOL`
+// notation and across every diagnostic that prints one.
 
 use { make } from "./sub/cross_module_same_name_pattern_dep.wado";
 
@@ -18,7 +22,4 @@ test "a same-named local struct does not answer for an imported scrutinee" {
 }
 
 __DATA__
-{
-  "test": {},
-  "compile_error": "pattern mismatch: expected 'Pair', found './sub/cross_module_same_name_pattern_dep.wado/Pair'"
-}
+{ "test": {}, "compile_error": "pattern mismatch: expected 'Pair', found 'Pair'" }
