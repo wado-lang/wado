@@ -593,12 +593,6 @@ pattern
     : patternRange ('|' patternRange)*
     ;
 
-<<<<<<< HEAD
-||||||| 826557305
-    : patternPrimary ('|' patternPrimary)*
-=======
-// Range sub-patterns: `10..=20`, `'0'..='9'`.
->>>>>>> origin/main
 patternRange
     : patternPrimary (('..<' | '..=') patternPrimary)?
     ;

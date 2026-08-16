@@ -461,7 +461,7 @@ global global:core:prelude/types.wado::__const_obj_22: ref null "core:prelude/ty
 global global:core:prelude/types.wado::__const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 116, 121, 112, 101, 115, 46, 119, 97, 100, 111), used: 23 };
 global global:core:prelude/types.wado::__const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 109, 95, 115, 117, 98, 116, 97, 115, 107, 95, 115, 101, 116, 116, 108, 101, 100), used: 18 };
 
-fn "wasi_filesystem_symlink.wado/run"() with (Stdout, Stderr, Preopens, Descriptor) {
+fn "wasi_filesystem_symlink.wado/run"() with Stdout, Stderr, Preopens, Descriptor {
     let dirs: ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let dir: i32;
     let sym_result: ref null "wasi:filesystem/types.wado//ErrorCode";
@@ -764,7 +764,7 @@ fn "wasi_filesystem_symlink.wado/run"() with (Stdout, Stderr, Preopens, Descript
     "wasi/resource-drop:descriptor"(dir);
 }
 
-fn "wasi_filesystem_symlink.wado/test_link_at"(dir) with (Stdout, Stderr, Descriptor) {
+fn "wasi_filesystem_symlink.wado/test_link_at"(dir) with Stdout, Stderr, Descriptor {
     let link_result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let err: ref "wasi:filesystem/types.wado//ErrorCode";
     let link_stat: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
