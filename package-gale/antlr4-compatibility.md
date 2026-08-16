@@ -43,6 +43,28 @@ trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
 
+### The Unicode version is Gale's, not the jar's
+
+`\p{...}` resolves against the **latest** Unicode Character Database —
+17.0.0 today — and tracking a new UCD release promptly is the standing
+policy, not a migration to schedule.
+
+ANTLR4 does not consult ICU at run time; it ships a property table
+generated when the jar was built, so its Unicode version is frozen at
+that release (4.13.2 is 15.0.0). Gale is therefore ahead of it, and a
+code point assigned since then is classified by Gale and unassigned by
+the jar. **Divergence that traces to the Unicode version is wontfix.**
+Pinning Gale to an old UCD to match a jar would mean mis-classifying
+characters that exist, which is the worse failure by far — and the
+superset rule already covers it: the meaning of a newly assigned code
+point is uniquely determined by the UCD, not invented by Gale.
+
+What this does _not_ excuse is a derivation that disagrees with ANTLR4
+on a code point both versions define. That is a real bug, and
+`scripts/check-unicode-properties.sh` separates the two by regenerating
+the tables at the jar's own version before diffing — see "Oracling the
+Unicode property tables" below.
+
 ### EOF in parse trees
 
 `toStringTree()` prints an explicitly-matched `EOF` as `<EOF>`
@@ -345,6 +367,43 @@ its answer of `ID` is still wrong. Agreement is evidence about the
 stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
+
+#### Oracling the Unicode property tables
+
+`\p{...}` is the one surface where a spot check is not enough: `\P{...}`
+complements whatever `\p` selects, so a table that is merely close
+*admits* code points rather than missing them. It is also the one
+surface that can be compared exactly, because a property's values
+partition the code-point space.
+
+`scripts/antlr4-property-oracle.sh <property> <value>...` synthesizes a
+lexer grammar with one `[\p{PROPERTY=VALUE}]+` rule per value, feeds it
+every Unicode scalar in code-point order, and prints the resulting runs.
+A `+` rule consumes a whole run, so the token stream *is* the jar's own
+range table. `scripts/check-unicode-properties.sh` drives that for every
+property Gale answers and diffs it against Gale's expansion (through the
+real `\p{...}` parse path, in `scripts/check_unicode_properties.wado`).
+
+Two facts make the diff meaningful:
+
+- **The jar carries a frozen Unicode snapshot**, while Gale tracks the
+  latest UCD ("The Unicode version is Gale's, not the jar's" above).
+  4.13.2 is Unicode 15.0.0 — measured, by diffing whole properties
+  against successive UCD versions until one matched exactly. Compare
+  like-for-like (`scripts/regen-unicode-tables.sh 15.0.0`) or every
+  Unicode change since then reads as a failure.
+- **ANTLR4's `Property=Value` surface is narrower than the UCD's.** It
+  rejects group letters (`\p{gc=L}`, though bare `\p{L}` is fine) and
+  values with no code points (`\p{sc=Hrkt}`), and it matches alias
+  spellings case-insensitively but underscore-sensitively
+  (`\p{Line_Break=Alphabetic}` yes, `\p{LineBreak=Alphabetic}` no).
+  Gale's UAX #44 loose matching accepts a superset of that, which is
+  allowed: the meaning is uniquely determined. The oracle drops what the
+  jar rejects and names each one on stderr.
+
+Java is needed only when running the check, never in CI; what CI keeps
+is the character-level pins in `src/g4/parser_test.wado`, chosen from
+the properties whose default derivation would otherwise fail silently.
 
 ### Stage C — action-body translation
 

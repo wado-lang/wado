@@ -1,0 +1,201 @@
+#!/usr/bin/env wado
+//! Compare Gale's `\p{PROPERTY=VALUE}` expansion against a table the published
+//! ANTLR4 jar produced. `scripts/check-unicode-properties.sh` drives this;
+//! `scripts/antlr4-property-oracle.sh` writes the table it reads.
+//!
+//! The oracle's table is exact over the whole code-point space, so this is a
+//! set comparison rather than a spot check — which is what `\P{...}` needs,
+//! since it complements whatever `\p` selects.
+//!
+//! Both sides are clipped to the Unicode scalars: the oracle cannot feed a
+//! surrogate through a lexer, and Gale drops them when a property claims one.
+
+use { args, print, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { parse } from "../src/g4/parser.wado";
+use { CharClass, CharRange, LexerElement } from "../src/ir.wado";
+
+global SURROGATE_FIRST: i32 = 0xD800;
+global SURROGATE_LAST: i32 = 0xDFFF;
+
+/// One value of the property and the ranges the oracle gave it, in the order
+/// the table first named it.
+struct ValueRanges {
+    value: String,
+    ranges: List<[i32, i32]>,
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    let arguments = args();
+    if arguments.len() != 2 {
+        eprintln(
+            "usage: check_unicode_properties <property> <table.tsv>   (the table comes from the preopened directory)",
+        );
+        exit(1);
+    }
+    let property = arguments[0];
+    let table = read_file(&arguments[1]);
+
+    let mut failures = 0;
+    let entries = parse_table(&table, &mut failures);
+    for let entry of &entries {
+        let expected = merge_ranges(&clip_all(&entry.ranges));
+        if let Some(ranges) = gale_ranges(&property, &entry.value) {
+            let actual = merge_ranges(&clip_all(&ranges));
+            if expected != actual {
+                failures += 1;
+                report(&property, &entry.value, &expected, &actual);
+            }
+        } else {
+            failures += 1;
+            println(`${property}=${entry.value}: Gale rejects the escape`);
+        }
+    }
+    if failures > 0 {
+        println(`${property}: ${failures} of ${entries.len()} values differ from the jar`);
+        exit(1);
+    }
+    println(`${property}: ${entries.len()} values match the jar exactly`);
+}
+
+/// Gale's own answer for `\p{property=value}`, taken through the real parser
+/// so the comparison covers escape parsing and table lookup, not just tables.
+/// Null when Gale rejects the escape outright — an unsupported property is a
+/// different finding from a set that disagrees.
+fn gale_ranges(property: &String, value: &String) -> Option<List<[i32, i32]>> {
+    let source = `lexer grammar T;\nX : [\\p{${*property}=${*value}}] ;`;
+    let parsed = parse(source);
+    if let Err(_) = &parsed {
+        return null;
+    }
+    let grammar = parsed.unwrap();
+    if let CharClass(cc) = grammar.lexer_rules[0].body[0].elements[0] {
+        let mut out: List<[i32, i32]> = [];
+        for let r of &cc.ranges {
+            out.push([r.start as i32, r.end as i32]);
+        }
+        return Option::Some(out);
+    }
+    panic(`\\p{${*property}=${*value}} did not parse into a character class`);
+}
+
+/// `VALUE<TAB>START-END` lines, grouped by value in first-seen order. A `?`
+/// value is the oracle reporting a span no value claimed.
+fn parse_table(content: &String, failures: &mut i32) -> List<ValueRanges> with Stdout {
+    let mut out: List<ValueRanges> = [];
+    for let line of content.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let mut fields = line.split("\t");
+        let value = fields.next().unwrap();
+        let mut bounds = fields.next().unwrap().split("-");
+        let start = i32::from_str_hex(&bounds.next().unwrap()).unwrap();
+        let end = i32::from_str_hex(&bounds.next().unwrap()).unwrap();
+        if value == "?" {
+            *failures += 1;
+            println(`  hole: ${start:X}-${end:X} is claimed by no value`);
+            continue;
+        }
+        let mut found = -1;
+        for let mut i = 0; i < out.len(); i += 1 {
+            if out[i].value == value {
+                found = i;
+            }
+        }
+        if found < 0 {
+            out.push(ValueRanges {
+                value,
+                ranges: [
+                    [start, end],
+                ],
+            });
+        } else {
+            out[found].ranges.push([start, end]);
+        }
+    }
+    return out;
+}
+
+fn report(property: &String, value: &String, expected: &List<[i32, i32]>, actual: &List<[i32, i32]>) with Stdout {
+    println(`${*property}=${*value}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`);
+    let mut shown = 0;
+    for let mut i = 0; i < i32::max(expected.len(), actual.len()) && shown < 4; i += 1 {
+        let e = if i < expected.len() { `${expected[i].0:X}-${expected[i].1:X}` } else { "—" };
+        let a = if i < actual.len() { `${actual[i].0:X}-${actual[i].1:X}` } else { "—" };
+        if e != a {
+            println(`    [${i}] jar ${e} vs gale ${a}`);
+            shown += 1;
+        }
+    }
+}
+
+/// Drop the surrogate half of every range; a range wholly inside the surrogate
+/// block disappears, which is what "matches nothing" looks like here.
+///
+/// Both sides go through this, so both split at the surrogate block. Gale
+/// keeps `D7FC-F8FF` as one range — no `char` in between is a surrogate, so
+/// splitting would churn the emitted pattern — while the oracle's run breaks
+/// there because its input skips them. Same set, two spellings.
+fn clip_all(ranges: &List<[i32, i32]>) -> List<[i32, i32]> {
+    let mut out: List<[i32, i32]> = [];
+    for let r of ranges {
+        push_clipped(&mut out, r.0, i32::min(r.1, SURROGATE_FIRST - 1));
+        push_clipped(&mut out, i32::max(r.0, SURROGATE_LAST + 1), r.1);
+    }
+    return out;
+}
+
+fn push_clipped(out: &mut List<[i32, i32]>, lo: i32, hi: i32) {
+    if lo <= hi {
+        out.push([lo, hi]);
+    }
+}
+
+fn merge_ranges(ranges: &List<[i32, i32]>) -> List<[i32, i32]> {
+    let mut sorted = *ranges;
+    sorted.sort_by(|a: &[i32, i32], b: &[i32, i32]| a.0.cmp(&b.0));
+    let mut out: List<[i32, i32]> = [];
+    for let r of &sorted {
+        if !out.is_empty() && out[out.len() - 1].1 + 1 >= r.0 {
+            out[out.len() - 1] = [
+                out[out.len() - 1].0,
+                i32::max(out[out.len() - 1].1, r.1),
+            ];
+        } else {
+            out.push(*r);
+        }
+    }
+    return out;
+}
+
+fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("check_unicode_properties: no preopened directories available");
+        exit(1);
+    }
+    let opened = dirs[0].0.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait();
+    if let Err(_) = opened {
+        eprintln(`check_unicode_properties: cannot open file: ${*path}`);
+        exit(1);
+    }
+    let file = opened.unwrap();
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let mut bytes: List<u8> = [];
+    loop {
+        let chunk = read_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let b of chunk {
+            bytes.push(b);
+        }
+    }
+    return String::from_utf8_unchecked(bytes);
+}

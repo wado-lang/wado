@@ -52,6 +52,7 @@ use {
     script_ranges,
     block_ranges,
     binary_property_ranges,
+    enumerated_property_ranges,
 } from "./unicode_tables.wado";
 
 pub struct G4Parser {
@@ -1533,7 +1534,9 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// `Inscriptional_*` scripts) is answered by an earlier table. The POSIX names
 /// go first so their meaning stays the measured one even if a future UCD grows
 /// a property that spells the same. The `Property=Value` form names its table
-/// instead.
+/// instead, and the enumerated properties (`lb=`, `bc=`, `gcb=`, …) are
+/// reachable only that way — their values are single letters that a bare-name
+/// lookup would collide with.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
@@ -1547,7 +1550,7 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
             "script" | "sc" => push_property_ranges(&script_ranges(&value), ranges),
             "block" | "blk" => push_property_ranges(&block_ranges(&value), ranges),
             "emojipresentation" => expand_emoji_presentation(&value, ranges),
-            _ => false,
+            _ => push_property_ranges(&enumerated_property_ranges(&head, &value), ranges),
         };
     }
     if expand_posix_property(&key, ranges) {

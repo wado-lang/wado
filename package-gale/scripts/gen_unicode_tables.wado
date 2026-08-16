@@ -62,6 +62,105 @@ global GROUPS: List<[String, String]> = [
     ["C", "Other"],
 ];
 
+/// The enumerated `Property=Value` names ANTLR4 answers beyond
+/// `General_Category`, `Script` and `Block`, each with the UCD file it is read
+/// from and its `PropertyValueAliases.txt` prefix.
+///
+/// `field` is where the value sits on a data line — `ArabicShaping.txt` writes
+/// the Joining_Type third. `gc_default` marks the one file stating its default
+/// as a rule over `General_Category` rather than as an `@missing` line.
+global ENUMERATED: List<EnumeratedProperty> = [
+    EnumeratedProperty {
+        name: "Bidi_Class",
+        prefix: "bc",
+        file: "extracted/DerivedBidiClass.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty { name: "Line_Break", prefix: "lb", file: "LineBreak.txt", field: 1, gc_default: false },
+    EnumeratedProperty {
+        name: "Word_Break",
+        prefix: "WB",
+        file: "auxiliary/WordBreakProperty.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "Sentence_Break",
+        prefix: "SB",
+        file: "auxiliary/SentenceBreakProperty.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "Grapheme_Cluster_Break",
+        prefix: "GCB",
+        file: "auxiliary/GraphemeBreakProperty.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "Numeric_Type",
+        prefix: "nt",
+        file: "extracted/DerivedNumericType.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "East_Asian_Width",
+        prefix: "ea",
+        file: "EastAsianWidth.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "Hangul_Syllable_Type",
+        prefix: "hst",
+        file: "HangulSyllableType.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty { name: "Joining_Type", prefix: "jt", file: "ArabicShaping.txt", field: 2, gc_default: true },
+    EnumeratedProperty {
+        name: "Indic_Syllabic_Category",
+        prefix: "InSC",
+        file: "IndicSyllabicCategory.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "Decomposition_Type",
+        prefix: "dt",
+        file: "extracted/DerivedDecompositionType.txt",
+        field: 1,
+        gc_default: false,
+    },
+    EnumeratedProperty {
+        name: "Vertical_Orientation",
+        prefix: "vo",
+        file: "VerticalOrientation.txt",
+        field: 1,
+        gc_default: false,
+    },
+];
+
+struct EnumeratedProperty {
+    name: String,
+    prefix: String,
+    file: String,
+    field: i32,
+    gc_default: bool,
+}
+
+/// One emitted `<property>_ranges` table: the folded property names that
+/// select it, and one entry per value.
+struct EnumeratedTable {
+    name: String,
+    fn_name: String,
+    keys: List<String>,
+    entries: List<NamedRanges>,
+}
+
 /// One `START;NAME;CATEGORY` run of the UCD, with the `, First>` / `, Last>`
 /// pairs already joined into a single range.
 struct CategoryRun {
@@ -95,8 +194,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let version = arguments[0];
 
     let categories = parse_runs(&read_file(&"UnicodeData.txt"));
-    let scripts = parse_prop_runs(&read_file(&"Scripts.txt"));
-    let blocks = parse_prop_runs(&read_file(&"Blocks.txt"));
+    let value_aliases = read_file(&"PropertyValueAliases.txt");
+    let script_aliases = parse_alias_lines(&value_aliases, &"sc");
+    let block_aliases = parse_alias_lines(&value_aliases, &"blk");
+    // `Script` and `Block` are enumerated properties too: their files leave the
+    // default value (`Unknown`, `No_Block`) to an `@missing` line, and ANTLR4
+    // answers `\p{sc=Zzzz}` / `\p{blk=NB}` with it.
+    let scripts = partition_runs(&read_file(&"Scripts.txt"), 1, false, &categories, &script_aliases, &"Script");
+    let blocks = partition_runs(&read_file(&"Blocks.txt"), 1, false, &categories, &block_aliases, &"Block");
     let mut binary = parse_prop_runs(&read_file(&"PropList.txt"));
     for let run of parse_prop_runs(&read_file(&"DerivedCoreProperties.txt")) {
         binary.push(run);
@@ -107,8 +212,25 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         binary.push(run);
     }
     let prop_aliases = parse_alias_lines(&read_file(&"PropertyAliases.txt"), &"");
-    let script_aliases = parse_alias_lines(&read_file(&"PropertyValueAliases.txt"), &"sc");
-    let block_aliases = parse_alias_lines(&read_file(&"PropertyValueAliases.txt"), &"blk");
+
+    let mut enumerated: List<EnumeratedTable> = [];
+    for let prop of &ENUMERATED {
+        let aliases = parse_alias_lines(&value_aliases, &prop.prefix);
+        let runs = partition_runs(
+            &read_file(&prop.file),
+            prop.field,
+            prop.gc_default,
+            &categories,
+            &aliases,
+            &prop.name,
+        );
+        enumerated.push(EnumeratedTable {
+            name: prop.name,
+            fn_name: table_fn_name(&prop.name),
+            keys: property_keys(&prop_aliases, &prop.name),
+            entries: named_ranges(&runs, &aliases),
+        });
+    }
 
     print(
         emit_module(
@@ -116,9 +238,39 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             &named_ranges(&scripts, &script_aliases),
             &named_ranges(&blocks, &block_aliases),
             &named_ranges(&binary, &prop_aliases),
+            &enumerated,
             &version,
         ),
     );
+}
+
+/// `Bidi_Class` -> `bidi_class_ranges`.
+fn table_fn_name(property: &String) -> String {
+    let mut out = String::with_capacity(property.len() + 7);
+    for let c of property.chars() {
+        out.push(c.to_ascii_lowercase());
+    }
+    out.push_str(&"_ranges");
+    return out;
+}
+
+/// The folded names that select one property's table (`lb`, `linebreak`),
+/// from `PropertyAliases.txt`.
+fn property_keys(aliases: &List<NamedRanges>, property: &String) -> List<String> {
+    for let alias of aliases {
+        if !names_contain_folded(alias, property) {
+            continue;
+        }
+        let mut keys: List<String> = [];
+        for let n of &alias.names {
+            let key = normalize_name(n);
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        return keys;
+    }
+    panic(`PropertyAliases.txt names no property '${*property}'`);
 }
 
 /// Property matching ignores case, `_`, `-` and spaces (UAX #44 loose
@@ -163,15 +315,172 @@ fn parse_prop_runs(content: &String) -> List<PropRun> {
         if fields.len() != 2 || fields[1].is_empty() {
             continue;
         }
-        let mut bounds = fields[0].split("..");
-        let start = i32::from_str_hex(&bounds.next().unwrap()).unwrap();
-        let end = match bounds.next() {
-            Some(hi) => i32::from_str_hex(&hi).unwrap(),
-            None => start,
-        };
-        runs.push(PropRun { start, end, value: fields[1] });
+        let bounds = parse_bounds(&fields[0]);
+        runs.push(PropRun { start: bounds.0, end: bounds.1, value: fields[1] });
     }
     return runs;
+}
+
+/// Like `parse_prop_runs` but taking the value from `field`, for a file whose
+/// lines carry more than the range and one value — `ArabicShaping.txt` writes
+/// `CODE; NAME; JOINING_TYPE; JOINING_GROUP`.
+fn parse_prop_runs_at(content: &String, field: i32) -> List<PropRun> {
+    let mut runs: List<PropRun> = [];
+    for let line of content.lines() {
+        let body = strip_comment(&line);
+        if body.is_empty() {
+            continue;
+        }
+        let mut fields: List<String> = [];
+        for let f of body.split(";") {
+            fields.push(f.trim());
+        }
+        if fields.len() <= field || fields[field].is_empty() {
+            continue;
+        }
+        let bounds = parse_bounds(&fields[0]);
+        runs.push(PropRun { start: bounds.0, end: bounds.1, value: fields[field] });
+    }
+    return runs;
+}
+
+/// `START` or `START..END` in hex.
+fn parse_bounds(text: &String) -> [i32, i32] {
+    let mut bounds = text.split("..");
+    let start = i32::from_str_hex(&bounds.next().unwrap()).unwrap();
+    let end = match bounds.next() {
+        Some(hi) => i32::from_str_hex(&hi).unwrap(),
+        None => start,
+    };
+    return [start, end];
+}
+
+/// Every code point's value for one enumerated property, as runs covering the
+/// whole space. Explicit lines win; then the `@missing` lines, widest first,
+/// since `DerivedBidiClass.txt` gives whole blocks their own default; then, for
+/// `ArabicShaping.txt` alone, its `General_Category` rule.
+///
+/// An enumerated property's values partition the code-point space, so a code
+/// point the file does not list still has a value — and `\P{...}` complements
+/// what `\p` selects, so leaving the default out would admit code points
+/// rather than merely miss them. The partition is asserted, not assumed.
+fn partition_runs(
+    content: &String,
+    field: i32,
+    gc_default: bool,
+    categories: &List<CategoryRun>,
+    aliases: &List<NamedRanges>,
+    property: &String,
+) -> List<PropRun> {
+    let mut names: List<String> = [];
+    let mut slot: List<i32> = List::filled(CODE_POINT_MAX + 1, 0);
+    for let run of parse_prop_runs_at(content, field) {
+        let id = intern(&mut names, &canonical_value(aliases, &run.value));
+        fill(&mut slot, run.start, run.end, id);
+    }
+
+    // The defaults form their own layer: a narrower `@missing` line overrides
+    // a wider one (`DerivedBidiClass.txt` gives whole blocks their own
+    // default), but no `@missing` line overrides a code point the file lists.
+    let missing = parse_missing(content);
+    assert missing.is_empty() == gc_default, `${*property}: expected either @missing lines or the General_Category default rule, not both or neither`;
+    let mut widest = missing;
+    widest.sort_by(|a: &PropRun, b: &PropRun| (b.end - b.start).cmp(&(a.end - a.start)));
+    let mut default_slot: List<i32> = List::filled(CODE_POINT_MAX + 1, 0);
+    for let run of &widest {
+        let id = intern(&mut names, &canonical_value(aliases, &run.value));
+        fill(&mut default_slot, run.start, run.end, id);
+    }
+    for let mut c = 0; c <= CODE_POINT_MAX; c += 1 {
+        if slot[c] == 0 {
+            slot[c] = default_slot[c];
+        }
+    }
+
+    if gc_default {
+        // ArabicShaping.txt: a code point it does not list is Joining_Type=T
+        // when its General_Category is Mn, Me or Cf, and U otherwise.
+        let transparent = intern(&mut names, &canonical_value(aliases, &"T"));
+        let non_joining = intern(&mut names, &canonical_value(aliases, &"U"));
+        let mut is_transparent: List<bool> = List::filled(CODE_POINT_MAX + 1, false);
+        for let run of categories {
+            if run.category != "Mn" && run.category != "Me" && run.category != "Cf" {
+                continue;
+            }
+            for let mut c = run.start; c <= run.end; c += 1 {
+                is_transparent[c] = true;
+            }
+        }
+        for let mut c = 0; c <= CODE_POINT_MAX; c += 1 {
+            if slot[c] == 0 {
+                slot[c] = if is_transparent[c] { transparent } else { non_joining };
+            }
+        }
+    }
+
+    let mut runs: List<PropRun> = [];
+    let mut start = 0;
+    for let mut c = 0; c <= CODE_POINT_MAX; c += 1 {
+        assert slot[c] != 0, `${*property}: U+${c:X} has no value; the values do not partition the code-point space`;
+        if c == CODE_POINT_MAX || slot[c + 1] != slot[c] {
+            runs.push(PropRun { start, end: c, value: names[slot[c] - 1] });
+            start = c + 1;
+        }
+    }
+    return runs;
+}
+
+fn fill(slot: &mut List<i32>, start: i32, end: i32, id: i32) {
+    for let mut c = start; c <= end; c += 1 {
+        slot[c] = id;
+    }
+}
+
+/// The alias row's canonical name, so a data line's `AL` and an `@missing`
+/// line's `Arabic_Letter` intern as one value instead of splitting the
+/// property in two.
+fn canonical_value(aliases: &List<NamedRanges>, value: &String) -> String {
+    for let alias of aliases {
+        if names_contain_folded(alias, value) {
+            return alias.names[0];
+        }
+    }
+    return *value;
+}
+
+/// 1-based so 0 stays free as "no value yet".
+fn intern(names: &mut List<String>, value: &String) -> i32 {
+    for let mut i = 0; i < names.len(); i += 1 {
+        if names[i] == *value {
+            return i + 1;
+        }
+    }
+    names.push(*value);
+    return names.len();
+}
+
+/// `# @missing: START..END; VALUE` — the value a code point the file does not
+/// list takes. Most files carry one line covering the whole space;
+/// `DerivedBidiClass.txt` adds narrower ones for the RTL and Arabic blocks.
+fn parse_missing(content: &String) -> List<PropRun> {
+    let mut out: List<PropRun> = [];
+    for let line of content.lines() {
+        if !line.trim().starts_with("#") {
+            continue;
+        }
+        let mut halves = line.split("@missing:");
+        halves.next();
+        if let Some(rest) = halves.next() {
+            let mut fields = rest.split(";");
+            let bounds = parse_bounds(&fields.next().unwrap().trim());
+            out.push(PropRun {
+                start: bounds.0,
+                end: bounds.1,
+                value: fields.next().unwrap().trim(),
+            });
+        }
+    }
+    return out;
 }
 
 /// Alias lines as `CANONICAL -> [alias, ...]`. `PropertyAliases.txt` is
@@ -206,6 +515,16 @@ fn parse_alias_lines(content: &String, prefix: &String) -> List<NamedRanges> {
     return out;
 }
 
+fn names_contain_folded(entry: &NamedRanges, name: &String) -> bool {
+    let folded = normalize_name(name);
+    for let n of &entry.names {
+        if normalize_name(n) == folded {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Group `runs` by value, in first-seen order, attaching the aliases the
 /// canonical name carries. Ranges are sorted and merged so the emitted table
 /// is one entry per contiguous span.
@@ -237,18 +556,23 @@ fn named_ranges(runs: &List<PropRun>, aliases: &List<NamedRanges>) -> List<Named
             }
         }
         let mut names: List<String> = [*value];
+        let mut matched = 0;
         for let alias of aliases {
-            // Blocks.txt spells a block with spaces where the alias file uses
-            // underscores, so canonical names meet as folded keys.
-            if normalize_name(&alias.names[0]) != normalize_name(value) {
+            // A data file writes whichever alias it likes — `Scripts.txt` the
+            // long name, `LineBreak.txt` the short one — so the row is found by
+            // any of its names, folded (Blocks.txt spells a block with spaces
+            // where the alias file uses underscores).
+            if !names_contain_folded(alias, value) {
                 continue;
             }
+            matched += 1;
             for let n of &alias.names {
                 if !names.contains(n) {
                     names.push(*n);
                 }
             }
         }
+        assert matched <= 1, `two alias rows both name '${*value}'; the table key would be ambiguous`;
         out.push(NamedRanges { names, ranges: merged });
     }
     return out;
@@ -382,6 +706,7 @@ fn emit_module(
     scripts: &List<NamedRanges>,
     blocks: &List<NamedRanges>,
     binary: &List<NamedRanges>,
+    enumerated: &List<EnumeratedTable>,
     version: &String,
 ) -> String {
     let mut w = CodeWriter::with_capacity(1024 * 1024);
@@ -412,7 +737,46 @@ fn emit_module(
         &"/// Ranges of one binary property (`White_Space`, `Pattern_Syntax`, …), or\n/// an empty string when the name is not one.",
         binary,
     );
+    for let table of enumerated {
+        w.blank();
+        emit_named_table(
+            &mut w,
+            &table.fn_name,
+            &`/// Ranges of one \`${table.name}\` value, or an empty string when the name\n/// is not one of its values.`,
+            &table.entries,
+        );
+    }
+    w.blank();
+    emit_enumerated_dispatch(&mut w, enumerated);
     return w.to_string();
+}
+
+/// Emit the `Property=Value` entry point: the property selects a table, which
+/// then answers the value. One flat table keyed by `property=value` would
+/// carry the cross product of both alias sets instead.
+fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) {
+    w.line(&"/// Ranges of one enumerated property's value (`\\p{lb=AL}`), or an empty");
+    w.line(&"/// string when the property is not one of these or the value is not one of");
+    w.line(&"/// its own. `General_Category`, `Script` and `Block` have their own tables.");
+    let mut spec = FnSpec::new(&"enumerated_property_ranges", Vis::Pub);
+    spec.add_param(&"property", &"&String").add_param(&"value", &"&String").set_return_type(&"String");
+    spec.emit_begin(w);
+    w.begin(&"return match *property");
+    for let table of tables {
+        let mut keys = String::with_capacity(64);
+        let mut first = true;
+        for let key of &table.keys {
+            if !first {
+                keys.push_str(&" | ");
+            }
+            first = false;
+            keys.push_str(&`${str_lit(*key)}`);
+        }
+        w.line(&`${keys} => ${table.fn_name}(value),`);
+    }
+    w.line(&`_ => ${str_lit("")},`);
+    w.end_with(&";");
+    w.end();
 }
 
 /// Emit `fn <name>(name: &String) -> String` as a match over folded keys. A

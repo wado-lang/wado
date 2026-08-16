@@ -10,7 +10,7 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 
 ## Order of attack
 
-1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below.
+1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. Empty right now.
 2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-07-30 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
 3. **Stage C**, starting with the lexer command surface for a superClass base op: the largest block, and the gate for drop-in ANTLR4 replacement.
 4. Everything else, in whatever order a live case surfaces it.
@@ -27,11 +27,7 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] `\p{...}` reaches the UCD and the POSIX surface, but not ANTLR4's enumerated properties beyond `General_Category=` / `Script=` / `Block=`. Measured against the published jar over 42 candidates:
-  - The gap is exactly twelve `Property=Value` names: `Bidi_Class`, `Line_Break`, `Word_Break`, `Sentence_Break`, `Grapheme_Cluster_Break`, `Numeric_Type`, `East_Asian_Width`, `Hangul_Syllable_Type`, `Joining_Type`, `Indic_Syllabic_Category`, `Decomposition_Type`, `Vertical_Orientation`.
-  - Each needs a UCD input `scripts/regen-unicode-tables.sh` does not fetch (`LineBreak.txt`, `auxiliary/*.txt`, `EastAsianWidth.txt`, …) and a new table. They partition the whole code-point space, so the 159 KB of tables grows materially.
-  - Not a gap, so no re-investigation: ANTLR4 itself rejects `\p{LC}`, `\p{Cased_Letter}`, `\p{Punct}`, `\p{Word}`, `\p{Script_Extensions=}`, `\p{Age=}` and `\p{Canonical_Combining_Class=}`.
-  - No corpus grammar needs any of it — the two real-world lexers use general categories only, and `RustLexer.g4`'s ICU-looking lines are comments.
+Empty right now. The last entry — the enumerated `\p{Property=Value}` surface — closed against `scripts/check-unicode-properties.sh`, which is the shape a soundness claim here wants: a whole-space diff against the jar rather than a spot check.
 
 ### Pipeline and tooling correctness
 

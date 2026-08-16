@@ -2112,6 +2112,114 @@ X : [\\p{EmojiPresentation=Text}] ;");
     assert !class_admits(&not_emoji, '\u{1F600}');
 }
 
+// The enumerated `Property=Value` names beyond `gc=` / `sc=` / `blk=`. Every
+// character below was measured against the published jar; `\p{...}` and the
+// whole-space diff behind it live in `scripts/check-unicode-properties.sh`.
+//
+// Each of these properties partitions the code-point space, so an unassigned
+// code point still has a value. The default-value cases are the ones that
+// break if the `@missing` derivation is dropped — a table built from the
+// listed lines alone answers them wrongly rather than not at all.
+
+test "Line_Break takes both alias spellings and its default value" {
+    let alphabetic = class_of(&"grammar Test;
+X : [\\p{Line_Break=Alphabetic}] ;");
+    assert class_admits(&alphabetic, 'A');
+    assert !class_admits(&alphabetic, '0'), "a digit is lb=NU";
+    assert class_of(&"grammar Test;
+X : [\\p{lb=AL}] ;").ranges == alphabetic.ranges, "the short spelling names the same set";
+
+    let unknown = class_of(&"grammar Test;
+X : [\\p{lb=XX}] ;");
+    assert class_admits(&unknown, '\u{0378}'), "U+0378 is unassigned, so it takes the @missing default";
+    assert !class_admits(&unknown, 'A');
+    assert !class_admits(&unknown, '\u{3400}'), "an unassigned CJK ideograph is lb=ID, which the file lists";
+}
+
+test "Bidi_Class defaults per block, not globally" {
+    let arabic_letter = class_of(&"grammar Test;
+X : [\\p{bc=AL}] ;");
+    assert class_admits(&arabic_letter, 'ا'), "U+0627 is listed";
+    assert class_admits(&arabic_letter, '\u{08B5}'), "unassigned inside 0860..08FF, whose own default is AL";
+
+    let right_to_left = class_of(&"grammar Test;
+X : [\\p{Bidi_Class=Right_To_Left}] ;");
+    assert class_admits(&right_to_left, '\u{0590}'), "unassigned inside 0590..05FF, whose default is R";
+    assert !class_admits(&right_to_left, 'A');
+
+    let left_to_right = class_of(&"grammar Test;
+X : [\\p{bc=L}] ;");
+    assert class_admits(&left_to_right, 'A');
+    assert class_admits(&left_to_right, '\u{0378}'), "unassigned outside every block default";
+    assert !class_admits(&left_to_right, '\u{0590}');
+}
+
+test "Joining_Type defaults through General_Category" {
+    // ArabicShaping.txt states its default as a rule rather than an @missing
+    // line: unlisted is T for Mn / Me / Cf, U for everything else.
+    let transparent = class_of(&"grammar Test;
+X : [\\p{jt=T}] ;");
+    assert class_admits(&transparent, '\u{0300}'), "COMBINING GRAVE ACCENT is Mn and unlisted";
+    assert class_admits(&transparent, '\u{00AD}'), "SOFT HYPHEN is Cf and unlisted";
+    assert !class_admits(&transparent, 'A');
+
+    let non_joining = class_of(&"grammar Test;
+X : [\\p{Joining_Type=Non_Joining}] ;");
+    assert class_admits(&non_joining, 'A');
+    assert !class_admits(&non_joining, '\u{0300}');
+
+    let dual = class_of(&"grammar Test;
+X : [\\p{jt=D}] ;");
+    assert class_admits(&dual, 'ب'), "U+0628 joins on both sides";
+    assert !class_admits(&dual, 'ا'), "U+0627 is right-joining";
+}
+
+test "the remaining enumerated properties answer their own values" {
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{gcb=LVT}] ;"), '\u{AC01}'), "U+AC01 is a Hangul LVT syllable";
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{hst=LVT}] ;"), '\u{AC01}');
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{WB=XX}] ;"), '!'), "an exclamation mark is Word_Break=Other, the default value";
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{SB=LO}] ;"), 'a'), "a lowercase letter is Sentence_Break=Lower";
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{nt=De}] ;"), '0');
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{Numeric_Type=None}] ;"), 'A'), "the default value covers everything with no numeric value";
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{ea=W}] ;"), '漢');
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{InSC=Bindu}] ;"), '\u{0901}');
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{dt=Font}] ;"), '\u{2102}'), "DOUBLE-STRUCK CAPITAL C is a font variant of C";
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{vo=U}] ;"), '漢');
+    assert class_admits(&class_of(&"grammar Test;
+X : [\\p{vo=R}] ;"), 'A');
+}
+
+test "a script or block with no code points of its own is still a value" {
+    // Both are the property's @missing default rather than a listed line, and
+    // ANTLR4 answers each; a table built from the listed lines alone rejects.
+    let no_script = class_of(&"grammar Test;
+X : [\\p{sc=Zzzz}] ;");
+    assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";
+    assert !class_admits(&no_script, 'A');
+
+    let no_block = class_of(&"grammar Test;
+X : [\\p{blk=NB}] ;");
+    assert class_admits(&no_block, '\u{2FE0}'), "U+2FE0 sits outside every assigned block";
+    assert !class_admits(&no_block, 'A');
+}
+
+test "an unknown enumerated property or value is still rejected" {
+    let bad: List<String> = ["grammar Test;\nX : [\\p{lb=Bogus}] ;", "grammar Test;\nX : [\\p{Bogus_Property=AL}] ;"];
+    for let g of &bad {
+        assert parse(*g) matches { Err(_) }, `expected a parse error for ${*g}`;
+    }
+}
+
 test "a property escape cannot be a bound of a character range" {
     // There is no range from one property to another, so accepting these would
     // mean inventing a meaning — ANTLR4 rejects each with error(182). The

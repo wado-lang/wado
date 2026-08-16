@@ -87,6 +87,14 @@ Real-world grammars can also be oracle-pinned (Stage B′ over the published jar
 
 A `superClass` grammar has no behaviour without its hand-written base class, so `antlr4-oracle.sh` refuses to guess one. Pass `--super tests/grammars/java/<Base>.java`; each of those is the Java twin of a Wado `impl` in the matching driver test, and keeping the pair in sync is what makes the comparison mean anything. `--probe-super` only reports what an input does against a synthesized base — it never yields pinnable output, for the reason in "Oracling a `superClass` grammar" in [`antlr4-compatibility.md`](./antlr4-compatibility.md). `scripts/antlr4-oracle-selftest.sh` pins both paths (needs java; run it after touching the oracle).
 
+The `\p{...}` tables have their own oracle, because `\P` complements what `\p` selects and a table that is merely close admits code points rather than missing them. `scripts/check-unicode-properties.sh` diffs every property Gale answers against the jar over the whole code-point space. The jar's Unicode snapshot is frozen at its build (4.13.2 is 15.0.0), so regenerate to match first:
+
+```sh
+scripts/regen-unicode-tables.sh 15.0.0   # match the jar
+scripts/check-unicode-properties.sh
+scripts/regen-unicode-tables.sh          # back to latest
+```
+
 To add an e2e grammar: drop the `.g4` in `tests/grammars/` (with `// Source:` / `// License:` headers), add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator.
 
 ## Inlined runtime
