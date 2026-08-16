@@ -183,6 +183,11 @@ jobs:
 
       - run: mise run test-wado
 
+      # Reuses the same `wado` build: parses the stdlib + fixture corpus with
+      # both the compiler's parser and `Wado.g4` and fails if the committed
+      # divergence list moved.
+      - run: mise run check-grammar
+
       # Reuses the `wado` build from the step above; `--dry-run` builds every
       # publishable world (catching a package that no longer compiles into a
       # component) without pushing, so no wkg or credentials are needed.

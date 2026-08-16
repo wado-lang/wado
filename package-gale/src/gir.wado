@@ -1131,6 +1131,12 @@ pub struct ScanOptionalLookaheadElement {
     /// shape selects a subset of the surface alt's elements (the
     /// optional sub-elements that are "on" in this shape).
     pub bodies: List<ScanBody>,
+    /// Two signatures can match the same input, so a shape whose body
+    /// fails must fall through to the next rather than skip the whole
+    /// optional. The parse-side twin selects by scanning in that case,
+    /// and the two sides have to resolve the same way — see
+    /// `OptionalShapeLookaheadStrategy::scan_guarded`.
+    pub scan_guarded: bool = false,
 }
 
 // ==========================================================================

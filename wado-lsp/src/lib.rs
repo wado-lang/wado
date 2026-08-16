@@ -643,7 +643,7 @@ impl Engine {
         };
         let mut lexed = wado_compiler::lex(&doc.text);
         let lex_errors = std::mem::take(&mut lexed.errors);
-        let mut parser = wado_compiler::Parser::from_lex(lexed);
+        let mut parser = wado_compiler::Parser::from_lex_no_trivia(lexed);
         parser.parse();
         let lines = text::LineIndex::new(&doc.text);
         lex_errors

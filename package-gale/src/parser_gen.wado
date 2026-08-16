@@ -1734,12 +1734,12 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
     if ole.sigs.is_empty() {
         return;
     }
-    // Shapes are ordered longest-first, and a shape's signature is only a
-    // necessary condition: it stops at the first element that may consume more
-    // than one token, so two shapes can share one. Each shape therefore falls
-    // through to the next when its body fails, rather than skipping the whole
-    // optional — the same longest-match resolution the alternative tournament
-    // uses. A shape that matches breaks out of the chain.
+    // Shapes are ordered longest-first. When two signatures can match the same
+    // input a shape falls through to the next as its body fails, rather than
+    // skipping the whole optional — the same longest-match resolution the
+    // parse side reaches by scanning each shape. When the signatures separate
+    // the shapes, both sides commit to the first that matches, so the chain
+    // must not fall through or the two would pick differently.
     let outer = ctx.next_scan_group();
     let chain_done = `osl_${outer}_done`;
     w.begin(&`${chain_done}:`);
@@ -1761,6 +1761,9 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         w.line(&`break ${chain_done};`);
         w.end();
         w.line(&`pos = ${save_var};`);
+        if !ole.scan_guarded {
+            w.line(&`break ${chain_done};`);
+        }
         w.end();
     }
     w.end();
@@ -6375,24 +6378,13 @@ fn dispatch_claims_every_first_token(
         }
     }
     for let idx of indices {
-        if elements_from_are_nullable(&alts[*idx].elements, skip) {
+        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip) {
             return false;
         }
         for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
             if !claimed.contains(tk) {
                 return false;
             }
-        }
-    }
-    return true;
-}
-
-/// Whether everything from `skip` on can match empty — including `skip` being
-/// past the last element.
-fn elements_from_are_nullable(elements: &List<Element>, skip: i32) -> bool {
-    for let mut i = skip; i < elements.len(); i += 1 {
-        if !is_nullable(&elements[i]) {
-            return false;
         }
     }
     return true;

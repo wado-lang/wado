@@ -149,9 +149,12 @@ last statement may drop it — whatever kind of statement it is:
 ```wado
 fn f() -> i32 {
     let x = 1;
-    x + 1        // no `;` needed on the last statement
+    return x + 1   // no `;` needed on the last statement
 }
 ```
+
+Dropping it does not make the statement an expression: a function that
+returns a value still needs `return`.
 
 A newline never separates statements. There is no automatic semicolon
 insertion, so two statements always need a `;` between them however they are
@@ -169,9 +172,9 @@ unlike Rust, a trailing semicolon does not turn the value into `()`. Write
 `()` to mean `()`:
 
 ```wado
-let a = if c { 1 } else { 2 };     // 1 or 2
-let b = if c { 1; } else { 2; };   // also 1 or 2
-let c = if c { g(); () } else { () };  // ()
+let a = if c { 1 } else { 2 };         // 1 or 2
+let b = if c { 1; } else { 2; };       // also 1 or 2
+let u = if c { g(); () } else { () };  // ()
 ```
 
 Only `if`, `match`, `loop` and labelled blocks produce a block value. A brace

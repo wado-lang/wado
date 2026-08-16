@@ -130,8 +130,8 @@ null // coerce to Option::None
 ```wado
 fn f() -> i32 {
     let x = 1;
-    x + 1               // the last statement may drop its `;`
-}
+    return x + 1        // the last statement may drop its `;`
+}                       // (a value-returning fn still needs `return`)
 
 let x = 1 let y = 2;    // Error: a newline does not separate (no ASI)
 let z = 1;;             // OK: an empty statement, removed by `wado format`

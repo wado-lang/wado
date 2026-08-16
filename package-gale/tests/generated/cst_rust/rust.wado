@@ -16917,12 +16917,30 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Li
 
 fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    if _kind_set_9(p.peek_kind()) {
+    let mut shape_scan_pos: i32 = -1;
+    shape_scan: {
+        let tokens = &p.kinds;
+        let mut pos: i32 = p.pos;
+        pos = scan_simple_path(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { break shape_scan; }
+        if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break shape_scan; }
+        pos += 1;
+        shape_scan_pos = pos;
+    }
+    let mut shape_scan_pos_2: i32 = -1;
+    shape_scan_2: {
+        let tokens = &p.kinds;
+        let mut pos: i32 = p.pos;
+        if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break shape_scan_2; }
+        pos += 1;
+        shape_scan_pos_2 = pos;
+    }
+    if shape_scan_pos >= 0 {
         if _kind_set_19(p.peek_kind()) {
             let simple_path = _parse_simple_path(p, &EMPTY_FOLLOW);
         }
         let pathsep = p.expect(TK_PATHSEP, &EMPTY_SYNC);
-    } else if p.peek_kind() == TK_PATHSEP {
+    } else if shape_scan_pos_2 >= 0 {
         let pathsep = p.expect(TK_PATHSEP, &EMPTY_SYNC);
     }
     let grp_kind = p.peek_kind();

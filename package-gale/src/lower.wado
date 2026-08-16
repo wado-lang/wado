@@ -2357,9 +2357,11 @@ fn lower_scan_optional_lookahead_group(
         sigs.push(sig);
         bodies.push(lower_scan_shape_body(shape, &alt.elements, ctx));
     }
+    let scan_guarded = shape_signatures_collide(&sigs);
     return ScanElement::OptionalLookahead(ScanOptionalLookaheadElement {
         sigs: sigs,
         bodies: bodies,
+        scan_guarded: scan_guarded,
     });
 }
 
@@ -2507,19 +2509,34 @@ fn shape_signature_positions(elem: &Element, ctx: &mut GenContext) -> [List<List
     ];
 }
 
-/// Order-stable rendering of a signature, for equality between shapes. Every
-/// shape's sets come from the same `first_of_element` walk, so equal
-/// signatures render equal.
-fn shape_signature_key(sig: &List<List<String>>) -> String {
-    let mut key = String::new();
-    for let position of sig {
-        for let kind of position {
-            key.push_str(kind);
-            key.push('|');
+/// True when two shapes' signatures can both match one input: at every
+/// position they share, their kind sets overlap. The shorter signature
+/// constrains nothing past its end, so one that is a prefix of another — the
+/// shape it names truncated at a multi-token element — is compatible with it.
+///
+/// Emit renders the shapes as an `if sig0 … else if sig1 …` chain, so a
+/// compatible pair means the chain can commit to a shape whose body does not
+/// match and never reach the one that does.
+fn signatures_can_both_match(a: &List<List<String>>, b: &List<List<String>>) -> bool {
+    let shared = if a.len() < b.len() { a.len() } else { b.len() };
+    for let mut i = 0; i < shared; i += 1 {
+        if !sets_overlap(&a[i], &b[i]) {
+            return false;
         }
-        key.push(';');
     }
-    return key;
+    return true;
+}
+
+/// True when any two of `sigs` can match the same input.
+fn shape_signatures_collide(sigs: &List<List<List<String>>>) -> bool {
+    for let mut i = 0; i < sigs.len(); i += 1 {
+        for let mut j = i + 1; j < sigs.len(); j += 1 {
+            if signatures_can_both_match(&sigs[i], &sigs[j]) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Build the `RuleHeader` shared by every `Rule` variant. The cached
@@ -3778,18 +3795,13 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
         }
         let shapes = compute_shapes_for_alt(elements);
         let mut shape_entries: List<OptionalLookaheadShape> = [];
-        let mut seen_signatures: List<String> = [];
-        let mut scan_guarded = false;
+        let mut signatures: List<List<List<String>>> = [];
         for let shape of &shapes {
             let sig = shape_lookahead_signature_for_alt(shape, elements, ctx);
             if sig.is_empty() {
                 continue;
             }
-            let key = shape_signature_key(&sig);
-            if seen_signatures.contains(&key) {
-                scan_guarded = true;
-            }
-            seen_signatures.push(key);
+            signatures.push(sig);
             shape_entries.push(OptionalLookaheadShape {
                 positions: *shape,
                 sig: sig,
@@ -3802,7 +3814,7 @@ fn try_optional_shape_lookahead(inner: &Element, ctx: &mut GenContext) -> Option
         return Option::Some(RepeatStrategy::OptionalShapeLookahead(
             OptionalShapeLookaheadStrategy {
                 shapes: shape_entries,
-                scan_guarded: scan_guarded,
+                scan_guarded: shape_signatures_collide(&signatures),
             },
         ));
     }

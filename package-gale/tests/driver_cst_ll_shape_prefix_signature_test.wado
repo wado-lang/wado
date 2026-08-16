@@ -1,0 +1,51 @@
+//! Two shapes whose lookahead signatures are in a prefix relation.
+//!
+//! `('=' m? '@' '#')?` enumerates a shape with `m` and one without. The first
+//! truncates at the multi-token `m` to `['=', first(m)]`; the second is
+//! `['=', '@', '#']` in full. Neither is equal to the other, but every input
+//! the second matches the first matches too, so an `if sig0 … else if sig1 …`
+//! chain commits to the shape with `m` and never reaches the one without.
+//!
+//! Shapes are treated as colliding when they can both match one input, not
+//! only when their signatures are equal, so `scan_guarded` fires here. What
+//! still blocks it is the pick order and the storable emitter:
+//!
+//! - `pick_optional_specialised` prefers the k-token prefix when the body has
+//!   a field, and that form decides only whether to enter the *outer*
+//!   optional — each nested optional is left to its own greedy choice.
+//! - Preferring the shape strategy instead routes this alt through
+//!   `gen_op_optional_with_shape_lookahead_storable`, which dispatches the
+//!   Optional op for a present position. `gen_op_dispatch_element` emits
+//!   nothing for a `RepeatOp`, so the shape's body drops the element the shape
+//!   selected. Peeling it the way the transparent twin does re-parents the ops
+//!   into a scope lower did not bake `dedup_base` for, and SQLite's
+//!   `LIMIT expr ((OFFSET | ',') expr)?` then emits two `let expr` in one
+//!   block.
+//!
+//! Closing this needs lower to re-bake the dedup bases for a peeled shape
+//! body, not an emit-side change.
+
+use g from "./grammars/ll_shape_prefix_signature.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_shape_prefix_signature" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+#[TODO]
+test "the shape without the multi-token element" {
+    assert_tree(&"let x = @ # ;", &"(prog (stmt let x = @ # ;))");
+}
+
+test "the shape with it" {
+    assert_tree(&"let x = @ ! @ # ;", &"(prog (stmt let x = (m @ !) @ # ;))");
+}
+
+test "neither shape" {
+    assert_tree(&"let x ;", &"(prog (stmt let x ;))");
+}

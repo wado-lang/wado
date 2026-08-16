@@ -1,0 +1,39 @@
+//! Both sides of the caller-FOLLOW yield gate, in one grammar.
+//!
+//! `a : X Y?` is tail-greedy, and each `stmt` alternative puts a different
+//! continuation after it. The mask the caller threads decides who takes the
+//! `Y`, and `compute_follow_arg` threads one only when it is evidence that the
+//! caller completes:
+//!
+//! - `'keep' a t ';'` — the suffix opens on `t`, which the caller must match,
+//!   so the mask is threaded and `a` yields.
+//! - `'free' a (Y ';')? ';'` — the suffix opens on an optional and the mask
+//!   walk stops there, so it says only that a `Y` *could* start the
+//!   continuation. It is not threaded, and `a` keeps its `Y`.
+//!
+//! The `free` case is the one the narrowing exists for; the `keep` case is the
+//! rejection case that pins the narrowing did not take the repair away.
+
+use g from "./grammars/ll_follow_mask_coverage.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_follow_mask_coverage" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a mandatory continuation takes the token" {
+    assert_tree(&"keep X Y ;", &"(prog (stmt keep (a X) (t Y) ;))");
+}
+
+test "an optional continuation does not" {
+    assert_tree(&"free X Y ;", &"(prog (stmt free (a X Y) ;))");
+}
+
+test "with nothing to compete for, both alternatives parse" {
+    assert_tree(&"free X ;", &"(prog (stmt free (a X) ;))");
+}

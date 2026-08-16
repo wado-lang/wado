@@ -1895,6 +1895,10 @@ impl Parser {
     const MULTI_EFFECT_NEEDS_PARENS: &'static str = "`with` takes one effect bare; parenthesize the row for more than one, \
          as in `with (A, B)`";
 
+    /// Diagnostic for `with ()`.
+    const EMPTY_EFFECT_ROW: &'static str =
+        "`with ()` names no effect; drop the clause, or name the effects the row carries";
+
     /// Read the opening of a `with` row. `Some(true)` when the row is
     /// parenthesized, `Some(false)` for the bare single-item form, `None` when
     /// there is no `with` clause.
@@ -1930,6 +1934,9 @@ impl Parser {
         let mut effects = Vec::new();
         let mut effect_ids = Vec::new();
         let mut stores = Vec::new();
+        if parenthesized && self.check(&TokenKind::RParen) {
+            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
+        }
         loop {
             if parenthesized && self.check(&TokenKind::RParen) {
                 break;
@@ -1953,6 +1960,26 @@ impl Parser {
             return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
         }
         Ok((effects, effect_ids, stores))
+    }
+
+    /// Point a `type F = fn() with A, B;` at the parentheses it is missing.
+    ///
+    /// A bare `with` row is one effect, so the comma belongs to whatever
+    /// encloses the type — except where nothing does. Only a caller that knows
+    /// its type is followed by a terminator rather than a list may ask; inside
+    /// a parameter or generic list the same comma is the list's, and
+    /// `fn(fn() with E, Stdout)` really is a two-parameter function type.
+    fn reject_bare_effect_row_after_type(&mut self, ty: &Type) -> ParseResult<()> {
+        if !self.check(&TokenKind::Comma) {
+            return Ok(());
+        }
+        let Type::Function(f) = ty else {
+            return Ok(());
+        };
+        if f.effects.is_empty() {
+            return Ok(());
+        }
+        Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS))
     }
 
     /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
@@ -1982,6 +2009,9 @@ impl Parser {
         let mut effects = Vec::new();
         let mut effect_ids = Vec::new();
         let mut stores = Vec::new();
+        if parenthesized && self.check(&TokenKind::RParen) {
+            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
+        }
         loop {
             if parenthesized && self.check(&TokenKind::RParen) {
                 break;
@@ -5084,6 +5114,9 @@ impl Parser {
 
         let mut effects = Vec::new();
         let mut effect_ids = Vec::new();
+        if parenthesized && self.check(&TokenKind::RParen) {
+            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
+        }
         loop {
             if parenthesized && self.check(&TokenKind::RParen) {
                 break;
@@ -5446,6 +5479,7 @@ impl Parser {
         }
         self.expect(&TokenKind::Eq)?;
         let ty = self.parse_type()?;
+        self.reject_bare_effect_row_after_type(&ty)?;
         // Span through the `;`, not just the `type` keyword, so the RHS type
         // node can't steal a trailing comment.
         let end_span = self.expect(&TokenKind::Semicolon)?.span;
@@ -8092,6 +8126,50 @@ line 2
             "the diagnostic must point at the missing parentheses, got {:?}",
             err.message
         );
+    }
+
+    /// `with ()` names no effect. Accepting it silently would let the
+    /// formatter delete a clause the author wrote.
+    #[test]
+    fn parse_with_row_empty_parens_are_rejected() {
+        for source in [
+            "fn f() with () { }",
+            "fn f(g: fn() with ()) { }",
+            "fn f<F: fn() with ()>(g: F) { }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(
+                err.message.contains("names no effect"),
+                "{source}: {:?}",
+                err.message
+            );
+        }
+    }
+
+    /// A type alias's row is followed by `;`, never by a list, so the comma
+    /// can only be a missing parenthesis and is reported as one.
+    #[test]
+    fn parse_with_row_bare_comma_in_a_type_alias_is_rejected() {
+        let err = parse("type F = fn() with A, B;").unwrap_err();
+        assert!(
+            err.message.contains("parenthes"),
+            "the diagnostic must point at the missing parentheses, got {:?}",
+            err.message
+        );
+    }
+
+    /// The same comma inside a parameter list belongs to the list —
+    /// `fn(fn() with E, Stdout)` is a two-parameter function type.
+    #[test]
+    fn parse_with_row_bare_comma_in_a_fn_type_stays_the_list_separator() {
+        let module = parse("type F = fn(fn() with E, Stdout);").unwrap();
+        let Item::Newtype(n) = &module.items[0] else {
+            panic!("expected a type alias");
+        };
+        let Type::Function(f) = &n.ty else {
+            panic!("expected a fn type");
+        };
+        assert_eq!(f.params.len(), 2);
     }
 
     #[test]
