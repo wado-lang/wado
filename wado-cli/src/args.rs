@@ -365,3 +365,33 @@ pub fn parse_dir_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
         Ok((dir_spec.clone(), dir_spec))
     }
 }
+
+/// `--dir` / `--no-dir` grants for `run` and `test`: the current directory is
+/// preopened when neither flag appears, and either flag replaces that default
+/// outright. `serve` has none — a service starts with no preopens.
+#[derive(Default)]
+pub struct DirGrants {
+    dirs: Vec<(String, String)>,
+    explicit: bool,
+    suppressed: bool,
+}
+
+impl DirGrants {
+    pub fn add(&mut self, parser: &mut Parser) -> Result<(), CliExit> {
+        self.dirs.push(parse_dir_arg(parser)?);
+        self.explicit = true;
+        Ok(())
+    }
+
+    pub fn suppress_default(&mut self) {
+        self.suppressed = true;
+    }
+
+    #[must_use]
+    pub fn finish(mut self) -> Vec<(String, String)> {
+        if !self.explicit && !self.suppressed {
+            self.dirs.push((".".to_owned(), ".".to_owned()));
+        }
+        self.dirs
+    }
+}

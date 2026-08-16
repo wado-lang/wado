@@ -19,14 +19,7 @@ use wado_compiler::hashmap::IndexMap;
 
 use crate::compiler_host::KilnComponentCache;
 use crate::kiln_driver::ResolvedGenerator;
-
-/// A map is structurally valid whatever a panicking holder was doing, so
-/// recovering the guard is correct, not a fallback.
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
+use crate::sync::lock;
 
 /// Everything one CLI run shares across the files it processes.
 #[derive(Default)]

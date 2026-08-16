@@ -57,6 +57,7 @@ use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 use crate::oci;
 use crate::run_cache::RunCache;
+use crate::sync::lock;
 
 /// Compiled generator components, each named by the hash of its sources.
 /// Gitignored. A registry (`Spec`) generator is prebuilt and caches in the
@@ -83,9 +84,7 @@ static INDEX_WRITES: Mutex<()> = Mutex::new(());
 /// The build lock for one generator. The map guard is released before the
 /// caller ever awaits, so registering a new generator never blocks a build.
 fn build_lock(index_path: &Path, module_path: &str) -> Arc<tokio::sync::Mutex<()>> {
-    let mut builds = BUILDS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut builds = lock(&BUILDS);
     let key = (index_path.to_path_buf(), module_path.to_string());
     Arc::clone(builds.entry(key).or_default())
 }
@@ -239,9 +238,7 @@ impl CliGeneratorProvider {
     /// generators. Best-effort: a refusal costs the next run a rebuild.
     fn write_index(&self, module_path: &str, identity: &IndexedGenerator) {
         let path = self.index_path();
-        let _writing = INDEX_WRITES
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _writing = lock(&INDEX_WRITES);
         let mut index = GeneratorIndex::load(&path).unwrap_or_default();
         index.version = INDEX_VERSION;
         let superseded = index
@@ -404,10 +401,7 @@ impl CliGeneratorProvider {
         // Drain the recorded sources, dedup paths (the compiler can request
         // the same module more than once). The combined hash is what the kiln
         // driver records in `Metadata::generator_source_hash`.
-        let mut recorded = loaded
-            .lock()
-            .map(|mut g| std::mem::take(&mut *g))
-            .unwrap_or_default();
+        let mut recorded = std::mem::take(&mut *lock(&loaded));
         // The entry never goes through `load_source`, so the recording host
         // never sees it; without seeding it, editing it would not move the
         // hash.
@@ -563,9 +557,7 @@ impl CompilerHost for SilentHost {
         async move {
             let bytes = inner_fut.await?;
             let hash = hash_source(&path_owned, &bytes);
-            if let Ok(mut guard) = loaded.lock() {
-                guard.push((path_owned, hash));
-            }
+            lock(&loaded).push((path_owned, hash));
             Ok(bytes)
         }
     }
