@@ -16,63 +16,9 @@ unit is chosen so the number is meaningful for the workload:
   (`MB/s`).
 - Otherwise, throughput falls back to iterations per second (`ops/s`).
 
-<<<<<<< HEAD
-A benchmark program is an `export fn run() with Stdout, MonotonicClock`
+A benchmark program is an `export fn run() with (Stdout, MonotonicClock)`
 called from a `test` block, so one file both runs under `wado run` and is
 checked by `wado test`; `benchmark/` holds the real ones.
-||||||| 563ae34d8
-Used by files in `benchmark/`. A benchmark typically looks like:
-
-```wado
-use { Benchmark } from "core:benchmark";
-
-test "benchmark" { run(); }
-
-export fn run() with Stdout, MonotonicClock {
-    let mut b = Benchmark { name: "count-prime" };
-    b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
-    b.unit = "numbers";
-    let count = b.run("", || count_primes(10_000_000));
-    b.println(`count = ${count}`);
-}
-```
-
-For multi-phase benchmarks, call `run` once per phase. A byte-sized input
-reports `MB/s` automatically:
-
-```wado
-let mut b = Benchmark { name: "zlib" };
-b.input_size = Option::Some(data.len());  // → MB/s
-let compressed = b.run("compress", || zlib_compress(&data));
-let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
-```
-=======
-Used by files in `benchmark/`. A benchmark typically looks like:
-
-```wado
-use { Benchmark } from "core:benchmark";
-
-test "benchmark" { run(); }
-
-export fn run() with (Stdout, MonotonicClock) {
-    let mut b = Benchmark { name: "count-prime" };
-    b.work_per_iter = Option::Some(10_000_000.0);  // numbers screened
-    b.unit = "numbers";
-    let count = b.run("", || count_primes(10_000_000));
-    b.println(`count = ${count}`);
-}
-```
-
-For multi-phase benchmarks, call `run` once per phase. A byte-sized input
-reports `MB/s` automatically:
-
-```wado
-let mut b = Benchmark { name: "zlib" };
-b.input_size = Option::Some(data.len());  // → MB/s
-let compressed = b.run("compress", || zlib_compress(&data));
-let _ = b.run("decompress", || inflate_zlib(&compressed).unwrap());
-```
->>>>>>> origin/main
 
 ## Synopsis
 

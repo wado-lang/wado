@@ -36,10 +36,10 @@ required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 let data: ByteList = b"wado wado wado wado";
 
 // One call per container format; level and strategy default.
-let compressed = zlib_compress(&data);                    // RFC 1950
+let compressed = zlib_compress(&data);  // RFC 1950
 let smallest = zlib_compress(&data, Z_BEST_COMPRESSION);  // override the level
-let gz = gzip_compress(&data);                            // RFC 1952
-let raw = deflate_raw(&data);                             // no header or trailer
+let gz = gzip_compress(&data);  // RFC 1952
+let raw = deflate_raw(&data);  // no header or trailer
 
 // `uncompress` tells zlib from gzip; the rest name the format they read.
 assert uncompress(&compressed) matches { Ok(round) && round == data };
