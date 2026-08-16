@@ -63,12 +63,10 @@ global GROUPS: List<[String, String]> = [
 ];
 
 /// The enumerated `Property=Value` names ANTLR4 answers beyond
-/// `General_Category`, `Script` and `Block`, each with the UCD file it is read
-/// from and its `PropertyValueAliases.txt` prefix.
-///
-/// `field` is where the value sits on a data line — `ArabicShaping.txt` writes
-/// the Joining_Type third. `gc_default` marks the one file stating its default
-/// as a rule over `General_Category` rather than as an `@missing` line.
+/// `General_Category`, `Script` and `Block`, with the UCD file each is read
+/// from, the field its value sits in, and its `PropertyValueAliases.txt`
+/// prefix. `gc_default` marks the one file stating its default as a rule over
+/// `General_Category` rather than as an `@missing` line.
 global ENUMERATED: List<EnumeratedProperty> = [
     EnumeratedProperty {
         name: "Bidi_Class",
@@ -197,9 +195,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let value_aliases = read_file(&"PropertyValueAliases.txt");
     let script_aliases = parse_alias_lines(&value_aliases, &"sc");
     let block_aliases = parse_alias_lines(&value_aliases, &"blk");
-    // `Script` and `Block` are enumerated properties too: their files leave the
-    // default value (`Unknown`, `No_Block`) to an `@missing` line, and ANTLR4
-    // answers `\p{sc=Zzzz}` / `\p{blk=NB}` with it.
+    // `Script` and `Block` partition the space too: ANTLR4 answers
+    // `\p{sc=Zzzz}` / `\p{blk=NB}` from their `@missing` default.
     let scripts = partition_runs(&read_file(&"Scripts.txt"), 1, false, &categories, &script_aliases, &"Script");
     let blocks = partition_runs(&read_file(&"Blocks.txt"), 1, false, &categories, &block_aliases, &"Block");
     let mut binary = parse_prop_runs(&read_file(&"PropList.txt"));
@@ -321,9 +318,8 @@ fn parse_prop_runs(content: &String) -> List<PropRun> {
     return runs;
 }
 
-/// Like `parse_prop_runs` but taking the value from `field`, for a file whose
-/// lines carry more than the range and one value — `ArabicShaping.txt` writes
-/// `CODE; NAME; JOINING_TYPE; JOINING_GROUP`.
+/// Like `parse_prop_runs`, taking the value from `field` — `ArabicShaping.txt`
+/// writes `CODE; NAME; JOINING_TYPE; JOINING_GROUP`.
 fn parse_prop_runs_at(content: &String, field: i32) -> List<PropRun> {
     let mut runs: List<PropRun> = [];
     for let line of content.lines() {
@@ -356,14 +352,12 @@ fn parse_bounds(text: &String) -> [i32, i32] {
 }
 
 /// Every code point's value for one enumerated property, as runs covering the
-/// whole space. Explicit lines win; then the `@missing` lines, widest first,
-/// since `DerivedBidiClass.txt` gives whole blocks their own default; then, for
-/// `ArabicShaping.txt` alone, its `General_Category` rule.
+/// whole space: the file's own lines, then its `@missing` defaults, then
+/// `ArabicShaping.txt`'s `General_Category` rule.
 ///
-/// An enumerated property's values partition the code-point space, so a code
-/// point the file does not list still has a value — and `\P{...}` complements
-/// what `\p` selects, so leaving the default out would admit code points
-/// rather than merely miss them. The partition is asserted, not assumed.
+/// `\P{...}` complements what `\p` selects, so a code point left without a
+/// value would be admitted rather than merely missed. The partition is
+/// asserted, not assumed.
 fn partition_runs(
     content: &String,
     field: i32,
@@ -379,9 +373,9 @@ fn partition_runs(
         fill(&mut slot, run.start, run.end, id);
     }
 
-    // The defaults form their own layer: a narrower `@missing` line overrides
-    // a wider one (`DerivedBidiClass.txt` gives whole blocks their own
-    // default), but no `@missing` line overrides a code point the file lists.
+    // Their own layer: a narrower `@missing` line overrides a wider one
+    // (`DerivedBidiClass.txt` gives whole blocks their own default), but none
+    // of them overrides a code point the file lists.
     let missing = parse_missing(content);
     assert missing.is_empty() == gc_default, `${*property}: expected either @missing lines or the General_Category default rule, not both or neither`;
     let mut widest = missing;
@@ -678,8 +672,8 @@ fn unassigned_ranges(runs: &List<CategoryRun>) -> List<[i32, i32]> {
 }
 
 /// Base64 over `(gap from the previous range's end, length)` varint pairs.
-/// Most ranges are a single code point a short way past the previous one, so
-/// the pair is two bytes; spelling the endpoints out costs three times as much.
+/// Most ranges are one code point a short way past the previous, so the pair is
+/// two bytes; spelling the endpoints out costs three times as much.
 fn encode(ranges: &List<[i32, i32]>) -> String {
     let mut bytes: ByteList = [];
     let mut prev = -1;
@@ -752,8 +746,8 @@ fn emit_module(
 }
 
 /// Emit the `Property=Value` entry point: the property selects a table, which
-/// then answers the value. One flat table keyed by `property=value` would
-/// carry the cross product of both alias sets instead.
+/// answers the value. One flat table keyed by `property=value` would carry the
+/// cross product of both alias sets.
 fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) {
     w.line(&"/// Ranges of one enumerated property's value (`\\p{lb=AL}`), or an empty");
     w.line(&"/// string when the property is not one of these or the value is not one of");

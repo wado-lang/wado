@@ -3,12 +3,9 @@
 //! ANTLR4 jar produced. `scripts/check-unicode-properties.sh` drives this;
 //! `scripts/antlr4-property-oracle.sh` writes the table it reads.
 //!
-//! The oracle's table is exact over the whole code-point space, so this is a
-//! set comparison rather than a spot check — which is what `\P{...}` needs,
-//! since it complements whatever `\p` selects.
-//!
-//! Both sides are clipped to the Unicode scalars: the oracle cannot feed a
-//! surrogate through a lexer, and Gale drops them when a property claims one.
+//! The oracle's table covers the whole code-point space, so this compares
+//! sets rather than samples — which is what `\P{...}` needs, since it
+//! complements whatever `\p` selects.
 
 use { args, print, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
@@ -58,10 +55,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     println(`${property}: ${entries.len()} values match the jar exactly`);
 }
 
-/// Gale's own answer for `\p{property=value}`, taken through the real parser
-/// so the comparison covers escape parsing and table lookup, not just tables.
-/// Null when Gale rejects the escape outright — an unsupported property is a
-/// different finding from a set that disagrees.
+/// Gale's own answer, taken through the real parser so the comparison covers
+/// escape parsing and lookup, not just the table. Null when Gale rejects the
+/// escape — unsupported is a different finding from a set that disagrees.
 fn gale_ranges(property: &String, value: &String) -> Option<List<[i32, i32]>> {
     let source = `lexer grammar T;\nX : [\\p{${*property}=${*value}}] ;`;
     let parsed = parse(source);
@@ -130,13 +126,9 @@ fn report(property: &String, value: &String, expected: &List<[i32, i32]>, actual
     }
 }
 
-/// Drop the surrogate half of every range; a range wholly inside the surrogate
-/// block disappears, which is what "matches nothing" looks like here.
-///
-/// Both sides go through this, so both split at the surrogate block. Gale
-/// keeps `D7FC-F8FF` as one range — no `char` in between is a surrogate, so
-/// splitting would churn the emitted pattern — while the oracle's run breaks
-/// there because its input skips them. Same set, two spellings.
+/// Drop the surrogate half of every range. Both sides go through this so both
+/// split there: Gale keeps `D7FC-F8FF` as one range (no `char` in between is a
+/// surrogate), while the oracle's run breaks because its input skips them.
 fn clip_all(ranges: &List<[i32, i32]>) -> List<[i32, i32]> {
     let mut out: List<[i32, i32]> = [];
     for let r of ranges {

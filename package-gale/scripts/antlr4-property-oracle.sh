@@ -1,32 +1,19 @@
 #!/usr/bin/env bash
 # Reconstruct the published ANTLR4 jar's own code-point table for one Unicode
-# property, by running the jar as a black-box oracle. See the License hygiene
-# section in package-gale/AGENTS.md: we may run the published jar to observe
-# its behavior, but we may not read ANTLR4's implementation source.
+# property, by running the jar as a black-box oracle (License hygiene in
+# package-gale/AGENTS.md: run the jar, never read its source).
 #
-# For `<property>` with values `v1 v2 ...` this synthesizes
-#
-#     lexer grammar PropOracle;
-#     V0 : [\p{<property>=v1}]+ ;
-#     ...
-#
+# Synthesizes one `V_<value> : [\p{<property>=<value>}]+ ;` rule per value,
 # feeds it every Unicode scalar in code-point order, and prints one
-# `VALUE<TAB>START-END` line (hex) per maximal run. A `+` rule consumes a whole
-# run, so the token stream is the jar's range table — an exact whole-space
-# answer rather than a spot check. A run no value claims prints as `?`.
+# `VALUE<TAB>START-END` line (hex) per maximal run — a `+` rule consumes a
+# whole run, so the token stream is the jar's range table. A run no value
+# claims prints as `?`.
 #
-# The jar carries a Unicode snapshot frozen when it was built (4.13.2 is
-# Unicode 15.0.0), so a diff against Gale's tables is only meaningful with
-# Gale's tables regenerated from that same version:
+# Callers want `check-unicode-properties.sh`, which drives this per property
+# and diffs the result; "Oracling the Unicode property tables" in
+# antlr4-compatibility.md covers why the diff needs matching Unicode versions.
 #
-#     scripts/regen-unicode-tables.sh 15.0.0
-#
-# Any difference that survives that is a Gale derivation bug rather than
-# version drift. Compare over the scalars only: the oracle never sees a
-# surrogate, and Gale drops them on the way in.
-#
-# Usage:
-#   scripts/antlr4-property-oracle.sh <property> <value>...
+# Usage: scripts/antlr4-property-oracle.sh <property> <value>...
 #
 # Exit codes:
 #   0 = table printed
@@ -60,11 +47,9 @@ write_grammar() {
     done
 }
 
-# ANTLR4 answers a narrower `Property=Value` surface than the UCD names: group
-# letters (`gc=L`) and values with no code points (`sc=Hrkt`) are rejected even
-# though the property itself is fine. Drop exactly what it names and retry, so
-# one refused value does not cost the whole property — and say which, since
-# that boundary is the compatibility contract.
+# ANTLR4's `Property=Value` surface is narrower than the UCD's: group letters
+# (`gc=L`) and empty values (`sc=Hrkt`) are rejected. Drop exactly what it
+# names and retry, saying which — that boundary is the contract.
 drop_rejected() {
     local rejected
     rejected=$(sed -nE 's/.*PropOracle\.g4:[0-9]+:[0-9]+: invalid escape sequence \\p\{[^=]*=([^}]*)\}.*/\1/p' \

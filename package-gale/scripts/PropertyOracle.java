@@ -1,10 +1,6 @@
 // Driver for antlr4-property-oracle.sh: feed every Unicode scalar to the
 // generated PropOracle lexer and print one `RULE<TAB>START-END` line (hex) per
-// maximal run. Each rule matches one value of the property under test with `+`,
-// so the token stream *is* the jar's range table for that property.
-//
-// A span no rule claims prints as `?`, which means the values passed in do not
-// partition the code-point space.
+// maximal run. A span no rule claims prints as `?`.
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Lexer;
@@ -12,8 +8,8 @@ import org.antlr.v4.runtime.Token;
 
 public class PropertyOracle {
     public static void main(String[] args) throws Exception {
-        // Surrogates are not scalars, so they cannot appear in the input at
-        // all; index i of the stream is points[i], not i itself.
+        // Surrogates cannot appear in the input, so stream index i is
+        // points[i], not i itself.
         int[] points = new int[0x110000];
         StringBuilder text = new StringBuilder();
         int count = 0;

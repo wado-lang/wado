@@ -1534,9 +1534,9 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// `Inscriptional_*` scripts) is answered by an earlier table. The POSIX names
 /// go first so their meaning stays the measured one even if a future UCD grows
 /// a property that spells the same. The `Property=Value` form names its table
-/// instead, and the enumerated properties (`lb=`, `bc=`, `gcb=`, …) are
-/// reachable only that way — their values are single letters that a bare-name
-/// lookup would collide with.
+/// instead; the enumerated properties (`lb=`, `bc=`, …) are reachable only
+/// that way, their single-letter values being ones a bare-name lookup would
+/// collide with.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
@@ -1745,8 +1745,7 @@ fn drop_prefix(name: &String, count: i32) -> String {
 }
 
 /// Decode a range list from the generated tables: base64 over `(gap from the
-/// previous range's end, length)` varint pairs, as `scripts/gen_unicode_tables`
-/// emits it.
+/// previous range's end, length)` varint pairs.
 fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
     let bytes = base64_decode(encoded).unwrap();
     let mut pos = 0;

@@ -2112,14 +2112,11 @@ X : [\\p{EmojiPresentation=Text}] ;");
     assert !class_admits(&not_emoji, '\u{1F600}');
 }
 
-// The enumerated `Property=Value` names beyond `gc=` / `sc=` / `blk=`. Every
-// character below was measured against the published jar; `\p{...}` and the
-// whole-space diff behind it live in `scripts/check-unicode-properties.sh`.
-//
-// Each of these properties partitions the code-point space, so an unassigned
-// code point still has a value. The default-value cases are the ones that
-// break if the `@missing` derivation is dropped — a table built from the
-// listed lines alone answers them wrongly rather than not at all.
+// The enumerated `Property=Value` names beyond `gc=` / `sc=` / `blk=`, pinned
+// character by character against the published jar (the whole-space diff is
+// `scripts/check-unicode-properties.sh`). The default-value cases carry the
+// weight: a table built from the listed lines alone answers those wrongly
+// rather than not at all.
 
 test "Line_Break takes both alias spellings and its default value" {
     let alphabetic = class_of(&"grammar Test;
@@ -2155,8 +2152,8 @@ X : [\\p{bc=L}] ;");
 }
 
 test "Joining_Type defaults through General_Category" {
-    // ArabicShaping.txt states its default as a rule rather than an @missing
-    // line: unlisted is T for Mn / Me / Cf, U for everything else.
+    // ArabicShaping.txt states its default as a rule: unlisted is T for
+    // Mn / Me / Cf, U otherwise.
     let transparent = class_of(&"grammar Test;
 X : [\\p{jt=T}] ;");
     assert class_admits(&transparent, '\u{0300}'), "COMBINING GRAVE ACCENT is Mn and unlisted";
@@ -2200,8 +2197,8 @@ X : [\\p{vo=R}] ;"), 'A');
 }
 
 test "a script or block with no code points of its own is still a value" {
-    // Both are the property's @missing default rather than a listed line, and
-    // ANTLR4 answers each; a table built from the listed lines alone rejects.
+    // Each is its property's @missing default rather than a listed line, and
+    // ANTLR4 answers both.
     let no_script = class_of(&"grammar Test;
 X : [\\p{sc=Zzzz}] ;");
     assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";

@@ -27,7 +27,7 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-Empty right now. The last entry — the enumerated `\p{Property=Value}` surface — closed against `scripts/check-unicode-properties.sh`, which is the shape a soundness claim here wants: a whole-space diff against the jar rather than a spot check.
+Empty right now.
 
 ### Pipeline and tooling correctness
 

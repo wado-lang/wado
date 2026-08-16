@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# Check Gale's `\p{...}` tables against the published ANTLR4 jar, one whole
-# property at a time and over the whole code-point space.
+# Check Gale's `\p{...}` tables against the published ANTLR4 jar over the whole
+# code-point space, one property at a time: the value list comes from the UCD's
+# PropertyValueAliases.txt, the jar's table from `antlr4-property-oracle.sh`,
+# and the diff from `check_unicode_properties.wado`.
 #
-# For each property it takes the value list from the UCD's
-# PropertyValueAliases.txt, asks `antlr4-property-oracle.sh` for the jar's own
-# table, and has `check_unicode_properties.wado` compare it against what Gale
-# expands `\p{PROPERTY=VALUE}` into.
-#
-# The jar carries a Unicode snapshot frozen when it was built (4.13.2 is
-# Unicode 15.0.0, measured), so compare like-for-like:
+# The jar's Unicode snapshot is frozen at its build (4.13.2 is 15.0.0), so
+# compare like-for-like or every Unicode change since reads as a failure:
 #
 #     scripts/regen-unicode-tables.sh 15.0.0   # match the jar
 #     scripts/check-unicode-properties.sh
 #     scripts/regen-unicode-tables.sh          # back to latest
-#
-# Skipping that step reports the Unicode versions' differences as failures.
 #
 # Usage: scripts/check-unicode-properties.sh [property...]   (default: all)
 # Needs java, javac, network access, and a built `wado` (WADO env, default
