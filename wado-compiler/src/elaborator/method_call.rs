@@ -2859,6 +2859,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.lookup_static_method_param_is_mut_keyed(struct_name, method_name, None)
     }
 
+    /// The declared type-param slots of a static method, keyed like
+    /// [`Self::lookup_static_method_param_types_keyed`].
+    pub(super) fn lookup_static_method_slots_keyed(
+        &self,
+        method_name: &str,
+        static_key: &crate::elaborator::trait_env::ImplTargetKey,
+    ) -> Vec<TypeId> {
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(static_key)
+            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
+            .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
+            .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
+            .unwrap_or_default()
+    }
+
     /// Like [`Self::lookup_static_method_param_is_mut`] but takes a pre-resolved
     /// canonical receiver key, for the same reason as
     /// [`Self::lookup_static_method_param_types_keyed`]: a namespace member the

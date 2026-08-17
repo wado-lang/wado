@@ -1750,6 +1750,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
                 return (params, Vec::new());
             }
+
+            // `ns::func` — a free function through a namespace import. Its
+            // signature lives in the namespace's module, which no bare-name
+            // lookup reaches. Without it the arguments resolve with no expected
+            // type, so a literal that only coerces when one is supplied — a
+            // sequence literal to a `List` parameter — keeps its own type and
+            // reaches codegen mismatched.
+            if self.sem.imports.namespace_imports.contains_key(prefix) {
+                let ns_source = self.sem.imports.namespace_imports[prefix].clone();
+                if let Some(sig) = self.tysys.signatures.function_sig(&ns_source, suffix) {
+                    return (
+                        sig.decl.param_types.clone(),
+                        sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
+                    );
+                }
+                // `ns::Type::method` — a static method on a namespace member.
+                // `is_static_method` above declines this shape (the importing
+                // module never names `Type` on its own), so the receiver is
+                // resolved through the namespace and the index keyed on it.
+                if let Some((type_name, method_name)) = suffix.split_once("::")
+                    && let Some(def) = self.namespace_member(prefix, type_name)
+                {
+                    let ns_key =
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+                    let params = self.lookup_static_method_param_types_keyed(
+                        type_name,
+                        method_name,
+                        Some(&ns_key),
+                    );
+                    if !params.is_empty() {
+                        let slots = self.lookup_static_method_slots_keyed(method_name, &ns_key);
+                        return (params, slots);
+                    }
+                }
+            }
             return (Vec::new(), Vec::new());
         }
 

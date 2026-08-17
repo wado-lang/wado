@@ -1,0 +1,13 @@
+// A call through a namespace import must see the callee's parameter types.
+// Without them the argument resolves with no expected type, so a sequence
+// literal keeps its own type instead of coercing to the `List<i32>` parameter
+// and reaches codegen as an invalid module.
+use acc from "./sub/ns_param_types_helper.wado";
+
+test "namespace free call coerces the literal to the parameter type" {
+    assert acc::sum_free([1, 2, 3]) == 6;
+}
+
+test "namespace static call coerces the literal to the parameter type" {
+    assert acc::Acc::sum([1, 2, 3]) == 6;
+}
