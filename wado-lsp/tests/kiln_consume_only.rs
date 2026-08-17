@@ -403,6 +403,61 @@ fn missing_sibling_output_is_cache_miss() {
     });
 }
 
+#[test]
+fn a_directory_in_the_metadata_slot_is_a_cache_miss() {
+    futures::executor::block_on(async {
+        // Nothing loadable is at the path, so the redirect is refused rather
+        // than firing against whatever the directory listing looks like.
+        let fixture = build_fixture(FixtureSpec::default());
+        let metadata_path = fixture
+            .root
+            .path()
+            .join("tests/generated")
+            .join(metadata_filename("grammars/calc.g4"));
+        std::fs::remove_file(&metadata_path).unwrap();
+        std::fs::create_dir(&metadata_path).unwrap();
+
+        let (engine, host) = engine_with(&fixture);
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert!(
+            has_warning(&diags, "KILN_STALE_CACHE"),
+            "an unloadable metadata path must be refused as a cache miss, got {diags:#?}",
+        );
+    });
+}
+
+/// "Not generated yet" and "there but unreadable" have different fixes, so the
+/// warning tells them apart. Only the first is reachable without a permission
+/// error, which this suite cannot stage as root.
+#[test]
+fn absent_metadata_reports_no_cache() {
+    futures::executor::block_on(async {
+        let fixture = build_fixture(FixtureSpec::default());
+        std::fs::remove_file(
+            fixture
+                .root
+                .path()
+                .join("tests/generated")
+                .join(metadata_filename("grammars/calc.g4")),
+        )
+        .unwrap();
+
+        let (engine, host) = engine_with(&fixture);
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        let stale = diags
+            .iter()
+            .find(|d| d.code == "KILN_STALE_CACHE")
+            .unwrap_or_else(|| panic!("expected a stale-cache warning, got {diags:#?}"));
+        assert!(
+            stale.message.contains("no cache at"),
+            "an absent cache is the ordinary not-generated-yet case, got {:?}",
+            stale.message,
+        );
+    });
+}
+
 #[cfg(unix)]
 #[test]
 fn symlink_escape_is_cache_miss() {

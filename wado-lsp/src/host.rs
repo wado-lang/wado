@@ -81,6 +81,10 @@ impl CompilerHost for FilesystemCompilerHost {
         })
     }
 
+    async fn source_exists(&self, path: &str) -> bool {
+        self.base_path.join(path).is_file()
+    }
+
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         self.collect_diagnostic(diagnostic);
     }
@@ -168,4 +172,27 @@ fn normalized_components(p: &Path) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_exists_answers_without_reading() {
+        // The kiln presence check calls this per recorded output on every
+        // snapshot; a `load_source` in its place would read each file in full
+        // only to drop the bytes.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.wado"), "fn f() {}").unwrap();
+        std::fs::create_dir(tmp.path().join("sub")).unwrap();
+        let host = FilesystemCompilerHost::new(tmp.path().to_path_buf());
+
+        futures::executor::block_on(async {
+            assert!(host.source_exists("a.wado").await);
+            assert!(!host.source_exists("missing.wado").await);
+            // A directory is not loadable, so it must not read as present.
+            assert!(!host.source_exists("sub").await);
+        });
+    }
 }

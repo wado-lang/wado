@@ -56,7 +56,7 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 /// emits via [`Code::KilnStaleCache`] will point at locations that
 /// don't exist in the source the rest of the snapshot is built against.
 ///
-/// Every file read here goes through `host.load_source`; only path
+/// Every file this reads or probes goes through the host; only path
 /// normalisation ([`safe_join`], [`canonicalized`]) touches the filesystem, and
 /// it degrades to the lexical form where there is none.
 ///
@@ -159,10 +159,18 @@ async fn resolve_invocation<H: CompilerHost>(
     };
     let metadata_path = output_dir_abs.join(metadata_filename(invocation.from.as_str()));
 
-    let bytes = host
-        .load_source(&metadata_path.display().to_string())
-        .await
-        .map_err(|e| format!("no cache at {}: {e}", metadata_path.display()))?;
+    let metadata_key = metadata_path.display().to_string();
+    let bytes = match host.load_source(&metadata_key).await {
+        Ok(bytes) => bytes,
+        // An absent cache is the ordinary "not generated yet" case; one that is
+        // there but will not read is a different thing to report. Presence is a
+        // second question because a host may report both as the same
+        // `SourceError` — `FilesystemCompilerHost` does.
+        Err(_) if !host.source_exists(&metadata_key).await => {
+            return Err(format!("no cache at {}", metadata_path.display()));
+        }
+        Err(e) => return Err(format!("cannot read {}: {e}", metadata_path.display())),
+    };
     let metadata: Metadata = serde_json::from_slice(&bytes)
         .map_err(|e| format!("failed to parse {}: {e}", metadata_path.display()))?;
     if metadata.version != METADATA_VERSION {
@@ -179,7 +187,8 @@ async fn resolve_invocation<H: CompilerHost>(
     // The entry module imports its generated siblings by relative path, so a
     // missing one would fail the import opaquely; refusing the whole redirect
     // surfaces the actionable `re-run wado compile` hint instead. Presence and
-    // path-sandbox only — not the hash validation consume-only skips.
+    // path-sandbox only — not the hash validation consume-only skips, and not a
+    // read: the loader is about to read these itself if the redirect fires.
     let mut entry_abs: Option<PathBuf> = None;
     for output in &metadata.outputs {
         let Some(abs) = safe_join(manifest_root, &output.path) else {
@@ -188,7 +197,7 @@ async fn resolve_invocation<H: CompilerHost>(
                 output.path,
             ));
         };
-        if host.load_source(&abs.display().to_string()).await.is_err() {
+        if !host.source_exists(&abs.display().to_string()).await {
             return Err(format!("{} missing on disk", output.path));
         }
         if output.entry {
@@ -211,11 +220,7 @@ async fn nearest_manifest_dir<H: CompilerHost>(start: &Path, host: &H) -> Option
     let mut dir = start.to_path_buf();
     while dir.pop() {
         let manifest = dir.join(wado_workspace::MANIFEST_FILENAME);
-        if host
-            .load_source(&manifest.display().to_string())
-            .await
-            .is_ok()
-        {
+        if host.source_exists(&manifest.display().to_string()).await {
             return Some(dir);
         }
     }

@@ -748,6 +748,10 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.load_source(path).await
     }
 
+    async fn source_exists(&self, path: &str) -> bool {
+        self.inner.source_exists(path).await
+    }
+
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
         // Capture for the snapshot cache, then forward so the inner host's
         // own side effects (e.g. CLI stderr logging) still happen.
