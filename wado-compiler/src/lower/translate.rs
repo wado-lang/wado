@@ -999,17 +999,24 @@ impl FunctionTranslator<'_, '_> {
         ))
     }
 
-    /// Emit a call to the `$value_copy$T(...)` helper. Returns the
-    /// value unchanged when the helper is not registered — this
-    /// mirrors the pre-Phase-A silent fall-through, where
-    /// `value_copy::insert` only wrapped at sites it walked
-    /// (pattern-lowered / deref-expansion / wide-int `Let`s are
-    /// synthesised after that walk, so they were never wrapped).
+    /// Emit a call to the `$value_copy$T(...)` helper.
+    ///
+    /// The caller has already decided a copy is due (`should_wrap_value_copy`,
+    /// which gates on `needs_value_copy`), so a missing helper is a hole in the
+    /// seed walk, not a type that needs no copy. Returning the value unwrapped
+    /// there would emit an alias where the semantics call for a fresh value —
+    /// silently, and only for the sites the walk did not reach.
     fn wrap_value_copy(&self, value: ExprId, type_id: tir::TypeId) -> ExprId {
         let span = self.expr_span(value);
         let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
         else {
-            return value;
+            panic!(
+                "no value-copy helper for {}, which the fold is wrapping",
+                self.base
+                    .type_table
+                    .borrow()
+                    .mangle_type_arg_for_generic(type_id)
+            );
         };
         let func = nir::FunctionRef {
             module_source: helper_module.clone(),
