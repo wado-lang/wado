@@ -6486,8 +6486,7 @@ fn gen_prediction_code_inner(
                 // is not a parser rule, which `ir.wado` rejects first. Assert
                 // that rather than keep the try-fail-retry lowerings only
                 // breaking it could reach.
-                assert sorted_indices.len() >= 2,
-                    `Ambiguous node for ${*rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
+                assert sorted_indices.len() >= 2, `Ambiguous node for ${*rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
                 let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
                 assert all_scan_full, `an alternative of ${*rule_display} is not fully scannable`;
                 emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);

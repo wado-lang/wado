@@ -1424,8 +1424,7 @@ test "a scan alt reached from several partitions is emitted once" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"fn scan_e_alt_1("), `alt 1 was not hoisted into a helper: ${output}`;
     let scan_e = extract_fn_body(&output, &"fn scan_e(");
-    assert count_substr(&scan_e, &"scan_e_alt_1(tokens, start") == 2,
-        `both partitions must call the hoisted helper: ${scan_e}`;
+    assert count_substr(&scan_e, &"scan_e_alt_1(tokens, start") == 2, `both partitions must call the hoisted helper: ${scan_e}`;
     assert count_substr(&scan_e, &"scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
 }
 

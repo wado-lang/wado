@@ -17,7 +17,12 @@ fn ambiguous(alts: List<i32>, reason: AmbiguityReason, branch_tokens: List<Strin
 fn dispatch(child: PredictionNode) -> PredictionNode {
     return PredictionNode::Dispatch(PredictionDispatch {
         depth: 1,
-        branches: [PredictionBranch { tokens: ["TK_X"], child }],
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child,
+            },
+        ],
     });
 }
 
@@ -67,11 +72,21 @@ test "prediction_node_eq: a nested Ambiguous is compared through the Dispatch" {
 test "prediction_node_eq: sub-dispatches differing in guard tokens are not equal" {
     let a = PredictionNode::Dispatch(PredictionDispatch {
         depth: 1,
-        branches: [PredictionBranch { tokens: ["TK_X"], child: PredictionNode::Leaf(0) }],
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
     });
     let b = PredictionNode::Dispatch(PredictionDispatch {
         depth: 1,
-        branches: [PredictionBranch { tokens: ["TK_Y"], child: PredictionNode::Leaf(0) }],
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_Y"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
     });
     assert !prediction_node_eq(&a, &b);
 }
@@ -79,11 +94,21 @@ test "prediction_node_eq: sub-dispatches differing in guard tokens are not equal
 test "prediction_node_eq: sub-dispatches differing in depth are not equal" {
     let a = PredictionNode::Dispatch(PredictionDispatch {
         depth: 1,
-        branches: [PredictionBranch { tokens: ["TK_X"], child: PredictionNode::Leaf(0) }],
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
     });
     let b = PredictionNode::Dispatch(PredictionDispatch {
         depth: 2,
-        branches: [PredictionBranch { tokens: ["TK_X"], child: PredictionNode::Leaf(0) }],
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
     });
     assert !prediction_node_eq(&a, &b);
 }
