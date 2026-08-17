@@ -1496,10 +1496,7 @@ fn compile_after_load<H: CompilerHost>(
     #[cfg(debug_assertions)]
     link::assert_no_stub_shadowing(&flat.functions, "reflect bridges");
 
-    // === Phase 9c: the declared-type invariant ===
-    // Inference is over, so a declared type still holding `UNKNOWN` was never
-    // resolved. Reporting it here keeps the whole class an ordinary diagnostic
-    // instead of an assert deep in `wir_build`; see `unresolved_types`.
+    // === Phase 9c: the declared-type invariant (`unresolved_types`) ===
     if unresolved_types::report_unresolved_declared_types(&flat, logger) > 0 {
         return Err(Bail);
     }

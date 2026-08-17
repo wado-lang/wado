@@ -363,13 +363,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    /// Report a name in a local `let` annotation that no declaration answers
-    /// here. The module-wide pre-check (`validate_ast_type_names`) passes a
-    /// type that exists in some loaded module but was never imported, and
-    /// resolution then yields `UNKNOWN`, which typechecks as deferred and
-    /// reaches WIR build as a local with no type. A `let` annotation names no
-    /// type parameter it does not already have in scope, so the site's answer
-    /// is decisive here in a way it is not in a bound or signature position.
+    /// Report an annotation naming a type no declaration answers here. Unlike a
+    /// bound or a signature, an annotation names no type parameter it does not
+    /// already have in scope, so the site's answer is decisive.
     pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
         if self.logger.has_errors() {
             return;
@@ -397,8 +393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
             }
             ast::Type::Generic(generic) => {
-                // The head answers first: with it unknown the arguments are
-                // noise, and a builtin head names no declaration at all.
+                // With the head unknown the arguments are noise.
                 if !BUILTIN_GENERIC_HEADS.contains(&generic.name.as_str())
                     && generic.name != crate::tir::TypeTable::ARRAY_TYPE_NAME
                     && !self

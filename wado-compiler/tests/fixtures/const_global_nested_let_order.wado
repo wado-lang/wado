@@ -1,7 +1,6 @@
 // A `let` nested inside a globalized constant's initializer must stay inside
-// it. Hoisting it out alongside the initializer's real siblings reordered it
-// above the binding it reads, so the slice captured a null `repr` and `len()`
-// trapped — at `-O2` only, where the pass runs on this shape.
+// it: hoisted alongside the real siblings it landed above the binding it reads,
+// so the slice captured a null `repr`. `-O2` only, which is the default.
 
 use { println, Stdout } from "core:cli";
 

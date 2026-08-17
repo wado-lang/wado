@@ -1,14 +1,6 @@
 //! The declared-type invariant, checked once between elaboration and lowering.
-//!
-//! `TypeTable::UNKNOWN` means "not decided yet" while inference is running, and
-//! typechecks as compatible with everything so a deferred answer does not
-//! cascade. Once inference is over, a *declared* type still holding it means
-//! resolution never found one — an unimported name reads exactly like that.
-//!
-//! Left alone it reaches `wir_build`, which asserts and reports a compiler bug
-//! at a location the user cannot act on. Checking it here turns the whole class
-//! into an ordinary diagnostic, and keeps it that way as new annotation sites
-//! appear: this is the single place that has to know the rule.
+//! Inference is over here, so a declared type still holding `UNKNOWN` was never
+//! resolved — one place to know that, rather than every annotation site.
 
 use crate::compiler_host::CompilerHost;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -18,8 +10,8 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
-/// Report every declared type that resolution never answered. Returns the
-/// number reported, so the caller can stop before lowering.
+/// Report every declared type resolution never answered; the count lets the
+/// caller stop before lowering.
 pub fn report_unresolved_declared_types<H: CompilerHost>(
     flat: &FlatPackage,
     logger: &Logger<'_, H>,

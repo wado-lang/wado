@@ -1177,9 +1177,8 @@ test "remove_unchecked ASCII" {
 }
 
 // `utf8_sequence_len` (behind `from_utf8_slice`) and `decode_utf8_scalar`
-// (behind `from_utf8_lossy`) each carry the UTF-8 validity table. Cross them so
-// neither can drift: a sequence one accepts is exactly one the other decodes
-// without substituting U+FFFD.
+// (behind `from_utf8_lossy`) each carry the validity table; cross them so
+// neither drifts.
 test "the two UTF-8 validity tables agree" {
     let mut cases: List<List<u8>> = [];
     for let mut b = 0; b < 256; b += 1 {

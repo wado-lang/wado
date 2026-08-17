@@ -2906,11 +2906,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return coerced.type_id;
         }
 
-        // Tuple literal cast to a tuple type: `[1, 2] as [i64, i64]`. Each
-        // element takes the target's own element type, exactly as the annotated
-        // form does — resolving the literal on its own would type it `[i32,
-        // i32]` and leave codegen a `StructNew` of the wrong shape. A spread
-        // element needs the general path, which expands it.
+        // `[1, 2] as [i64, i64]`: each element takes the target's own element
+        // type, as the annotated form does.
         let has_spread = matches!(&cast.expr, ast::Expr::TupleLiteral(t)
             if t.elements.iter().any(|e| matches!(e, ast::Expr::Spread(..))));
         let expected_elems = self.tysys.type_table.borrow().as_tuple(target_type);
@@ -2938,9 +2935,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .insert(cast.expr.id(), target_type);
             return target_type;
         }
-        // A spread needs the general literal path, which expands it. Typecheck
-        // the result against the target so a widening the expansion cannot do
-        // reads as the mismatch the annotated form reports, not an ICE.
+        // A spread needs the general literal path, which expands it; the
+        // typecheck reports a widening that expansion cannot do.
         if matches!(&cast.expr, ast::Expr::TupleLiteral(_))
             && has_spread
             && expected_elems.is_some()
@@ -3068,17 +3064,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // An aggregate reaching here relates to the target by no representation:
-        // every coercion above declined it, so reify would hand codegen a
-        // `StructNew` typed as the target (`[1, 2] as Array<i32>`,
-        // `a as [i64, i64]`, `{ a: 1 } as List<i32>`). `as` between two
-        // aggregates is only ever a newtype step, which shares a base; the
-        // annotated form of the same binding is a plain type mismatch, and so
-        // is this.
+        // Every coercion above declined, so nothing relates these two: `as`
+        // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are structs here but carry their own cast rules
-            // below, and a resource is a handle, not an aggregate value.
+            // `i128` / `u128` are structs here, with their own rules below.
             let wide_int = |id| {
                 matches!(tt.get(id), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
@@ -3099,9 +3089,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 hint: "the two types share no representation; `as` between aggregates is a newtype step".to_string(),
                 span: cast.span,
             });
-            // The target type is the cast's answer, as the other invalid-cast
-            // arms leave it: the error already stands, and a cascade of
-            // method-not-found on `error` would bury it.
+            // The target is the cast's answer, as the other invalid-cast arms
+            // leave it; `error` would bury this one under a cascade.
             return target_type;
         }
 

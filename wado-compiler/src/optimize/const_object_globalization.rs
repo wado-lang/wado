@@ -778,7 +778,6 @@ fn let_stmt_qualifies(
     Some(lets)
 }
 
-/// The `let` statements sitting inside `value`'s own subtree.
 fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
     let mut out = IndexSet::default();
     let Some(e) = value.as_expr() else {

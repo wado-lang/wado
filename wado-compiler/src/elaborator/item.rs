@@ -1223,8 +1223,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
-            // Same reach as a free function's signature; see
-            // `reject_unresolved_annotation`.
             for param in &method.params {
                 frame_scope.reject_unresolved_annotation(&param.ty);
             }
@@ -1525,8 +1523,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| method_scope.resolve_type(t));
-            // Same reach as a free function's signature; see
-            // `reject_unresolved_annotation`.
             for param in &method.params {
                 method_scope.reject_unresolved_annotation(&param.ty);
             }
@@ -1710,8 +1706,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
-            // Same reach as a free function's signature; see
-            // `reject_unresolved_annotation`.
             for param in &method.params {
                 scope.reject_unresolved_annotation(&param.ty);
             }
@@ -2075,11 +2069,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
         let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
-        // A signature's types reach every caller's locals, so an unresolved one
-        // leaks the same untyped local a `let` annotation would (see
-        // `reject_unresolved_annotation`). The frame still holds this
-        // function's own type parameters here, so they are not mistaken for
-        // unknown names.
+        // The frame still holds this function's type parameters, so they are
+        // not mistaken for unknown names.
         for param in &func.params {
             scope.reject_unresolved_annotation(&param.ty);
         }

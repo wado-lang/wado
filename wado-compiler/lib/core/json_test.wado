@@ -654,9 +654,8 @@ test "from_bytes validates multibyte sequences during the scan" {
     assert around matches { Ok(v) && v == "日\n本" };
 }
 
-// UTF-8 validity must not depend on whether the schema happens to name the
-// field: an unknown field is skipped, and a key is compared as bytes, but both
-// still carry string content the input claims is UTF-8.
+// UTF-8 validity must not depend on whether the schema names the field: a
+// skipped value and a key are string tokens too.
 test "from_bytes rejects invalid UTF-8 outside materialized values" {
     // {"b":"<0xff>","a":"x"} -- bad byte inside a field `Rec` does not declare
     let skipped: ByteList = [

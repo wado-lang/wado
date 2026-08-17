@@ -52,8 +52,7 @@ perf record -k mono wado run --profile perfmap prog.wado  # Linux perf (simple)
 View guest profiles at https://profiler.firefox.com/. See `README.md` for full documentation.
 
 `perf.md` records dead ends only — optimizations that moved no benchmark and
-were dropped. Read it before performance work; add an entry with the cause. A
-change that is kept belongs in the commit, not here.
+were dropped. A change that is kept belongs in its commit, not here.
 
 ## Updating Results
 

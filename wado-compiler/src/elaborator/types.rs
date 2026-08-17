@@ -1899,8 +1899,6 @@ impl FunctionContext {
         is_mut: bool,
         defining_ast_id: Option<AstId>,
     ) -> u32 {
-        // A binding the user wrote has a span, and a diagnostic that names its
-        // slot has to be able to point at it — take `add_local_at` instead.
         debug_assert!(
             defining_ast_id.is_none(),
             "a source-level binding must carry its span: use `add_local_at`"
