@@ -26,11 +26,9 @@ pub variant PredictionNode {
 }
 
 /// Why static prediction could not isolate a single alternative at an
-/// `Ambiguous` leaf. Surfaced by `gale dump` so an ATN-class gap can be
-/// triaged without re-deriving the halt condition by hand. The codegen
-/// ignores it — every reason lowers to the same longest-match scan
-/// tournament — but the label tells a human which edge of the static
-/// path was hit.
+/// `Ambiguous` leaf. `AtEndConflict` is the one the codegen reads (it can
+/// route to the ATN simulator); the rest label which edge of the static path
+/// was hit, for `gale dump`.
 pub enum AmbiguityReason {
     /// Lookahead reached the static depth ceiling (k = max_depth) without
     /// isolating one alt: genuinely ATN-class, needs unbounded lookahead.
@@ -1009,10 +1007,8 @@ pub fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
 }
 
 /// Whether two `Ambiguous` nodes emit the same code: the alt set, plus what
-/// `ambiguous_node_routes_via_atn` reads. Only `AtEndConflict` can route to
-/// the simulator and only it reads `branch_tokens`, so every other reason
-/// folds — merging two that route differently would hand one branch's tokens
-/// to the other's routing.
+/// `ambiguous_node_routes_via_atn` reads. Only `AtEndConflict` routes to the
+/// simulator, and only it reads `branch_tokens`.
 fn ambiguous_eq(a: &AmbiguousNode, b: &AmbiguousNode) -> bool {
     if a.alts != b.alts {
         return false;

@@ -1401,7 +1401,6 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
     let copies = count_substr(&body, &"p.peek_at(1)");
     assert copies > 0, `expected a depth-1 sub-dispatch in tp: ${body}`;
     assert copies <= 2, `sub-dispatch duplicated once per first token (${copies} copies): ${body}`;
-    // One merged branch, so exactly one depth-0 guard covers A, B and C.
     assert count_substr(&body, &"if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
 }
 
@@ -1430,7 +1429,6 @@ test "a scan alt reached from several partitions is emitted once" {
     assert count_substr(&scan_e, &"scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
 }
 
-// The companion: one partition reaches alt 2, so it stays inline.
 test "a scan alt reached once stays inline" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;

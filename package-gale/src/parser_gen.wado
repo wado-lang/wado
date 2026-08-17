@@ -1000,8 +1000,8 @@ fn gen_lr_overlap_dispatch(
 /// Wildcard or a rule whose FIRST is unenumerable) are attempted
 /// unconditionally as fallbacks.
 /// The token partitioning of a multi-alt rule, plus the alt bodies more than
-/// one partition emits. Computed once so `gen_scan_alt_helpers` and
-/// `gen_scan_multi_alt` cannot disagree on which alts are hoisted.
+/// one partition emits. Computed once so the helper emit and the dispatch
+/// cannot disagree on which alts are hoisted.
 pub struct ScanAltPlan {
     groups_alts: List<List<i32>>,
     groups_tokens: List<List<String>>,
@@ -5222,7 +5222,7 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
 }
 
 /// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented on the error
-/// path with a diagnostic-only re-parse of a RuleRef inner (see the body).
+/// path with a diagnostic-only re-parse of a RuleRef inner.
 fn gen_rep_break_with_recovery(
     w: &mut CodeWriter,
     scan_pos: &String,
@@ -5246,11 +5246,9 @@ fn gen_rep_break_with_recovery(
         w.begin(&`if ${scan_pos} < 0`);
         // Gate on the body's FIRST set, so the probe has something to report.
         w.begin(&`if ${ctx.first_check_str(loop_first)}`);
-        // Backtracking, and deliberate — the standing rule covers the accept
-        // path, and this runs only once the scan has failed. Committing edits
-        // would steal the caller's tokens, so everything but `pending` is
-        // rolled back: that message is what points the diagnostic at the
-        // offending token rather than the start of input
+        // Backtracking, and the exception the standing rule names: it decides
+        // nothing, and only `pending` survives. That message is what points
+        // the diagnostic at the offending token rather than the start of input
         // (`driver_cst_error_recovery_test`).
         w.line(&"let _rec_pos = p.pos;");
         w.line(&"let _rec_cp = p.b.checkpoint();");
@@ -6485,10 +6483,9 @@ fn gen_prediction_code_inner(
                 }
                 // Every alternative reaching codegen scans in full:
                 // non-scannability's only source is a `RuleRef` to a name that
-                // is not a parser rule, which `ir.wado` rejects first. The
-                // partial-scan and no-scan lowerings this retires were a
-                // try-fail-retry backtracker, so assert the premise instead of
-                // keeping a path only breaking it can reach.
+                // is not a parser rule, which `ir.wado` rejects first. Assert
+                // that rather than keep the try-fail-retry lowerings only
+                // breaking it could reach.
                 assert sorted_indices.len() >= 2,
                     `Ambiguous node for ${*rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
                 let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);

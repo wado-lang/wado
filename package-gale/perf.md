@@ -101,13 +101,11 @@ share); no over-fill regression.
 ### Dispatch reaches every lexer rule (landed, 2026-08)
 
 Two emit-site defects had the tokenizer call rules that could not match: a
-reference to a non-fragment lexer rule counted as an unbounded first set
-(Rust ran `BLOCK_COMMENT_OR_DOC` / `INTEGER_LITERAL` / `FLOAT_LITERAL` on
-every character — 325 `try_` call sites → 161), and a `mode` grammar skipped
-first-char dispatch outright (TypeScript 0 → 57 branches, 116 calls per
-character → 10 worst case; ANTLRv4 0 → 43).
+reference to a non-fragment lexer rule counted as unbounded (Rust: 325 `try_`
+call sites → 161), and a `mode` grammar skipped first-char dispatch outright
+(TypeScript 0 → 57 branches, 116 calls per character → 10 worst case).
 
-Unmeasured here: both benchmarks run a modeless grammar whose first sets were
+Unmeasured here — both benchmarks run a modeless grammar whose first sets were
 already exact, so size this on a keyword-dense or mode-bearing grammar.
 
 ### Standing rules (measured)

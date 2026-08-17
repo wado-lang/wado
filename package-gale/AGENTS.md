@@ -40,7 +40,7 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 
 ## Standing codegen rules
 
-- No backtracking on the accept path — parser or lexer. Disambiguate with static k-token lookahead; a decision static prediction cannot resolve in depth 5 routes to the runtime ATN simulator, never a try-fail-retry loop. The one sanctioned exception decides nothing: the repeat-exit probe re-parses a failed element under `speculating` purely to record where the error is, and rolls back everything but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
+- No backtracking on the accept path — parser or lexer. Disambiguate with static k-token lookahead; a decision static prediction cannot resolve in depth 5 routes to the runtime ATN simulator, never a try-fail-retry loop. The one exception decides nothing: the repeat-exit probe re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).
 - Keep generated code byte-identical for grammars that do not use a feature (actions, FOLLOW gates, ATN) — gate every emit site on the feature.
 - A compiler bug is P0 (top-level `CLAUDE.md`): write a minimal `wado-compiler/tests/fixtures/` repro first, then fix.
 

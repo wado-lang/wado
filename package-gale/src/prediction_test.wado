@@ -1,7 +1,5 @@
 //! White-box tests for `prediction_node_eq`, the predicate `find_merge_branch`
-//! folds two dispatch branches on. Merging branches that emit differently would
-//! hand one token set the other's code, so equality must cover every field the
-//! emit reads.
+//! folds two dispatch branches on. It must cover every field the emit reads.
 
 use {
     PredictionNode,
@@ -44,7 +42,6 @@ test "prediction_node_eq: two non-AtEndConflict reasons fold" {
 }
 
 test "prediction_node_eq: branch tokens do not split a non-AtEndConflict node" {
-    // `branch_tokens` is only read on the `AtEndConflict` route.
     let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]);
     let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_B"]);
     assert prediction_node_eq(&a, &b);
@@ -59,8 +56,7 @@ test "prediction_node_eq: differing at-end branch tokens are not equal" {
 }
 
 test "prediction_node_eq: a nested Ambiguous is compared through the Dispatch" {
-    // The `Dispatch` arm recurses into children, so a difference the leaf
-    // comparison catches must survive one level of nesting.
+    // A leaf difference must survive one level of nesting.
     let a = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]));
     let b = dispatch(ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]));
     assert !prediction_node_eq(&a, &b);

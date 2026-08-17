@@ -326,9 +326,8 @@ test "compute_elem_first_chars: a rule cycle stays wildcard" {
 }
 
 test "compute_elem_first_chars: a callee inheriting the grammar's case stays wildcard" {
-    // `INNER` inherits the grammar's `caseInsensitive`, so `try_INNER` folds
-    // while `OUTER` overrides to false: walking it with the caller's folding
-    // would claim `OUTER` starts only at `k`, and dispatch would never try `K`.
+    // `INNER` inherits the grammar's `caseInsensitive` and `OUTER` overrides
+    // it, so walking `INNER` with the caller's folding loses `K`.
     let g = parse_grammar(
         "grammar T; options { caseInsensitive = true; } x : OUTER ; OUTER options { caseInsensitive = false; } : INNER '!' ; INNER : 'k' '#' ;",
     );
@@ -349,7 +348,6 @@ test "compute_elem_first_chars: an inlined fragment folds with its caller" {
 }
 
 test "compute_elem_first_chars: a callee folding a different case stays wildcard" {
-    // The callee folds a different case, so its set is not reproducible here.
     let g = parse_grammar(
         "grammar T; x : OUTER ; OUTER : INNER ; INNER options { caseInsensitive = true; } : 'k' ;",
     );
