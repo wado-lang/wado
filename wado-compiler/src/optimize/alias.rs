@@ -50,10 +50,12 @@ impl AliasGroups {
     }
 
     /// The alias class containing `local`, itself included, or `None` when
-    /// `local` is in no class.
-    pub fn members(&self, local: u32) -> Option<&[u32]> {
-        let root = self.root_of.get(&local)?;
-        self.members_of.get(root).map(Vec::as_slice)
+    /// `local` is in no class. Paired with the class's canonical root, so a
+    /// caller sweeping many locals can visit each class once.
+    pub fn class_of(&self, local: u32) -> Option<(u32, &[u32])> {
+        let &root = self.root_of.get(&local)?;
+        let members = self.members_of.get(&root)?;
+        Some((root, members.as_slice()))
     }
 }
 
@@ -263,14 +265,21 @@ fn build_mut_escaped(
         })
         .collect();
     // Close over the reference alias groups: if any group member is mutably
-    // escaped, every member's pointee may be mutated through it.
+    // escaped, every member's pointee may be mutated through it. Sweeping the
+    // seed by class root visits each class once — the members of one class are
+    // all seeds of it, so walking the member list per seed would be `O(m^2)`.
     if !alias_groups.is_empty() {
         let seed: Vec<u32> = esc.iter().copied().collect();
+        let mut closed: IndexSet<u32> = IndexSet::default();
         for v in seed {
-            if let Some(group) = alias_groups.members(v) {
-                for &member in group {
-                    esc.insert(member);
-                }
+            let Some((root, members)) = alias_groups.class_of(v) else {
+                continue;
+            };
+            if !closed.insert(root) {
+                continue;
+            }
+            for &member in members {
+                esc.insert(member);
             }
         }
     }
@@ -1245,7 +1254,7 @@ mod tests {
     use super::*;
 
     fn members(groups: &AliasGroups, local: u32) -> Option<Vec<u32>> {
-        groups.members(local).map(|m| {
+        groups.class_of(local).map(|(_, m)| {
             let mut v: Vec<u32> = m.to_vec();
             v.sort_unstable();
             v
@@ -1285,8 +1294,14 @@ mod tests {
         const N: u32 = 20_000;
         let star: Vec<(u32, u32)> = (1..=N).map(|i| (0, i)).collect();
         let groups = alias_groups_from_edges(star);
-        assert_eq!(groups.members(0).map(<[u32]>::len), Some(N as usize + 1));
-        assert_eq!(groups.members(N).map(<[u32]>::len), Some(N as usize + 1));
+        assert_eq!(
+            groups.class_of(0).map(|(_, m)| m.len()),
+            Some(N as usize + 1)
+        );
+        assert_eq!(
+            groups.class_of(N).map(|(_, m)| m.len()),
+            Some(N as usize + 1)
+        );
     }
 
     /// A chain unions each local onto the next, so resolving the first root
@@ -1297,7 +1312,13 @@ mod tests {
         const N: u32 = 20_000;
         let chain: Vec<(u32, u32)> = (0..N).map(|i| (i, i + 1)).collect();
         let groups = alias_groups_from_edges(chain);
-        assert_eq!(groups.members(0).map(<[u32]>::len), Some(N as usize + 1));
-        assert_eq!(groups.members(N).map(<[u32]>::len), Some(N as usize + 1));
+        assert_eq!(
+            groups.class_of(0).map(|(_, m)| m.len()),
+            Some(N as usize + 1)
+        );
+        assert_eq!(
+            groups.class_of(N).map(|(_, m)| m.len()),
+            Some(N as usize + 1)
+        );
     }
 }

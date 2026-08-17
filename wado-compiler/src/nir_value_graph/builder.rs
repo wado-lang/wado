@@ -686,18 +686,18 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Invalidate the locals a call may mutate. One proven to mutate nothing
-    /// ([`BuildConfig::pure_calls`]) bumps only the `untrackable` locals any call
-    /// can reach; otherwise every `mut_escaped` local is bumped — not just this
-    /// call's arguments, since a mutable reference that escaped earlier may have
-    /// been retained.
-    /// [`HeapState::version_of`] with the `mut_escaped` membership it needs to
-    /// apply the shared escape version.
+    /// [`HeapState::version_of`], reading the `mut_escaped` membership it needs
+    /// to apply the shared escape version.
     fn heap_version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
         let escaped = root.is_some_and(|r| self.mut_escaped.contains(&r));
         self.heap_state.version_of(root, field, escaped)
     }
 
+    /// Invalidate the locals a call may mutate. One proven to mutate nothing
+    /// ([`BuildConfig::pure_calls`]) bumps only the `untrackable` locals any call
+    /// can reach; otherwise every `mut_escaped` local is bumped — not just this
+    /// call's arguments, since a mutable reference that escaped earlier may have
+    /// been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
@@ -2318,4 +2318,3 @@ mod tests {
         assert_eq!(build_with(&escaped([0, 1])), build_with(&escaped([1, 0])));
     }
 }
-
