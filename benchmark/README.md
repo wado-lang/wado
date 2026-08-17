@@ -291,22 +291,23 @@ One worker — a 1-core container scaled out horizontally:
 
 | Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
 | ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
-| `GET /user`                     |      39,173 |                   36,092 |                16,534 |                    16,519 |
-| `GET /user/lookup/username/hey` |      39,806 |                   42,354 |                16,269 |                    15,994 |
-| `POST /event/abcd1234/comment`  |      39,815 |                   37,128 |                16,218 |                    14,594 |
-| `GET /static/index.html`        |      41,438 |                   44,343 |                15,989 |                    15,954 |
+| `GET /user`                     |      42,971 |                   43,519 |                16,803 |                    16,616 |
+| `GET /user/lookup/username/hey` |      41,283 |                   39,842 |                16,299 |                    16,476 |
+| `POST /event/abcd1234/comment`  |      42,649 |                   37,053 |                16,298 |                    15,228 |
+| `GET /static/index.html`        |      40,564 |                   41,992 |                16,559 |                    16,279 |
 
 Four workers — a small VM running one instance:
 
 | Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
 | ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
-| `GET /user`                     |     364,684 |                  265,320 |                96,138 |                    79,074 |
-| `GET /user/lookup/username/hey` |     356,587 |                  226,319 |                92,124 |                    76,617 |
-| `POST /event/abcd1234/comment`  |     356,704 |                  227,098 |                91,553 |                    65,678 |
-| `GET /static/index.html`        |     359,716 |                  229,296 |                90,491 |                    72,973 |
+| `GET /user`                     |     374,969 |                  264,426 |                91,820 |                    77,430 |
+| `GET /user/lookup/username/hey` |     367,134 |                  224,187 |                85,520 |                    73,675 |
+| `POST /event/abcd1234/comment`  |     373,798 |                  227,640 |                84,187 |                    64,281 |
+| `GET /static/index.html`        |     373,769 |                  228,782 |                86,381 |                    72,744 |
 
-`wado serve` edges out Hono on Node and trails Bun by ~2.5x and Axum by ~3.8x.
-It also stops gaining past roughly eight workers.
+`wado serve` edges out Hono on Node and trails Bun by ~2.6x and Axum by ~4.2x.
+It also stops gaining past roughly eight workers. Its `content-length` header
+costs it ~6% of a request, nearly all of it the header value's allocation.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).
