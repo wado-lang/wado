@@ -537,7 +537,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self.lookup_variant_case(prefix).cloned()
+            if let Some(variant_info) = self
+                .lookup_variant_cases_at(receiver_site, prefix)
+                .cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -677,7 +679,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_ast_id = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
                         .and_then(|r| r.method_id)
-                        .or_else(|| self.static_method_decl_id(None, prefix, suffix));
+                        .or_else(|| {
+                            self.static_method_decl_id(
+                                &self.impl_target_at(receiver_site, prefix),
+                                suffix,
+                            )
+                        });
                     if let Some(method_ast_id) = method_ast_id {
                         self.record_reference_to_def(suffix_seg.id, method_ast_id);
                     }
@@ -860,7 +867,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_id;
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
-            else if let Some(flags_info) = self.lookup_flags_case(prefix).cloned()
+            else if let Some(flags_info) = self
+                .lookup_flags_members_at(receiver_site, prefix)
+                .cloned()
                 && matches!(suffix, "none" | "all")
             {
                 if let Some(prefix_seg) = ident.segments.first() {
@@ -872,7 +881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return flags_info.type_id;
             }
             // Check if this is a variant case construction (Color::Red)
-            else if let Some(variant_info) = self.lookup_variant_case(prefix) {
+            else if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix) {
                 // Clone needed data to release the borrow on self
                 let variant_info = variant_info.clone();
                 let case_match = variant_info
@@ -1146,7 +1155,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // the position `record_namespaced_case` also reads.
                     if let Some(method_seg) = ident.segments.get(2)
                         && let Some(method_ast_id) = method_ref.method_id.or_else(|| {
-                            self.static_method_decl_id(Some(&struct_module), type_name, method_name)
+                            // The receiver is `ns::Type`, whose middle segment
+                            // the resolve walk answered for under the `ns$Type`
+                            // alias. No spelling is re-resolved from the call
+                            // site's frame, which declares its own `Type`.
+                            let defs = self.tysys.resolutions.defs();
+                            let receiver = trait_env::ImplTargetKey::of_decl(
+                                defs,
+                                self.qualified_owner_decl(ident)?,
+                            );
+                            self.static_method_decl_id(&receiver, method_name)
                         })
                     {
                         self.record_reference_to_def(method_seg.id, method_ast_id);

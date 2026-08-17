@@ -123,7 +123,6 @@ impl TypeSystem {
         impl_ty: &Type,
         impl_params: &[ast::GenericParam],
         receiver_type_args: Option<&[TypeId]>,
-        impl_module: &ModuleSource,
     ) -> bool {
         let inner = match impl_ty {
             Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
@@ -141,7 +140,7 @@ impl TypeSystem {
             // A concrete arg (recursing into nested generics, excluding declared
             // impl params) must equal the receiver's arg; a free type param
             // matches anything.
-            if let Some(expected) = self.concrete_arg_mangled(arg, impl_params, impl_module) {
+            if let Some(expected) = self.concrete_arg_mangled(arg, impl_params) {
                 let Some(&recv) = args.get(i) else {
                     return false;
                 };
@@ -155,63 +154,62 @@ impl TypeSystem {
 
     /// The mangled type name a concrete impl argument must equal in the
     /// receiver (`u8` → `"u8"`, `Box<u8>` → `"Box<u8>"`), or `None` when the
-    /// argument is a free type parameter (declared `impl<T>` or an unknown
-    /// name) that should match any receiver argument. Recurses so nested
+    /// argument names no declaration — a type parameter, or a name that reaches
+    /// nothing — and so must match any receiver argument. Recurses so nested
     /// generic args (`List<Box<u8>>`) are constrained, not silently accepted.
+    ///
+    /// The header wrote these arguments, so each has a reference site the
+    /// resolve pass answered for. Nothing here re-resolves the spelling: the
+    /// argument of an `impl Holder<Tag>` reaches the `Tag` this module imported
+    /// even when another module declares one too.
     fn concrete_arg_mangled(
         &self,
         arg: &Type,
         impl_params: &[ast::GenericParam],
-        impl_module: &ModuleSource,
     ) -> Option<String> {
         match arg {
-            Type::Named(named) => {
-                if self.is_known_type_name_in(impl_module, &named.name)
-                    && !impl_params.iter().any(|p| p.name == named.name)
-                {
-                    // Mangle the written name the same way the receiver side
-                    // was, so the two are comparable.
-                    Some(self.mangled_decl_name_in(impl_module, &named.name))
-                } else {
-                    None
-                }
-            }
+            Type::Named(named) => self.mangled_decl_name_at(named.id, impl_params),
             Type::Generic(g) => {
                 let parts: Vec<String> = g
                     .args
                     .iter()
-                    .map(|a| self.concrete_arg_mangled(a, impl_params, impl_module))
+                    .map(|a| self.concrete_arg_mangled(a, impl_params))
                     .collect::<Option<Vec<String>>>()?;
-                let head = if impl_params.iter().any(|p| p.name == g.name) {
-                    g.name.clone()
-                } else {
-                    self.mangled_decl_name_in(impl_module, &g.name)
-                };
+                let head = self
+                    .mangled_decl_name_at(g.id, impl_params)
+                    .unwrap_or_else(|| g.name.clone());
                 Some(crate::name::mangle_generic_name(&head, &parts))
             }
             _ => None,
         }
     }
 
-    /// The mangled name of the declaration `name` refers to from
-    /// `impl_module`'s perspective: its own declaration if it has one, else the
-    /// module that does declare it. Falls back to the written name for a
-    /// builtin shape, which spells itself, and for an ambiguous name, where
-    /// rejecting on a guess would be worse than not constraining.
-    fn mangled_decl_name_in(&self, impl_module: &ModuleSource, name: &str) -> String {
+    /// The mangled spelling of the declaration the reference site `site` names,
+    /// in the form the receiver side of the comparison carries. `None` for a
+    /// binder, for a name that reaches nothing, and for a node no walk saw.
+    ///
+    /// `impl_params` are the header's own binders. The walk answers
+    /// [`crate::resolve::Resolution::Binder`] for them, so this check is what
+    /// covers a header whose arguments predate the walk — a synthesised impl.
+    fn mangled_decl_name_at(
+        &self,
+        site: crate::ast::AstId,
+        impl_params: &[ast::GenericParam],
+    ) -> Option<String> {
+        let def = self.resolutions.declared_if_walked(site)?;
+        let defs = self.resolutions.defs();
+        if impl_params.iter().any(|p| p.name == defs.name(def)) {
+            return None;
+        }
         {
             let tt = self.type_table.borrow();
-            if let Some(id) = tt.find_decl_type_by_name(name, impl_module) {
-                return tt.mangle_type_name(id);
+            if let Some(id) = tt.type_of_symbol(&defs.ast_id(def)) {
+                return Some(tt.mangle_type_name(id));
             }
         }
-        let defs = self.resolutions.defs();
-        self.trait_env.find_struct_like_decl_key(name).map_or_else(
-            || name.to_string(),
-            // `of_head`, not `declared`: the index also carries builtin shapes,
-            // which a mangler spells bare wherever they appear.
-            |def| crate::name::FqTypeName::of_head(defs, def).into_string(),
-        )
+        // `of_head`, not `declared`: a builtin shape is spelled bare wherever a
+        // mangler puts it.
+        Some(crate::name::FqTypeName::of_head(defs, def).into_string())
     }
 }
 
@@ -458,10 +456,18 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Find the module source for a struct by name.
-    pub(super) fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
-        // Check if it's a primitive type - impl blocks live in core:prelude/primitive.wado
-        // Note: i128/u128 are structs (in prelude/int128.wado), not primitives
+    /// The module declaring the type a rendered head names, for a caller whose
+    /// preferred identity path — the receiver's own `ResolvedType` — carries no
+    /// declaration.
+    ///
+    /// The frame derivation and nothing wider (WEP 2026-08-12): what this
+    /// module imported under the name, what it declares under it, what the
+    /// prelude gives it. A head naming a declaration this module cannot see is
+    /// attributed here, where the walk stands — never to the first module in
+    /// build order that happens to declare something spelled the same.
+    pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
+        // Primitive impl blocks live in `core:prelude/primitive.wado`. i128 /
+        // u128 are structs in `prelude/int128.wado`, not primitives.
         if matches!(
             struct_name,
             "i8" | "i16"
@@ -478,72 +484,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return ModuleSource::primitive();
         }
-
-        // The name as written may be an alias (`use { Helper as Counter }`),
-        // and the bare-name index below is keyed by what a declaration calls
-        // itself. Ask which declaration the name resolves to first, so an
-        // alias answers with its target rather than with another module's
-        // type that happens to be spelled the same.
-        let defs = self.tysys.resolutions.defs().clone();
-        if let Some(canonical) = self.decl_key_or_local(struct_name)
-            && defs.name(canonical) != struct_name
-            && self
-                .tysys
-                .trait_env
-                .struct_like_decl_modules
-                .get(defs.name(canonical))
-                .is_some_and(|decls| decls.contains(&canonical))
-        {
-            return defs.module(canonical).clone();
+        if let Some(def) = self.decl_key_or_local(struct_name) {
+            return self.tysys.resolutions.defs().module(def).clone();
         }
-
-        // Struct / resource / variant / enum / builtin declarations from the
-        // digest (covers every loaded module, incl. the current one). The
-        // current module wins when it declares the type; else the first
-        // declaring module in build order.
-        if let Some(decls) = self
-            .tysys
-            .trait_env
-            .struct_like_decl_modules
-            .get(struct_name)
-        {
-            if decls
-                .iter()
-                .any(|def| *defs.module(*def) == self.current_module_source)
-            {
-                return self.current_module_source.clone();
-            }
-            if let Some(first) = decls.first() {
-                return defs.module(*first).clone();
-            }
-        }
-
-        // Check newtypes/flags — the impl block may live in the module that defines the type
+        // A newtype or `flags` type this walk interned: its `ResolvedType`
+        // carries the declaration, so the module comes off that.
         if let Some(type_id) = self.lookup_newtype(struct_name) {
-            let ms = match self.tysys.type_table.borrow().get(type_id).clone() {
+            let declared = match self.tysys.type_table.borrow().get(type_id).clone() {
                 ResolvedType::Newtype { def, .. } | ResolvedType::Flags { def } => {
                     Some(self.tysys.type_table.borrow().def_module(def).clone())
                 }
                 _ => None,
             };
-            if let Some(module_source) = ms {
+            if let Some(module_source) = declared {
                 return module_source;
             }
         }
-
-        if let Some(decls) = self.tysys.trait_env.newtype_decl_modules.get(struct_name)
-            && let Some(first) = decls.first()
-        {
-            return defs.module(*first).clone();
-        }
-
-        // Aliased imports (`use { Counter as CounterA }`) aren't declared as
-        // local Structs anywhere, so the declaring module comes from what the
-        // name reaches here.
-        if let Some(def) = self.decl_key_or_local(struct_name) {
-            return self.tysys.resolutions.defs().module(def).clone();
-        }
-        // Default to current module source
         self.current_module_source.clone()
     }
 
@@ -784,7 +740,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !targets_receiver {
                     continue;
                 }
-                if !self.inherent_impl_applies(header, receiver_type_args.as_deref(), impl_module) {
+                if !self.inherent_impl_applies(header, receiver_type_args.as_deref()) {
                     continue;
                 }
                 if let Some(info) =
@@ -804,11 +760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
                 if self.get_type_name(&header.ty) != struct_name
-                    || !self.inherent_impl_applies(
-                        header,
-                        receiver_type_args.as_deref(),
-                        search_module_source,
-                    )
+                    || !self.inherent_impl_applies(header, receiver_type_args.as_deref())
                 {
                     continue;
                 }
@@ -862,13 +814,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         header: &ImplHeader,
         receiver_type_args: Option<&[TypeId]>,
-        impl_module: &ModuleSource,
     ) -> bool {
         self.tysys.inherent_impl_type_args_match(
             &header.ty,
             &header.type_params,
             receiver_type_args,
-            impl_module,
         ) && self.tysys.check_impl_block_bounds(
             &self.annotate_ctx,
             &self.type_lookup(),

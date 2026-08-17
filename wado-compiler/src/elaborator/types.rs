@@ -2190,6 +2190,38 @@ impl<'a> TypeLookup<'a> {
         }
     }
 
+    /// The cases of the variant a *written* qualifier names — the `Color` of
+    /// `Color::Red`, read off the site the resolve walk answered for.
+    ///
+    /// [`Self::declaration_at`] for a case lookup, and the form every site with
+    /// a path segment uses: the spelling answers only where no walk saw the
+    /// node.
+    pub(super) fn variant_cases_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&'a VariantInfo> {
+        self.variant_cases_of(self.declaration_at(site, name)?)
+    }
+
+    /// [`Self::variant_cases_at`] for an `enum`.
+    pub(super) fn enum_cases_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&'a EnumInfo> {
+        self.enum_cases_of(self.declaration_at(site, name)?)
+    }
+
+    /// [`Self::variant_cases_at`] for a `flags` type.
+    pub(super) fn flags_members_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&'a FlagsInfo> {
+        self.flags_members_of(self.declaration_at(site, name)?)
+    }
+
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
         self.variant_cases_of(self.declaration(name)?)
     }

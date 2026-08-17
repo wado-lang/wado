@@ -298,6 +298,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.tysys.resolutions.declared(ident.segments[owner].id)
     }
 
+    /// The reference site of a qualified path's *owner* segment — `Color` in
+    /// `Color::Red`, `Color` in `ns::Color::Red`. `None` for a bare name, which
+    /// qualifies nothing.
+    fn qualified_owner_site(&self, ident: &ast::IdentExpr) -> Option<crate::ast::AstId> {
+        let owner = ident.segments.len().checked_sub(2)?;
+        Some(ident.segments[owner].id)
+    }
+
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -7637,8 +7645,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
             if !suffix.contains("::") {
+                let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
-                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -8152,7 +8161,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            let flags = self.type_lookup().flags_case(prefix).cloned();
+            let owner = self.qualified_owner_site(ident);
+            let flags = self.type_lookup().flags_members_at(owner, prefix).cloned();
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
             {
@@ -8978,10 +8988,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // a further `::` is `ns::Type::Case` (namespace path) —
             // defer to a later branch.
             if !suffix.contains("::") {
+                let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
 
                 // Variant case.
-                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9016,7 +9027,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Enum case.
-                if let Some(enum_info) = lookup.enum_case(prefix).cloned()
+                if let Some(enum_info) = lookup.enum_cases_at(owner, prefix).cloned()
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9036,7 +9047,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Flags member.
-                if let Some(flags_info) = lookup.flags_case(prefix).cloned()
+                if let Some(flags_info) = lookup.flags_members_at(owner, prefix).cloned()
                     && let Some(member) = flags_info
                         .members
                         .iter()

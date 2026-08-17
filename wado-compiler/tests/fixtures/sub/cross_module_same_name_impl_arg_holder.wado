@@ -1,0 +1,13 @@
+use { Tag } from "./cross_module_same_name_impl_arg_tag_a.wado";
+
+pub struct Holder<T> {
+    pub value: T
+}
+
+// The impl header's type argument names `Tag` through this module's `use`, so
+// the header's own reference site is what says which declaration it is.
+impl Holder<Tag> {
+    pub fn n(&self) -> i32 {
+        return self.value.n
+    }
+}

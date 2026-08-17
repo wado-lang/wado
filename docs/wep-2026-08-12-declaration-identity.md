@@ -471,22 +471,41 @@ Each mechanism states what it makes impossible, not what it discourages.
 - `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
   node without an id, so a new reference position cannot be added silently.
 - `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
-  for a function taking a module parameter and a name parameter and handing back
-  a declaration. That is the shape of the chain this design removes, and the one
-  property the type system cannot state. Visibility is not part of the shape:
-  the scan reads every `fn`, because a private helper of that shape answers the
-  same way for everything in its module, and a module is as large as it grows.
-  Four are listed in `NAME_TO_IDENTITY` with the reason each belongs there:
-  `Scopes::resolve` and `resolve_value`, which are the one scope and so the one
-  place the shape belongs; `imported_as`, which answers what a module imported
-  under a local name rather than what a spelling means; and `cm_decl_in`, the
-  Component Model boundary. The test fails on a fifth, and equally on a stale
-  entry, so neither the class nor the list can grow.
+  for a function that takes a name, takes no reference site, and hands back a
+  declaration. That is the shape of the chain this design removes, and the one
+  property the type system cannot state.
+
+  Two things are not part of the shape, and each is a decision. Visibility is
+  not: the scan reads every `fn`, because a private helper of that shape answers
+  the same way for everything in its module, and a module is as large as it
+  grows. A `ModuleSource` *parameter* is not either — and requiring one is what
+  made an earlier version of this scan nearly vacuous. Every by-name declaration
+  lookup in the elaborator is a method whose vantage is `&self`, so the scan read
+  four functions that merely happen to pass the module as an argument while the
+  whole frame derivation, `TypeLookup`'s by-name queries and a program-wide
+  unique-match sat outside it.
+
+  An `AstId` parameter is the one exemption: a function handed the reference site
+  reads the answer the resolve pass recorded for it, which is what this design
+  asks of a consumer. Deriving an identity from a spelling is the shape; asking
+  for one already derived is not.
+
+  `NAME_TO_IDENTITY` lists what is left, each entry with the reason it is there,
+  grouped by what it is: the one scope (`Scopes::resolve`, `resolve_value`); the
+  three recorded facts the frame derivation is built from (`imported_as`,
+  `prelude_decl`, `decls_named`); the derivation itself (`decl_key_or_local`,
+  `TypeLookup::declaration` and `declaration_or_render`, `namespace_member`,
+  `scoped_trait_decl_key`, `bound_declaring_assoc_type`); the one rendering still
+  compared against a declaration's own (`impl_target_decl_key`); and the
+  Component Model boundary (`cm_decl_in`, `cm_decl`). The test fails on one more,
+  and equally on a stale entry, so neither the class nor the list can grow — and
+  because the shape is now the real one, the list is what remains rather than a
+  sample of it.
 
 ## The frame derivation
 
 A name whose reference site is not at hand still has to reach a declaration:
-`find_struct_module_source` asked for a synthesis target, `symbol_named` for a
+`declaring_module_of` asked for a synthesis target, `symbol_named` for a
 mangled name, a `*_case(name)` lookup for a resolved type's rendered head.
 Nothing walks a module's scope for them. Three recorded facts answer instead, in
 order:
@@ -523,13 +542,51 @@ give, the derivation above answers, in the frame that wrote the name.
 
 Nor does any tier take a vantage it could get wrong: `decls_named` takes no
 module at all, and the derivation filters it by a frame of the walk's own. That
-is why it cannot be mistaken for a scope, and why
-`no_reachable_function_turns_a_name_into_an_identity` is a statement about
-production code rather than a ratchet over it.
+is why it cannot be mistaken for a scope, and why the derivation is sanctioned
+rather than scheduled for removal — `NAME_TO_IDENTITY` records it as such.
+
+### What a derivation may not be
+
+Three things sat beside the derivation and looked like more of it. None was: each
+reached past the module's own scope into the whole program, so what a name meant
+depended on declarations no module involved could see. All three are gone.
+
+- `find_struct_like_decl_key(name)` took no module at all and answered with the
+  unique struct-like declaration of that name program-wide, declining when two
+  modules declared it. Declining is not neutral: its caller mangles an `impl`
+  header's written type argument to compare against the receiver's, and the bare
+  spelling it fell back to never equals a qualified mangle. So
+  `impl Holder<Tag>` stopped applying the moment an unrelated module declared its
+  own `Tag`. The header wrote that argument, so it has a reference site;
+  `concrete_arg_mangled` reads it (`cross_module_same_name_impl_arg`).
+- `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
+  and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
+  *first declaring module in build order*, with no ambiguity check at all. Every
+  caller already preferred the receiver's own `ResolvedType`, so what the scan
+  answered was only ever the case where no declaration was named. It is now
+  `declaring_module_of`: the frame derivation, then the walk's own newtype table,
+  then the module the walk stands in. Both indexes are deleted.
+- `unique_declared_trait` answered an `impl` header's trait position by
+  per-family unique-match when the header's site named nothing. But implementing
+  a trait *is* naming it — §3 — so a position that reaches nothing is the
+  "trait not in scope" error, and the key it gets carries a spelling no query can
+  mistake for an identity.
+
+`static_receiver_keys` was the same defect one step removed: it filed a static
+call under two keys, the call site's frame first and the receiver's second, and
+took whichever hit. A receiver that arrived through a namespace prefix is the
+case that made the order wrong. It is gone; each caller builds one key from the
+receiver it holds — the path segment's own reference site, or the receiver type's
+head through `ImplTargetKey::of_type_head`, which is total over the head so no
+caller has to search for a key by name.
 
 What still prevents some collisions by convention rather than by key is
 `name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
 index that reads it back into a declaration — a convention every minting and
 lookup site has to keep. Two sibling functions each declaring `struct Box<T>`
 took seven fixes to close, one per caller of that first-wins index; a removed
-mechanism takes one.
+mechanism takes one. This is the one place the design still trades a mechanism
+for a discipline, and `declaration_or_render`'s `NAME_TO_IDENTITY` entry says so.
+Retiring it is §6's remaining step: it needs the registries still keyed by a
+rendered name — the WIR struct registry above all — to be keyed by declaration
+first.

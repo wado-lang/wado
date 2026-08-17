@@ -752,15 +752,6 @@ pub struct TraitEnv {
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
     pub(super) function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>>,
-    /// Type name → modules declaring a struct / resource / variant / enum /
-    /// builtin type of that name, in build order. Powers
-    /// `find_struct_module_source` without an AST scan. Newtypes are tracked
-    /// separately in [`Self::newtype_decl_modules`] because the query consults
-    /// them only as a later fallback.
-    pub(super) struct_like_decl_modules: IndexMap<String, Vec<DefId>>,
-    /// Type name → modules declaring a `newtype` of that name, in build order.
-    /// The fallback half of `find_struct_module_source`'s module lookup.
-    pub(super) newtype_decl_modules: IndexMap<String, Vec<DefId>>,
     /// Declared name → every declaration written under it, in build order.
     /// The frame derivation's second tier reads this on every name that is not
     /// an import, so it is keyed by name rather than scanned: the sets it
@@ -1002,9 +993,9 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for item in &module.items {
-                // Digest the per-item facts that `lookup_function_type_params`
-                // and `find_struct_module_source` read, so neither needs to
-                // re-scan `loaded_modules`. (Non-impl items fall through to the
+                // Digest the per-item facts `lookup_function_type_params` and
+                // `decls_by_name` are built from, so neither needs to re-scan
+                // `loaded_modules`. (Non-impl items fall through to the
                 // `Item::Impl` guard below and `continue`.)
                 match item {
                     Item::Function(f) => {
@@ -1104,28 +1095,16 @@ impl TraitEnv {
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site));
+                // Implementing a trait is naming it, so the header's own
+                // reference site answers and only it. A position that reaches
+                // no declaration is the "trait not in scope" error, and the key
+                // it gets carries a spelling no query can mistake for an
+                // identity — never another module's same-named trait.
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
-                    // The site the header wrote answers first. `impl_target_key`
-                    // resolves through the symbol table, which holds no entry
-                    // for a trait, so a module implementing its own `trait Sub`
-                    // fell through to `core:prelude`'s arithmetic one.
-                    trait_ref.map(ImplTargetKey::Decl).unwrap_or_else(|| {
-                        // A trait position whose site names no declaration.
-                        // The declaration indexes are the only thing that can
-                        // answer, and they decline when several modules
-                        // declare the name.
-                        unique_declared_trait(
-                            defs,
-                            &get_type_name_static(trait_type),
-                            &decl_index,
-                            &effect_decl_index,
-                            &resource_decl_index,
-                        )
-                        .map_or_else(
-                            || impl_target_key_at(trait_type, module_source, resolutions),
-                            ImplTargetKey::Decl,
-                        )
-                    })
+                    trait_ref.map_or_else(
+                        || impl_target_key_at(trait_type, module_source, resolutions),
+                        ImplTargetKey::Decl,
+                    )
                 });
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
@@ -1315,8 +1294,6 @@ impl TraitEnv {
                 supertrait_closures,
                 function_type_params,
                 decls_by_name,
-                struct_like_decl_modules,
-                newtype_decl_modules,
                 module_namespace_imports,
                 assoc_type_bound_index,
                 blanket_impls,
@@ -1401,17 +1378,6 @@ impl TraitEnv {
     /// it takes no vantage — the caller filters for the module it means.
     pub(crate) fn decls_named<'n>(&'n self, name: &str) -> impl Iterator<Item = DefId> + 'n {
         self.decls_by_name.get(name).into_iter().flatten().copied()
-    }
-
-    /// Declaring module of a struct-like type (struct / resource / variant /
-    /// enum / builtin) by name, when the name picks out exactly one. Several
-    /// modules declaring the name leaves it unresolved rather than guessing:
-    /// a wrong module is worse than the caller's existing fallback.
-    pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DefId> {
-        match self.struct_like_decl_modules.get(name)?.as_slice() {
-            [only] => Some(*only),
-            _ => None,
-        }
     }
 
     /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
@@ -1730,34 +1696,6 @@ fn impl_target_key_at(
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
 
-/// The one trait declaration named `name`, else the one effect or resource —
-/// per-family and in that order, so a `trait Encode` beside another module's
-/// `interface Encode` is one trait rather than an ambiguity. Declines when a
-/// single family holds two. Differs from `decl_key_or_local`, which consults its
-/// struct-like index first.
-fn unique_declared_trait(
-    defs: &crate::defs::DefTable,
-    name: &str,
-    decls: &IndexSet<DefId>,
-    effects: &IndexSet<DefId>,
-    resources: &IndexSet<DefId>,
-) -> Option<DefId> {
-    let unique = |mut hits: Box<dyn Iterator<Item = &DefId> + '_>| {
-        let first = hits.next()?;
-        hits.next().is_none().then_some(*first)
-    };
-    unique(Box::new(
-        decls.iter().filter(|key| defs.name(**key) == name),
-    ))
-    .or_else(|| {
-        unique(Box::new(
-            effects
-                .iter()
-                .chain(resources.iter())
-                .filter(|key| defs.name(**key) == name),
-        ))
-    })
-}
 
 /// The key an `impl` header's target resolves to, from the site the header
 /// wrote — the vantage the target name belongs to.

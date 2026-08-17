@@ -1298,7 +1298,6 @@ impl TypeSystem {
         let trait_env = self.trait_env.clone();
         {
             for entry in trait_env.entries_by_receiver_vec(type_key) {
-                let (module_src, _) = &entry;
                 let Some(header) = trait_env.impl_headers.get(&entry) else {
                     continue;
                 };
@@ -1313,7 +1312,6 @@ impl TypeSystem {
                         &header.ty,
                         &header.type_params,
                         type_args,
-                        module_src,
                     )
                     && self.check_impl_block_bounds(
                         ctx,
@@ -2406,7 +2404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_def(base_type_id)
             .map_or_else(
-                || self.find_struct_module_source(struct_name),
+                || self.declaring_module_of(struct_name),
                 |def| self.tysys.resolutions.defs().module(def).clone(),
             );
         // The auto-derived trait is a compiler item, so it is named by the

@@ -312,6 +312,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().struct_fields(name)
     }
 
+    /// The cases of the variant a written qualifier names — see
+    /// [`super::types::TypeLookup::variant_cases_at`].
+    pub(super) fn lookup_variant_cases_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&VariantInfo> {
+        self.type_lookup().variant_cases_at(site, name)
+    }
+
+    pub(super) fn lookup_flags_members_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&FlagsInfo> {
+        self.type_lookup().flags_members_at(site, name)
+    }
+
     pub(super) fn lookup_variant_case(&self, name: &str) -> Option<&VariantInfo> {
         self.type_lookup().variant_case(name)
     }
@@ -520,61 +538,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The receiver keys a static-method lookup may be filed under, in the order
-    /// to try them. Neither vantage answers alone: the call site's frame
-    /// resolves a name it declares, but one that arrived through a namespace
-    /// prefix lost its qualifier, and canonicalising *that* from the call site
-    /// finds the caller's own `Pair` for `helper::Pair::new`.
-    pub(super) fn static_receiver_keys(
-        &self,
-        receiver_module: Option<&ModuleSource>,
-        written_name: &str,
-    ) -> Vec<trait_env::ImplTargetKey> {
-        let defs = self.tysys.resolutions.defs();
-        let mut keys = vec![self.impl_target(written_name)];
-        if let Some(module) = receiver_module {
-            // From the receiver's own vantage, not the call site's: what that
-            // module imported under the spelling, else what it declares under
-            // it. Two recorded facts, neither of them a scope walk.
-            let by_receiver = self
-                .tysys
-                .resolutions
-                .imported_as(module, written_name)
-                .or_else(|| {
-                    self.tysys
-                        .trait_env
-                        .decls_named(written_name)
-                        .find(|def| defs.module(*def) == module)
-                })
-                .map(|def| trait_env::ImplTargetKey::of_decl(defs, def));
-            if let Some(by_receiver) = by_receiver
-                && keys[0] != by_receiver
-            {
-                keys.push(by_receiver);
-            }
-        }
-        keys
-    }
-
-    /// The declaring node of the static method `Type::method`, from the
-    /// static-method index.
+    /// The declaring node of the static method `receiver::method_name`, from
+    /// the static-method index.
+    ///
+    /// The receiver is a key the caller resolved from its own reference site —
+    /// the path segment that wrote it. Filing the lookup under a second key
+    /// built from another vantage and taking whichever hit first is what let a
+    /// `helper::Pair::new` call land on the caller's own `Pair`.
     pub(super) fn static_method_decl_id(
         &self,
-        receiver_module: Option<&ModuleSource>,
-        type_name: &str,
+        receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<crate::ast::AstId> {
-        self.static_receiver_keys(receiver_module, type_name)
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(receiver)?
             .iter()
-            .find_map(|key| {
-                self.tysys
-                    .trait_env
-                    .static_method_index
-                    .get(key)?
-                    .iter()
-                    .find(|e| e.name == method_name)
-                    .map(|e| e.method_id)
-            })
+            .find(|e| e.name == method_name)
+            .map(|e| e.method_id)
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active

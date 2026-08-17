@@ -690,10 +690,13 @@ mod tests {
     }
 }
 
-/// The reachable functions that still turn a name into a declaration, each with
-/// the reason it survives. See `docs/wep-2026-08-12-declaration-identity.md`.
+/// Every reachable function that still derives a declaration from a name
+/// without a reference site, each with the reason it survives. This is the
+/// whole list, not a sample: the scan below fails on a new one and equally on a
+/// stale entry. See `docs/wep-2026-08-12-declaration-identity.md`.
 #[cfg(test)]
 const NAME_TO_IDENTITY: &[(&str, &str)] = &[
+    // The one scope.
     (
         "resolve",
         "`Scopes::resolve` is the one scope, so it is the one place this shape \
@@ -703,11 +706,70 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
         "resolve_value",
         "`Scopes::resolve` in the value namespace; see above.",
     ),
+    // The recorded facts the frame derivation is built from. Each is one tier,
+    // none is a scope, and none takes a vantage a caller could get wrong.
     (
         "imported_as",
         "answers the import tier alone, for a caller to whom the *aliasing* is \
          the question — the one import fact that is not a scope lookup",
     ),
+    (
+        "prelude_decl",
+        "the prelude tier alone. It cannot be given a vantage: the prelude is in \
+         scope in every module, so there is none from which it answers \
+         differently.",
+    ),
+    (
+        "decls_named",
+        "hands back *every* declaration written under the name and picks none, \
+         so it is not an answer. It holds what modules declare, never what they \
+         import, and takes no module — the caller filters by a frame of its own.",
+    ),
+    // The frame derivation itself: the three tiers above, in order, over a frame
+    // that is the walk's own position rather than a caller's argument.
+    (
+        "decl_key_or_local",
+        "the frame derivation, for a caller holding a rendered head whose \
+         reference site is not at hand. A caller *with* a site reaches \
+         `decl_key_at`, which asks the site.",
+    ),
+    (
+        "declaration",
+        "`TypeLookup`'s copy of the frame derivation, for the same callers one \
+         layer down. `declaration_at` is the sited entry point.",
+    ),
+    (
+        "declaration_or_render",
+        "`declaration`, plus the index that reads a function-local item's \
+         `{name}@{AstId}` rendering back into its declaration. The rendering is \
+         a convention every minting and lookup site keeps, not a key — the one \
+         place this design still trades a mechanism for a discipline.",
+    ),
+    (
+        "namespace_member",
+        "`imported_as` on the `ns$Name` alias a namespace import registers — \
+         the import tier answering the qualification the programmer wrote.",
+    ),
+    (
+        "scoped_trait_decl_key",
+        "`declaration` filtered to the trait index, for the `TypeSystem` \
+         queries that hold a scope and a bound's spelling rather than its site.",
+    ),
+    (
+        "bound_declaring_assoc_type",
+        "asks which of a *binder's* bounds declares an associated-type name. \
+         The binder is the walk's own, not a module's, and the trait comes from \
+         each bound's reference site.",
+    ),
+    // A rendering compared against a declaration's own, because the index that
+    // produced it stores a spelling.
+    (
+        "impl_target_decl_key",
+        "walks a receiver type's newtype chain for the link whose rendering \
+         equals the head an impl was found under. The name is the impl index's, \
+         not a caller's; it goes when that index carries `DefId`s.",
+    ),
+    // The Component Model boundary.
     (
         "cm_decl_in",
         "permanent. A WIT name has no Wado reference site, and \
@@ -715,6 +777,11 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
          declaring node it could record is in this program's `DefTable`. \
          `wado-from-idl` declares each WIT name once per generated module, so \
          the pair identifies one declaration by construction.",
+    ),
+    (
+        "cm_decl",
+        "`cm_decl_in` from the synthesis side, which resolves the interface's \
+         module first; see above.",
     ),
 ];
 
@@ -758,8 +825,18 @@ mod enforcement {
             .collect()
     }
 
-    /// Whether `signature` takes a module and a name and hands back a
+    /// Whether `signature` takes a name and no reference site and hands back a
     /// declaration.
+    ///
+    /// A `ModuleSource` parameter is deliberately *not* part of the shape. Every
+    /// by-name declaration lookup in the elaborator is a method whose vantage is
+    /// `&self`, so requiring the module as an argument exempted the whole class
+    /// this design is about and left the scan reading four functions that merely
+    /// happen to pass it.
+    ///
+    /// An `AstId` parameter *is* an exemption, and the only one: a function
+    /// handed the reference site reads the answer the resolve pass recorded for
+    /// it. Deriving one is the shape; asking for one is not.
     fn maps_a_name_to_an_identity(signature: &str) -> bool {
         let Some((params, ret)) = signature.split_once("->") else {
             return false;
@@ -768,9 +845,9 @@ mod enforcement {
             return false;
         };
         let types = param_types(params.trim_end().trim_end_matches(')'));
-        let is_module = |ty: &&str| matches!(*ty, "ModuleSource" | "&ModuleSource");
         let is_name = |ty: &&str| matches!(*ty, "&str" | "String" | "&String");
-        ret.contains("DefId") && types.iter().any(is_module) && types.iter().any(is_name)
+        let is_site = |ty: &&str| ty.contains("AstId");
+        ret.contains("DefId") && types.iter().any(is_name) && !types.iter().any(is_site)
     }
 
     fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -827,7 +904,7 @@ mod enforcement {
 
         assert!(
             offenders.is_empty(),
-            "these take a module and a name and hand back a declaration, so a \
+            "these turn a name into a declaration with no reference site, so a \
              consumer holding only a spelling can obtain an identity and \
              compare it: {offenders:?}. Give the caller the reference site \
              instead — or, if it truly cannot have one, register it in \

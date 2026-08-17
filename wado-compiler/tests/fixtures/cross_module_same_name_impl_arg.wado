@@ -1,0 +1,20 @@
+// An inherent `impl Holder<Tag>` whose type argument is imported, while a
+// second, unrelated module also declares a `Tag`.
+//
+// `inherent_impl_type_args_match` mangled the header's written argument through
+// a program-wide by-name scan that declined whenever two modules declared the
+// name. Declining left the bare spelling, which never equals the receiver's
+// qualified mangle, so the impl stopped applying and `h.n()` became an unknown
+// method — a program that compiles or fails depending on an unrelated
+// declaration elsewhere. The header's argument has a reference site; it answers.
+
+use { Holder } from "./sub/cross_module_same_name_impl_arg_holder.wado";
+use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";
+use { Tag as OtherTag } from "./sub/cross_module_same_name_impl_arg_tag_b.wado";
+
+test "inherent impl type argument named through an import" {
+    let h = Holder { value: Tag { n: 7 } };
+    assert h.n() == 7;
+    let other = OtherTag { label: "unrelated" };
+    assert other.label == "unrelated";
+}
