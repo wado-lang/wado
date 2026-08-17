@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786963122138,
+  "lastUpdate": 1786964554120,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48961,6 +48961,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1cf6a96b8a1fafa912f42af70e77597450bcd450",
+          "message": "Merge pull request #1836 from wado-lang/claude/package-gale-code-smell-oyrbvk\n\nperf(gale): emit each parser decision once, and dispatch to rules that can match",
+          "timestamp": "2026-08-17T19:49:36+09:00",
+          "tree_id": "21f83c5cdae1ee1bd0b0f71001e42d34a6eedbf0",
+          "url": "https://github.com/wado-lang/wado/commit/1cf6a96b8a1fafa912f42af70e77597450bcd450"
+        },
+        "date": 1786964553493,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263926,
             "unit": "bytes"
           }
         ]
