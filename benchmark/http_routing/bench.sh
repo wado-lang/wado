@@ -157,13 +157,26 @@ run_shape() {
     echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
   fi
 
-  declare -A BEST=()
-  local key si ri req method path rps url best_rps saturated=""
+  declare -A BEST=() REF=()
+  local key si ri req method path rps url best_rps saturated="" got differs=""
   for si in "${!SERVER_KEYS[@]}"; do
     key="${SERVER_KEYS[$si]}"
     url="$(server_url "$key")"
     echo "--- $(server_name "$key") ---"
     start_server "$key" "$workers"
+
+    # The rows only compare if the servers answer alike. One request each,
+    # outside the timed slices, against the first server's answers.
+    for ri in "${!REQUESTS[@]}"; do
+      req="${REQUESTS[$ri]}"
+      got=$(curl -s -X "${req%% *}" -w '|%{http_code}' "${url}${req#* }" 2>/dev/null)
+      if [ -z "${REF[$ri]:-}" ]; then
+        REF[$ri]="$got"
+      elif [ "$got" != "${REF[$ri]}" ]; then
+        echo "    WARNING: ${req} answers ${got}, $(server_name "${SERVER_KEYS[0]}") answers ${REF[$ri]}"
+        differs="yes"
+      fi
+    done
 
     # Discarded: the JS rows need it to reach steady state.
     for req in "${REQUESTS[@]}"; do
@@ -209,6 +222,12 @@ run_shape() {
     for si in "${!SERVER_KEYS[@]}"; do printf '%26s' "${BEST[${si}|${ri}]:-0}"; done
     printf '\n'
   done
+  echo
+  if [ -n "$differs" ]; then
+    echo "Response check: FAILED — the servers do not answer alike; see above."
+  else
+    echo "Response check: ok — every server returns the same body and status."
+  fi
   [ "$HEADROOM_CHECK" = "1" ] || return 0
   echo
   if [ -n "$saturated" ]; then
