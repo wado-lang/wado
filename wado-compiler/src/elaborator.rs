@@ -385,10 +385,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().declaration_at(site, name)
     }
 
-    pub(super) fn contains_variant(&self, name: &str) -> bool {
-        self.lookup_variant_case(name).is_some()
-    }
-
     /// Run `body` in `module`'s perspective, swapping the current module and
     /// its namespace imports. For callee-scope work only, such as a parameter
     /// default; already being there skips the swap.
@@ -1297,9 +1293,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// Asks the type for its declaration instead of reading a `(name, module)`
     /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
-    /// was spelled from, so there is no separate generic arm and no
-    /// `contains_variant` spelling check deciding whether the pair means a
-    /// variant at all.
+    /// was spelled from, so there is no separate generic arm and no spelling
+    /// check deciding whether the pair means a variant at all.
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
         let def = self.tysys.type_def(type_id)?;
         self.tysys.all_variant_cases.get(&def)

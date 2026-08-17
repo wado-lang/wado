@@ -2795,8 +2795,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Resource { .. } => true,
+            // The instance's own declaration, not its name looked up again.
             ResolvedType::GenericInstance { def, .. } => {
-                self.contains_variant(self.tysys.type_table.borrow().def_name(def))
+                self.lookup_variant_case_of_decl(def).is_some()
             }
             ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
             _ => false,

@@ -268,6 +268,16 @@ elaborated has contributed so far — are keyed by declaration, so a module-leve
 `struct Box` and a function-local one of that name are two entries rather than
 one the later insert wins. No separate tier is needed to keep the two apart.
 
+Reaching them takes an identity or the site that resolved to one:
+`variant_cases_of` / `enum_cases_of` / `flags_members_of` / `struct_fields_of`
+take the `DefId`, and `variant_cases_at` / `enum_cases_at` / `flags_members_at`
+mirror `declaration_at` for a written qualifier — the `Color` of `Color::Red`,
+read off its own path segment in both annotate and reify so the two cannot
+disagree about which `Color`. What still arrives holding only a spelling is a
+name synthesis assembled, for which there is no segment to read:
+`synth_qualified_case` is the one such caller left, and the by-name form exists
+for it.
+
 A key whose subject may also be a shape no declaration names takes the head
 rather than the declaration. `synthesis::traits::SynthRequests` — the
 `(receiver, module, trait)` triples a bound-driven derivation was asked for — is
@@ -478,7 +488,7 @@ Each mechanism states what it makes impossible, not what it discourages.
   Two things are not part of the shape, and each is a decision. Visibility is
   not: the scan reads every `fn`, because a private helper of that shape answers
   the same way for everything in its module, and a module is as large as it
-  grows. A `ModuleSource` *parameter* is not either — and requiring one is what
+  grows. A `ModuleSource` _parameter_ is not either — and requiring one is what
   made an earlier version of this scan nearly vacuous. Every by-name declaration
   lookup in the elaborator is a method whose vantage is `&self`, so the scan read
   four functions that merely happen to pass the module as an argument while the
@@ -501,6 +511,16 @@ Each mechanism states what it makes impossible, not what it discourages.
   and equally on a stale entry, so neither the class nor the list can grow — and
   because the shape is now the real one, the list is what remains rather than a
   sample of it.
+
+  Two things the scan still does not see, stated so the list is not read as more
+  than it is. It matches on `DefId` in the return type, so a function handing
+  back a `Symbol` — which carries the declaring node — is outside it:
+  `symbol_named` is the frame derivation in that currency, and
+  `SymbolTable`'s own name-keyed accessors are the class §2 deletes. And it reads
+  function signatures, not fields, so a `(name, module) -> DefId` _map_ is
+  invisible; there are two, and each is accounted for by a listed function that
+  reads it — `local_item_renders` by `declaration_or_render`, `TypeTable`'s
+  `decl_index` by `cm_decl_in`.
 
 ## The frame derivation
 
@@ -561,24 +581,26 @@ depended on declarations no module involved could see. All three are gone.
   `concrete_arg_mangled` reads it (`cross_module_same_name_impl_arg`).
 - `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
   and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
-  *first declaring module in build order*, with no ambiguity check at all. Every
+  _first declaring module in build order_, with no ambiguity check at all. Every
   caller already preferred the receiver's own `ResolvedType`, so what the scan
   answered was only ever the case where no declaration was named. It is now
   `declaring_module_of`: the frame derivation, then the walk's own newtype table,
   then the module the walk stands in. Both indexes are deleted.
 - `unique_declared_trait` answered an `impl` header's trait position by
   per-family unique-match when the header's site named nothing. But implementing
-  a trait *is* naming it — §3 — so a position that reaches nothing is the
+  a trait _is_ naming it — §3 — so a position that reaches nothing is the
   "trait not in scope" error, and the key it gets carries a spelling no query can
   mistake for an identity.
 
 `static_receiver_keys` was the same defect one step removed: it filed a static
 call under two keys, the call site's frame first and the receiver's second, and
 took whichever hit. A receiver that arrived through a namespace prefix is the
-case that made the order wrong. It is gone; each caller builds one key from the
-receiver it holds — the path segment's own reference site, or the receiver type's
-head through `ImplTargetKey::of_type_head`, which is total over the head so no
-caller has to search for a key by name.
+case that made the order wrong. It is gone; `static_method_decl_id` takes the key
+and derives none, and each caller builds that one key from the receiver it holds
+— the path segment's own reference site, the middle segment of a `ns::Type::method`
+path, or the receiver type's own declaration. A head that names none — an
+instantiation's fused spelling, an anonymous shape — falls to the frame
+derivation, which is one vantage rather than two.
 
 What still prevents some collisions by convention rather than by key is
 `name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`

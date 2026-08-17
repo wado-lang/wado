@@ -1696,7 +1696,6 @@ fn impl_target_key_at(
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
 }
 
-
 /// The key an `impl` header's target resolves to, from the site the header
 /// wrote — the vantage the target name belongs to.
 ///

@@ -537,9 +537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self
-                .lookup_variant_cases_at(receiver_site, prefix)
-                .cloned()
+            if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix).cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -867,9 +865,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_id;
             }
             // Check if this is a flags type method call: Perms::none(), Perms::all()
-            else if let Some(flags_info) = self
-                .lookup_flags_members_at(receiver_site, prefix)
-                .cloned()
+            else if let Some(flags_info) =
+                self.lookup_flags_members_at(receiver_site, prefix).cloned()
                 && matches!(suffix, "none" | "all")
             {
                 if let Some(prefix_seg) = ident.segments.first() {
