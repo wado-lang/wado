@@ -766,12 +766,14 @@ fn let_stmt_qualifies(
     // block exactly as they did in the function. One already nested inside the
     // initializer travels with the value, so relisting it would lift it out of
     // its own scope, ahead of the sibling it reads.
-    let nested = stmts_within_operand(body, value);
     let mut lets: Vec<StmtId> = used_siblings
         .iter()
         .filter_map(|l| siblings.let_stmts.get(l).copied())
-        .filter(|s| !nested.contains(s))
         .collect();
+    if !lets.is_empty() {
+        let nested = stmts_within_operand(body, value);
+        lets.retain(|s| !nested.contains(s));
+    }
     lets.sort_by_key(|s| s.index());
     Some(lets)
 }
