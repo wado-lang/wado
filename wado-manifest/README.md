@@ -3,10 +3,11 @@
 Parsing, validation, and dependency resolution for `wado.toml` and `wado.lock`,
 plus the workspace and dependency discovery that reads them off disk.
 
-`wasm32-unknown-unknown`-safe. The resolver models the dependency graph purely;
-network and git fetching are injected by `wado-cli` through the
-`DependencyProvider` seam. Only `workspace.rs` and `dependency.rs` touch the
-filesystem, and only to read.
+Targets `wasm32-wasip1` / `wasm32-wasip2`, which have a filesystem; it still
+compiles for `wasm32-unknown-unknown`, where the reads no-op. The resolver
+models the dependency graph purely; network and git fetching are injected by
+`wado-cli` through the `DependencyProvider` seam. Only `workspace.rs` and
+`dependency.rs` touch the filesystem, and only to read.
 
 See [WEP: Package Manifest](../docs/wep-2026-02-14-package-manifest.md) for the
 specification.
