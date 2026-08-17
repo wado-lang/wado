@@ -32,6 +32,16 @@ enum RefBinding {
 /// must surface is the binding set (used by or-pattern validation).
 type PatBindings = Vec<(String, u32, TypeId)>;
 
+/// Generic heads `resolve_generic_type` answers itself; none names a
+/// declaration a site could find.
+const BUILTIN_GENERIC_HEADS: &[&str] = &[
+    "Option",
+    "Stream",
+    "StreamWritable",
+    "Future",
+    "FutureWritable",
+];
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Walk a block for its fact-recording side effects. Reify rebuilds the
     /// `TirBlock` from the AST; this walk
@@ -329,6 +339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
+            scope.reject_unresolved_annotation(&field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -350,6 +361,79 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // builds this declaration's `TirStruct`, from the `local_struct_fields`
         // entry just recorded above (annotate records facts; reify is the
         // sole TIR producer, matching every other declaration kind).
+    }
+
+    /// Report an annotation naming a type no declaration answers here. Unlike a
+    /// bound or a signature, an annotation names no type parameter it does not
+    /// already have in scope, so the site's answer is decisive.
+    pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
+        if self.logger.has_errors() {
+            return;
+        }
+        match ty {
+            ast::Type::Named(named) => {
+                if named.name == "Self"
+                    || self
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&named.name)
+                    || self.type_decl_at(Some(named.id), &named.name).is_some()
+                {
+                    return;
+                }
+                if self.resolve_named_type(named.id, &named.name, named.span, false)
+                    != crate::tir::TypeTable::UNKNOWN
+                {
+                    return;
+                }
+                let _ = self.emit(TypeError::UnknownType {
+                    name: named.name.clone(),
+                    span: named.span,
+                });
+            }
+            ast::Type::Generic(generic) => {
+                // With the head unknown the arguments are noise.
+                if !BUILTIN_GENERIC_HEADS.contains(&generic.name.as_str())
+                    && generic.name != crate::tir::TypeTable::ARRAY_TYPE_NAME
+                    && !self
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&generic.name)
+                    && self.type_decl_at(Some(generic.id), &generic.name).is_none()
+                {
+                    let _ = self.emit(TypeError::UnknownType {
+                        name: generic.name.clone(),
+                        span: generic.span,
+                    });
+                    return;
+                }
+                for arg in &generic.args {
+                    self.reject_unresolved_annotation(arg);
+                }
+            }
+            ast::Type::NamespacedGeneric(namespaced) => {
+                for arg in &namespaced.args {
+                    self.reject_unresolved_annotation(arg);
+                }
+            }
+            ast::Type::Function(func_ty) => {
+                for param in &func_ty.params {
+                    self.reject_unresolved_annotation(param);
+                }
+                self.reject_unresolved_annotation(&func_ty.return_type);
+            }
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                self.reject_unresolved_annotation(inner);
+            }
+            ast::Type::Tuple(elems) => {
+                for elem in elems {
+                    self.reject_unresolved_annotation(elem);
+                }
+            }
+            ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
+        }
     }
 
     /// Resolve a local newtype, reporting whether its base came out known.
@@ -446,6 +530,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let resolved = self.resolve_type(annotated_type);
+            self.reject_unresolved_annotation(annotated_type);
             let target_type = if Self::first_infer_span(annotated_type).is_some() {
                 TypeTable::ERROR
             } else {
@@ -627,7 +712,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
                 let mut closure_candidate = ast_value;
                 while let ast::Expr::Unary(u) = closure_candidate {
@@ -728,12 +813,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variable is assigned before any use.
     fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Type annotation is guaranteed by the parser when there is no initializer.
-        let type_id = self.resolve_type(
-            let_stmt
-                .ty
-                .as_ref()
-                .expect("parser ensures type annotation for uninit let"),
-        );
+        let annotated_type = let_stmt
+            .ty
+            .as_ref()
+            .expect("parser ensures type annotation for uninit let");
+        let type_id = self.resolve_type(annotated_type);
+        self.reject_unresolved_annotation(annotated_type);
 
         // Reify rebuilds the pre-declared `Let` (with
         // its unit placeholder value) from the AST; this walk only binds the
@@ -751,7 +836,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
             }
             _ => {
@@ -1039,7 +1124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .intern(ResolvedType::MutRef(type_id)),
                     RefBinding::None => type_id,
                 };
-                ctx.add_local(name.clone(), binding_type, pat_mut, Some(*id));
+                ctx.add_local_at(name.clone(), binding_type, pat_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
@@ -1470,7 +1555,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .intern(ResolvedType::MutRef(scrutinee_type)),
                     RefBinding::None => scrutinee_type,
                 };
-                let index = ctx.add_local(name.clone(), binding_type, is_mut, Some(*id));
+                let index =
+                    ctx.add_local_at(name.clone(), binding_type, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
                 vec![(name.clone(), index, binding_type)]
             }
@@ -2275,7 +2361,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_destructured = matches!(&for_of.binding, crate::ast::Pattern::Tuple(..));
 
         ctx.enter_scope();
-        ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
+        ctx.add_local_at(
+            binding_name.clone(),
+            binding_type,
+            is_mut,
+            binding_id,
+            binding_name_span.unwrap_or_default(),
+        );
         if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
             self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
@@ -2301,7 +2393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let elem_type: TypeId =
                         inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                    ctx.add_local_at(name.clone(), elem_type, is_mut, Some(*id), *name_span);
                     self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
                 }
             }
@@ -2422,7 +2514,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } => {
                         let is_mut =
                             for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
-                        ctx.add_local(name.clone(), bind_elem_type, is_mut, Some(*id));
+                        ctx.add_local_at(
+                            name.clone(),
+                            bind_elem_type,
+                            is_mut,
+                            Some(*id),
+                            *name_span,
+                        );
                         self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
                     }
                     Pattern::Tuple(_, _) | Pattern::Struct { .. } => {

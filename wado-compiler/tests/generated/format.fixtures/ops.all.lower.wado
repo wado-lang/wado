@@ -11037,8 +11037,8 @@ pub fn "core:prelude/string.wado/String::from_utf8_slice"(bytes: ArraySlice<u8>)
         if !(i < len) {
             break;
         }
-        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("ops.all_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
-        if !scalar.valid {
+        let advance: i32 = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_sequence_len"(&bytes, i, len);
+        if (advance == 0) {
             core::builtin::cold_path();
             return Result<String, String>::Err(__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(38);
@@ -11048,9 +11048,73 @@ pub fn "core:prelude/string.wado/String::from_utf8_slice"(bytes: ArraySlice<u8>)
                 break __tmpl: __r;
             });
         }
-        i = (i + scalar.advance);
+        i = (i + advance);
     }
     return Result<String, String>::Ok(String { repr: bytes."core:prelude/slice.wado/ArraySlice<u8>::to_array"() as Array<u8>, used: bytes."core:prelude/slice.wado/ArraySlice<u8>::len"() });
+}
+
+fn "core:prelude/string.wado/String::utf8_sequence_len"(bytes: &ArraySlice<u8>, start: i32, len: i32) -> i32 {
+    let b0: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"(start);
+    if (b0 < 128) {
+        return 1;
+    }
+    if (b0 < 194) {
+        core::builtin::cold_path();
+        return 0;
+    }
+    if (b0 < 224) {
+        if ((start + 1) >= len) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        let b1: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"((start + 1));
+        if ((b1 < 128) || (b1 > 191)) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        return 2;
+    }
+    if (b0 < 240) {
+        if ((start + 2) >= len) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        let b1: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"((start + 1));
+        if ((((b1 < 128) || (b1 > 191)) || ((b0 == 224) && (b1 < 160))) || ((b0 == 237) && (b1 >= 160))) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        let b2: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"((start + 2));
+        if ((b2 < 128) || (b2 > 191)) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        return 3;
+    }
+    if (b0 < 245) {
+        if ((start + 3) >= len) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        let b1: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"((start + 1));
+        if ((((b1 < 128) || (b1 > 191)) || ((b0 == 240) && (b1 < 144))) || ((b0 == 244) && (b1 > 143))) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        let b2: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"((start + 2));
+        if ((b2 < 128) || (b2 > 191)) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        let b3: u8 = bytes."core:prelude/slice.wado/ArraySlice<u8>::get_unchecked"((start + 3));
+        if ((b3 < 128) || (b3 > 191)) {
+            core::builtin::cold_path();
+            return 0;
+        }
+        return 4;
+    }
+    core::builtin::cold_path();
+    return 0;
 }
 
 pub fn "core:prelude/string.wado/String::is_valid_utf8"(bytes: ArraySlice<u8>) -> bool {
@@ -11060,12 +11124,12 @@ pub fn "core:prelude/string.wado/String::is_valid_utf8"(bytes: ArraySlice<u8>) -
         if !(i < len) {
             break;
         }
-        let scalar: Utf8Scalar = "core::prelude/string.wado::decode_utf8_scalar"("ops.all_dirty.wado::$value_copy$core:prelude/slice.wado/ArraySlice<u8>"(bytes), i, len);
-        if !scalar.valid {
+        let advance: i32 = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_sequence_len"(&bytes, i, len);
+        if (advance == 0) {
             core::builtin::cold_path();
             return false;
         }
-        i = (i + scalar.advance);
+        i = (i + advance);
     }
     return true;
 }

@@ -2348,6 +2348,7 @@ impl<'a> PatternLowerer<'a> {
                         name: name.clone(),
                         type_id: *ty,
                         is_mut: false,
+                        span: crate::token::Span::default(),
                     })
                     .chain(body_locals.iter().cloned())
                     .collect();

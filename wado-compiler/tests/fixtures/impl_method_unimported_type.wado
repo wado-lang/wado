@@ -1,0 +1,26 @@
+// An `impl` method's signature resolves in the impl frame's scope, which the
+// free-function check never reached.
+
+use { from_bytes } from "core:json";
+
+struct Rec {
+    a: String,
+}
+
+struct Parser {
+}
+
+impl Parser {
+    fn parse(&self) -> Result<Rec, DeserializeError> {
+        let bytes: ByteList = [0x7b, 0x7d];
+        return from_bytes(bytes);
+    }
+}
+
+export fn run() {
+    let parser = Parser {};
+    let parsed = parser.parse();
+}
+
+__DATA__
+{"compile_error": "unknown type 'DeserializeError'"}

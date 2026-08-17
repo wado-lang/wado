@@ -171,6 +171,7 @@ fn generate_copy_function(
         name: "v".to_string(),
         type_id,
         is_mut: false,
+        span: crate::token::Span::default(),
     }];
     locals.extend(extra_locals);
     let local_count = u32::try_from(locals.len()).expect("local count fits in u32");
@@ -301,6 +302,7 @@ fn build_variant_copy_body(
                     name: local_name.clone(),
                     type_id: *payload_ty,
                     is_mut: false,
+                    span: crate::token::Span::default(),
                 });
                 let payload_local = TirExpr::new(
                     TirExprKind::Local {

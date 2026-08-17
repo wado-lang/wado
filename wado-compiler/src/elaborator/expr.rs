@@ -2906,6 +2906,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return coerced.type_id;
         }
 
+        // `[1, 2] as [i64, i64]`: each element takes the target's own element
+        // type, as the annotated form does.
+        let has_spread = matches!(&cast.expr, ast::Expr::TupleLiteral(t)
+            if t.elements.iter().any(|e| matches!(e, ast::Expr::Spread(..))));
+        let expected_elems = self.tysys.type_table.borrow().as_tuple(target_type);
+        if let ast::Expr::TupleLiteral(tuple_lit) = &cast.expr
+            && !has_spread
+            && let Some(expected_elems) = expected_elems
+        {
+            if tuple_lit.elements.len() != expected_elems.len() {
+                let from_name = self.tysys.type_table.borrow().type_name(target_type);
+                let _ = self.emit(TypeError::InvalidCast {
+                    from: format!("a {}-element tuple", tuple_lit.elements.len()),
+                    to: from_name,
+                    hint: "the two tuples have different arities".to_string(),
+                    span: cast.span,
+                });
+                return target_type;
+            }
+            for (elem, expected) in tuple_lit.elements.iter().zip(expected_elems) {
+                let resolved = self.resolve_expr(elem, ctx, Some(expected));
+                self.typecheck(resolved, expected, elem.span());
+            }
+            self.sem
+                .types
+                .expression_types
+                .insert(cast.expr.id(), target_type);
+            return target_type;
+        }
+        // A spread needs the general literal path, which expands it; the
+        // typecheck reports a widening that expansion cannot do.
+        if matches!(&cast.expr, ast::Expr::TupleLiteral(_))
+            && has_spread
+            && expected_elems.is_some()
+        {
+            let resolved = self.resolve_expr(&cast.expr, ctx, Some(target_type));
+            self.typecheck(resolved, target_type, cast.expr.span());
+            return target_type;
+        }
+
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
@@ -3022,6 +3062,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
+        }
+
+        // Every coercion above declined, so nothing relates these two: `as`
+        // between aggregates is only ever a newtype step, which shares a base.
+        let unrelated_aggregate = {
+            let tt = self.tysys.type_table.borrow();
+            // `i128` / `u128` are structs here, with their own rules below.
+            let wide_int = |id| {
+                matches!(tt.get(id), ResolvedType::Struct { def, .. }
+                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
+            };
+            let source_is_aggregate = !wide_int(source_type)
+                && !wide_int(target_type)
+                && (tt.is_tuple(source_type)
+                    || matches!(tt.get(source_type), ResolvedType::Struct { .. }));
+            source_is_aggregate
+                && tt.get_ultimate_base_type(source_type) != tt.get_ultimate_base_type(target_type)
+        };
+        if unrelated_aggregate {
+            let from_name = self.tysys.type_table.borrow().type_name(source_type);
+            let to_name = self.tysys.type_table.borrow().type_name(target_type);
+            let _ = self.emit(TypeError::InvalidCast {
+                from: from_name,
+                to: to_name,
+                hint: "the two types share no representation; `as` between aggregates is a newtype step".to_string(),
+                span: cast.span,
+            });
+            // The target is the cast's answer, as the other invalid-cast arms
+            // leave it; `error` would bury this one under a cascade.
+            return target_type;
         }
 
         // Casts *from* i128/u128 (including newtypes of them) support:
@@ -4254,7 +4324,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         match binding {
             ast::Pattern::Ident { id, name, span } => {
-                ctx.add_local(name.clone(), binding_type, false, Some(*id));
+                ctx.add_local_at(name.clone(), binding_type, false, Some(*id), *span);
                 self.record_local_symbol(*id, name, *span, false, binding_type);
             }
             ast::Pattern::Tuple(elems, _) => {
@@ -4267,7 +4337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, elem) in elems.iter().enumerate() {
                     if let ast::Pattern::Ident { id, name, span } = elem {
                         let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        ctx.add_local(name.clone(), elem_type, false, Some(*id));
+                        ctx.add_local_at(name.clone(), elem_type, false, Some(*id), *span);
                         self.record_local_symbol(*id, name, *span, false, elem_type);
                     }
                 }

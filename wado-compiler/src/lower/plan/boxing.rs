@@ -105,6 +105,7 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
                 name: format!("__boxed_param_{local_idx}"),
                 type_id: box_type_id,
                 is_mut: false,
+                span: crate::token::Span::default(),
             });
             effective_address_taken.swap_remove(&local_idx);
             effective_address_taken.insert(shadow_idx);

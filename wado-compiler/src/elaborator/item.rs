@@ -1223,6 +1223,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
+            for param in &method.params {
+                frame_scope.reject_unresolved_annotation(&param.ty);
+            }
+            if let Some(ty) = method.return_type.as_ref() {
+                frame_scope.reject_unresolved_annotation(ty);
+            }
             let mut type_params: Vec<(String, TypeId)> = frame
                 .impl_type_params
                 .iter()
@@ -1350,6 +1356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
+            scope.reject_unresolved_annotation(&field.ty);
             if let Some(serde_default) = field
                 .attrs
                 .iter()
@@ -1516,6 +1523,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| method_scope.resolve_type(t));
+            for param in &method.params {
+                method_scope.reject_unresolved_annotation(&param.ty);
+            }
+            if let Some(ty) = method.return_type.as_ref() {
+                method_scope.reject_unresolved_annotation(ty);
+            }
 
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
@@ -1693,6 +1706,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
+            for param in &method.params {
+                scope.reject_unresolved_annotation(&param.ty);
+            }
+            if let Some(ty) = method.return_type.as_ref() {
+                scope.reject_unresolved_annotation(ty);
+            }
             if method.is_async
                 && scope
                     .tysys
@@ -2050,6 +2069,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
         let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
+        // The frame still holds this function's type parameters, so they are
+        // not mistaken for unknown names.
+        for param in &func.params {
+            scope.reject_unresolved_annotation(&param.ty);
+        }
+        if let Some(ty) = func.return_type.as_ref() {
+            scope.reject_unresolved_annotation(ty);
+        }
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
         drop(scope);
         self.sem
@@ -2210,7 +2237,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
                 scope.typecheck(resolved, expected, default_ast.span());
             }
-            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            let index = ctx.add_local_at(
+                param.name.clone(),
+                type_id,
+                param.is_mut,
+                Some(param.id),
+                param.span,
+            );
             scope.record_local_symbol(
                 param.id,
                 &param.name,
@@ -2590,7 +2623,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
                 scope.typecheck(resolved, expected, default_ast.span());
             }
-            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            let index = ctx.add_local_at(
+                param.name.clone(),
+                type_id,
+                param.is_mut,
+                Some(param.id),
+                param.span,
+            );
             scope.record_local_symbol(
                 param.id,
                 &param.name,

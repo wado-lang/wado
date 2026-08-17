@@ -509,6 +509,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             name,
             type_id,
             is_mut: false,
+            span: crate::token::Span::default(),
         });
         index
     }

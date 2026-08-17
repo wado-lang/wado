@@ -1,0 +1,15 @@
+// A tuple cast takes its element types from the target, as the annotated form
+// does. Resolving the literal on its own typed it `[i32, i32]` and left codegen
+// a `StructNew` of the wrong shape.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let widened = [1, 2] as [i64, i64];
+    let mixed = [1, "two"] as [i64, String];
+    let same = [3, 4] as [i32, i32];
+    println(`${widened.0 + widened.1} ${mixed.1} ${same.0}`);
+}
+
+__DATA__
+{"stdout": "3 two 3\n"}

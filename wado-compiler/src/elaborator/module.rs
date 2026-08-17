@@ -31,6 +31,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = scope.resolve_type(&field.ty);
+                        scope.reject_unresolved_annotation(&field.ty);
                         fields.push((field.name.clone(), type_id, field.visibility));
                         field_ast_ids.push(field.id);
                         field_defaults.push(field.default.clone());
@@ -154,6 +155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Each variant case has exactly one payload type.
                         // Unit variants have `()` (unit type) payload.
                         let payload = if let Some(payload_ty) = &case.payload {
+                            scope.reject_unresolved_annotation(payload_ty);
                             scope.resolve_type(payload_ty)
                         } else {
                             TypeTable::UNIT
