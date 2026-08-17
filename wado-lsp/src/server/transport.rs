@@ -97,7 +97,9 @@ pub fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<JsonRpcRequest>
         .map_err(|e| ReadError::Parse(format!("invalid JSON: {e}")))
 }
 
-fn write_serialized<W: Write>(writer: &mut W, body: String) -> Result<(), String> {
+/// Serialize `message` and write it as one Content-Length-framed frame.
+fn send<W: Write, T: Serialize>(writer: &mut W, message: &T) -> Result<(), String> {
+    let body = serde_json::to_string(message).map_err(|e| format!("serialize error: {e}"))?;
     let header = format!("Content-Length: {}\r\n\r\n", body.len());
     writer
         .write_all(header.as_bytes())
@@ -105,8 +107,7 @@ fn write_serialized<W: Write>(writer: &mut W, body: String) -> Result<(), String
     writer
         .write_all(body.as_bytes())
         .map_err(|e| format!("write error: {e}"))?;
-    writer.flush().map_err(|e| format!("flush error: {e}"))?;
-    Ok(())
+    writer.flush().map_err(|e| format!("flush error: {e}"))
 }
 
 /// Send a typed JSON-RPC response.
@@ -115,13 +116,14 @@ pub fn send_response<W: Write, T: Serialize>(
     id: &Value,
     result: T,
 ) -> Result<(), String> {
-    let msg = JsonRpcResponse {
-        jsonrpc: JSONRPC_VERSION,
-        id,
-        result,
-    };
-    let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
-    write_serialized(writer, body)
+    send(
+        writer,
+        &JsonRpcResponse {
+            jsonrpc: JSONRPC_VERSION,
+            id,
+            result,
+        },
+    )
 }
 
 /// Send a typed JSON-RPC notification.
@@ -130,13 +132,14 @@ pub fn send_notification<W: Write, T: Serialize>(
     method: &'static str,
     params: T,
 ) -> Result<(), String> {
-    let msg = JsonRpcNotification {
-        jsonrpc: JSONRPC_VERSION,
-        method,
-        params,
-    };
-    let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
-    write_serialized(writer, body)
+    send(
+        writer,
+        &JsonRpcNotification {
+            jsonrpc: JSONRPC_VERSION,
+            method,
+            params,
+        },
+    )
 }
 
 /// Send a JSON-RPC error response.
@@ -146,13 +149,14 @@ pub fn send_error<W: Write>(
     code: i32,
     message: String,
 ) -> Result<(), String> {
-    let msg = JsonRpcErrorResponse {
-        jsonrpc: JSONRPC_VERSION,
-        id,
-        error: JsonRpcError { code, message },
-    };
-    let body = serde_json::to_string(&msg).map_err(|e| format!("serialize error: {e}"))?;
-    write_serialized(writer, body)
+    send(
+        writer,
+        &JsonRpcErrorResponse {
+            jsonrpc: JSONRPC_VERSION,
+            id,
+            error: JsonRpcError { code, message },
+        },
+    )
 }
 
 /// Decode request params. On failure, send an `InvalidParams` error response

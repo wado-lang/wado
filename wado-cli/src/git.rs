@@ -211,7 +211,7 @@ pub fn materialize_entry(
         Some(dir) => worktree.join(dir),
         None => worktree,
     };
-    let entry = wado_lsp::host::package_lib_entry(&pkg_dir).map_err(|message| {
+    let entry = wado_workspace::package_lib_entry(&pkg_dir).map_err(|message| {
         ProviderError::InvalidManifest {
             source: pkg_dir.display().to_string(),
             message,
@@ -245,7 +245,7 @@ fn worktree_is_valid(worktree: &Path) -> bool {
 
 /// The completion marker beside the worktree, inside `.worktrees/` (so
 /// `wado clean` removes it and ghq ignores it), not in the checkout itself.
-/// Kept in sync with the reader in `wado_lsp::host`.
+/// Kept in sync with the reader in `wado_workspace`.
 fn ready_marker(worktree: &Path) -> PathBuf {
     let mut marker = worktree.as_os_str().to_os_string();
     marker.push(".ready");

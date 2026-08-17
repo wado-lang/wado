@@ -13,6 +13,7 @@ use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
 use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
+use crate::ast_search::{self, FirstMatch};
 use crate::diagnostics::{Position, Range};
 use crate::location::{module_uri, symbol_uri};
 use crate::query::QueryContext;
@@ -113,24 +114,32 @@ fn find_file_path_at_cursor(module: &Module, line: usize, col: usize) -> Option<
             return Some(use_decl.source.clone());
         }
     }
-    let mut finder = IncludePathFinder {
-        line,
-        col,
-        result: None,
-    };
-    for item in &module.items {
-        finder.visit_item(item);
-        if finder.result.is_some() {
-            break;
-        }
-    }
-    finder.result
+    ast_search::find_in_module(
+        module,
+        IncludePathFinder {
+            line,
+            col,
+            result: None,
+        },
+    )
 }
 
 struct IncludePathFinder {
     line: usize,
     col: usize,
     result: Option<String>,
+}
+
+impl FirstMatch for IncludePathFinder {
+    type Output = String;
+
+    fn found(&self) -> bool {
+        self.result.is_some()
+    }
+
+    fn take(self) -> Option<String> {
+        self.result
+    }
 }
 
 impl AstVisitor for IncludePathFinder {

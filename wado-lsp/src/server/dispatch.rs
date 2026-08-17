@@ -26,29 +26,24 @@ trait TargetDocument {
     fn uri(&self) -> &str;
 }
 
-impl TargetDocument for TextDocumentPositionParams {
-    fn uri(&self) -> &str {
-        &self.text_document.uri
-    }
+macro_rules! target_document {
+    ($($params:ty),+ $(,)?) => {
+        $(
+            impl TargetDocument for $params {
+                fn uri(&self) -> &str {
+                    &self.text_document.uri
+                }
+            }
+        )+
+    };
 }
 
-impl TargetDocument for ReferenceParams {
-    fn uri(&self) -> &str {
-        &self.text_document.uri
-    }
-}
-
-impl TargetDocument for SemanticTokensParams {
-    fn uri(&self) -> &str {
-        &self.text_document.uri
-    }
-}
-
-impl TargetDocument for InlayHintParams {
-    fn uri(&self) -> &str {
-        &self.text_document.uri
-    }
-}
+target_document!(
+    TextDocumentPositionParams,
+    ReferenceParams,
+    SemanticTokensParams,
+    InlayHintParams,
+);
 
 /// Run a document-scoped query: decode the params, build the host for the
 /// document they name, hand both to `handler`, and reply with its result.

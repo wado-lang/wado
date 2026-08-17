@@ -29,6 +29,53 @@ use std::sync::Mutex;
 use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
 
+use crate::Engine;
+
+/// Path a single-file fixture is analysed under.
+pub const TEST_PATH: &str = "/test.wado";
+
+/// An [`Engine`] with one document open, and the host serving the fixture.
+///
+/// Here so a test that builds its own setup stands out as deliberate.
+pub struct Opened {
+    pub engine: Engine,
+    pub host: MapHost,
+    pub uri: String,
+}
+
+/// [`Opened`] over a single fixture file at [`TEST_PATH`].
+#[must_use]
+pub fn open(source: &str) -> Opened {
+    open_at(TEST_PATH, source)
+}
+
+/// [`Opened`] over a single fixture file at `path`.
+#[must_use]
+pub fn open_at(path: &str, source: &str) -> Opened {
+    open_files(&[(path, source)], path)
+}
+
+/// [`Opened`] over a multi-file fixture, with `entry` the open document.
+///
+/// # Panics
+/// If `entry` names no file in `files`.
+#[must_use]
+pub fn open_files(files: &[(&str, &str)], entry: &str) -> Opened {
+    let source = files
+        .iter()
+        .find(|(path, _)| *path == entry)
+        .map(|(_, source)| *source)
+        .expect("entry file present in fixture");
+    let uri = format!("file://{entry}");
+    let mut engine = Engine::new();
+    engine.open_document(&uri, source.to_string());
+    Opened {
+        engine,
+        host: MapHost::with_files(files),
+        uri,
+    }
+}
+
 /// In-memory `CompilerHost` backed by an `IndexMap` of path → source bytes.
 ///
 /// Emitted diagnostics are captured into an internal buffer so tests can

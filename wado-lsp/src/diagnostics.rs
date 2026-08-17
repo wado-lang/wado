@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
 use crate::macros::lsp_repr_u32_enum;
-use crate::text::{LineIndex, PositionEncoding};
+use crate::text::{self, LineIndex, PositionEncoding};
 
 lsp_repr_u32_enum!(
     /// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
@@ -73,35 +73,19 @@ fn span_to_range(
     lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Range {
-    let start_line = span.line.saturating_sub(1) as u32;
-    let end_line = span
-        .end_line
-        .map_or(start_line, |l| l.saturating_sub(1) as u32);
-    let start_codepoint = span.column.saturating_sub(1) as u32;
-    let end_codepoint = span
+    // A `DiagnosticSpan`'s end is optional, unlike a lexer `Span`'s: default it
+    // to a one-column range on the start line. Everything after that is the
+    // same conversion every other query does, so it happens in one place.
+    let end_line = span.end_line.unwrap_or(span.line);
+    let end_column = span
         .end_column
-        .map_or(start_codepoint.saturating_add(1), |c| {
-            c.saturating_sub(1) as u32
-        });
-
-    let (start_char, end_char) = match lines {
-        Some(lines) => (
-            lines.to_character(start_line, start_codepoint, encoding),
-            lines.to_character(end_line, end_codepoint, encoding),
-        ),
-        None => (start_codepoint, end_codepoint),
-    };
-
-    Range {
-        start: Position {
-            line: start_line,
-            character: start_char,
-        },
-        end: Position {
-            line: end_line,
-            character: end_char,
-        },
-    }
+        .unwrap_or_else(|| span.column.saturating_add(1));
+    text::range_from_codepoints(
+        (span.line, span.column),
+        (end_line, end_column),
+        lines,
+        encoding,
+    )
 }
 
 /// Convert a compiler diagnostic to an LSP-compatible diagnostic.

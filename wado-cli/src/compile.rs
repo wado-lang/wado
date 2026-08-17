@@ -567,7 +567,7 @@ async fn materialize_git_dependencies(
     manifest: &wado_manifest::Manifest,
     manifest_root: &Path,
 ) -> Result<(), String> {
-    let locked = wado_lsp::host::locked_git_packages(manifest_root);
+    let locked = wado_workspace::dependency::locked_git_packages(manifest_root);
     for (name, dep) in &manifest.dependencies {
         let DependencySource::Git { url, .. } = &dep.source else {
             continue;

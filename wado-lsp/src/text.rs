@@ -127,23 +127,40 @@ pub(crate) fn line_without_terminator(line: &str) -> &str {
 /// round-trip correctly.
 #[must_use]
 pub fn span_to_range(span: &Span, source: Option<&str>, encoding: PositionEncoding) -> Range {
-    let start_line = span.line.saturating_sub(1) as u32;
-    let start_col_codepoints = span.column.saturating_sub(1) as u32;
-    let end_line = span.end_line.saturating_sub(1) as u32;
-    let end_col_codepoints = span.end_column.saturating_sub(1) as u32;
+    let lines = source.map(LineIndex::new);
+    range_from_codepoints(
+        (span.line, span.column),
+        (span.end_line, span.end_column),
+        lines.as_ref(),
+        encoding,
+    )
+}
 
-    match source {
-        Some(src) => span_to_range_indexed(span, &LineIndex::new(src), encoding),
-        None => Range {
-            start: Position {
-                line: start_line,
-                character: start_col_codepoints,
+/// LSP [`Range`] from the compiler's 1-based `(line, codepoint column)` pairs.
+///
+/// The one place that conversion happens — [`crate::diagnostics`] routes its own
+/// span type through here. `None` lines passes the codepoint columns through.
+#[must_use]
+pub(crate) fn range_from_codepoints(
+    start: (usize, usize),
+    end: (usize, usize),
+    lines: Option<&LineIndex<'_>>,
+    encoding: PositionEncoding,
+) -> Range {
+    let position = |(line, column): (usize, usize)| {
+        let line = line.saturating_sub(1) as u32;
+        let codepoint_col = column.saturating_sub(1) as u32;
+        Position {
+            line,
+            character: match lines {
+                Some(lines) => lines.to_character(line, codepoint_col, encoding),
+                None => codepoint_col,
             },
-            end: Position {
-                line: end_line,
-                character: end_col_codepoints,
-            },
-        },
+        }
+    };
+    Range {
+        start: position(start),
+        end: position(end),
     }
 }
 
@@ -155,26 +172,12 @@ pub(crate) fn span_to_range_indexed(
     lines: &LineIndex<'_>,
     encoding: PositionEncoding,
 ) -> Range {
-    let start_line = span.line.saturating_sub(1) as u32;
-    let end_line = span.end_line.saturating_sub(1) as u32;
-    Range {
-        start: Position {
-            line: start_line,
-            character: lines.to_character(
-                start_line,
-                span.column.saturating_sub(1) as u32,
-                encoding,
-            ),
-        },
-        end: Position {
-            line: end_line,
-            character: lines.to_character(
-                end_line,
-                span.end_column.saturating_sub(1) as u32,
-                encoding,
-            ),
-        },
-    }
+    range_from_codepoints(
+        (span.line, span.column),
+        (span.end_line, span.end_column),
+        Some(lines),
+        encoding,
+    )
 }
 
 /// Translate an LSP `character` (0-based, in `encoding` code units) into
@@ -184,30 +187,25 @@ pub(crate) fn span_to_range_indexed(
 /// newline after a soft-wrap).
 fn character_to_codepoint_offset(line: &str, character: u32, encoding: PositionEncoding) -> usize {
     let target = character as usize;
+    if encoding == PositionEncoding::Utf32 {
+        return target.min(line.chars().count());
+    }
+    let mut units = 0usize;
+    for (i, ch) in line.chars().enumerate() {
+        if units >= target {
+            return i;
+        }
+        units += code_units_of(ch, encoding);
+    }
+    line.chars().count()
+}
+
+/// Code units `ch` occupies in `encoding`.
+fn code_units_of(ch: char, encoding: PositionEncoding) -> usize {
     match encoding {
-        PositionEncoding::Utf8 => {
-            // `character` is a UTF-8 byte index; walk the line's chars
-            // until we reach that byte offset.
-            let mut bytes = 0usize;
-            for (i, ch) in line.chars().enumerate() {
-                if bytes >= target {
-                    return i;
-                }
-                bytes += ch.len_utf8();
-            }
-            line.chars().count()
-        }
-        PositionEncoding::Utf16 => {
-            let mut units = 0usize;
-            for (i, ch) in line.chars().enumerate() {
-                if units >= target {
-                    return i;
-                }
-                units += ch.len_utf16();
-            }
-            line.chars().count()
-        }
-        PositionEncoding::Utf32 => target.min(line.chars().count()),
+        PositionEncoding::Utf8 => ch.len_utf8(),
+        PositionEncoding::Utf16 => ch.len_utf16(),
+        PositionEncoding::Utf32 => 1,
     }
 }
 
@@ -268,19 +266,13 @@ pub(crate) fn codepoints_to_code_units(
     encoding: PositionEncoding,
 ) -> u32 {
     let codepoint_col = codepoint_col.min(line_codepoints);
-    match encoding {
-        PositionEncoding::Utf8 => line
-            .chars()
-            .take(codepoint_col as usize)
-            .map(|c| c.len_utf8() as u32)
-            .sum(),
-        PositionEncoding::Utf16 => line
-            .chars()
-            .take(codepoint_col as usize)
-            .map(|c| c.len_utf16() as u32)
-            .sum(),
-        PositionEncoding::Utf32 => codepoint_col,
+    if encoding == PositionEncoding::Utf32 {
+        return codepoint_col;
     }
+    line.chars()
+        .take(codepoint_col as usize)
+        .map(|c| code_units_of(c, encoding) as u32)
+        .sum()
 }
 
 #[cfg(test)]

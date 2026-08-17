@@ -73,13 +73,10 @@ pub(crate) fn declaration_location(
     ctx: &QueryContext,
     def_id: wado_compiler::ast::AstId,
 ) -> Option<ReferenceLocation> {
+    let span = ctx.declaration_span(def_id)?;
     // Module-level symbols carry a symbol-table entry; methods / associated
     // constants (reached by a `Type::m` notation) do not, so fall back to the
-    // node's own module + name span.
-    let span = ctx
-        .sem
-        .name_span_of(def_id)
-        .or_else(|| ctx.sem.symbol_at(def_id).and_then(|s| s.span))?;
+    // node's own module.
     let uri = match ctx.sem.symbol_at(def_id) {
         Some(symbol) => symbol_uri(ctx.entry(), symbol, ctx.uri)?,
         None => module_uri(ctx.entry(), ctx.sem.module_of_id(def_id)?, ctx.uri)?,
@@ -105,7 +102,7 @@ pub(crate) fn use_site_location(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::MapHost;
+    use crate::query::test_ctx::with_ctx;
     use crate::text::PositionEncoding;
 
     async fn refs_at(
@@ -114,12 +111,10 @@ mod tests {
         character: u32,
         include_declaration: bool,
     ) -> Vec<ReferenceLocation> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
-        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf16);
-        find_references(&ctx, Position { line, character }, include_declaration)
+        with_ctx(source, PositionEncoding::Utf16, |ctx| {
+            find_references(ctx, Position { line, character }, include_declaration)
+        })
+        .await
     }
 
     fn ranges(refs: &[ReferenceLocation]) -> Vec<(u32, u32, u32, u32)> {

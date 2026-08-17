@@ -56,15 +56,19 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 /// emits via [`Code::KilnStaleCache`] will point at locations that
 /// don't exist in the source the rest of the snapshot is built against.
 ///
+/// Every file read here goes through `host.load_source`; only path
+/// normalisation ([`safe_join`], [`canonicalized`]) touches the filesystem, and
+/// it degrades to the lexical form where there is none.
+///
 /// Returns an empty index when the entry has no inline `with` clauses
 /// or no enclosing `wado.toml` is found.
-pub fn prepare_invocations<H: CompilerHost>(
+pub async fn prepare_invocations<H: CompilerHost>(
     entry_filename: &str,
     entry_ast: &Module,
     host: &H,
 ) -> InvocationIndex {
     let entry_path = Path::new(entry_filename);
-    let Some(manifest_root) = crate::workspace::nearest_manifest_dir(entry_path) else {
+    let Some(manifest_root) = nearest_manifest_dir(entry_path, host).await else {
         return InvocationIndex::new();
     };
 
@@ -92,7 +96,7 @@ pub fn prepare_invocations<H: CompilerHost>(
     let mut index = InvocationIndex::new();
     for invocation in &invocations {
         let invocation_id = &invocation.decl_site.synthetic_id;
-        match resolve_invocation(&manifest_root, invocation) {
+        match resolve_invocation(&manifest_root, invocation, host).await {
             Ok(entry_uri) => {
                 // Key by the literal `from "<source>"` string: the loader looks
                 // up redirects with the unresolved import path, while
@@ -142,9 +146,10 @@ fn use_decl_span_for(module: &Module, from: &InvocationPath, filename: &str) -> 
 /// no metadata, no entry output recorded, or an output that is missing
 /// or escapes the workspace — returns a human-readable reason for
 /// [`Code::KilnStaleCache`].
-fn resolve_invocation(
+async fn resolve_invocation<H: CompilerHost>(
     manifest_root: &Path,
     invocation: &wado_compiler::kiln::Invocation,
+    host: &H,
 ) -> Result<String, String> {
     let Some(output_dir_abs) = safe_join(manifest_root, invocation.output_dir.as_str()) else {
         return Err(format!(
@@ -154,37 +159,27 @@ fn resolve_invocation(
     };
     let metadata_path = output_dir_abs.join(metadata_filename(invocation.from.as_str()));
 
-    let metadata: Metadata = match std::fs::read_to_string(&metadata_path) {
-        Ok(s) => match serde_json::from_str::<Metadata>(&s) {
-            Ok(m) if m.version == METADATA_VERSION => m,
-            Ok(_) => {
-                return Err(format!(
-                    "metadata at {} has an unsupported version",
-                    metadata_path.display(),
-                ));
-            }
-            Err(e) => {
-                return Err(format!("failed to parse {}: {e}", metadata_path.display()));
-            }
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(format!("no cache at {}", metadata_path.display()));
-        }
-        Err(e) => {
-            return Err(format!("cannot read {}: {e}", metadata_path.display()));
-        }
-    };
+    let bytes = host
+        .load_source(&metadata_path.display().to_string())
+        .await
+        .map_err(|e| format!("no cache at {}: {e}", metadata_path.display()))?;
+    let metadata: Metadata = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("failed to parse {}: {e}", metadata_path.display()))?;
+    if metadata.version != METADATA_VERSION {
+        return Err(format!(
+            "metadata at {} has an unsupported version",
+            metadata_path.display(),
+        ));
+    }
 
     if !metadata.outputs.iter().any(|o| o.entry) {
         return Err("no entry output recorded in metadata".to_string());
     }
 
-    // Every recorded output must still exist within the workspace: the entry
-    // module typically imports its generated siblings by relative path, so a
-    // missing sibling would fail the import with an opaque error. Refusing the
-    // whole redirect here surfaces the actionable `re-run wado compile` hint
-    // instead. This is an existence (and path-sandbox) check only — not the
-    // freshness/hash validation consume-only deliberately skips.
+    // The entry module imports its generated siblings by relative path, so a
+    // missing one would fail the import opaquely; refusing the whole redirect
+    // surfaces the actionable `re-run wado compile` hint instead. Presence and
+    // path-sandbox only — not the hash validation consume-only skips.
     let mut entry_abs: Option<PathBuf> = None;
     for output in &metadata.outputs {
         let Some(abs) = safe_join(manifest_root, &output.path) else {
@@ -193,7 +188,7 @@ fn resolve_invocation(
                 output.path,
             ));
         };
-        if !abs.exists() {
+        if host.load_source(&abs.display().to_string()).await.is_err() {
             return Err(format!("{} missing on disk", output.path));
         }
         if output.entry {
@@ -202,8 +197,35 @@ fn resolve_invocation(
     }
 
     let abs_entry = entry_abs.expect("entry output presence verified above");
-    let canonical = std::fs::canonicalize(&abs_entry).unwrap_or(abs_entry);
-    Ok(path_to_kiln_uri(&canonical))
+    Ok(path_to_kiln_uri(&canonicalized(abs_entry)))
+}
+
+/// The nearest ancestor of `start` whose `wado.toml` the host can load.
+///
+/// A relative `start` — every non-`file:` document URI — has no workspace to
+/// anchor against and yields `None` rather than walking the process's cwd.
+async fn nearest_manifest_dir<H: CompilerHost>(start: &Path, host: &H) -> Option<PathBuf> {
+    if !start.is_absolute() {
+        return None;
+    }
+    let mut dir = start.to_path_buf();
+    while dir.pop() {
+        let manifest = dir.join(wado_workspace::MANIFEST_FILENAME);
+        if host
+            .load_source(&manifest.display().to_string())
+            .await
+            .is_ok()
+        {
+            return Some(dir);
+        }
+    }
+    None
+}
+
+/// `path` with symlinks resolved, or `path` itself where that cannot be done.
+/// Mirrors `wado-cli`'s kiln driver so both spell the same file the same way.
+fn canonicalized(path: PathBuf) -> PathBuf {
+    std::fs::canonicalize(&path).unwrap_or(path)
 }
 
 /// Join `rel` onto `manifest_root` while refusing absolute paths,

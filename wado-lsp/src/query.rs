@@ -120,4 +120,38 @@ impl<'a> QueryContext<'a> {
     pub fn source_for_id(&self, id: AstId) -> Option<&'a str> {
         (self.sem.module_of_id(id) == Some(self.entry())).then_some(self.source)
     }
+
+    /// Span of the declaration `def_id`'s own name.
+    ///
+    /// `name_span_of` covers no anonymous `impl`, `Item::Resource` or
+    /// `Item::Test`, so a registered symbol's own span is the fallback.
+    pub fn declaration_span(&self, def_id: AstId) -> Option<Span> {
+        self.sem
+            .name_span_of(def_id)
+            .or_else(|| self.sem.symbol_at(def_id).and_then(|s| s.span))
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_ctx {
+    use super::QueryContext;
+    use crate::test_support::MapHost;
+    use crate::text::PositionEncoding;
+
+    /// Path every single-file feature test analyses under.
+    pub(crate) const PATH: &str = "/test.wado";
+
+    /// Analyse `source` and hand `f` a [`QueryContext`] over the result.
+    ///
+    /// Takes a closure because a context borrows its `Semantics`.
+    pub(crate) async fn with_ctx<R>(
+        source: &str,
+        encoding: PositionEncoding,
+        f: impl FnOnce(&QueryContext) -> R,
+    ) -> R {
+        let uri = format!("file://{PATH}");
+        let host = MapHost::single(PATH, source);
+        let sem = wado_compiler::semantics(source, &host, Some(PATH)).await;
+        f(&QueryContext::new(&sem, source, &uri, encoding))
+    }
 }

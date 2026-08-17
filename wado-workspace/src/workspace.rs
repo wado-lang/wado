@@ -3,9 +3,8 @@
 //! A workspace member's `wado.toml` force-inherits fields (e.g. `version`) from
 //! the workspace root's `[workspace.package]`, so loading it standalone fails.
 //! These helpers locate the governing workspace and apply inheritance, so a
-//! member is loadable as a path dependency — both by the LSP host's
-//! dependency-index builder (`host::package_lib_entry`) and by `wado update`'s
-//! resolver (`wado-cli` delegates here).
+//! member is loadable as a path dependency — by the dependency-index builders
+//! in `wado-lsp` / `wado-cli` and by `wado update`'s resolver alike.
 
 use std::path::{Path, PathBuf};
 
@@ -36,7 +35,7 @@ pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
 
 /// `p` against the current directory when relative, or `p` itself when the
 /// process has no readable current directory.
-pub(crate) fn absolutize(p: &Path) -> PathBuf {
+pub fn absolutize(p: &Path) -> PathBuf {
     if p.is_absolute() {
         p.to_path_buf()
     } else {
