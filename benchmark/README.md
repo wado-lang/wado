@@ -310,9 +310,9 @@ Four workers — a small VM running one instance:
 | `POST /event/abcd1234/comment`  |     373,798 |                  227,640 |                84,187 |                    64,281 |
 | `GET /static/index.html`        |     373,769 |                  228,782 |                86,381 |                    72,744 |
 
-`wado serve` places third, ahead of Hono on Node. It stops gaining past roughly
-eight workers, and the allocation behind its `content-length` header value costs
-it a few percent of every request.
+`wado serve` places third: level with Hono on Node at one worker, clear of it at
+four. It stops gaining past roughly eight workers, and the allocation behind its
+`content-length` header value costs it a few percent of every request.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).

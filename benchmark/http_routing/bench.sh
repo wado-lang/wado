@@ -140,6 +140,8 @@ start_server() {
 
 run_shape() {
   local workers="$1"
+  local key si ri req method path rps url best_rps best_method best_path
+  local pinned="" saturated="" got differs=""
   CONNECTIONS=$((CONNECTIONS_PER_WORKER * workers))
 
   # `oha` gets a fixed core count, not "the rest": spreading the same
@@ -147,18 +149,23 @@ run_shape() {
   # server pays for the extra wakeups — measured 105k req/s on 4 generator
   # cores against 69k on 8, for the same server. Four sustains >320k req/s,
   # well past anything measured here; the headroom check guards the low side.
-  if [ "$PIN_AVAILABLE" -eq 1 ] && [ $((workers + OHA_CORE_COUNT)) -le "$NPROC" ]; then
+  if [ "$PIN_AVAILABLE" -eq 0 ]; then
+    echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
+  elif [ $((workers + OHA_CORE_COUNT)) -gt "$NPROC" ]; then
+    echo "CPU pinning: disabled (${workers} workers + ${OHA_CORE_COUNT} generator cores exceed nproc=${NPROC})"
+  else
+    pinned=yes
+  fi
+  if [ -n "$pinned" ]; then
     SERVER_PIN=(taskset -c "0-$((workers - 1))")
     OHA_PIN=(taskset -c "$((NPROC - OHA_CORE_COUNT))-$((NPROC - 1))")
     echo "CPU pinning: servers on cores 0-$((workers - 1)), oha on cores $((NPROC - OHA_CORE_COUNT))-$((NPROC - 1))"
   else
     SERVER_PIN=(env)
     OHA_PIN=(env)
-    echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
   fi
 
   declare -A BEST=() REF=()
-  local key si ri req method path rps url best_rps saturated="" got differs=""
   for si in "${!SERVER_KEYS[@]}"; do
     key="${SERVER_KEYS[$si]}"
     url="$(server_url "$key")"
@@ -183,27 +190,34 @@ run_shape() {
       measure "$url" "${req%% *}" "${req#* }" >/dev/null
     done
     best_rps=0
+    best_method=""
+    best_path=""
     for ri in "${!REQUESTS[@]}"; do
       req="${REQUESTS[$ri]}"
       method="${req%% *}"
       path="${req#* }"
+      BEST[${si}|${ri}]=0
       for _ in $(seq 1 "$ROUNDS"); do
         rps=$(measure "$url" "$method" "$path")
         [ -z "$rps" ] && rps=0
-        [ "$rps" -gt "${BEST[${si}|${ri}]:-0}" ] && BEST[${si}|${ri}]="$rps"
+        [ "$rps" -gt "${BEST[${si}|${ri}]}" ] && BEST[${si}|${ri}]="$rps"
       done
-      [ "${BEST[${si}|${ri}]}" -gt "$best_rps" ] && best_rps="${BEST[${si}|${ri}]}" && method="${req%% *}" && path="${req#* }"
+      if [ "${BEST[${si}|${ri}]}" -gt "$best_rps" ]; then
+        best_rps="${BEST[${si}|${ri}]}"
+        best_method="$method"
+        best_path="$path"
+      fi
     done
 
     # A gain at 2x connections means `oha` set that number, not the server.
     # Off by default: it passes at the tuned settings, so it earns its slice
     # only when CONNECTIONS_PER_WORKER, OHA_CORE_COUNT or a shape changes.
-    if [ "$HEADROOM_CHECK" = "1" ]; then
+    if [ "$HEADROOM_CHECK" = "1" ] && [ -n "$best_path" ]; then
       CONNECTIONS=$((CONNECTIONS * 2))
-      rps=$(measure "$url" "$method" "$path")
+      rps=$(measure "$url" "$best_method" "$best_path")
       CONNECTIONS=$((CONNECTIONS / 2))
       if [ "${rps:-0}" -gt $((best_rps * 105 / 100)) ]; then
-        echo "    WARNING: ${best_rps} -> ${rps} req/s at 2x connections; this row is a floor"
+        echo "    WARNING: ${best_method} ${best_path}: ${best_rps} -> ${rps} req/s at 2x connections; this row is a floor"
         saturated="yes"
       fi
     fi
@@ -223,6 +237,9 @@ run_shape() {
     printf '\n'
   done
   echo
+  if [ -z "$pinned" ]; then
+    echo "These rows are unpinned: the servers and the load generator shared cores."
+  fi
   if [ -n "$differs" ]; then
     echo "Response check: FAILED — the servers do not answer alike; see above."
   else
