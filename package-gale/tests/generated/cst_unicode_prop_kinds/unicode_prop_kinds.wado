@@ -1045,6 +1045,7 @@ pub enum TokenKind {
     GREEK,
     INGREEK,
     PATSYN,
+    WIDE,
     WSP,
     OTHER,
     Eof,
@@ -1054,10 +1055,11 @@ pub enum TokenKind {
 pub global TK_GREEK: i32 = 0;
 pub global TK_INGREEK: i32 = 1;
 pub global TK_PATSYN: i32 = 2;
-pub global TK_WSP: i32 = 3;
-pub global TK_OTHER: i32 = 4;
-pub global TK_EOF: i32 = 5;
-pub global TK_ERROR: i32 = 6;
+pub global TK_WIDE: i32 = 3;
+pub global TK_WSP: i32 = 4;
+pub global TK_OTHER: i32 = 5;
+pub global TK_EOF: i32 = 6;
+pub global TK_ERROR: i32 = 7;
 
 struct Lexer {
     chars: List<char>,
@@ -1135,20 +1137,39 @@ fn try_PATSYN(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_WIDE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { 'ᄀ'..='ᅟ' | '⌚'..='⌛' | '〈'..='〉' | '⏩'..='⏬' | '⏰' | '⏳' | '◽'..='◾' | '☔'..='☕' | '☰'..='☷' | '♈'..='♓' | '♿' | '⚊'..='⚏' | '⚓' | '⚡' | '⚪'..='⚫' | '⚽'..='⚾' | '⛄'..='⛅' | '⛎' | '⛔' | '⛪' | '⛲'..='⛳' | '⛵' | '⛺' | '⛽' | '✅' | '✊'..='✋' | '✨' | '❌' | '❎' | '❓'..='❕' | '❗' | '➕'..='➗' | '➰' | '➿' | '⬛'..='⬜' | '⭐' | '⭕' | '⺀'..='⺙' | '⺛'..='⻳' | '⼀'..='⿕' | '⿰'..='⿿' | '、'..='〾' | 'ぁ'..='ゖ' | '゙'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | '㆐'..='㇥' | '㇯'..='㈞' | '㈠'..='㉇' | '㉐'..='ꒌ' | '꒐'..='꓆' | 'ꥠ'..='ꥼ' | '가'..='힣' | '豈'..='﫿' | '︐'..='︙' | '︰'..='﹒' | '﹔'..='﹦' | '﹨'..='﹫' | '𖿠'..='𖿤' | '𖿰'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𝌀'..='𝍖' | '𝍠'..='𝍶' | '🀄' | '🃏' | '🆎' | '🆑'..='🆚' | '🈀'..='🈂' | '🈐'..='🈻' | '🉀'..='🉈' | '🉐'..='🉑' | '🉠'..='🉥' | '🌀'..='🌠' | '🌭'..='🌵' | '🌷'..='🍼' | '🍾'..='🎓' | '🎠'..='🏊' | '🏏'..='🏓' | '🏠'..='🏰' | '🏴' | '🏸'..='🐾' | '👀' | '👂'..='📼' | '📿'..='🔽' | '🕋'..='🕎' | '🕐'..='🕧' | '🕺' | '🖕'..='🖖' | '🖤' | '🗻'..='🙏' | '🚀'..='🛅' | '🛌' | '🛐'..='🛒' | '🛕'..='🛘' | '🛜'..='🛟' | '🛫'..='🛬' | '🛴'..='🛼' | '🟠'..='🟫' | '🟰' | '🤌'..='🤺' | '🤼'..='🥅' | '🥇'..='🧿' | '🩰'..='🩼' | '🪀'..='🪊' | '🪎'..='🫆' | '🫈' | '🫍'..='🫜' | '🫟'..='🫪' | '🫯'..='🫸' | '𠀀'..='𯿽' | '𰀀'..='𿿽' })) { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_3 = pos;
+        rep_3: {
+            if pos >= chars.len() { break rep_3; }
+            if !((chars[pos] matches { 'ᄀ'..='ᅟ' | '⌚'..='⌛' | '〈'..='〉' | '⏩'..='⏬' | '⏰' | '⏳' | '◽'..='◾' | '☔'..='☕' | '☰'..='☷' | '♈'..='♓' | '♿' | '⚊'..='⚏' | '⚓' | '⚡' | '⚪'..='⚫' | '⚽'..='⚾' | '⛄'..='⛅' | '⛎' | '⛔' | '⛪' | '⛲'..='⛳' | '⛵' | '⛺' | '⛽' | '✅' | '✊'..='✋' | '✨' | '❌' | '❎' | '❓'..='❕' | '❗' | '➕'..='➗' | '➰' | '➿' | '⬛'..='⬜' | '⭐' | '⭕' | '⺀'..='⺙' | '⺛'..='⻳' | '⼀'..='⿕' | '⿰'..='⿿' | '、'..='〾' | 'ぁ'..='ゖ' | '゙'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | '㆐'..='㇥' | '㇯'..='㈞' | '㈠'..='㉇' | '㉐'..='ꒌ' | '꒐'..='꓆' | 'ꥠ'..='ꥼ' | '가'..='힣' | '豈'..='﫿' | '︐'..='︙' | '︰'..='﹒' | '﹔'..='﹦' | '﹨'..='﹫' | '𖿠'..='𖿤' | '𖿰'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𝌀'..='𝍖' | '𝍠'..='𝍶' | '🀄' | '🃏' | '🆎' | '🆑'..='🆚' | '🈀'..='🈂' | '🈐'..='🈻' | '🉀'..='🉈' | '🉐'..='🉑' | '🉠'..='🉥' | '🌀'..='🌠' | '🌭'..='🌵' | '🌷'..='🍼' | '🍾'..='🎓' | '🎠'..='🏊' | '🏏'..='🏓' | '🏠'..='🏰' | '🏴' | '🏸'..='🐾' | '👀' | '👂'..='📼' | '📿'..='🔽' | '🕋'..='🕎' | '🕐'..='🕧' | '🕺' | '🖕'..='🖖' | '🖤' | '🗻'..='🙏' | '🚀'..='🛅' | '🛌' | '🛐'..='🛒' | '🛕'..='🛘' | '🛜'..='🛟' | '🛫'..='🛬' | '🛴'..='🛼' | '🟠'..='🟫' | '🟰' | '🤌'..='🤺' | '🤼'..='🥅' | '🥇'..='🧿' | '🩰'..='🩼' | '🪀'..='🪊' | '🪎'..='🫆' | '🫈' | '🫍'..='🫜' | '🫟'..='🫪' | '🫯'..='🫸' | '𠀀'..='𯿽' | '𰀀'..='𿿽' })) { break rep_3; }
+            pos += 1;
+            continue;
+        }
+        pos = rep_saved_3;
+        break;
+    }
+    return pos;
+}
+
 fn try_WSP(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '\t'..='\r' | ' ' | '' | ' ' | ' ' | ' '..=' ' | ' '..=' ' | ' ' | ' ' | '　' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_3 = pos;
-        rep_3: {
-            if pos >= chars.len() { break rep_3; }
-            if !((chars[pos] matches { '\t'..='\r' | ' ' | '' | ' ' | ' ' | ' '..=' ' | ' '..=' ' | ' ' | ' ' | '　' })) { break rep_3; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() { break rep_4; }
+            if !((chars[pos] matches { '\t'..='\r' | ' ' | '' | ' ' | ' ' | ' '..=' ' | ' '..=' ' | ' ' | ' ' | '　' })) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_3;
+        pos = rep_saved_4;
         break;
     }
     return pos;
@@ -1176,7 +1197,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_WSP; }
             end = try_OTHER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '`' | '©' | '®' | '¶' | '»' | '¿' | '×' | '÷' | '〰' } {
+        } else if first_char matches { '`' | '©' | '®' | '¶' | '»' | '¿' | '×' | '÷' } {
             end = try_PATSYN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PATSYN; }
             end = try_OTHER(&lexer.chars, start);
@@ -1191,6 +1212,18 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { 'ᶿ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ω' | 'ꭥ' | '𐆠' } {
             end = try_GREEK(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_GREEK; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '⏰' | '⏳' | '♿' | '⚓' | '⚡' | '⛎' | '⛔' | '⛪' | '⛵' | '⛺' | '⛽' | '✅' | '✨' | '❌' | '❎' | '❗' | '➰' | '➿' | '⭐' | '⭕' | '〰' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '𛄲' | '𛅕' | '🀄' | '🃏' | '🆎' | '🏴' | '👀' | '🕺' | '🖤' | '🛌' | '🟰' | '🫈' } {
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
             end = try_OTHER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OTHER; }
         } else if first_char matches { 'Ͱ'..='ͳ' | '͵'..='ͷ' | 'ͺ'..='ͽ' | 'Έ'..='Ί' | 'Ύ'..='Ρ' | 'Σ'..='ϡ' | 'ϰ'..='Ͽ' } {
@@ -1212,9 +1245,81 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_INGREEK; }
             end = try_OTHER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OTHER; }
-        } else if first_char matches { '!'..='/' | ':'..='@' | '['..='^' | '{'..='~' | '¡'..='§' | '«'..='¬' | '°'..='±' | '‐'..='‧' | '‰'..='‾' | '⁁'..='⁓' | '⁕'..='⁞' | '←'..='⑟' | '─'..='❵' | '➔'..='⯿' | '⸀'..='⹿' | '、'..='〃' | '〈'..='〠' | '﴾'..='﴿' | '﹅'..='﹆' } {
+        } else if first_char matches { '!'..='/' | ':'..='@' | '['..='^' | '{'..='~' | '¡'..='§' | '«'..='¬' | '°'..='±' | '‐'..='‧' | '‰'..='‾' | '⁁'..='⁓' | '⁕'..='⁞' } {
             end = try_PATSYN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '←'..='⑟' | '─'..='❵' | '➔'..='⯿' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '⸀'..='⹿' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '、'..='〃' | '〈'..='〠' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '﴾'..='﴿' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '﹅'..='﹆' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { 'ᄀ'..='ᅟ' } {
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '⌚'..='⌛' | '〈'..='〉' | '⏩'..='⏬' | '◽'..='◾' | '☔'..='☕' | '☰'..='☷' | '♈'..='♓' | '⚊'..='⚏' | '⚪'..='⚫' | '⚽'..='⚾' | '⛄'..='⛅' | '⛲'..='⛳' | '✊'..='✋' | '❓'..='❕' | '➕'..='➗' | '⬛'..='⬜' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '⺀'..='⺙' | '⺛'..='⻳' | '⼀'..='⿕' | '⿰'..='⿿' } {
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '、'..='〾' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { 'ぁ'..='ゖ' | '゙'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | '㆐'..='㇥' | '㇯'..='㈞' | '㈠'..='㉇' | '㉐'..='ꒌ' | '꒐'..='꓆' | 'ꥠ'..='ꥼ' | '가'..='힣' | '豈'..='﫿' | '︐'..='︙' } {
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '︰'..='﹒' } {
+            end = try_PATSYN(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
+            end = try_OTHER(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_OTHER; }
+        } else if first_char matches { '﹔'..='﹦' | '﹨'..='﹫' | '𖿠'..='𖿤' | '𖿰'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛅐'..='𛅒' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𝌀'..='𝍖' | '𝍠'..='𝍶' | '🆑'..='🆚' | '🈀'..='🈂' | '🈐'..='🈻' | '🉀'..='🉈' | '🉐'..='🉑' | '🉠'..='🉥' | '🌀'..='🌠' | '🌭'..='🌵' | '🌷'..='🍼' | '🍾'..='🎓' | '🎠'..='🏊' | '🏏'..='🏓' | '🏠'..='🏰' | '🏸'..='🐾' | '👂'..='📼' | '📿'..='🔽' | '🕋'..='🕎' | '🕐'..='🕧' | '🖕'..='🖖' | '🗻'..='🙏' | '🚀'..='🛅' | '🛐'..='🛒' | '🛕'..='🛘' | '🛜'..='🛟' | '🛫'..='🛬' | '🛴'..='🛼' | '🟠'..='🟫' | '🤌'..='🤺' | '🤼'..='🥅' | '🥇'..='🧿' | '🩰'..='🩼' | '🪀'..='🪊' | '🪎'..='🫆' | '🫍'..='🫜' | '🫟'..='🫪' | '🫯'..='🫸' | '𠀀'..='𯿽' | '𰀀'..='𿿽' } {
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
             end = try_OTHER(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OTHER; }
         } else if first_char matches { '\t'..='\r' | ' '..=' ' | ' '..=' ' } {
@@ -1229,6 +1334,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_INGREEK; }
             end = try_PATSYN(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PATSYN; }
+            end = try_WIDE(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_WIDE; }
             end = try_WSP(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WSP; }
             end = try_OTHER(&lexer.chars, start);
@@ -1259,6 +1366,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_GREEK => "GREEK",
         TK_INGREEK => "INGREEK",
         TK_PATSYN => "PATSYN",
+        TK_WIDE => "WIDE",
         TK_WSP => "WSP",
         TK_OTHER => "OTHER",
         TK_EOF => "Eof",
@@ -1533,16 +1641,16 @@ impl Parser {
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(8);
+    for let mut k = 0; k < 8; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(7);
-    for let mut k = 0; k < 7; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(8);
+    for let mut k = 0; k < 8; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;

@@ -228,6 +228,18 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A clause on an effect operation that dispatch cannot honour. `detail`
+    /// names the clause and why: an operation's effects reach no call site, so
+    /// a default body performing one would hand its caller a capability the
+    /// caller never declared; and the dispatch record holds one slot per
+    /// operation, not one per instantiation.
+    OperationClauseNotAllowed {
+        owner: String,
+        operation: String,
+        detail: &'static str,
+        span: Span,
+    },
+
     /// Invalid numeric literal
     InvalidLiteral {
         message: String,
@@ -621,7 +633,7 @@ pub enum TypeError {
         type_name: String,
         /// `true` when `trait_name` is the compiler's prelude `Display` (resolved
         /// scope-aware at the marker site, so a same-name user trait does not
-        /// match) — gates the `Display`-specific "use `{x:?}`" hint.
+        /// match) — gates the `Display`-specific "use `${x:?}`" hint.
         is_display: bool,
         span: Span,
     },
@@ -902,6 +914,16 @@ impl TypeError {
             TypeError::CalleeNotCallable { type_name, span } => (
                 Code::TypeMismatch,
                 format!("expression is not callable: type '{type_name}' is not a function"),
+                *span,
+            ),
+            TypeError::OperationClauseNotAllowed {
+                owner,
+                operation,
+                detail,
+                span,
+            } => (
+                Code::InvalidSyntax,
+                format!("`{owner}::{operation}` {detail}"),
                 *span,
             ),
             TypeError::InvalidLiteral { message, span } => {
@@ -1367,7 +1389,7 @@ impl TypeError {
                 span,
             } => {
                 let hint = if *is_display {
-                    " `Display` is never auto-derived (plain enums display their bare case name automatically); write a manual `impl Display`, or use `{x:?}` for debug output"
+                    " `Display` is never auto-derived (plain enums display their bare case name automatically); write a manual `impl Display`, or use `${x:?}` for debug output"
                 } else {
                     ""
                 };

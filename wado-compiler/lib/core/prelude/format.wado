@@ -3,7 +3,7 @@
 // Format Infrastructure
 //
 // This module defines the Formatter and Alignment types that
-// back template string format specifiers (`{x:spec}`).
+// back template string format specifiers (`${x:spec}`).
 //
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
@@ -32,8 +32,7 @@ internal enum Alignment {
 /// Format specification fields match Rust's format syntax:
 /// `[[fill]align][sign][#][0][width][.precision]type`
 ///
-/// Width uses -1 for "not specified"; precision uses the sentinels on
-/// `impl Formatter`.
+/// Unset width and precision use the sentinels on `impl Formatter`.
 #[compiler_item("formatter")]
 internal struct Formatter {
     /// Fill character for padding (default: ' ')
@@ -44,10 +43,10 @@ internal struct Formatter {
     pub sign_plus: bool,
     /// Whether to use zero-padding (`0` flag)
     pub zero_pad: bool,
-    /// Minimum field width (-1 = no minimum)
+    /// Minimum field width; `NO_WIDTH` for none
     pub width: i32,
     /// Decimal places for floats; max rendered length for sequences (chars /
-    /// elements). Negative values are the sentinels on `impl Formatter`.
+    /// elements). Negative values are the sentinels below.
     pub precision: i32,
     /// Current indentation level for pretty-printing (used by InspectAlt)
     pub indent: i32,
@@ -55,7 +54,13 @@ internal struct Formatter {
     pub buf: &mut String,
 }
 
+// `synthesis::template` writes `Formatter` literals directly rather than
+// calling `Formatter::new`, so it repeats these sentinels as
+// `compiler_item::FormatterField`'s constants. The e2e fixture
+// `template_formatter_sentinels.wado` fails if the copies drift.
 impl Formatter {
+    /// No width given: every padding path is a no-op.
+    pub const NO_WIDTH: i32 = -1;
     /// No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
     pub const PRECISION_DEFAULT: i32 = -2;
     /// Render uncapped: sequence Inspect skips truncation.
@@ -80,7 +85,7 @@ impl Formatter {
             align: Alignment::Right,
             sign_plus: false,
             zero_pad: false,
-            width: -1,
+            width: Formatter::NO_WIDTH,
             precision: Formatter::PRECISION_DEFAULT,
             indent: 0,
             buf,
@@ -143,7 +148,7 @@ impl Formatter {
     /// Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
     /// The fill character must be ASCII (single byte); non-ASCII fill is not supported.
     pub fn apply_padding(&mut self, start_pos: i32) {
-        // No width set is the default and covers every JSON/CBOR/plain `{x}`
+        // No width set is the default and covers every JSON/CBOR/plain `${x}`
         // value, so this wrapper stays tiny and inlines to one field compare.
         // When a width IS set the slow path runs every time — it is not a cold
         // branch — so the padding logic is merely kept out-of-line via

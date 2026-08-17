@@ -8,15 +8,15 @@ use crate::ast::{
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
     ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl,
-    InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
+    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -2216,6 +2216,7 @@ impl Parser {
             TokenKind::Ident(name) => name,
             _ => unreachable!("parse_labeled_block_stmt called without identifier"),
         };
+        self.check_label_available(&label, start_span)?;
 
         // Consume the colon
         self.expect(&TokenKind::Colon)?;
@@ -3925,6 +3926,7 @@ impl Parser {
                 return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
+                self.check_label_available(&name, start_span)?;
                 self.advance(); // consume ':'
                 let block = self.parse_block()?;
                 let end_span = block.span;
@@ -4840,14 +4842,14 @@ impl Parser {
         })
     }
 
-    fn parse_interface_method(&mut self) -> ParseResult<InterfaceMethod> {
-        // Parse any attributes on the method (e.g., #[cm("...")])
+    /// Parse one member of an `interface` or `resource` block. An interface is
+    /// a trait with a different dispatch story, so a member is parsed exactly
+    /// as a trait method is: a signature terminated by `;`, or a signature
+    /// followed by a block — the operation's default implementation.
+    fn parse_interface_method(&mut self) -> ParseResult<Function> {
+        // Attributes on the method (e.g. `#[cm("...")]`) carry through.
         let attrs = self.parse_attributes()?;
 
-        let id = self.alloc_ast_id();
-        let start_span = self.peek().span;
-
-        // Check for async keyword
         let is_async = if self.check(&TokenKind::Async) {
             self.advance();
             true
@@ -4855,36 +4857,9 @@ impl Parser {
             false
         };
 
-        self.expect(&TokenKind::Fn)?;
-        let (name, name_span) = self.consume_ident_with_span()?;
-
-        let _type_params = self.parse_generic_params()?;
-
-        self.expect(&TokenKind::LParen)?;
-        let params = self.parse_param_list()?;
-        self.expect(&TokenKind::RParen)?;
-
-        let return_type = self.parse_optional_return_type()?;
-
-        self.expect(&TokenKind::Semicolon)?;
-
-        // Span must cover through the terminating `;`, not just the `fn`
-        // keyword line. The formatter's blank-line accounting keys off
-        // `span.end_line()`; a single-line span would drift once the
-        // signature is reflowed across multiple lines, manufacturing blank
-        // lines between members on the next format pass (idempotency break).
-        let end_span = self.tokens[self.pos.saturating_sub(1)].span;
-
-        Ok(InterfaceMethod {
-            id,
-            name,
-            name_span,
-            is_async,
-            attrs,
-            params,
-            return_type,
-            span: start_span.merge(&end_span),
-        })
+        // Visibility comes from the interface itself, and an operation is
+        // never exported at the CM boundary on its own.
+        self.parse_function(Visibility::Private, false, is_async, attrs, true)
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
@@ -5947,21 +5922,22 @@ impl Parser {
                     format,
                     origin,
                 } => {
-                    // The lexer already split off the format specifier, so the
-                    // expression source is parsed as-is (trimmed of surrounding
-                    // whitespace). Trimming moves the origin with it, or every
-                    // span inside a `${ x }` would sit one column early.
+                    // The specifier sits one `:` past the expression source the
+                    // lexer split off, so its position follows from the origin.
+                    let spec_origin = advance_position(advance_position(origin, &expr), ":");
+                    // The expression source is parsed as-is (trimmed of
+                    // surrounding whitespace). Trimming moves the origin with
+                    // it, or every span inside a `${ x }` would sit one column
+                    // early.
                     let trimmed = expr.trim_start();
-                    let origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
-                    let parsed = self.parse_interpolation_expr(trimmed.trim_end(), span, origin)?;
+                    let expr_origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
+                    let parsed =
+                        self.parse_interpolation_expr(trimmed.trim_end(), origin, expr_origin)?;
                     let format_spec = match format {
-                        Some(spec) if spec.is_empty() => {
-                            return Err(ParseError {
-                                message: "empty format specifier in template string".to_string(),
-                                span,
-                            });
+                        Some(spec) => {
+                            self.check_format_spec(&spec, spec_origin)?;
+                            Some(FormatSpec { spec })
                         }
-                        Some(spec) => Some(FormatSpec { spec }),
                         None => None,
                     };
                     parts.push(TemplatePart::Interpolation {
@@ -5979,6 +5955,35 @@ impl Parser {
         })))
     }
 
+    /// Reject a label the compiler reserves for its synthesised blocks — passes
+    /// recognise those by label, so source must not be able to write one.
+    fn check_label_available(&mut self, label: &str, span: Span) -> ParseResult<()> {
+        if crate::name::is_reserved_label(label) {
+            return Err(ParseError {
+                message: format!(
+                    "label `{label}` is reserved for the compiler; a label cannot start with `{}`",
+                    crate::name::SYNTHETIC_LABEL_PREFIX
+                ),
+                span,
+            });
+        }
+        Ok(())
+    }
+
+    /// Reject a malformed format specifier. `origin` is where the specifier
+    /// starts in the file, so the offset [`crate::format_spec`] reports lands on
+    /// the offending character.
+    fn check_format_spec(&mut self, spec: &str, origin: crate::token::Position) -> ParseResult<()> {
+        let Err(error) = crate::format_spec::parse(spec) else {
+            return Ok(());
+        };
+        let at = advance_position(origin, &spec[..error.offset]);
+        Err(ParseError {
+            message: format!("{error} in template string"),
+            span: span_of(at, spec[error.offset..].chars().next()),
+        })
+    }
+
     /// Parse an interpolation expression string.
     ///
     /// `origin` is where `expr_str`'s first byte sits in the file. The fragment
@@ -5986,16 +5991,19 @@ impl Parser {
     /// one is rebased before it can reach the AST, or a node inside `${…}`
     /// would carry an offset that indexes unrelated text and a column measured
     /// from the wrong place.
+    ///
+    /// `open` is where the introducing `${` ends — what an empty-expression
+    /// error points at, having no text of its own to blame.
     fn parse_interpolation_expr(
         &mut self,
         expr_str: &str,
-        span: Span,
+        open: crate::token::Position,
         origin: crate::token::Position,
     ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
             return Err(ParseError {
                 message: "empty interpolation expression in template string".to_string(),
-                span,
+                span: span_of_open_brace(open),
             });
         }
 
@@ -6170,6 +6178,37 @@ fn advance_position(origin: crate::token::Position, text: &str) -> crate::token:
             None => origin.column + text.chars().count(),
         },
     }
+}
+
+/// The span of `ch` at `at`; zero-width when there is no character left to
+/// blame, so an error past the end of the text claims no byte.
+fn span_of(at: crate::token::Position, ch: Option<char>) -> Span {
+    let width = ch.map_or(0, char::len_utf8);
+    Span::with_end(
+        at.offset,
+        at.offset + width,
+        at.line,
+        at.column,
+        at.line,
+        at.column + usize::from(ch.is_some()),
+    )
+}
+
+/// The span of the `${` whose expression starts at `origin` — both ASCII, and
+/// always on the expression's own line, so the opening column is two back.
+fn span_of_open_brace(origin: crate::token::Position) -> Span {
+    assert!(
+        origin.offset >= 2 && origin.column >= 3,
+        "an interpolation origin always follows `${{`"
+    );
+    Span::with_end(
+        origin.offset - 2,
+        origin.offset,
+        origin.line,
+        origin.column - 2,
+        origin.line,
+        origin.column,
+    )
 }
 
 /// Rebase a position produced by lexing a fragment on its own onto the file the
@@ -7278,6 +7317,77 @@ mod tests {
             } else {
                 panic!("expected assert statement");
             }
+        }
+    }
+
+    /// A malformed format specifier is a syntax error, and the span points at
+    /// the offending character rather than at the whole template.
+    #[test]
+    fn test_template_format_spec_errors_are_reported_precisely() {
+        // `blamed` is located in the source, so the expected column cannot
+        // drift with the prefix's length.
+        let cases: [(&str, &str, &str); 4] = [
+            ("`ab${x:zz}`", "unknown format specifier `z`", "zz}`"),
+            ("`ab${x:5:8}`", "unknown format specifier `:`", ":8}`"),
+            ("`ab${x:.}`", "expected digits after `.`", "}`"),
+            ("`ab${x:}`", "empty format specifier", "}`"),
+        ];
+        for (template, expected, blamed) in cases {
+            let source = format!("fn f() {{ let x = 1; let s = {template}; }}");
+            let (_, errors) = parse_recovering(&source);
+            let hit = errors
+                .iter()
+                .find(|e| e.message.contains(expected))
+                .unwrap_or_else(|| panic!("{template}: no `{expected}` in {errors:?}"));
+            let want = source.find(blamed).expect("blamed substring");
+            assert_eq!(hit.span.start, want, "{template}: span {:?}", hit.span);
+            assert_eq!(hit.span.column, want + 1, "{template}: span {:?}", hit.span);
+        }
+    }
+
+    /// `__` is the compiler's label namespace: passes recognise synthesised
+    /// blocks by it, so source cannot mint one.
+    #[test]
+    fn test_reserved_label_rejected() {
+        for source in [
+            "fn f() { __tmpl: { break __tmpl; } }",
+            "fn f() { let x = __tmpl: { break __tmpl: 1; }; }",
+        ] {
+            let (_, errors) = parse_recovering(source);
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.message.contains("`__tmpl` is reserved")),
+                "{source}: {errors:?}"
+            );
+        }
+        let (_, errors) = parse_recovering("fn f() { outer: { break outer; } }");
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    /// An empty interpolation points at the `${` that opens it.
+    #[test]
+    fn test_template_empty_interpolation_span() {
+        let source = "fn f() { let s = `ab${}cd`; }";
+        let (_, errors) = parse_recovering(source);
+        let hit = errors
+            .iter()
+            .find(|e| e.message.contains("empty interpolation expression"))
+            .unwrap_or_else(|| panic!("no empty-interpolation error in {errors:?}"));
+        let want = source.find("${}").expect("interpolation");
+        assert_eq!(hit.span.start, want, "span {:?}", hit.span);
+        assert_eq!(hit.span.end, want + 2, "span {:?}", hit.span);
+    }
+
+    /// Every specifier the stdlib and fixtures rely on keeps parsing.
+    #[test]
+    fn test_template_format_specs_accepted() {
+        for spec in [
+            "?", "#?", "x", "#010X", "*^10.2", "+08", ".2f", "0.2f", "-<8", "<15e", " 5 ",
+        ] {
+            let source = format!("fn f() {{ let x = 1; let s = `${{x:{spec}}}`; }}");
+            let (_, errors) = parse_recovering(&source);
+            assert!(errors.is_empty(), "spec `{spec}`: {errors:?}");
         }
     }
 
@@ -9094,5 +9204,51 @@ line 2
             "unexpected message: {}",
             err.message
         );
+    }
+
+    fn parse_interface(source: &str) -> InterfaceDecl {
+        let module = parse(source).unwrap();
+        let Item::Interface(decl) = &module.items[0] else {
+            panic!("expected an interface declaration");
+        };
+        decl.clone()
+    }
+
+    #[test]
+    fn interface_method_parses_without_a_body() {
+        let decl = parse_interface("interface Log { fn emit(message: String); }");
+        assert_eq!(decl.methods.len(), 1);
+        assert_eq!(decl.methods[0].name, "emit");
+        assert!(decl.methods[0].body.is_none());
+    }
+
+    #[test]
+    fn interface_method_parses_with_a_default_body() {
+        let decl = parse_interface(
+            "interface Log {
+                fn enabled(level: i32) -> bool;
+                fn emit(message: String) { log_stderr(message); }
+            }",
+        );
+        assert_eq!(decl.methods.len(), 2);
+        assert!(decl.methods[0].body.is_none());
+        assert_eq!(decl.methods[1].name, "emit");
+        assert!(
+            decl.methods[1].body.is_some(),
+            "a default body makes the operation optional for a handler"
+        );
+    }
+
+    #[test]
+    fn interface_method_parses_the_whole_trait_member_grammar() {
+        // The grammar is the trait grammar, so a `with` clause and type
+        // parameters parse here rather than erroring out of the parser. Both
+        // are then rejected by the elaborator with a diagnostic that says why
+        // (`reject_unsupported_operation_clauses`) — the parser's job is to
+        // read the member, not to decide what dispatch can honour.
+        let decl = parse_interface("interface Run { fn go<T>(v: T) -> T with Stdout; }");
+        let method = &decl.methods[0];
+        assert_eq!(method.type_params.len(), 1);
+        assert_eq!(method.effects, ["Stdout"]);
     }
 }

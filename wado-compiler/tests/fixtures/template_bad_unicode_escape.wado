@@ -1,0 +1,9 @@
+// A malformed `\u` escape names itself, as it does in a plain `"\u12"`.
+// Regression: the template scanner consumed four characters unconditionally,
+// swallowing the closing backtick, and reported "unterminated template string".
+export fn run() {
+    let _ = `\u12`;
+}
+
+__DATA__
+{"compile_error": "expected 4 hex digits after \\u"}

@@ -714,7 +714,7 @@ fn render_param(param: &Param) -> String {
     }
 }
 
-fn render_interface_method_signature(m: &crate::ast::InterfaceMethod) -> String {
+fn render_interface_method_signature(m: &crate::ast::Function) -> String {
     let mut sig = String::new();
     if m.is_async {
         sig.push_str("async ");

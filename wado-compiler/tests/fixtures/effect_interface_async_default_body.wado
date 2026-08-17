@@ -1,0 +1,16 @@
+// An async operation's call site is typed as an `AsyncCall`, which a plain
+// body does not produce — a diagnostic, not an ICE in the WIR builder.
+interface Fetcher {
+    async fn get(url: String) -> AsyncCall<String> {
+        return "";
+    }
+}
+
+export fn run() {
+    Fetcher::get(`x`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot carry a default implementation"
+}

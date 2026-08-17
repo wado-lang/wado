@@ -1770,7 +1770,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let decl_ops: Vec<(
             crate::ast::AstId,
             Vec<ast::GenericParam>,
-            Vec<ast::InterfaceMethod>,
+            Vec<ast::Function>,
             bool,
         )> = module
             .items
@@ -1875,9 +1875,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Interface(effect_decl) => {
                     // Records `effect_ops`; reify reads them.
                     self.resolve_effect_decl(effect_decl);
+                    self.reject_unsupported_operation_clauses(
+                        &effect_decl.name,
+                        &effect_decl.methods,
+                        crate::elaborator::item::OperationOwner::Interface,
+                    );
+                    // An operation's default body is walked as the function
+                    // reify will emit it as, so its facts land under the same
+                    // `AstId` every other function's do.
+                    for method in crate::elaborator::reify::default_impl_methods(effect_decl) {
+                        self.resolve_function(&method);
+                    }
                 }
                 Item::Resource(resource_decl) => {
                     self.resolve_resource_decl(resource_decl);
+                    self.reject_unsupported_operation_clauses(
+                        &resource_decl.name,
+                        &resource_decl.methods,
+                        crate::elaborator::item::OperationOwner::Resource,
+                    );
                 }
                 // Other items will be added as needed
                 _ => {}

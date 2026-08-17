@@ -68,6 +68,30 @@ fn write_base64_string(buf: &mut String, v: ByteSlice) {
 /// Only `"`, `\`, and controls (< 0x20) are escaped — all ASCII — so unescaped
 /// runs (including any multi-byte UTF-8) bulk-copy instead of re-encoding.
 pub fn write_escaped_string(buf: &mut String, s: &String) {
+    if json_escape_free(s) {
+        buf.push('"');
+        buf.push_str(s);
+        buf.push('"');
+        return;
+    }
+    write_escaped_string_slow(buf, s);
+}
+
+/// True when `s` holds no byte JSON must escape. Pure and closed over `s`, so a
+/// constant key folds this away at compile time.
+fn json_escape_free(s: &String) -> bool {
+    let n = s.len();
+    for let mut i = 0; i < n; i += 1 {
+        let b = s.get_byte_unchecked(i);
+        if b >= 0x20 && b != 0x22 && b != 0x5C {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+fn write_escaped_string_slow(buf: &mut String, s: &String) {
     buf.push('"');
     let n = s.len();
     let mut run_start = 0;
@@ -233,14 +257,19 @@ fn write_pretty_newline_and_indent(buf: &mut String, indent: &String, depth: i32
     }
 }
 
+/// Serializes one nested value into `buf`, wrapping and unwrapping the
+/// `JsonSerializer` the compact container writers share.
+fn serialize_into<T: Serialize>(buf: &mut String, value: &T) -> Result<(), SerializeError> {
+    let mut ser = JsonSerializer { buf: buf };
+    return value.serialize(&mut ser);
+}
+
 impl SerializeSeq for JsonSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.buf.push_str(&",");
         }
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         self.count += 1;
         return r;
     }
@@ -256,18 +285,14 @@ impl SerializeMap for JsonMapSerializer {
         if self.count > 0 {
             self.buf.push_str(&",");
         }
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = key.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, key);
         self.buf.push_str(&":");
         self.need_value = true;
         return r;
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         self.count += 1;
         self.need_value = false;
         return r;
@@ -279,16 +304,52 @@ impl SerializeMap for JsonMapSerializer {
     }
 }
 
+/// Writes `"name":`, preceded by `,` when the struct already has a field.
+fn write_plain_key(buf: &mut String, name: &String, count: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    buf.push('"');
+    buf.push_str(name);
+    buf.push_str(&"\":");
+}
+
+fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    write_escaped_string_slow(buf, name);
+    buf.push(':');
+}
+
+/// The indented twins, on the same split so a constant key folds there too.
+fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    write_pretty_newline_and_indent(buf, indent, depth);
+    buf.push('"');
+    buf.push_str(name);
+    buf.push_str(&"\": ");
+}
+
+fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
+    if count > 0 {
+        buf.push(',');
+    }
+    write_pretty_newline_and_indent(buf, indent, depth);
+    write_escaped_string_slow(buf, name);
+    buf.push_str(&": ");
+}
+
 impl SerializeStruct for JsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.push_str(&",");
+        if json_escape_free(name) {
+            write_plain_key(self.buf, name, self.count);
+        } else {
+            write_escaping_key(self.buf, name, self.count);
         }
-        write_escaped_string(self.buf, name);
-        self.buf.push_str(&":");
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         self.count += 1;
         return r;
     }
@@ -301,9 +362,7 @@ impl SerializeStruct for JsonStructSerializer {
 
 impl SerializeVariant for JsonVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize(&mut ser);
-        self.buf = ser.buf;
+        let r = serialize_into(self.buf, value);
         return r;
     }
 
@@ -523,12 +582,11 @@ impl SerializeMap for PrettyJsonMapSerializer {
 
 impl SerializeStruct for PrettyJsonStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
-        if self.count > 0 {
-            self.buf.push_str(&",");
+        if json_escape_free(name) {
+            write_pretty_plain_key(self.buf, name, self.count, self.indent, self.depth);
+        } else {
+            write_pretty_escaping_key(self.buf, name, self.count, self.indent, self.depth);
         }
-        write_pretty_newline_and_indent(self.buf, self.indent, self.depth);
-        write_escaped_string(self.buf, name);
-        self.buf.push_str(&": ");
         let mut ser = PrettyJsonSerializer {
             buf: self.buf,
             indent: self.indent,

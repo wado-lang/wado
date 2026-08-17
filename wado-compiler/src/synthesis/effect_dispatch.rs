@@ -200,6 +200,14 @@ pub struct DispatchPlan {
     /// Cached operation declarations (cloned from `EffectMeta`) so the
     /// wrapper / closure synth doesn't have to walk back to the index.
     pub operations: Vec<TirEffectOp>,
+    /// Module the effect is declared in — where an operation's default
+    /// implementation lives.
+    pub decl_module: ModuleSource,
+    /// Operations answered by the consumer's implementation across the CM
+    /// boundary. A handler that leaves one out keeps the wrapper's routing
+    /// rather than falling to a local default, which would shadow the real
+    /// implementation on the other side.
+    pub open_boundary_ops: IndexSet<String>,
 }
 
 /// Build the mangled instantiation label for naming dispatch
@@ -274,6 +282,7 @@ fn substitute_operations(
                 span: op.span,
                 cm_name: op.cm_name.clone(),
                 is_async: op.is_async,
+                has_default: op.has_default,
             }
         })
         .collect()
@@ -399,6 +408,10 @@ fn synthesize_dispatch_struct(
         field_types,
         field_indices,
         operations: meta.operations.clone(),
+        decl_module: key.0.clone(),
+        // Filled by `synthesize_dispatch_wrappers`, which is where the
+        // open-and-registered test already runs.
+        open_boundary_ops: IndexSet::default(),
     }
 }
 
@@ -448,7 +461,7 @@ fn synthesize_dispatch_wrappers(
     entry_source: &ModuleSource,
     key: &InstantiationKey,
     meta: &EffectMeta,
-    plan: &DispatchPlan,
+    plan: &mut DispatchPlan,
     open_effects: &IndexSet<(ModuleSource, String)>,
 ) {
     let (effect_module, base_name, type_args) = key;
@@ -473,6 +486,13 @@ fn synthesize_dispatch_wrappers(
                     ))
                     .is_some()
         })
+        .collect();
+    plan.open_boundary_ops = plan
+        .operations
+        .iter()
+        .zip(&open_and_registered)
+        .filter(|(_, is_open_import)| **is_open_import)
+        .map(|(op, _)| op.name.clone())
         .collect();
     let entry_module = project
         .tir_modules
@@ -719,7 +739,48 @@ fn build_dispatch_wrapper_function(
     // and cm_binding rewrites both uniformly. A user-defined effect never gets
     // here: effect-check insists on a handler at every call site.
     let mut else_stmts: Vec<TirStmt> = Vec::new();
-    if is_resource {
+    if !is_resource && op.cm_name.is_none() && !is_open_boundary_effect && op.has_default {
+        // The declaration gave the operation a body: that is what "no handler
+        // installed" does, where nothing else answers for the operation. Being
+        // open at the CM boundary is a property of the world rather than of the
+        // declaration, so this ordering is what keeps a local default from
+        // shadowing the consumer's implementation.
+        assert!(
+            type_args.is_empty(),
+            "a default implementation is one monomorphic function, so only a \
+             non-generic declaration can carry one: `{base_name}::{op_name}`"
+        );
+        let default_call = TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(FunctionRef {
+                    module_source: effect_module.clone(),
+                    name: crate::name::effect_default_impl_name(base_name, op_name),
+                    monomorph_info: None,
+                    method_info: None,
+                }),
+                type_args: vec![],
+                args: arg_exprs
+                    .iter()
+                    .cloned()
+                    .map(|e| CallArg::new(e, false))
+                    .collect(),
+                has_receiver: false,
+            },
+            return_type,
+            span,
+        );
+        if return_type == TypeTable::UNIT {
+            else_stmts.push(TirStmt::new(TirStmtKind::Expr(default_call), span));
+            else_stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
+        } else {
+            else_stmts.push(TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(default_call),
+                },
+                span,
+            ));
+        }
+    } else if is_resource {
         let placeholder_call = build_resource_fallback_call(
             effect_module,
             base_name,
@@ -1602,6 +1663,15 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 )
             } else if impl_info.rest == Some(crate::ast::RestClause::Forward) {
                 build_forward_closure(op, plan, &env.entry_source, &env.type_table)
+            } else if impl_info.rest.is_none()
+                && op.has_default
+                && !plan.open_boundary_ops.contains(&op.name)
+            {
+                // No rest clause, and the interface said what the operation
+                // does unhandled. `..trap` above wins over that — a mock means
+                // it — and a boundary-open operation keeps the wrapper's
+                // routing to the consumer's implementation.
+                build_default_closure(op, plan, &interface_name, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)
             };
@@ -2239,6 +2309,79 @@ fn build_trap_closure(
             functor_id: None,
             address_taken_locals: crate::hashmap::IndexSet::default(),
             // Synthetic trap stub; no body-level let-bindings.
+            body_locals: Vec::new(),
+            declared_effects: None,
+        },
+        func_type,
+        span,
+    )
+}
+
+/// The stub for an operation a handler leaves out with no rest clause: call the
+/// operation's default implementation directly, so the slot behaves as the
+/// declaration says the operation behaves when nothing answers for it.
+///
+/// Like every handler body, it runs in the outer scope — the wrapper installs
+/// `outer` before calling any slot — so an `E::op(...)` inside the default
+/// reaches the next handler out, not the handler this default is filling.
+fn build_default_closure(
+    op: &TirEffectOp,
+    plan: &DispatchPlan,
+    interface_name: &str,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) -> TirExpr {
+    let span = synth_span();
+    let closure_params: Vec<(String, TypeId)> = op
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.type_id))
+        .collect();
+    let args: Vec<CallArg> = op
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: i as u32,
+                        name: p.name.clone(),
+                    },
+                    p.type_id,
+                    span,
+                ),
+                false,
+            )
+        })
+        .collect();
+    let body = TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: plan.decl_module.clone(),
+                name: crate::name::effect_default_impl_name(interface_name, &op.name),
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: Vec::new(),
+            args,
+            has_receiver: false,
+        },
+        op.return_type,
+        span,
+    );
+
+    let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
+    let func_type =
+        type_table
+            .borrow_mut()
+            .make_function(param_types, op.return_type, vec![], vec![]);
+    TirExpr::new(
+        TirExprKind::Closure {
+            params: closure_params,
+            body: Box::new(body),
+            captures: Vec::new(),
+            functor_id: None,
+            address_taken_locals: crate::hashmap::IndexSet::default(),
             body_locals: Vec::new(),
             declared_effects: None,
         },
@@ -2911,7 +3054,7 @@ fn synthesize_dispatch_infrastructure(
     for plan in plans.values() {
         synthesize_dispatch_global(project, &entry_source, plan);
     }
-    for (key, plan) in &plans {
+    for (key, plan) in &mut plans {
         let meta = substituted_metas
             .get(key)
             .expect("substituted meta must exist for every active instantiation");

@@ -1,0 +1,72 @@
+// A handler covers the operations it means to answer for; an operation the
+// interface gave a default runs that default. An explicit `..trap` still wins,
+// and a default fills the slot without inheriting the handler's scope — see
+// `two` below.
+use { println, Stdout } from "core:cli";
+
+interface Calc {
+    fn one() -> i32 {
+        return 1;
+    }
+
+    // A default is a handler body, so it runs in the outer scope: this
+    // `Calc::one()` reaches the next handler out — nothing, here, so the
+    // default `one` — rather than the `Only::one` whose slot it sits beside.
+    // That is the same rule that stops a `..forward` recursing into itself.
+    fn two() -> i32 {
+        return Calc::one() + 100;
+    }
+
+    // `#function` inside a default reports the operation, not the synthesized
+    // name its body is stored under.
+    fn who() -> String {
+        return #function;
+    }
+}
+
+struct Only {
+}
+
+impl Calc for Only {
+    fn one(&self) -> i32 {
+        resume 10;
+    }
+}
+
+struct Mock {
+}
+
+impl Mock {
+    fn nothing(&self) {
+    }
+}
+
+impl Calc for Mock {
+    fn one(&self) -> i32 {
+        resume 100;
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let o = Only {};
+    with Calc => &o do {
+        println(`${Calc::one()}`);
+        // Left out with no rest clause: the interface's default answers.
+        println(`${Calc::two()}`);
+        println(Calc::who());
+    };
+
+    let m = Mock {};
+    with Calc => &m do {
+        println(`${Calc::one()}`);
+        // `..trap` covers `two` / `who` — not exercised, since a trap ends the
+        // program; that it is a trap and not the default is the point.
+    };
+}
+
+__DATA__
+{
+    "stdout": "10\n101\nCalc::who\n100\n"
+}

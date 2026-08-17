@@ -1,0 +1,17 @@
+// A default body takes the same local-binding pass as any other body: an
+// uninitialized read is a diagnostic, not an ICE in the WIR builder.
+interface Calc {
+    fn go() -> i32 {
+        let x: i32;
+        return x;
+    }
+}
+
+export fn run() {
+    Calc::go();
+}
+
+__DATA__
+{
+    "compile_error": "used before initialization"
+}

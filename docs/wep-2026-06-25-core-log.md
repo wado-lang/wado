@@ -1,6 +1,6 @@
 # WEP: Structured Logging and Tracing Standard Library (`core:log`)
 
-Status: Draft
+Status: Implemented
 
 ## Context
 
@@ -36,107 +36,53 @@ filtering is a three-tier gate whose two cheap tiers never reach the effect.
 
 ### Levels
 
-```wado
-pub enum Level { Trace, Debug, Info, Warn, Error }
-```
-
-`enum` values are ordered by declaration, so `level >= threshold` needs no cast.
-A "threshold" is the lowest level emitted: at `Info`, `Trace` and `Debug` are off.
+`Level` is a plain `enum` — `Trace`, `Debug`, `Info`, `Warn`, `Error` — ordered
+by declaration, so `level >= threshold` needs no cast. A "threshold" is the
+lowest level emitted: at `Info`, `Trace` and `Debug` are off. The lowercase case
+name is the wire spelling, and the one a directive and `-D log.level=` accept.
 
 ### Filtering — three tiers
 
-Every level wrapper carries the same three gates, cheapest first, each strictly
-narrowing what the one before admitted.
+Every level wrapper applies one gate, `enabled(level)`, which is three checks,
+cheapest first, each strictly narrowing what the one before admitted. A wrapper
+passes its level as a literal, so the fold tier 1 depends on survives inlining;
+`enabled` is public, so a caller spells the same gate around fields too expensive
+to build:
 
 ```wado
-#[ambient]
-pub fn debug<T: Serialize = NoFields>(
-    message: String,
-    fields: T = NoFields {},
-    target: String = #function,
-    file: String = #file,
-    line: i32 = #line,
-) {
-    if Level::Debug < LOG_STATIC_LEVEL { return; }    // tier 1 — folds away
-    if Level::Debug < runtime_level() { return; }     // tier 2 — one global read
-    if !Log::enabled(Level::Debug) { return; }        // tier 3 — the subscriber
-    event(Level::Debug, message, fields, target, file, line);
-}
+if enabled(Level::Debug) { debug(`state`, { snapshot: expensive_snapshot() }); }
 ```
 
 Tier 1 — compile time. A `#[param]` global carries the threshold, so the
 comparison against the wrapper's literal level folds and the body reduces to an
 early return. Interprocedural DCE then removes the call and its pure arguments,
-message construction included.
-
-```wado
-#[param(name = "log.level", from_env = "WADO_LOG_LEVEL")]
-global LOG_LEVEL: String = "trace";
-
-global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL);
-```
-
-The parameter is a `String` so the threshold is spelled by name
-(`-D log.level=info`); `from_env` reads the build environment, not the runtime
-one. The default admits every level, so a build says what it strips rather than
-what it keeps. `#[param]` accepts only built-in types today, hence the conversion
-function — see [Language and optimizer requirements](#language-and-optimizer-requirements).
+message construction included. The parameter is a `String` so the threshold is
+spelled by name (`-D log.level=info`), and `from_env = "WADO_LOG_LEVEL"` reads
+the build environment, not the runtime one. Its default admits every level, so a
+build says what it strips rather than what it keeps. `#[param]` accepts only
+built-in types today, hence the conversion through `level_from_str` — see
+[Language and optimizer requirements](#language-and-optimizer-requirements).
 
 Tier 2 — process-wide runtime threshold: a global read and a comparison, no call
-and no allocation.
-
-```wado
-global mut RUNTIME_LEVEL: Level = Level::Trace;
-
-pub fn set_log_level(level: Level) { RUNTIME_LEVEL = level; }
-pub fn runtime_level() -> Level { return RUNTIME_LEVEL; }
-```
-
-The threshold belongs to `core:log`, not to the installed sink, and is set
-explicitly — the bootstrap reads `WADO_LOG`, an application may call
-`set_log_level` at any time — so no sink contract and no cache invalidation exist
-to get wrong. A layer narrows further through tier 3.
+and no allocation. The threshold belongs to `core:log`, not to the installed
+sink, and is set explicitly through `set_log_level` (read back with `log_level`),
+which an application may call at any time — so no sink contract and no cache
+invalidation exist to get wrong. A layer narrows further through tier 3.
 
 Tier 3 — the subscriber. `Log::enabled` runs the installed layer stack, so a
 `Filter` layer's per-target directives decide. It costs one indirect call, on
 what the first two tiers admitted.
-
-The same ladder is exposed for guarding expensive fields:
-
-```wado
-#[ambient]
-pub fn enabled(level: Level) -> bool { ... }   // the three tiers, as a predicate
-
-if enabled(Level::Debug) { debug(`state`, { snapshot: expensive_snapshot() }); }
-```
 
 No branch hint is emitted: whether a deployment logs is genuinely open, and a
 static hint cannot beat the CPU's predictor on a branch this consistent.
 
 ### Types
 
-```wado
-pub type SpanId = u64;
-
-pub struct Metadata {
-    pub level: Level,
-    pub target: String,   // category; default = caller #function
-    pub name: String,     // span name; "" for events
-    pub file: String,     // call-site #file
-    pub line: i32,        // call-site #line
-}
-
-pub struct Event {
-    pub meta: Metadata,
-    pub message: String,
-    pub fields: Value = Value::Null,       // Value from core:value
-    pub parent: Option<SpanId> = null,
-}
-
-pub struct SpanAttrs { pub meta: Metadata, pub fields: Value }
-
-pub struct NoFields {}                     // serializes to `{}`
-```
+An `Event` is `Metadata` — level, target, span name, file, line — plus a message,
+a field payload and an optional parent `SpanId` (`u64`); `SpanAttrs` pairs the
+same metadata with a span's fields. `target` defaults to the caller's
+`#function`, `file` and `line` to `#file` and `#line`, all resolved at the call
+site by default arguments rather than by a macro.
 
 Fields are passed as an anonymous struct bounded by `Serialize` and boxed into a
 single `core:value::Value` at the facade, before the effect boundary, so the
@@ -146,31 +92,19 @@ single `core:value::Value` at the facade, before the effect boundary, so the
 info(`user logged in`, { user_id: id, ip: ip });
 ```
 
-The field parameter defaults to an empty struct, so `info(msg)` logs with no
-fields; the default type parameter supplies the type for the omitted argument.
-Anonymous structs derive `Serialize` through
+The field parameter defaults to an empty struct (`NoFields`, which serializes to
+`{}`), so `info(msg)` logs with no fields; the default type parameter supplies
+the type for the omitted argument. Anonymous structs derive `Serialize` through
 [bound-driven derivation](./wep-2026-06-25-trait-derivation.md), so no `derive`
 form appears at the call site.
 
 ### The `Log` effect (subscriber)
 
 An effect mirroring `tracing`'s `Subscriber`, simplified by GC (no span
-refcounting). Operations are best-effort and never fail the program; sinks
+refcounting): `enabled`, `current_span`, `new_span`, `record_fields` (fields onto
+an open span), `follows_from` (a non-parent causal link), `enter`, `exit`,
+`close`, `event`. Operations are best-effort and never fail the program; sinks
 swallow their own write and serialize errors.
-
-```wado
-pub interface Log {
-    fn enabled(level: Level) -> bool;
-    fn current_span() -> Option<SpanId>;
-    fn new_span(attrs: SpanAttrs) -> SpanId;
-    fn record_fields(span: SpanId, fields: Value);   // fields onto an open span
-    fn follows_from(span: SpanId, cause: SpanId);    // non-parent causal link
-    fn enter(span: SpanId);
-    fn exit(span: SpanId);
-    fn close(span: SpanId);
-    fn event(event: Event);
-}
-```
 
 `enabled` takes a `Level`, not a `&Metadata`: the gate must not force the caller
 to build a `Metadata` for an event about to be dropped. A layer filtering on
@@ -180,63 +114,25 @@ to build a `Metadata` for an event about to be dropped. A layer filtering on
 
 Free functions; location defaults resolve at the caller. The level wrappers own
 the filtering — each knows its level as a compile-time literal — and forward to
-the raw `event` emitter. A direct caller of `event` (a dynamic `level`, say) opts
-out of the static gate.
-
-```wado
-#[ambient]
-pub fn event<T: Serialize = NoFields>(
-    level: Level,
-    message: String,
-    fields: T = NoFields {},
-    target: String = #function,
-    file: String = #file,
-    line: i32 = #line,
-) {
-    Log::event(Event {
-        meta: Metadata { level, target, name: "", file, line },
-        message,
-        fields: box_fields(fields),
-        parent: Log::current_span(),
-    });
-}
-```
+the raw `event` emitter, which stamps the metadata, boxes the fields, and parents
+the event to the subscriber's current span. A direct caller of `event` (a dynamic
+`level`, say) opts out of the static gate.
 
 ### Spans
 
-A span is a first-class, re-enterable value entered for a scope:
-
-```wado
-pub struct Span { id: SpanId }
-
-pub fn span(level: Level, name: String, fields: T = NoFields {}, ...) -> Span;
-pub fn current() -> Option<Span>;
-
-impl Span {
-    pub fn id(&self) -> SpanId { ... }
-    pub fn record<T: Serialize>(&self, fields: T) { Log::record_fields(self.id, box_fields(fields)); }
-    pub fn follows_from(&self, cause: &Span) { Log::follows_from(self.id, cause.id); }
-}
-```
-
-Entry uses the `in_span` closure, so `exit` and `close` run on every exit path
-including an early `return` from the body:
-
-```wado
-#[ambient]
-pub fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
-    Log::enter(s.id());
-    let r = body();
-    Log::exit(s.id());
-    Log::close(s.id());
-    return r;
-}
-```
+A span is a first-class, re-enterable value carrying only its id, with `record`
+and `follows_from` methods; `current()` returns the innermost entered one. Entry
+uses the `in_span` closure, so `exit` and `close` run on every exit path
+including an early `return` from the body. Its body parameter is `fn mut`
+(`fn <: fn mut`), so a scope that mutates what it captures enters a span like any
+other.
 
 The subscriber tracks the current-span stack from `enter` / `exit`, so `current()`
 and event parenting need no separate global. Entry is lexical, so there is no
-"guard held across an await" footgun. `close` fires on GC unreachability or an
-explicit `span.close()`; fmt sinks usually ignore it.
+"guard held across an await" footgun. `close` fires as `in_span` leaves the
+scope, or from an explicit `span.close()` on a span opened without it; a GC that
+runs no finalizers cannot fire it on unreachability, and fmt sinks ignore it
+anyway.
 
 ### Subscribers and layers
 
@@ -245,34 +141,28 @@ delegating the rest outward with `..forward` ([Effect Handler](./wep-2026-04-11-
 nothing, so a forwarded operation terminates there instead of trapping. A test
 sink that must never see an operation uses `..trap`.
 
-```wado
-pub struct TextSink { pub timestamp: bool = true, pub seq: bool = true, pub location: bool = false }
-pub struct JsonSink { pub timestamp: bool = true, pub seq: bool = true }
-pub struct NopSink {}
-pub struct CaptureSink { events: List<Event> = [], spans: List<SpanAttrs> = [] }
+Four terminal sinks ship: `TextSink` and `JsonSink` write one line per event to
+stderr, `NopSink` drops everything (for a program whose libraries log but which
+must not), and `CaptureSink` keeps events and spans in memory. Each carries the
+bookkeeping every terminal sink needs — fresh span ids and the current-span stack
+that parents events — through one shared internal helper. Two layers ship:
+`Context` prepends fixed fields to every event passing through (slog's `With`),
+and `Filter` applies per-target directives; each implements only what it changes
+and `..forward`s the rest.
 
-pub struct Context<T: Serialize> { fields: T }     // slog `With`: prepend fixed fields
-pub struct Filter { directives: List<Directive> }  // EnvFilter-style, per target
+`Filter`'s `enabled` sees a level and no target, so its gate is the floor over
+every directive — the lowest level any of them admits — not the unmatched-target
+default. A narrower answer would drop events its `event` would go on to admit.
 
-impl<T: Serialize> Log for Context<T> {
-    fn event(&self, event: Event) { Log::event(event.with_fields_under(&self.fields)); }
-    ..forward
-}
+`CaptureSink` is the testing sink: its events and spans are the captured values,
+and an `ops` list records the span lifecycle in order (`new:name#id`, `enter:id`,
+`exit:id`, `close:id`, `record:id:key`, `follows:id<-cause`), so a test asserts on
+a `List<String>` rather than on output. `TextSink` and `JsonSink` expose the line
+they would write as `render`, which is both how they are tested and the hook for
+sending the same format somewhere other than stderr.
 
-impl Log for Filter {
-    fn enabled(&self, level: Level) -> bool { resume self.admits(level, "") && Log::enabled(level); }
-    fn event(&self, event: Event) { if self.admits(event.meta.level, event.meta.target) { Log::event(event); } }
-    ..forward
-}
-```
-
-Compose by nesting `with`, innermost last:
-
-```wado
-with Log => &TextSink {} do {
-    with Log => &Filter { directives: parse_directives(log_directives()) } do { app(); }
-}
-```
+Compose by nesting `with`, innermost last — a `Filter` installed inside a
+`TextSink` narrows what that sink writes.
 
 `Span` carries only its id, so a sink wanting per-span data keeps its own map
 keyed by `SpanId` (`tracing`'s `Registry`, hand-rolled).
@@ -292,11 +182,17 @@ any part its configuration turns off:
 {"ts":"2026-08-08T11:47:08.204Z","seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7,"ip":"127.0.0.1"}}
 ```
 
+A parent span is written as `span=3` in text, `"span":3` in JSON; `location`
+appends `at file:line` to a text line and `file` / `line` keys to a JSON object.
+A key a switch turns off is absent rather than null.
+
 Both write through the ambient `log_stderr`, so a sink needs no `Stderr` in its
 signature and installs in any world — a world without stderr degrades to a no-op
-instead of a trap, matching the never-fail rule. Timestamps are the one part
-needing a capability: `timestamp: true` reads `SystemClock`, `false` removes the
-requirement.
+instead of a trap, matching the never-fail rule. The timestamp is the one part
+needing a capability, and reaches it the same way: `Log`'s operations declare no
+effects, so a sink cannot declare the clock read on them either, and it goes
+through an `#[ambient]` helper. `timestamp: false` never reaches that call, which
+is what makes a sink installable where no clock is.
 
 ### Runtime filter directives
 
@@ -304,13 +200,19 @@ requirement.
 string an application supplies:
 
 ```
-info,core:json=debug,app::db=trace
+info,Db::query=debug,handle_request=trace
 ```
 
 A bare level is the default for unmatched targets; `target=level` overrides it
 for targets under that prefix, longest matching prefix winning. A malformed
 directive is skipped — a typo in an environment variable must not stop a program
 from starting.
+
+A target is a function name, not a module path: it defaults to the caller's
+`#function`, which is bare for a free function, `Type::method` for a method, and
+`Interface::op` inside an operation's default implementation. Grouping events
+under a subsystem name instead is a matter of passing `target` explicitly at the
+call site — there is no `#module` literal to derive one from.
 
 ### Timestamp and sequence
 
@@ -327,15 +229,31 @@ outermost handler for a scope. The facade functions are `#[ambient]`, so
 performing `Log` adds no `with Log` to callers — logging is callable anywhere
 without infecting signatures.
 
-Something must own the default install, since an operation with no handler traps.
-The export shim the compiler already synthesises around an entry point is where
-it goes: for a program whose module graph reaches `core:log`, the shim installs
-the default sink and seeds `set_log_level` from `WADO_LOG` before calling the
-entry function.
+Something must own the default, since `info()` must never be the reason a
+program stops. The library owns it: every `Log` operation carries a default
+implementation ([Effect Handler](./wep-2026-04-11-effect-handler.md)) — a
+`TextSink` on stderr, admitting `Info` and above — so a program that installs
+nothing still logs, and one that installs a handler replaces the defaults for
+that scope. `NopSink` is how a program asks for silence.
 
-TODO: decide the default sink per world — `TextSink` everywhere is the obvious
-choice, but `wado test` wants output attributed to the failing test, which may
-mean `CaptureSink` under the test world.
+That answers the question an entry-shim install could not. A shim wraps the
+entry point only, so a test block, a Kiln generator, or anything reached outside
+it would still trap; and it would put "which sink" — a library policy — in the
+compiler. Defaults in the interface cover every call site, in every world, and
+keep the policy in `core:log`. The test world needs no special case either:
+`wado test` already captures a test's stderr and attaches it to the failure,
+discarding it when the test passes, which is exactly the attribution a
+`CaptureSink`-under-test default was reaching for. `CaptureSink` stays what it
+should be — the sink a test installs to assert on events.
+
+`Info` rather than `Warn` for the default threshold: a program nobody configured
+should say what it is doing, not everything it is thinking, and a `debug`/`info`
+added while debugging that prints nothing is the papercut the default exists to
+avoid.
+
+TODO: seed the default threshold from `WADO_LOG` on first use, so a deployment
+retunes it without a recompile (`parse_directives` already reads the syntax).
+Reading the environment ambiently degrades where a world has none.
 
 ### Error handling and reentrancy
 
@@ -350,13 +268,15 @@ deliberately, since the alternative is an unbounded chain.
 
 `core:log` lives in `wado-compiler/lib/core/log.wado`, its tests alongside in
 `log_test.wado`, exercised through `CaptureSink` so assertions read the events
-rather than captured output.
+rather than captured output. The generated reference is
+[`core:log`](./stdlib-core-log.md).
 
-Exported: `Level`, `SpanId`, `Metadata`, `Event`, `SpanAttrs`, `Span`, `NoFields`;
-the facade `trace` / `debug` / `info` / `warn` / `error` / `event` / `enabled`;
-`span` / `current` / `in_span`; `set_log_level` / `log_level` / `level_from_str`;
-the `Log` effect; sinks `TextSink` / `JsonSink` / `NopSink` / `CaptureSink`; layers
-`Context` / `Filter` with `Directive` and `parse_directives`.
+Exported: `Level`, `SpanId`, `Metadata`, `Event`, `SpanAttrs`, `Span`,
+`NoFields`; the facade `trace` / `debug` / `info` / `warn` / `error` / `event` /
+`enabled`; `span` / `current` / `in_span`; `set_log_level` / `log_level` /
+`level_from_str`; the `Log` effect; sinks `TextSink` / `JsonSink` / `NopSink` /
+`CaptureSink`; layers `Context` / `Filter` with `Directive` and
+`parse_directives`.
 
 ### Async semantics
 
@@ -406,8 +326,9 @@ only.
   filtering) built from existing language features.
 - Layer composition, scoped context, and automatic context restore from
   effect-handler nesting — static dispatch throughout.
-- `#[ambient]` keeps logging out of signatures; a default sink at the entry gives
-  zero per-call setup. Caller source location without macros; testable with a
+- `#[ambient]` keeps logging out of signatures, and the interface's default
+  implementations mean zero setup: `info()` works in any program, in any world,
+  with no sink installed. Caller source location without macros; testable with a
   capturing sink.
 - The two cheap tiers keep the disabled path off the effect-dispatch path, so the
   common case is a fold or a global read.
@@ -415,8 +336,8 @@ only.
 ### Trade-offs
 
 - `#[ambient]` hides a sink's I/O from signatures (the existing ambient-logging
-  trade-off), and an operation with no handler traps — so the entry point must
-  install the default sink.
+  trade-off), and the default subscriber writes to stderr without being asked —
+  the deliberate trade for `info()` never being the reason a program stops.
 - Eager message: the optimizer, not a macro, is what drops it. Tier 1 already
   does; tier 2 needs the sinking pass, and `enabled()` is the manual guard until
   then.
@@ -427,17 +348,12 @@ only.
 - Automatic span propagation is single-scope; cross-task is explicit until the
   async story settles.
 
-### Prerequisites
+### Open work
 
-- [x] `core:value::to_value` (direct `Value`-building serializer).
-- [x] Anonymous structs with bound-driven `Serialize` derivation.
-- [x] `#[param]` with compile-time constant folding and DCE.
-- [x] Span scoping via the `in_span` closure.
-- [x] `..forward` effect forwarding.
-- [x] A remark when a compile-time parameter still decides a branch.
+- [ ] Seeding the default threshold from `WADO_LOG` — see
+      [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
 - [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
-- [ ] `core:log` itself — see [Module surface](#module-surface).
 - [ ] Optional: native `with <span> do { … }` sugar.
 - [ ] Optional: erased serde for field passing (performance-gated).
 - [ ] Automatic cross-task current-span propagation (async-gated).

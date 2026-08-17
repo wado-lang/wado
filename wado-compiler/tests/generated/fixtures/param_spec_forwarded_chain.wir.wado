@@ -67,6 +67,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:param_spec_forwarded_chain.wado::__modules_initialized: bool = 0;
+global global:param_spec_forwarded_chain.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 100), used: 2 };
+global global:param_spec_forwarded_chain.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
 
 fn "param_spec_forwarded_chain.wado/run"() with Stdout {
     let out: ref "core:prelude/string.wado//String";
@@ -81,8 +83,8 @@ fn "param_spec_forwarded_chain.wado/run"() with Stdout {
         global:param_spec_forwarded_chain.wado::__modules_initialized = 1;
     };
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
-    "param_spec_forwarded_chain.wado/outer$spec0"(out, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 });
-    "param_spec_forwarded_chain.wado/outer$spec0"(out, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 100), used: 2 });
+    "param_spec_forwarded_chain.wado/outer$spec0"(out, global:param_spec_forwarded_chain.wado::__const_obj_1);
+    "param_spec_forwarded_chain.wado/outer$spec0"(out, global:param_spec_forwarded_chain.wado::__const_obj_0);
     rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "param_spec_forwarded_chain.wado/__cm_binding__Stdout_write_via_stream"(rx_9);
@@ -236,11 +238,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b8 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b8 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l9;
         };
     };

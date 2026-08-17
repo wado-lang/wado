@@ -26,6 +26,7 @@ use crate::knobs::{CompileKnobs, KnobOpt, OptLevel};
 use crate::manifest as project_manifest;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, WasiState};
+use crate::sync::lock;
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
@@ -290,7 +291,7 @@ fn walk_into(
     queue: &mut Vec<PathBuf>,
 ) -> Result<(), CliExit> {
     let result =
-        discover::discover_test_files(pkg_root, excludes, includes).map_err(CliExit::error)?;
+        discover::discover_wado_files(pkg_root, excludes, includes).map_err(CliExit::error)?;
     let label = relative_label(invocation_root, pkg_root);
     let paths = result.files.iter().map(|p| display_path(p)).collect();
     runs.push(PackageRun { label, paths });
@@ -415,9 +416,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut test_name_filters: Vec<String> = Vec::new();
     let mut cli_excludes: Vec<String> = Vec::new();
     let mut jobs: Option<usize> = None;
-    let mut preopened_dirs: Vec<(String, String)> = Vec::new();
-    let mut explicit_dirs = false;
-    let mut no_dir = false;
+    let mut dirs = args::DirGrants::default();
     let mut no_run = false;
     let mut format = TestFormat::Heartbeat;
     // Tests compile unoptimized by default: the compile stage dominates a run,
@@ -459,11 +458,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                         ))
                     })?;
                 }
-                Opt::Dir => {
-                    preopened_dirs.push(args::parse_dir_arg(&mut parser)?);
-                    explicit_dirs = true;
-                }
-                Opt::NoDir => no_dir = true,
+                Opt::Dir => dirs.add(&mut parser)?,
+                Opt::NoDir => dirs.suppress_default(),
                 Opt::NoRun => no_run = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
@@ -472,11 +468,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         } else {
             return Err(args::unexpected_arg(arg, &usage));
         }
-    }
-
-    // Default: preopen the current directory unless --dir or --no-dir was given.
-    if !explicit_dirs && !no_dir {
-        preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
     // No args ⇒ project-wide recursion through every nested `wado.toml`.
@@ -537,7 +528,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         package_runs,
         jobs,
         knobs,
-        preopened_dirs,
+        preopened_dirs: dirs.finish(),
         no_run,
         test_name_filters,
         format,
@@ -621,30 +612,23 @@ impl StageObserver {
     }
 
     fn record_input(&self) {
-        let mut guard = lock_resilient(&self.first_input_at);
+        let mut guard = lock(&self.first_input_at);
         if guard.is_none() {
             *guard = Some(Instant::now());
         }
     }
 
     fn record_output(&self) {
-        *lock_resilient(&self.last_output_at) = Some(Instant::now());
+        *lock(&self.last_output_at) = Some(Instant::now());
     }
 
     fn add_work(&self, d: Duration) {
-        *lock_resilient(&self.work_time) += d;
+        *lock(&self.work_time) += d;
     }
 
     fn work_time(&self) -> Duration {
-        *lock_resilient(&self.work_time)
+        *lock(&self.work_time)
     }
-}
-
-// Plain `lock().unwrap()` would propagate poison — and the EpochTicker
-// thread silently dies with it, disabling timeout enforcement. None of
-// these mutexes guard logically-coupled invariants, so just recover.
-fn lock_resilient<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // Recovers `&'static str` and `String` payloads (what `panic!` produces);
@@ -1412,7 +1396,7 @@ impl EpochTicker {
                 // `register`, which must not block the load stage on
                 // per-engine work.
                 let live: Vec<Arc<Engine>> = {
-                    let mut guard = lock_resilient(&engines_clone);
+                    let mut guard = lock(&engines_clone);
                     guard.retain(|w| w.strong_count() > 0);
                     guard.iter().filter_map(Weak::upgrade).collect()
                 };
@@ -1429,7 +1413,7 @@ impl EpochTicker {
     }
 
     fn register(&self, engine: &Arc<Engine>) {
-        lock_resilient(&self.engines).push(Arc::downgrade(engine));
+        lock(&self.engines).push(Arc::downgrade(engine));
     }
 }
 

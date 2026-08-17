@@ -41,9 +41,11 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo $? > run.done`.
+- Never `pgrep` to check whether a job is alive — it matches the watcher's own command line, so the loop never exits. Have the job record its own completion: `cmd > run.log 2>&1; echo "exit=$?" >> run.log`.
 - Always redirect output to a file and read the file. Filtering a live command (`| tail`, `| grep`) discards everything you did not anticipate, and a filter that misses costs a full re-run — tens of minutes.
 - Run long jobs (`mise run test`, `test-wado`, `update-golden-fixtures`) through the harness's background mechanism, not `nohup ... &`, so completion is notified. Never foreground `sleep` to wait.
+- Decide "finished" from that completion line, not from what launched the job: a wrapper's exit code is its last command (`grep -c failures` exits 1 on a clean run), and a log left by a timeout-killed foreground command reads like a run still in progress. `grep -q "^exit=" run.log` tells them apart — wait on it with a background until-loop.
+- Give a long job its own invocation. Chaining it behind a slow step (`{ mise run format; mise run test; }`) puts both under one timeout, and the kill takes the job with it.
 - Don't edit sources while a `wado test` run is in flight. The run pins each Kiln generator at its first resolve and fails at the end naming every source that changed under it; that verdict describes neither tree, so re-run instead of reading it.
 
 ## General Rules
@@ -113,6 +115,7 @@ Wado-specific features:
 - `wado-vscode/` — the VS Code extension.
 - `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT.
 - `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution.
+- `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module. (`wado-bundled-icu/` is a not-yet-wired spike.)
 - `docs/` — the language spec (`docs/spec.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.

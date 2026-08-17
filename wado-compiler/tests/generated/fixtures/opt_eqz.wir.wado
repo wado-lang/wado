@@ -342,11 +342,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b10 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b10 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l11;
         };
     };
@@ -434,11 +430,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     let _av_28: i32;
     content_len = content.used;
     _av_28 = self.width;
-    if (if _av_28 <= 0 -> i32 {
-        1;
-    } else {
-        content_len >= _av_28;
-    }) {
+    if select i32(_av_28 <= 0, 1, content_len >= _av_28) {
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         return;
     }
@@ -449,12 +441,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
         c_9 = self.fill;
         i_11 = 0;
         _licm_buf_24 = self.buf;
-        b23: block {
-            l24: loop {
-                break_if b23 i_11 >= padding;
+        b21: block {
+            l22: loop {
+                break_if b21 i_11 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_24, c_9);
                 i_11 = i_11 + 1;
-                continue l24;
+                continue l22;
             };
         };
     } else if align == 1 {
@@ -463,36 +455,36 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
         c_13 = self.fill;
         i_15 = 0;
         _licm_buf_25 = self.buf;
-        b26: block {
-            l27: loop {
-                break_if b26 i_15 >= left_pad;
+        b24: block {
+            l25: loop {
+                break_if b24 i_15 >= left_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_25, c_13);
                 i_15 = i_15 + 1;
-                continue l27;
+                continue l25;
             };
         };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);
         c_17 = self.fill;
         i_19 = 0;
         _licm_buf_26 = self.buf;
-        b28: block {
-            l29: loop {
-                break_if b28 i_19 >= right_pad;
+        b26: block {
+            l27: loop {
+                break_if b26 i_19 >= right_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_26, c_17);
                 i_19 = i_19 + 1;
-                continue l29;
+                continue l27;
             };
         };
     } else {
         c_21 = self.fill;
         i_23 = 0;
         _licm_buf_27 = self.buf;
-        b30: block {
-            l31: loop {
-                break_if b30 i_23 >= padding;
+        b28: block {
+            l29: loop {
+                break_if b28 i_23 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_27, c_21);
                 i_23 = i_23 + 1;
-                continue l31;
+                continue l29;
             };
         };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self.buf, content);

@@ -12,7 +12,6 @@ use crate::wir::WirPackage;
 mod component;
 mod component_context;
 mod emit;
-mod postprocess;
 
 /// Emit a Wasm component binary from a linked package and its WIR module.
 pub fn emit_wasm(

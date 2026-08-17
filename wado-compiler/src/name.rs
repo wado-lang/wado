@@ -69,6 +69,33 @@ pub fn shallow_copy_helper_name(deep_name: &str) -> String {
     format!("{deep_name}$shallow")
 }
 
+/// The name of the function holding an effect operation's default
+/// implementation — the body that runs when the operation is dispatched with
+/// no handler installed. `$`-prefixed like the other synthesized helpers, so it
+/// never collides with a source-level function: `core:log` declares both a
+/// `Log::event` default and an `event` facade in one module.
+pub fn effect_default_impl_name(interface: &str, op: &str) -> String {
+    format!("{EFFECT_DEFAULT_PREFIX}{interface}${op}")
+}
+
+/// Prefix of [`effect_default_impl_name`].
+const EFFECT_DEFAULT_PREFIX: &str = "$effect_default$";
+
+/// How a function name reads where a user sees it — `#function`, and the
+/// call-site name a defaulted argument captures. A default implementation's
+/// storage name is an internal detail, so it renders as the operation it
+/// implements (`Log::event`); every other name passes through unchanged.
+#[must_use]
+pub fn display_function_name(name: &str) -> String {
+    let Some(rest) = name.strip_prefix(EFFECT_DEFAULT_PREFIX) else {
+        return name.to_string();
+    };
+    match rest.split_once('$') {
+        Some((interface, op)) => format!("{interface}::{op}"),
+        None => name.to_string(),
+    }
+}
+
 /// The name of a `param_spec` clone: the original's name plus the clone's
 /// ordinal among that callee's specializations. Unique package-wide, since the
 /// original's name already is.
@@ -189,12 +216,29 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 /// anchor shape.
 pub const CLOSURE_FN_TRAIT: &str = "Fn";
 
+/// Prefix every compiler-synthesised block label carries.
+///
+/// Reserved in source — the parser rejects a label that starts with it — so a
+/// label is a sound marker for a synthesised block: a pass that recognises one
+/// by name cannot be fooled by a hand-written block wearing the same label.
+pub const SYNTHETIC_LABEL_PREFIX: &str = "__";
+
+#[must_use]
+pub fn is_reserved_label(label: &str) -> bool {
+    label.starts_with(SYNTHETIC_LABEL_PREFIX)
+}
+
 /// Label the template-string synthesiser stamps on the block wrapping an
-/// expanded `` `...` `` literal. The template-hoist and const-branch-prune
-/// optimizers key on it to recognise template expansions, so the producer
-/// (`synthesis::template`) and those consumers share this one definition
-/// instead of re-hardcoding the literal — compiler-internal, hence a `const`.
+/// expanded `` `...` `` literal.
 pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
+
+/// Whether `label` marks the block an expanded template string breaks out of.
+/// Shared by the producer (`synthesis::template`) and the two optimizer passes
+/// that key on it, rather than each re-comparing the constant.
+#[must_use]
+pub fn is_template_block(label: &str) -> bool {
+    label == TEMPLATE_BLOCK_LABEL
+}
 
 /// Name of the result accumulator local in an expanded template block.
 /// Recognised by the template-hoist optimizer; single-sourced here.

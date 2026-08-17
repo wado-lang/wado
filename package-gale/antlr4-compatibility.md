@@ -43,6 +43,18 @@ trees, token streams, and semantics must match ANTLR4; an incidental
 rendering difference that carries no structural meaning is allowed to
 diverge.
 
+### The Unicode version is Gale's, not the jar's
+
+`\p{...}` resolves against the latest UCD — 17.0.0 today — and tracking a
+new release promptly is the standing policy. ANTLR4 ships a property
+table frozen when the jar was built (4.13.2 is Unicode 15.0.0), so Gale
+runs ahead of it: **divergence that traces to the Unicode version is
+wontfix**. The superset rule already covers it — a newly assigned code
+point's meaning is fixed by the UCD, not invented by Gale.
+
+A derivation that disagrees on a code point _both_ versions define is
+still a bug; `scripts/check-unicode-properties.sh` separates the two.
+
 ### EOF in parse trees
 
 `toStringTree()` prints an explicitly-matched `EOF` as `<EOF>`
@@ -345,6 +357,26 @@ its answer of `ID` is still wrong. Agreement is evidence about the
 stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
+
+#### Oracling the Unicode property tables
+
+`\P{...}` complements what `\p` selects, so a table that is merely close
+_admits_ code points rather than missing them — and a property's values
+partition the code-point space, so it can be compared exactly instead of
+spot-checked.
+
+`scripts/antlr4-property-oracle.sh <property> <value>...` gives the jar
+one `[\p{PROPERTY=VALUE}]+` rule per value over every Unicode scalar in
+order; a `+` rule consumes a whole run, so the token stream _is_ the
+jar's range table. `scripts/check-unicode-properties.sh` diffs that
+against Gale's expansion, with the tables regenerated at the jar's frozen
+version (above). Java runs only here, never in CI.
+
+ANTLR4's `Property=Value` surface is narrower than the UCD's: it rejects
+group letters (`\p{gc=L}`, though bare `\p{L}` is fine) and empty values
+(`\p{sc=Hrkt}`), and matches aliases case-insensitively but
+underscore-sensitively. Gale's UAX #44 loose matching is a superset; the
+oracle drops what the jar rejects, naming each on stderr.
 
 ### Stage C — action-body translation
 

@@ -17,6 +17,7 @@ use wasmtime_wasi_tls::{
     WasiTlsCtxView, WasiTlsView,
 };
 
+use crate::args::CliExit;
 use crate::http_hooks::WadoHttpHooks;
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
@@ -304,6 +305,45 @@ pub enum ProfileMode {
         /// Sampling interval in milliseconds.
         interval_ms: u64,
     },
+}
+
+/// Parse a `--profile` argument value. Shared by `run` and `serve`.
+///
+/// # Errors
+///
+/// Returns an error if the mode name or the interval is unparseable.
+pub fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
+    if s == "jitdump" {
+        return Ok(ProfileMode::JitDump);
+    }
+    if s == "perfmap" {
+        return Ok(ProfileMode::PerfMap);
+    }
+    if s == "guest" {
+        return Ok(ProfileMode::Guest {
+            path: "profile.json".to_owned(),
+            interval_ms: 10,
+        });
+    }
+    if let Some(rest) = s.strip_prefix("guest,") {
+        let parts: Vec<&str> = rest.splitn(2, ',').collect();
+        let path = if parts[0].is_empty() {
+            "profile.json".to_owned()
+        } else {
+            parts[0].to_owned()
+        };
+        let interval_ms = if parts.len() > 1 {
+            parts[1]
+                .parse::<u64>()
+                .map_err(|_| CliExit::error(format!("invalid profiling interval '{}'", parts[1])))?
+        } else {
+            10
+        };
+        return Ok(ProfileMode::Guest { path, interval_ms });
+    }
+    Err(CliExit::error(format!(
+        "unknown profile mode '{s}'. Use guest, jitdump, or perfmap"
+    )))
 }
 
 /// wado's default GC collector.

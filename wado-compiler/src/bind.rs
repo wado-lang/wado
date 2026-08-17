@@ -459,6 +459,19 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_function(method)?;
             }
         }
+        // An interface operation's default body is a body like any other, so it
+        // gets the same local-binding pass; a `resource` method never has one,
+        // and `bind_function` returns immediately for a signature.
+        if let Item::Interface(interface_decl) = item {
+            for method in &interface_decl.methods {
+                self.bind_function(method)?;
+            }
+        }
+        if let Item::Resource(resource_decl) = item {
+            for method in &resource_decl.methods {
+                self.bind_function(method)?;
+            }
+        }
         Ok(())
     }
 

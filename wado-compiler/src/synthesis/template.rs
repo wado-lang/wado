@@ -3,127 +3,216 @@
 //! construction, and `Display` / `Inspect` dispatch. Runs pre-monomorphize, so
 //! the emitted trait calls resolve there — no post-mono `has_trait_impl` check
 //! or standalone inspect function is needed.
+//!
+//! The emitted shape is a contract: `optimize::tmpl_hoist` matches it back
+//! apart, which is why `optimize::const_branch_prune` leaves the block
+//! un-flattened until that pass has run. Both sides name what they agree on
+//! through [`crate::name`], [`CompilerItem`],
+//! [`crate::compiler_item::SeqField`] and [`FormatterField`] rather than
+//! spelling it out twice. `Formatter`'s sentinels are the one exception —
+//! repeated in Rust, and pinned by the e2e fixture
+//! `template_formatter_sentinels.wado`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::elaborator::trait_env::{BlanketBound, BlanketParamSource, ImplReceiver, TraitEnv};
+use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TemplateFormatSpec, TirBlock, TirExpr,
-    TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart,
-    TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal,
+    TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
-/// Snapshot of every `core:prelude/format` symbol name + case index the
-/// template-expansion synthesiser needs, resolved once through the
-/// [`CompilerItem`] registry so stdlib renames flow without touching synthesis
-/// sites. Every format-family trait is single-method, so each `<trait>` field is
-/// paired with a `<trait>_method` from [`CompilerItems::trait_method_name`].
+/// Every `core:prelude/format` symbol this synthesiser needs, resolved once
+/// through the [`CompilerItem`] registry so a stdlib rename does not reach
+/// here.
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
     /// `formatter` prefixed by its declaring module — the form a function name
     /// embeds. The bare `formatter` stays for type-table lookups, which key a
     /// struct by its simple name plus module.
     pub formatter_fq: FqTypeName,
-    pub alignment: String,
-    pub left_name: String,
-    pub left_index: u32,
-    pub center_name: String,
-    pub center_index: u32,
-    pub right_name: String,
-    pub right_index: u32,
-    pub display: crate::name::FqTraitName,
-    pub display_method: String,
-    pub display_alt: crate::name::FqTraitName,
-    pub display_alt_method: String,
-    pub inspect: crate::name::FqTraitName,
-    pub inspect_method: String,
-    pub inspect_alt: crate::name::FqTraitName,
-    pub inspect_alt_method: String,
-    pub binary: crate::name::FqTraitName,
-    pub binary_method: String,
-    pub binary_alt: crate::name::FqTraitName,
-    pub binary_alt_method: String,
-    pub octal: crate::name::FqTraitName,
-    pub octal_method: String,
-    pub octal_alt: crate::name::FqTraitName,
-    pub octal_alt_method: String,
-    pub lower_hex: crate::name::FqTraitName,
-    pub lower_hex_method: String,
-    pub lower_hex_alt: crate::name::FqTraitName,
-    pub lower_hex_alt_method: String,
-    pub upper_hex: crate::name::FqTraitName,
-    pub upper_hex_method: String,
-    pub upper_hex_alt: crate::name::FqTraitName,
-    pub upper_hex_alt_method: String,
-    pub lower_exp: crate::name::FqTraitName,
-    pub lower_exp_method: String,
-    pub upper_exp: crate::name::FqTraitName,
-    pub upper_exp_method: String,
+    /// In the order [`Align`] names them.
+    pub alignment_cases: [EnumCase; 3],
+    /// Keyed by kind and by whether the spec asked for the alternate (`#`) form.
+    traits: Vec<(FormatKind, bool, FormatTrait)>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct FormatTrait {
+    pub name: crate::name::FqTraitName,
+    pub method: String,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct EnumCase {
+    pub name: String,
+    pub index: u32,
 }
 
 impl FormatStdlibNames {
     pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
         let items = type_table.compiler_items();
-        let (_, _, left_name, left_index) = items.require_enum_case(CompilerItem::AlignmentLeft);
-        let (_, _, center_name, center_index) =
-            items.require_enum_case(CompilerItem::AlignmentCenter);
-        let (_, _, right_name, right_index) = items.require_enum_case(CompilerItem::AlignmentRight);
+        let case = |item| {
+            let (_, _, name, index) = items.require_enum_case(item);
+            EnumCase {
+                name: name.to_string(),
+                index,
+            }
+        };
+        let format_trait = |item| FormatTrait {
+            name: items.trait_fq(item),
+            method: items.trait_method_name(item).to_string(),
+        };
+        // `e` / `E` have no separate alternate form, so both entries name the
+        // same trait and the lookup stays total.
+        let traits = vec![
+            (
+                FormatKind::Display,
+                false,
+                format_trait(CompilerItem::Display),
+            ),
+            (
+                FormatKind::Display,
+                true,
+                format_trait(CompilerItem::DisplayAlt),
+            ),
+            (
+                FormatKind::Fixed,
+                false,
+                format_trait(CompilerItem::Display),
+            ),
+            (
+                FormatKind::Fixed,
+                true,
+                format_trait(CompilerItem::DisplayAlt),
+            ),
+            (
+                FormatKind::Inspect,
+                false,
+                format_trait(CompilerItem::Inspect),
+            ),
+            (
+                FormatKind::Inspect,
+                true,
+                format_trait(CompilerItem::InspectAlt),
+            ),
+            (
+                FormatKind::Binary,
+                false,
+                format_trait(CompilerItem::Binary),
+            ),
+            (
+                FormatKind::Binary,
+                true,
+                format_trait(CompilerItem::BinaryAlt),
+            ),
+            (FormatKind::Octal, false, format_trait(CompilerItem::Octal)),
+            (
+                FormatKind::Octal,
+                true,
+                format_trait(CompilerItem::OctalAlt),
+            ),
+            (
+                FormatKind::LowerHex,
+                false,
+                format_trait(CompilerItem::LowerHex),
+            ),
+            (
+                FormatKind::LowerHex,
+                true,
+                format_trait(CompilerItem::LowerHexAlt),
+            ),
+            (
+                FormatKind::UpperHex,
+                false,
+                format_trait(CompilerItem::UpperHex),
+            ),
+            (
+                FormatKind::UpperHex,
+                true,
+                format_trait(CompilerItem::UpperHexAlt),
+            ),
+            (
+                FormatKind::LowerExp,
+                false,
+                format_trait(CompilerItem::LowerExp),
+            ),
+            (
+                FormatKind::LowerExp,
+                true,
+                format_trait(CompilerItem::LowerExp),
+            ),
+            (
+                FormatKind::UpperExp,
+                false,
+                format_trait(CompilerItem::UpperExp),
+            ),
+            (
+                FormatKind::UpperExp,
+                true,
+                format_trait(CompilerItem::UpperExp),
+            ),
+        ];
+        assert_formatter_layout(type_table);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
             formatter_fq: type_table.compiler_struct_fq_name(CompilerItem::Formatter),
-            alignment: items.enum_name(CompilerItem::Alignment).to_string(),
-            left_name: left_name.to_string(),
-            left_index,
-            center_name: center_name.to_string(),
-            center_index,
-            right_name: right_name.to_string(),
-            right_index,
-            display: items.trait_fq(CompilerItem::Display),
-            display_method: items.trait_method_name(CompilerItem::Display).to_string(),
-            display_alt: items.trait_fq(CompilerItem::DisplayAlt),
-            display_alt_method: items
-                .trait_method_name(CompilerItem::DisplayAlt)
-                .to_string(),
-            inspect: items.trait_fq(CompilerItem::Inspect),
-            inspect_method: items.trait_method_name(CompilerItem::Inspect).to_string(),
-            inspect_alt: items.trait_fq(CompilerItem::InspectAlt),
-            inspect_alt_method: items
-                .trait_method_name(CompilerItem::InspectAlt)
-                .to_string(),
-            binary: items.trait_fq(CompilerItem::Binary),
-            binary_method: items.trait_method_name(CompilerItem::Binary).to_string(),
-            binary_alt: items.trait_fq(CompilerItem::BinaryAlt),
-            binary_alt_method: items.trait_method_name(CompilerItem::BinaryAlt).to_string(),
-            octal: items.trait_fq(CompilerItem::Octal),
-            octal_method: items.trait_method_name(CompilerItem::Octal).to_string(),
-            octal_alt: items.trait_fq(CompilerItem::OctalAlt),
-            octal_alt_method: items.trait_method_name(CompilerItem::OctalAlt).to_string(),
-            lower_hex: items.trait_fq(CompilerItem::LowerHex),
-            lower_hex_method: items.trait_method_name(CompilerItem::LowerHex).to_string(),
-            lower_hex_alt: items.trait_fq(CompilerItem::LowerHexAlt),
-            lower_hex_alt_method: items
-                .trait_method_name(CompilerItem::LowerHexAlt)
-                .to_string(),
-            upper_hex: items.trait_fq(CompilerItem::UpperHex),
-            upper_hex_method: items.trait_method_name(CompilerItem::UpperHex).to_string(),
-            upper_hex_alt: items.trait_fq(CompilerItem::UpperHexAlt),
-            upper_hex_alt_method: items
-                .trait_method_name(CompilerItem::UpperHexAlt)
-                .to_string(),
-            lower_exp: items.trait_fq(CompilerItem::LowerExp),
-            lower_exp_method: items.trait_method_name(CompilerItem::LowerExp).to_string(),
-            upper_exp: items.trait_fq(CompilerItem::UpperExp),
-            upper_exp_method: items.trait_method_name(CompilerItem::UpperExp).to_string(),
+            alignment_cases: [
+                case(CompilerItem::AlignmentLeft),
+                case(CompilerItem::AlignmentCenter),
+                case(CompilerItem::AlignmentRight),
+            ],
+            traits,
         }
     }
+
+    pub fn format_trait(&self, spec: Option<&TemplateFormatSpec>) -> &FormatTrait {
+        let (kind, alternate) = match spec {
+            Some(spec) => (spec.kind, spec.alternate),
+            None => (FormatKind::Display, false),
+        };
+        &self
+            .traits
+            .iter()
+            .find(|(k, alt, _)| *k == kind && *alt == alternate)
+            .expect("every (kind, alternate) pair names a trait")
+            .2
+    }
+
+    /// The `Alignment` case for `align`, defaulting to right as the stdlib does.
+    pub fn alignment_case(&self, align: Option<Align>) -> &EnumCase {
+        match align.unwrap_or(Align::Right) {
+            Align::Left => &self.alignment_cases[0],
+            Align::Center => &self.alignment_cases[1],
+            Align::Right => &self.alignment_cases[2],
+        }
+    }
+}
+
+/// A field reordered on the Wado side would otherwise turn every `Formatter`
+/// literal built here into a silently wrong one.
+fn assert_formatter_layout(type_table: &TypeTable) {
+    let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
+    let defs = type_table.defs();
+    let declared: Vec<&str> = defs
+        .members(def)
+        .iter()
+        .filter(|m| defs.kind(**m) == crate::defs::DefKind::Field)
+        .map(|m| defs.name(*m))
+        .collect();
+    let expected: Vec<&str> = FormatterField::ALL.iter().map(|f| f.field_name()).collect();
+    assert_eq!(
+        declared, expected,
+        "`Formatter`'s fields no longer match `FormatterField`"
+    );
 }
 
 /// Expand all `TemplateString` nodes in a module.
@@ -147,13 +236,16 @@ pub fn expand_templates(
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
         if let Some(ref mut body) = func.body {
-            let mut alloc = FuncLocalAlloc {
-                next_index: local_count,
-                new_locals: Vec::new(),
+            let mut expander = TemplateExpander {
+                alloc: FuncLocalAlloc {
+                    next_index: local_count,
+                    new_locals: Vec::new(),
+                },
+                ctx: &ctx,
             };
-            expand_block(body, &mut alloc, &ctx);
-            func.local_count = alloc.next_index;
-            func.locals.extend(alloc.new_locals);
+            crate::tir_visitor::TirOptVisitor::visit_block(&mut expander, body);
+            func.local_count = expander.alloc.next_index;
+            func.locals.extend(expander.alloc.new_locals);
         }
     }
 }
@@ -180,218 +272,65 @@ impl FuncLocalAlloc {
     }
 }
 
-fn expand_block(block: &mut TirBlock, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx) {
-    for stmt in &mut block.stmts {
-        expand_stmt(stmt, alloc, ctx);
-    }
+/// Rewrites every `TemplateString` in a body into its expanded block.
+///
+/// Traversal goes through [`TirOptVisitor`], whose walk is exhaustive over
+/// `TirExprKind`, so a node added later cannot silently skip a template — which
+/// reaches `lower::translate`'s `unreachable!`, not a diagnostic.
+struct TemplateExpander<'a> {
+    alloc: FuncLocalAlloc,
+    ctx: &'a TemplateCtx<'a>,
 }
 
-fn expand_stmt(stmt: &mut TirStmt, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx) {
-    match &mut stmt.kind {
-        TirStmtKind::Expr(e) => expand_expr(e, alloc, ctx),
-        TirStmtKind::Let { value, .. } => {
-            expand_expr(value, alloc, ctx);
-        }
-        TirStmtKind::Return { value: Some(e) } | TirStmtKind::Break { value: Some(e), .. } => {
-            expand_expr(e, alloc, ctx);
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            expand_expr(condition, alloc, ctx);
-            expand_block(then_block, alloc, ctx);
-            if let Some(eb) = else_block {
-                expand_block(eb, alloc, ctx);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            expand_block(body, alloc, ctx);
-        }
-        TirStmtKind::LetDestructure { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
-            expand_expr(value, alloc, ctx);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            expand_block(block, alloc, ctx);
-        }
-        TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            expand_expr(iterable, alloc, ctx);
-            expand_block(body, alloc, ctx);
-        }
-        _ => {}
-    }
-}
-
-fn expand_expr(expr: &mut TirExpr, alloc: &mut FuncLocalAlloc, ctx: &TemplateCtx) {
-    // First, recurse into sub-expressions
-    match &mut expr.kind {
-        TirExprKind::TemplateString { parts } => {
-            // Expand sub-expressions within template parts first
-            for part in parts.iter_mut() {
-                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    expand_expr(inner, alloc, ctx);
-                }
-            }
-        }
-        TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            expand_block(b, alloc, ctx);
-            return;
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            expand_expr(condition, alloc, ctx);
-            expand_block(then_branch, alloc, ctx);
-            if let Some(eb) = else_branch {
-                expand_block(eb, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::Match { expr: s, arms } => {
-            expand_expr(s, alloc, ctx);
-            for arm in arms {
-                if let Some(guard) = &mut arm.guard {
-                    expand_expr(guard, alloc, ctx);
-                }
-                expand_expr(&mut arm.body, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::Call { args, .. } => {
-            for a in args {
-                expand_expr(&mut a.expr, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            expand_expr(left, alloc, ctx);
-            expand_expr(right, alloc, ctx);
-            return;
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
-            expand_expr(inner, alloc, ctx);
-            return;
-        }
-        TirExprKind::Assign { target, value } => {
-            expand_expr(target, alloc, ctx);
-            expand_expr(value, alloc, ctx);
-            return;
-        }
-        TirExprKind::Index {
-            expr: e,
-            index: idx,
-        } => {
-            expand_expr(e, alloc, ctx);
-            expand_expr(idx, alloc, ctx);
-            return;
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for f in fields {
-                expand_expr(&mut f.value, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::TupleLiteral { elements } => {
-            for e in elements {
-                expand_expr(e, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::Closure {
+impl crate::tir_visitor::TirOptVisitor for TemplateExpander<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        // Closure bodies own an independent local-index namespace, so the
+        // template synth locals (`__r`, `__f`, …) must be allocated there;
+        // otherwise they collide with closure params or body lets and
+        // `LocalCollector` merges incompatibly-typed locals into one Wasm
+        // slot. Mirrors the closure-scope switch in pattern lowering.
+        if let TirExprKind::Closure {
             params,
             body,
             body_locals,
             ..
-        } => {
-            // Closure bodies own an independent local-index namespace, so the
-            // template synth locals (`__r`, `__f`, …) must be allocated there;
-            // otherwise they collide with closure params or body lets and
-            // `LocalCollector` merges incompatibly-typed locals into one Wasm
-            // slot. Mirrors the closure-scope switch in pattern lowering.
-            let mut closure_alloc = FuncLocalAlloc {
-                next_index: (params.len() + body_locals.len()) as u32,
-                new_locals: Vec::new(),
+        } = &mut expr.kind
+        {
+            let mut nested = TemplateExpander {
+                alloc: FuncLocalAlloc {
+                    next_index: (params.len() + body_locals.len()) as u32,
+                    new_locals: Vec::new(),
+                },
+                ctx: self.ctx,
             };
-            expand_expr(body, &mut closure_alloc, ctx);
+            let changed = nested.visit_expr(body);
             // Surface the new synth locals on the closure so later passes
-            // (pattern lowering, closure planning) see a `body_locals`
-            // that matches the body's actual let-index range.
-            body_locals.extend(closure_alloc.new_locals);
-            return;
+            // (pattern lowering, closure planning) see a `body_locals` that
+            // matches the body's actual let-index range.
+            body_locals.extend(nested.alloc.new_locals);
+            return changed;
         }
-        TirExprKind::IndirectCall { callee, args } => {
-            expand_expr(callee, alloc, ctx);
-            for a in args {
-                expand_expr(a, alloc, ctx);
-            }
-            return;
+
+        // Interpolations first: expanding inside out keeps a nested template
+        // (`${ `${x}` }`) from being left behind in the block this one builds.
+        let mut changed = crate::tir_visitor::opt_walk_expr(self, expr);
+
+        if matches!(expr.kind, TirExprKind::TemplateString { .. }) {
+            let (string_type, span) = (expr.type_id, expr.span);
+            let TirExprKind::TemplateString { parts } =
+                std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+            else {
+                unreachable!("checked above")
+            };
+            *expr = build_template_block(parts, string_type, span, &mut self.alloc, self.ctx);
+            changed = true;
         }
-        TirExprKind::CmRawCall { args, .. } => {
-            for a in args {
-                expand_expr(a, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                expand_expr(p, alloc, ctx);
-            }
-            return;
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            expand_expr(value, alloc, ctx);
-            return;
-        }
-        TirExprKind::WithHandler { bindings, body, .. } => {
-            for binding in bindings {
-                expand_expr(&mut binding.handler, alloc, ctx);
-            }
-            expand_block(body, alloc, ctx);
-            return;
-        }
-        TirExprKind::Resume { value } => {
-            expand_expr(value, alloc, ctx);
-            return;
-        }
-        TirExprKind::VariadicTupleComprehension {
-            iterable,
-            destructure,
-            body,
-            ..
-        } => {
-            expand_expr(iterable, alloc, ctx);
-            for stmt in destructure {
-                expand_stmt(stmt, alloc, ctx);
-            }
-            expand_expr(body, alloc, ctx);
-            return;
-        }
-        _ => return,
+        changed
     }
-
-    // At this point, expr.kind is TemplateString — expand it
-    let span = expr.span;
-    let string_type = expr.type_id;
-    let parts = if let TirExprKind::TemplateString { parts } = std::mem::replace(
-        &mut expr.kind,
-        TirExprKind::Unit, // temporary placeholder
-    ) {
-        parts
-    } else {
-        unreachable!();
-    };
-
-    let expanded = build_template_block(parts, string_type, span, alloc, ctx);
-    *expr = expanded;
 }
+
+/// Reserved per interpolation, on top of the literal segments' exact length.
+const CAPACITY_PER_INTERPOLATION: i64 = 16;
 
 /// Build the `__tmpl: { ... }` labeled block for a template string.
 fn build_template_block(
@@ -402,51 +341,32 @@ fn build_template_block(
     ctx: &TemplateCtx,
 ) -> TirExpr {
     let tt = ctx.tt;
-    let string_struct_name = tt.borrow().compiler_struct_fq_name(CompilerItem::String);
-    let with_capacity_qualified =
-        crate::name::MethodName::format_local(&string_struct_name, None, "with_capacity");
     let label = crate::name::TEMPLATE_BLOCK_LABEL.to_string();
 
-    // Estimate capacity: sum of literal lengths + 16 per interpolation
     let capacity_estimate: i64 = parts
         .iter()
         .map(|p| match p {
             TirTemplatePart::Literal(s) => s.len() as i64,
-            TirTemplatePart::Interpolation { .. } => 16,
+            TirTemplatePart::Interpolation { .. } => CAPACITY_PER_INTERPOLATION,
         })
         .sum();
 
     let buf_index = alloc.alloc(string_type);
+    let buf = BufLocal {
+        index: buf_index,
+        string_type,
+        ref_string_type: tt.borrow_mut().make_ref(string_type),
+        span,
+    };
 
     // let mut __r = String::with_capacity(N);
-    let with_capacity_call = TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::string(),
-                name: with_capacity_qualified,
-                monomorph_info: None,
-                method_info: Some(LocalMethodName::new(
-                    string_struct_name.clone(),
-                    None,
-                    "with_capacity".to_string(),
-                )),
-            }),
-            type_args: vec![],
-            args: vec![CallArg::new(
-                TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: capacity_estimate.cast_unsigned(),
-                        repr: capacity_estimate.to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                ),
-                false,
-            )],
-            has_receiver: false,
-        },
+    let with_capacity_call = string_call(
+        CompilerItem::StringWithCapacity,
+        None,
+        vec![CallArg::new(int_literal(capacity_estimate, span), false)],
         string_type,
         span,
+        ctx,
     );
     let mut stmts = vec![TirStmt::new(
         TirStmtKind::Let {
@@ -464,186 +384,49 @@ fn build_template_block(
     let formatter_type = {
         let def = tt
             .borrow()
-            .require_compiler_item_def(crate::compiler_item::CompilerItem::Formatter);
+            .require_compiler_item_def(CompilerItem::Formatter);
         tt.borrow_mut()
             .make_struct(crate::tir::StructDef::Decl(def))
     };
     let mut_ref_formatter = tt.borrow_mut().make_mut_ref(formatter_type);
-    let ref_string_type = tt.borrow_mut().make_ref(string_type);
     let mut fmt_local_index: Option<u32> = None;
 
     for part in parts {
         match part {
             TirTemplatePart::Literal(s) => {
-                let buf_ref = TirExpr::new(
-                    TirExprKind::Local {
-                        index: buf_index,
-                        name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
-                    },
-                    string_type,
-                    span,
-                );
-                let push_str_qualified =
-                    crate::name::MethodName::format_local(&string_struct_name, None, "push_str");
-                let literal_ref = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::StringLiteral(s),
-                            string_type,
-                            span,
-                        )),
-                    },
-                    ref_string_type,
-                    span,
-                );
-                let push_str_call = TirExpr::new(
-                    TirExprKind::method_call(
-                        Box::new(buf_ref),
-                        FunctionRef {
-                            module_source: ModuleSource::string(),
-                            name: push_str_qualified,
-                            monomorph_info: None,
-                            method_info: Some(LocalMethodName::new(
-                                string_struct_name.clone(),
-                                None,
-                                "push_str".to_string(),
-                            )),
-                        },
-                        vec![],
-                        vec![CallArg::new(literal_ref, false)],
-                    ),
-                    TypeTable::UNIT,
-                    span,
-                );
-                stmts.push(TirStmt::new(TirStmtKind::Expr(push_str_call), span));
+                let literal = TirExpr::new(TirExprKind::StringLiteral(s), string_type, span);
+                stmts.push(buf.push_str(literal, ctx));
             }
             TirTemplatePart::Interpolation {
                 expr: resolved,
                 format_spec,
             } => {
-                // Strip refs for type-based decisions
+                // Ref level is irrelevant to which trait renders the value —
+                // except under `Inspect`, where `&x` renders as `&42` through
+                // the ref blanket, so the dispatch type keeps its refs.
                 let inner_type = strip_refs(resolved.type_id, tt);
+                let kind = format_spec
+                    .as_ref()
+                    .map_or(FormatKind::Display, |spec| spec.kind);
+                let format_trait = ctx.names.format_trait(format_spec.as_ref());
 
-                // If String type (or &String, &&String, ...) with no format spec, just push_str directly
+                // A plain `${s}` on a `String` is the buffer append itself.
                 if inner_type == string_type && format_spec.is_none() {
-                    let buf_ref = TirExpr::new(
-                        TirExprKind::Local {
-                            index: buf_index,
-                            name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
-                        },
-                        string_type,
-                        span,
-                    );
-                    // Normalize to &String regardless of ref level
                     let derefed = deref_to_inner(*resolved, string_type, span);
-                    let arg_ref = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(derefed),
-                        },
-                        ref_string_type,
-                        span,
-                    );
-                    let push_str_qualified = crate::name::MethodName::format_local(
-                        &string_struct_name,
-                        None,
-                        "push_str",
-                    );
-                    let push_str_call = TirExpr::new(
-                        TirExprKind::method_call(
-                            Box::new(buf_ref),
-                            FunctionRef {
-                                module_source: ModuleSource::string(),
-                                name: push_str_qualified,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    string_struct_name.clone(),
-                                    None,
-                                    "push_str".to_string(),
-                                )),
-                            },
-                            vec![],
-                            vec![CallArg::new(arg_ref, false)],
-                        ),
-                        TypeTable::UNIT,
-                        span,
-                    );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(push_str_call), span));
+                    stmts.push(buf.push_str(derefed, ctx));
                     continue;
                 }
 
-                let is_inspect = format_spec
-                    .as_ref()
-                    .is_some_and(|fs| fs.type_char == Some('?'));
-                let is_alternate = format_spec.as_ref().is_some_and(|fs| fs.alternate);
-
-                let (trait_name, method_name): (&crate::name::FqTraitName, &str) =
-                    match &format_spec {
-                        Some(fs) => match (fs.type_char, fs.alternate) {
-                            (Some('b'), true) => {
-                                (&ctx.names.binary_alt, ctx.names.binary_alt_method.as_str())
-                            }
-                            (Some('b'), false) => {
-                                (&ctx.names.binary, ctx.names.binary_method.as_str())
-                            }
-                            (Some('o'), true) => {
-                                (&ctx.names.octal_alt, ctx.names.octal_alt_method.as_str())
-                            }
-                            (Some('o'), false) => {
-                                (&ctx.names.octal, ctx.names.octal_method.as_str())
-                            }
-                            (Some('x'), true) => (
-                                &ctx.names.lower_hex_alt,
-                                ctx.names.lower_hex_alt_method.as_str(),
-                            ),
-                            (Some('x'), false) => {
-                                (&ctx.names.lower_hex, ctx.names.lower_hex_method.as_str())
-                            }
-                            (Some('X'), true) => (
-                                &ctx.names.upper_hex_alt,
-                                ctx.names.upper_hex_alt_method.as_str(),
-                            ),
-                            (Some('X'), false) => {
-                                (&ctx.names.upper_hex, ctx.names.upper_hex_method.as_str())
-                            }
-                            (Some('e'), _) => {
-                                (&ctx.names.lower_exp, ctx.names.lower_exp_method.as_str())
-                            }
-                            (Some('E'), _) => {
-                                (&ctx.names.upper_exp, ctx.names.upper_exp_method.as_str())
-                            }
-                            (_, true) => (
-                                &ctx.names.display_alt,
-                                ctx.names.display_alt_method.as_str(),
-                            ),
-                            _ => (&ctx.names.display, ctx.names.display_method.as_str()),
-                        },
-                        None => (&ctx.names.display, ctx.names.display_method.as_str()),
-                    };
-
-                // Create or reassign Formatter local
+                let formatter_expr = || {
+                    build_formatter_expr(&buf, formatter_type, format_spec.as_ref(), tt, ctx.names)
+                };
+                // One `Formatter` local serves the whole block: the first
+                // interpolation declares it, the rest overwrite it.
                 let fmt_index = if let Some(idx) = fmt_local_index {
-                    let formatter_expr = build_formatter_expr(
-                        buf_index,
-                        string_type,
-                        formatter_type,
-                        &format_spec,
-                        span,
-                        tt,
-                        ctx.names,
-                    );
                     let assign = TirExpr::new(
                         TirExprKind::Assign {
-                            target: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: idx,
-                                    name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
-                                },
-                                formatter_type,
-                                span,
-                            )),
-                            value: Box::new(formatter_expr),
+                            target: Box::new(formatter_local(idx, formatter_type, span)),
+                            value: Box::new(formatter_expr()),
                         },
                         TypeTable::UNIT,
                         span,
@@ -653,15 +436,6 @@ fn build_template_block(
                 } else {
                     let idx = alloc.alloc(formatter_type);
                     fmt_local_index = Some(idx);
-                    let formatter_expr = build_formatter_expr(
-                        buf_index,
-                        string_type,
-                        formatter_type,
-                        &format_spec,
-                        span,
-                        tt,
-                        ctx.names,
-                    );
                     stmts.push(TirStmt::new(
                         TirStmtKind::Let {
                             name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
@@ -669,7 +443,7 @@ fn build_template_block(
                             is_mut: true,
                             is_reactive: false,
                             type_id: formatter_type,
-                            value: formatter_expr,
+                            value: formatter_expr(),
                             skip_value_copy: false,
                         },
                         span,
@@ -680,68 +454,33 @@ fn build_template_block(
                 let fmt_mut_ref = TirExpr::new(
                     TirExprKind::Unary {
                         op: TirUnaryOp::MutRef,
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::Local {
-                                index: fmt_index,
-                                name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
-                            },
-                            formatter_type,
-                            span,
-                        )),
+                        expr: Box::new(formatter_local(fmt_index, formatter_type, span)),
                     },
                     mut_ref_formatter,
                     span,
                 );
-
-                if is_inspect {
-                    let (it_name, im_name): (&crate::name::FqTraitName, &str) = if is_alternate {
-                        (
-                            &ctx.names.inspect_alt,
-                            ctx.names.inspect_alt_method.as_str(),
-                        )
-                    } else {
-                        (&ctx.names.inspect, ctx.names.inspect_method.as_str())
-                    };
-                    let call_stmts = trait_fmt_call(
-                        resolved.type_id,
-                        *resolved,
-                        fmt_mut_ref,
-                        it_name,
-                        im_name,
-                        span,
-                        ctx,
-                    );
-                    stmts.extend(call_stmts);
-                } else {
-                    // Display/DisplayAlt/Binary/BinaryAlt/etc.
-                    let call_stmts = trait_fmt_call(
-                        inner_type,
-                        *resolved,
-                        fmt_mut_ref,
-                        trait_name,
-                        method_name,
-                        span,
-                        ctx,
-                    );
-                    stmts.extend(call_stmts);
-                }
+                let dispatch_type = match kind {
+                    FormatKind::Inspect => resolved.type_id,
+                    _ => inner_type,
+                };
+                stmts.extend(trait_fmt_call(
+                    dispatch_type,
+                    *resolved,
+                    fmt_mut_ref,
+                    kind,
+                    format_trait,
+                    span,
+                    ctx,
+                ));
             }
         }
     }
 
     // break __tmpl: __r;
-    let buf_final = TirExpr::new(
-        TirExprKind::Local {
-            index: buf_index,
-            name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
-        },
-        string_type,
-        span,
-    );
     stmts.push(TirStmt::new(
         TirStmtKind::Break {
             label: Some(label.clone()),
-            value: Some(buf_final),
+            value: Some(buf.read()),
         },
         span,
     ));
@@ -757,43 +496,134 @@ fn build_template_block(
     )
 }
 
-/// Build a `Formatter::new(&mut __r)` or `Formatter { ... }` expression.
-fn build_formatter_expr(
-    buf_index: u32,
+/// The `__r` accumulator the expanded block appends into. Every read of it —
+/// the value, a `&`, a `&mut` — comes from here, so the local's identity is
+/// written once.
+struct BufLocal {
+    index: u32,
     string_type: TypeId,
-    formatter_type: TypeId,
-    parsed: &Option<TemplateFormatSpec>,
+    ref_string_type: TypeId,
     span: Span,
+}
+
+impl BufLocal {
+    fn read(&self) -> TirExpr {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: self.index,
+                name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
+            },
+            self.string_type,
+            self.span,
+        )
+    }
+
+    fn mut_ref(&self, tt: &Rc<RefCell<TypeTable>>) -> TirExpr {
+        let mut_ref_string = tt.borrow_mut().make_mut_ref(self.string_type);
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::MutRef,
+                expr: Box::new(self.read()),
+            },
+            mut_ref_string,
+            self.span,
+        )
+    }
+
+    /// `__r.push_str(&value)`.
+    fn push_str(&self, value: TirExpr, ctx: &TemplateCtx) -> TirStmt {
+        let arg = TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(value),
+            },
+            self.ref_string_type,
+            self.span,
+        );
+        let call = string_call(
+            CompilerItem::StringPushStr,
+            Some(self.read()),
+            vec![CallArg::new(arg, false)],
+            TypeTable::UNIT,
+            self.span,
+            ctx,
+        );
+        TirStmt::new(TirStmtKind::Expr(call), self.span)
+    }
+}
+
+fn formatter_local(index: u32, formatter_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Local {
+            index,
+            name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
+        },
+        formatter_type,
+        span,
+    )
+}
+
+fn int_literal(value: i64, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: value.cast_unsigned(),
+            repr: value.to_string(),
+        },
+        TypeTable::I32,
+        span,
+    )
+}
+
+/// Call an inherent `String` method named by a compiler item — `receiver`
+/// present for a method call, absent for an associated function.
+fn string_call(
+    item: CompilerItem,
+    receiver: Option<TirExpr>,
+    args: Vec<CallArg>,
+    return_type: TypeId,
+    span: Span,
+    ctx: &TemplateCtx,
+) -> TirExpr {
+    let (module_source, method_name) = {
+        let tt = ctx.tt.borrow();
+        let items = tt.compiler_items();
+        let (module_source, _, method_name) = items.require_method(item);
+        (module_source.clone(), method_name.to_string())
+    };
+    let owner = ctx
+        .tt
+        .borrow()
+        .compiler_struct_fq_name(CompilerItem::String);
+    let method_info = LocalMethodName::new(owner.clone(), None, method_name.clone());
+    let func = FunctionRef {
+        module_source,
+        name: crate::name::MethodName::format_local(&owner, None, &method_name),
+        monomorph_info: None,
+        method_info: Some(method_info),
+    };
+    let kind = match receiver {
+        Some(receiver) => TirExprKind::method_call(Box::new(receiver), func, vec![], args),
+        None => TirExprKind::Call {
+            func: Box::new(func),
+            type_args: vec![],
+            args,
+            has_receiver: false,
+        },
+    };
+    TirExpr::new(kind, return_type, span)
+}
+
+/// Build a `Formatter::new(&mut __r)` or, when the spec asks for padding or
+/// precision, the full `Formatter { ... }` literal.
+fn build_formatter_expr(
+    buf: &BufLocal,
+    formatter_type: TypeId,
+    spec: Option<&TemplateFormatSpec>,
     tt: &Rc<RefCell<TypeTable>>,
     names: &FormatStdlibNames,
 ) -> TirExpr {
-    let mut_ref_string = tt.borrow_mut().make_mut_ref(string_type);
-    let buf_mut_ref = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::MutRef,
-            expr: Box::new(TirExpr::new(
-                TirExprKind::Local {
-                    index: buf_index,
-                    name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
-                },
-                string_type,
-                span,
-            )),
-        },
-        mut_ref_string,
-        span,
-    );
-
-    let has_custom_spec = parsed.as_ref().is_some_and(|p| {
-        p.fill.is_some()
-            || p.align.is_some()
-            || p.sign_plus
-            || p.zero_pad
-            || p.width.is_some()
-            || p.precision.is_some()
-    });
-
-    if !has_custom_spec {
+    let span = buf.span;
+    let Some(spec) = spec.filter(|s| s.needs_formatter_fields()) else {
         return TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
@@ -807,114 +637,77 @@ fn build_formatter_expr(
                     )),
                 }),
                 type_args: vec![],
-                args: vec![CallArg::new(buf_mut_ref, false)],
+                args: vec![CallArg::new(buf.mut_ref(tt), false)],
                 has_receiver: false,
             },
             formatter_type,
             span,
         );
-    }
+    };
 
-    let pf = parsed.as_ref().unwrap();
     let alignment_type = {
         let def = tt
             .borrow()
-            .require_compiler_item_def(crate::compiler_item::CompilerItem::Alignment);
+            .require_compiler_item_def(CompilerItem::Alignment);
         tt.borrow_mut().make_enum(def)
     };
-    let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
-    let (align_index, align_name): (u32, &str) = match pf.align {
-        Some('<') => (names.left_index, names.left_name.as_str()),
-        Some('^') => (names.center_index, names.center_name.as_str()),
-        _ => (names.right_index, names.right_name.as_str()),
-    };
+    let align_case = names.alignment_case(spec.align);
+    let fill_char = spec.fill.unwrap_or(if spec.zero_pad { '0' } else { ' ' });
+
+    // Built from `FormatterField::ALL` so the literal cannot drift out of the
+    // declared field order — the names and indices are checked against the
+    // declaration in `FormatStdlibNames::from_type_table`.
+    let fields = FormatterField::ALL
+        .iter()
+        .map(|field| {
+            let value = match field {
+                FormatterField::Fill => {
+                    TirExpr::new(TirExprKind::CharLiteral(fill_char), TypeTable::CHAR, span)
+                }
+                FormatterField::Align => TirExpr::new(
+                    TirExprKind::EnumConstruct {
+                        enum_type: alignment_type,
+                        case_index: align_case.index,
+                        case_name: align_case.name.clone(),
+                    },
+                    alignment_type,
+                    span,
+                ),
+                FormatterField::SignPlus => TirExpr::new(
+                    TirExprKind::BoolLiteral(spec.sign_plus),
+                    TypeTable::BOOL,
+                    span,
+                ),
+                FormatterField::ZeroPad => TirExpr::new(
+                    TirExprKind::BoolLiteral(spec.zero_pad),
+                    TypeTable::BOOL,
+                    span,
+                ),
+                FormatterField::Width => {
+                    int_literal(spec.width.unwrap_or(FormatterField::NO_WIDTH).into(), span)
+                }
+                FormatterField::Precision => int_literal(
+                    spec.precision
+                        .unwrap_or(FormatterField::PRECISION_DEFAULT)
+                        .into(),
+                    span,
+                ),
+                FormatterField::Indent => int_literal(0, span),
+                FormatterField::Buf => buf.mut_ref(tt),
+            };
+            TirStructField {
+                name: field.field_name().to_string(),
+                value,
+                field_index: field.index(),
+            }
+        })
+        .collect();
 
     TirExpr::new(
         TirExprKind::StructLiteral {
             struct_type: formatter_type,
             struct_name: names.formatter.clone(),
-            fields: vec![
-                TirStructField {
-                    name: "fill".to_string(),
-                    value: TirExpr::new(TirExprKind::CharLiteral(fill_char), TypeTable::CHAR, span),
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "align".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type: alignment_type,
-                            case_index: align_index,
-                            case_name: align_name.to_string(),
-                        },
-                        alignment_type,
-                        span,
-                    ),
-                    field_index: 1,
-                },
-                TirStructField {
-                    name: "sign_plus".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(pf.sign_plus),
-                        TypeTable::BOOL,
-                        span,
-                    ),
-                    field_index: 2,
-                },
-                TirStructField {
-                    name: "zero_pad".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(pf.zero_pad),
-                        TypeTable::BOOL,
-                        span,
-                    ),
-                    field_index: 3,
-                },
-                TirStructField {
-                    name: "width".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: pf.width.unwrap_or(-1).cast_unsigned(),
-                            repr: pf.width.unwrap_or(-1).to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 4,
-                },
-                TirStructField {
-                    name: "precision".to_string(),
-                    // -2 (`Formatter::PRECISION_DEFAULT`) marks "no precision in
-                    // the spec" so sequence Inspect can fall back to its default
-                    // length cap; an explicit `.N` carries the literal N.
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: pf.precision.unwrap_or(-2).cast_unsigned(),
-                            repr: pf.precision.unwrap_or(-2).to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 5,
-                },
-                TirStructField {
-                    name: "indent".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: 0,
-                            repr: "0".to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 6,
-                },
-                TirStructField {
-                    name: "buf".to_string(),
-                    value: buf_mut_ref,
-                    field_index: 7,
-                },
-            ],
+            fields,
         },
         formatter_type,
         span,
@@ -949,20 +742,17 @@ fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
     )
 }
 
-/// Unified format trait dispatch.
-///
-/// Emits a trait method call, delegating to the Wado-level trait implementation
-/// (including blanket impls).
 /// Peel a newtype receiver to its base type so a format call targets the
 /// inherited impl — a newtype renders its underlying value for every format
-/// trait except `Inspect` / `InspectAlt` (which it overrides with the ` as Name`
-/// tag). A manual `impl <Trait>` on the newtype stops the peel.
+/// kind except `Inspect` (which overrides it with the ` as Name` tag). A manual
+/// `impl <Trait>` on the newtype stops the peel.
 fn peel_transparent_newtype(
     type_id: TypeId,
+    kind: FormatKind,
     trait_name: &crate::name::FqTraitName,
     ctx: &TemplateCtx,
 ) -> TypeId {
-    if *trait_name == ctx.names.inspect || *trait_name == ctx.names.inspect_alt {
+    if kind == FormatKind::Inspect {
         return type_id;
     }
     let mut tid = type_id;
@@ -990,16 +780,20 @@ fn peel_transparent_newtype(
     }
 }
 
+/// Unified format trait dispatch: emit the `value.fmt(&mut f)` call,
+/// delegating to the Wado-level trait implementation (including blanket impls).
 fn trait_fmt_call(
     type_id: TypeId,
     val: TirExpr,
     fmt: TirExpr,
-    trait_name: &crate::name::FqTraitName,
-    method_name: &str,
+    kind: FormatKind,
+    format_trait: &FormatTrait,
     span: Span,
     ctx: &TemplateCtx,
 ) -> Vec<TirStmt> {
-    let target = peel_transparent_newtype(type_id, trait_name, ctx);
+    let trait_name = &format_trait.name;
+    let method_name = format_trait.method.as_str();
+    let target = peel_transparent_newtype(type_id, kind, trait_name, ctx);
     let (val, type_id) = if target == type_id {
         (val, type_id)
     } else {

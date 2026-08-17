@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::canonical::CmCallTarget;
+use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
@@ -4419,21 +4420,6 @@ pub enum TirTemplatePart {
     },
 }
 
-/// Parsed format specification from a template string interpolation.
-/// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
-#[derive(Debug, Clone)]
-pub struct TemplateFormatSpec {
-    pub fill: Option<char>,
-    pub align: Option<char>,
-    pub sign_plus: bool,
-    pub alternate: bool,
-    pub zero_pad: bool,
-    pub width: Option<i64>,
-    pub precision: Option<i64>,
-    /// Type character: `b`, `o`, `x`, `X`, `e`, `E`, `?`
-    pub type_char: Option<char>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TirBinaryOp {
     Add,
@@ -5339,6 +5325,11 @@ pub struct TirEffectOp {
     /// `MethodInfo` — back to the right per-monomorphisation wrapper.
     pub cm_name: Option<String>,
     pub is_async: bool,
+    /// Set when the declaration gave the operation a body: what it does when
+    /// dispatched with no handler installed. The dispatch wrapper calls
+    /// [`crate::name::effect_default_impl_name`] in that case instead of
+    /// trapping.
+    pub has_default: bool,
 }
 
 /// Resource declaration captured in TIR for effect propagation.

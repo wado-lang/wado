@@ -7,13 +7,12 @@ use crate::ast::{
     BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr,
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
     ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl,
-    InterfaceMethod, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WorldDecl, WorldExport,
+    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item,
+    LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
+    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl,
+    TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind};
 use crate::hashmap::IndexSet;
@@ -1121,28 +1120,10 @@ impl<'a> Unparser<'a> {
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
                 this.emit_leading_for(method.id);
                 this.emit_blank_lines_to(effective_line);
-                this.unparse_interface_method(method);
+                this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
         });
-    }
-
-    fn unparse_interface_method(&mut self, m: &InterfaceMethod) {
-        self.emit_outer_attrs(&m.attrs);
-        self.emit_kw_if(m.is_async, "async ");
-
-        self.output.push_str("fn ");
-        self.output.push_str(&m.name);
-        self.delimited_params(&m.params, |s| {
-            if let Some(ret) = &m.return_type
-                && !is_unit_type(ret)
-            {
-                s.output.push_str(" -> ");
-                s.unparse_type(ret);
-            }
-        });
-
-        self.output.push_str(";\n");
     }
 
     fn unparse_resource(&mut self, r: &ResourceDecl) {
@@ -1161,7 +1142,7 @@ impl<'a> Unparser<'a> {
         self.with_braced_body(r.span, |this| {
             for method in &r.methods {
                 this.emit_leading_for(method.id);
-                this.unparse_interface_method(method);
+                this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
         });
@@ -2427,15 +2408,16 @@ impl<'a> Unparser<'a> {
         self.unparse_expr(&c.body);
     }
 
+    /// Twin of [`unparse_template_string_into`], which prints the same shape
+    /// without comment tracking; keep the two in step.
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
         use crate::ast::TemplatePart;
 
         self.output.push('`');
         for part in &t.parts {
             match part {
-                TemplatePart::String(s) => {
-                    escape_template_literal_into(s, &mut self.output);
-                }
+                // Literal segments are stored raw, escapes and all.
+                TemplatePart::String(s) => self.output.push_str(s),
                 TemplatePart::Interpolation { expr, format } => {
                     self.output.push_str("${");
                     self.unparse_expr(expr);
@@ -3165,36 +3147,6 @@ fn escape_char(c: char) -> String {
     }
 }
 
-fn format_spec_to_string(spec: &crate::tir::TemplateFormatSpec) -> String {
-    let mut s = String::new();
-    if let Some(fill) = spec.fill {
-        s.push(fill);
-    }
-    if let Some(align) = spec.align {
-        s.push(align);
-    }
-    if spec.sign_plus {
-        s.push('+');
-    }
-    if spec.alternate {
-        s.push('#');
-    }
-    if spec.zero_pad {
-        s.push('0');
-    }
-    if let Some(w) = spec.width {
-        s.push_str(&w.to_string());
-    }
-    if let Some(p) = spec.precision {
-        s.push('.');
-        s.push_str(&p.to_string());
-    }
-    if let Some(t) = spec.type_char {
-        s.push(t);
-    }
-    s
-}
-
 /// Unparse an AST expression to a string without comments.
 /// Used by the desugar phase for generating error messages.
 pub fn unparse_expr_simple(expr: &Expr) -> String {
@@ -3419,20 +3371,14 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
     unparse_expr_into(&c.body, output);
 }
 
-fn escape_template_literal_into(s: &str, output: &mut String) {
-    // Template literal parts are stored as raw text (escape sequences preserved).
-    // Just output as-is — escapes like \n, \{, \} are already in raw form.
-    output.push_str(s);
-}
-
+/// Twin of [`Unparser::unparse_template_string`]; keep the two in step.
 fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
     use crate::ast::TemplatePart;
     output.push('`');
     for part in &t.parts {
         match part {
-            TemplatePart::String(s) => {
-                escape_template_literal_into(s, output);
-            }
+            // Literal segments are stored raw, escapes and all.
+            TemplatePart::String(s) => output.push_str(s),
             TemplatePart::Interpolation { expr, format } => {
                 output.push_str("${");
                 unparse_expr_into(expr, output);
@@ -5031,11 +4977,11 @@ impl<'a> TirUnparser<'a> {
                             expr: inner,
                             format_spec,
                         } => {
-                            self.output.push('{');
+                            self.output.push_str("${");
                             self.unparse_expr(inner);
                             if let Some(spec) = format_spec {
                                 self.output.push(':');
-                                self.output.push_str(&format_spec_to_string(spec));
+                                self.output.push_str(&spec.to_string());
                             }
                             self.output.push('}');
                         }

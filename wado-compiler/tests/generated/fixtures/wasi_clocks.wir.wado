@@ -142,15 +142,7 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
         "core:cli/write_to_stream"(tx_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: FAILED - monotonic clock went backwards"), used: 45 }, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_34);
     }
-    if (if (if t1 >u 0_i64 -> i32 {
-        1;
-    } else {
-        t2 >u 0_i64;
-    }) -> i32 {
-        1;
-    } else {
-        t3 >u 0_i64;
-    }) {
+    if select i32(select i32(t1 >u 0_i64, 1, t2 >u 0_i64), 1, t3 >u 0_i64) {
         rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
         tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
         handle_43 = "wasi_clocks.wado/__cm_binding__Stdout_write_via_stream"(rx_46);
@@ -245,12 +237,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l8;
+            continue l6;
         };
     };
 }
@@ -274,20 +266,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 offset >= count;
+    b7: block {
+        l8: loop {
+            break_if b7 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b9 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
-            continue l10;
+            break_if b7 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l8;
         };
     };
 }

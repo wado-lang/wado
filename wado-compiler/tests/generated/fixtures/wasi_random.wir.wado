@@ -151,11 +151,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     handle_10 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_13);
     "core:cli/write_to_stream"(tx_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: random u64 works"), used: 22 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
-    if (if r1 != 0_i64 -> i32 {
-        1;
-    } else {
-        r2 != 0_i64;
-    }) {
+    if select i32(r1 != 0_i64, 1, r2 != 0_i64) {
         rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
         tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
         handle_19 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
@@ -209,11 +205,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     handle_82 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_85);
     "core:cli/write_to_stream"(tx_86, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test: insecure seed works"), used: 25 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_82);
-    if (if seed_low != 0_i64 -> i32 {
-        1;
-    } else {
-        seed_high != 0_i64;
-    }) {
+    if select i32(seed_low != 0_i64, 1, seed_high != 0_i64) {
         rx_94 = builtin::i32_wrap_i64(local.tee packed_93("wasi/stream-new"()));
         tx_95 = builtin::i32_wrap_i64(packed_93 >> 32_i64);
         handle_91 = "wasi_random.wado/__cm_binding__Stdout_write_via_stream"(rx_94);
@@ -310,12 +302,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 i >= len;
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
             i = i + 1;
-            continue l8;
+            continue l6;
         };
     };
 }
@@ -339,20 +331,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 offset >= count;
+    b7: block {
+        l8: loop {
+            break_if b7 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b9 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
-            continue l10;
+            break_if b7 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l8;
         };
     };
 }

@@ -11,8 +11,8 @@
 use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
     AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
-    Function, GenericType, InnerAttribute, InterfaceDecl, InterfaceMethod, Item, Module, NamedType,
-    Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType, Newtype, Param,
+    SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
 use crate::token::Span;
 use crate::wit_emit::CmShape;
@@ -263,14 +263,21 @@ impl Builder {
                     span: syn(),
                 },
             ];
-            methods.push(InterfaceMethod {
+            methods.push(Function {
                 id: self.id(),
                 name: fname.to_snake_case(),
                 name_span: syn(),
+                visibility: Visibility::Private,
+                is_export: false,
                 is_async: false,
+                type_params: Vec::new(),
                 attrs,
                 params,
                 return_type,
+                effects: Vec::new(),
+                effect_ids: Vec::new(),
+                stores: Vec::new(),
+                body: None,
                 span: syn(),
             });
         }

@@ -2553,8 +2553,7 @@ This avoids intermediate allocations.
 Format specification fields match Rust's format syntax:
 `[[fill]align][sign][#][0][width][.precision]type`
 
-Width uses -1 for "not specified"; precision uses the sentinels on
-`impl Formatter`.
+Unset width and precision use the sentinels on `impl Formatter`.
 
 #### `fill: char`
 
@@ -2574,12 +2573,12 @@ Whether to use zero-padding (`0` flag)
 
 #### `width: i32`
 
-Minimum field width (-1 = no minimum)
+Minimum field width; `NO_WIDTH` for none
 
 #### `precision: i32`
 
 Decimal places for floats; max rendered length for sequences (chars /
-elements). Negative values are the sentinels on `impl Formatter`.
+elements). Negative values are the sentinels below.
 
 #### `indent: i32`
 

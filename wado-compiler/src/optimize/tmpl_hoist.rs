@@ -3,10 +3,15 @@
 //! resetting `used = 0` instead of building a fresh struct. Sound only when
 //! neither the template result nor the inner `__r` escapes the iteration, which
 //! [`EscapeScan`] and [`template_buf_escapes`] decide. Runs as a [`Rule`].
+//!
+//! The block comes from `synthesis::template`, whose module docs list the names
+//! the two sides share. Recognition spells none of them out: the label goes
+//! through [`crate::name::is_template_block`], the callees through their
+//! [`CompilerItem`], the fields through [`SeqField`] / [`FormatterField`].
 
 use std::cell::{Cell, RefCell};
 
-use crate::compiler_item::SeqField;
+use crate::compiler_item::{CompilerItem, FormatterField, SeqField};
 use crate::hashmap::IndexSet;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
@@ -21,37 +26,29 @@ use super::arena_query::{is_local, stmt_mentions_local};
 use super::gate::{FunctionGate, GatedPass};
 use cranelift_entity::EntityRef;
 
-/// The builtin callee ids the template-hoist recognizers match, resolved once
-/// per pass run so each match is an integer `func_id` compare (not a name read
-/// off the call node's `FunctionRef`). Each callee is resolved by exact
-/// identity — the builtin descriptor (`builtin_name` /
-/// `monomorphized_builtin_name`, the mechanism `loop_version_bce` uses for
-/// `builtin::array_set`) or the resolved method identity — never by substring,
-/// so a same-named user function is never captured. Builtins are *sets* over
-/// every monomorphized instance.
-pub(super) struct TmplCalleeIds {
+/// Everything the recognizers match a node against, resolved once per pass run:
+/// callee ids, so each match is an integer `func_id` compare rather than a name
+/// read off the call node, plus the stdlib struct names the literals carry.
+///
+/// Each callee is resolved by exact identity — its compiler item, or the
+/// builtin descriptor (`builtin_name` / `monomorphized_builtin_name`, the
+/// mechanism `loop_version_bce` uses for `builtin::array_set`) — never by
+/// substring, so a same-named user function is never captured. Builtins are
+/// *sets* over every monomorphized instance.
+pub(super) struct TmplIdents {
     /// The stdlib `String::with_capacity` (the pre-lowered template init).
     with_capacity: IndexSet<FuncId>,
     /// `builtin::array_new` and its monomorphizations.
     array_new: IndexSet<FuncId>,
     /// `builtin::ref.as_non_null`.
     ref_as_non_null: IndexSet<FuncId>,
+    /// The `String` struct literal the lowered template init takes the shape of.
+    string_struct: String,
+    /// The `Formatter` struct literal each interpolation builds.
+    formatter_struct: String,
 }
 
-/// Exact identity of the stdlib `String::with_capacity`: an inherent
-/// `with_capacity` method on `String` declared in a `core:` module. Matching
-/// the resolved method identity (not the mangled name string) keeps a
-/// user-defined `String::with_capacity` in a local module from being captured.
-fn is_string_with_capacity(f: &NirFunction) -> bool {
-    f.module_source.is_core()
-        && f.method_info.as_ref().is_some_and(|mi| {
-            mi.receiver_decl_name() == "String"
-                && mi.method_name == "with_capacity"
-                && mi.trait_name.is_none()
-        })
-}
-
-impl TmplCalleeIds {
+impl TmplIdents {
     fn resolve(project: &NirPackage) -> Self {
         let mut with_capacity = IndexSet::default();
         let mut array_new = IndexSet::default();
@@ -59,7 +56,9 @@ impl TmplCalleeIds {
         for f in &project.functions {
             let f = f.borrow();
             let Some(id) = f.id else { continue };
-            if is_string_with_capacity(&f) {
+            // The stdlib `String::with_capacity`, by compiler item rather than
+            // by name, so a user-defined one is never captured.
+            if f.compiler_item == Some(CompilerItem::StringWithCapacity) {
                 with_capacity.insert(id);
             }
             let descriptor = FunctionRef::from_resolved(&f, f.module_source.clone());
@@ -72,10 +71,14 @@ impl TmplCalleeIds {
                 ref_as_non_null.insert(id);
             }
         }
+        let type_table = project.type_table.borrow();
+        let items = type_table.compiler_items();
         Self {
             with_capacity,
             array_new,
             ref_as_non_null,
+            string_struct: items.struct_name(CompilerItem::String).to_string(),
+            formatter_struct: items.struct_name(CompilerItem::Formatter).to_string(),
         }
     }
 
@@ -87,7 +90,7 @@ impl TmplCalleeIds {
 /// Apply template string buffer hoisting to all functions in the project.
 pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.clone();
-    let callee_ids = TmplCalleeIds::resolve(project);
+    let idents = TmplIdents::resolve(project);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::TmplHoist, len, |fid| {
@@ -97,7 +100,7 @@ pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate)
         }
         let rule = TmplHoistRule {
             type_table: &type_table,
-            callee_ids: &callee_ids,
+            idents: &idents,
             applied: Cell::new(false),
         };
         let NirFunction { body, locals, .. } = &mut *func;
@@ -111,7 +114,7 @@ pub fn hoist_template_buffers(project: &mut NirPackage, gate: &mut FunctionGate)
 /// function template-buffer hoist at the body root.
 pub(super) struct TmplHoistRule<'a> {
     type_table: &'a RefCell<TypeTable>,
-    callee_ids: &'a TmplCalleeIds,
+    idents: &'a TmplIdents,
     applied: Cell<bool>,
 }
 
@@ -124,7 +127,7 @@ impl Rule for TmplHoistRule<'_> {
             return false;
         }
         let root = engine.body.root;
-        hoist_in_block(engine, root, self.type_table, self.callee_ids)
+        hoist_in_block(engine, root, self.type_table, self.idents)
     }
 }
 
@@ -137,7 +140,7 @@ fn hoist_in_block(
     engine: &mut Engine,
     block: BlockId,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> bool {
     let mut changed = false;
     let mut new_stmts: Vec<StmtId> = Vec::new();
@@ -146,9 +149,9 @@ fn hoist_in_block(
         if let StmtKind::Loop { body } = &engine.body.stmts[s].kind {
             let lb = *body;
             // Recurse into the loop body first (for nested loops).
-            changed |= hoist_in_block(engine, lb, type_table, callee_ids);
+            changed |= hoist_in_block(engine, lb, type_table, idents);
             // Try to hoist template buffers out of this loop.
-            let hoist_stmts = hoist_tmpl_from_loop(engine, lb, type_table, callee_ids);
+            let hoist_stmts = hoist_tmpl_from_loop(engine, lb, type_table, idents);
             if !hoist_stmts.is_empty() {
                 changed = true;
                 new_stmts.extend(hoist_stmts);
@@ -158,7 +161,7 @@ fn hoist_in_block(
             let mut blocks = Vec::new();
             nearest_child_blocks(engine.body, NodeRef::Stmt(s), &mut blocks);
             for b in blocks {
-                changed |= hoist_in_block(engine, b, type_table, callee_ids);
+                changed |= hoist_in_block(engine, b, type_table, idents);
             }
         }
         new_stmts.push(s);
@@ -224,7 +227,7 @@ fn hoist_tmpl_from_loop(
     engine: &mut Engine,
     loop_body: BlockId,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> Vec<StmtId> {
     // Phase 1: Collect all Let bindings whose value is a __tmpl LabeledBlock,
     // and check if the bound variable escapes (used as a non-self argument).
@@ -238,7 +241,7 @@ fn hoist_tmpl_from_loop(
         &escaping_locals,
         &mut hoist_stmts,
         type_table,
-        callee_ids,
+        idents,
     );
     hoist_stmts
 }
@@ -421,7 +424,7 @@ impl<'a> EscapeScan<'a> {
             // Formatter `buf` linkage in the inner-buffer scan.
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if !(self.exempt_buf_fields && field.name == "buf") {
+                    if !(self.exempt_buf_fields && field.name == FormatterField::Buf.field_name()) {
                         self.mark_chain(field.value);
                     }
                     self.scan_operand(field.value);
@@ -609,17 +612,10 @@ fn transform_stmts_in_block(
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) {
     for s in engine.body.blocks[block].stmts.clone() {
-        transform_stmt(
-            engine,
-            s,
-            escaping_locals,
-            hoist_stmts,
-            type_table,
-            callee_ids,
-        );
+        transform_stmt(engine, s, escaping_locals, hoist_stmts, type_table, idents);
     }
 }
 
@@ -629,7 +625,7 @@ fn transform_stmt(
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) {
     // `let x = __tmpl: { ... }` — the only statement shape that can hoist.
     let let_info = if let StmtKind::Let {
@@ -645,7 +641,7 @@ fn transform_stmt(
     {
         let tmpl_block = match &engine.body.exprs[ve].kind {
             ExprKind::LabeledBlock { label, block, .. }
-                if label == crate::name::TEMPLATE_BLOCK_LABEL =>
+                if crate::name::is_template_block(label) =>
             {
                 Some(*block)
             }
@@ -653,10 +649,10 @@ fn transform_stmt(
         };
         if let Some(tb) = tmpl_block
             && !escaping_locals.contains(&local_index)
-            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb, callee_ids)
+            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb, idents)
             && !template_buf_escapes(engine.body, tb, candidate.buf_local_index)
         {
-            transform_tmpl_block(engine, tb, &candidate, hoist_stmts, type_table, callee_ids);
+            transform_tmpl_block(engine, tb, &candidate, hoist_stmts, type_table, idents);
             // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
             // This is a non-id field on `Let` and does not affect the engine's
             // parent map / use index, so the in-place write is safe.
@@ -669,14 +665,7 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(
-            engine,
-            ve,
-            escaping_locals,
-            hoist_stmts,
-            type_table,
-            callee_ids,
-        );
+        transform_expr(engine, ve, escaping_locals, hoist_stmts, type_table, idents);
         return;
     }
 
@@ -702,14 +691,7 @@ fn transform_stmt(
     };
     match shape {
         Shape::Expr(e) | Shape::Break(e) => {
-            transform_expr(
-                engine,
-                e,
-                escaping_locals,
-                hoist_stmts,
-                type_table,
-                callee_ids,
-            );
+            transform_expr(engine, e, escaping_locals, hoist_stmts, type_table, idents);
         }
         Shape::If(cond, tb, eb) => {
             if let Some(cond) = cond {
@@ -719,17 +701,10 @@ fn transform_stmt(
                     escaping_locals,
                     hoist_stmts,
                     type_table,
-                    callee_ids,
+                    idents,
                 );
             }
-            transform_stmts_in_block(
-                engine,
-                tb,
-                escaping_locals,
-                hoist_stmts,
-                type_table,
-                callee_ids,
-            );
+            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table, idents);
             if let Some(eb) = eb {
                 transform_stmts_in_block(
                     engine,
@@ -737,19 +712,12 @@ fn transform_stmt(
                     escaping_locals,
                     hoist_stmts,
                     type_table,
-                    callee_ids,
+                    idents,
                 );
             }
         }
         Shape::Labeled(b) => {
-            transform_stmts_in_block(
-                engine,
-                b,
-                escaping_locals,
-                hoist_stmts,
-                type_table,
-                callee_ids,
-            );
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table, idents);
         }
         Shape::None => {}
     }
@@ -761,7 +729,7 @@ fn transform_expr(
     escaping_locals: &IndexSet<u32>,
     hoist_stmts: &mut Vec<StmtId>,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) {
     // Mirror the original's restricted arm set: __tmpl in non-Let contexts is
     // not hoisted, so only these shapes recurse.
@@ -800,14 +768,7 @@ fn transform_expr(
     match walk {
         Walk::Exprs(v) => {
             for id in v {
-                transform_expr(
-                    engine,
-                    id,
-                    escaping_locals,
-                    hoist_stmts,
-                    type_table,
-                    callee_ids,
-                );
+                transform_expr(engine, id, escaping_locals, hoist_stmts, type_table, idents);
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
@@ -818,17 +779,10 @@ fn transform_expr(
                     escaping_locals,
                     hoist_stmts,
                     type_table,
-                    callee_ids,
+                    idents,
                 );
             }
-            transform_stmts_in_block(
-                engine,
-                tb,
-                escaping_locals,
-                hoist_stmts,
-                type_table,
-                callee_ids,
-            );
+            transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table, idents);
             if let Some(eb) = eb {
                 transform_stmts_in_block(
                     engine,
@@ -836,19 +790,12 @@ fn transform_expr(
                     escaping_locals,
                     hoist_stmts,
                     type_table,
-                    callee_ids,
+                    idents,
                 );
             }
         }
         Walk::Block(b) => {
-            transform_stmts_in_block(
-                engine,
-                b,
-                escaping_locals,
-                hoist_stmts,
-                type_table,
-                callee_ids,
-            );
+            transform_stmts_in_block(engine, b, escaping_locals, hoist_stmts, type_table, idents);
         }
         Walk::None => {}
     }
@@ -861,7 +808,7 @@ fn transform_expr(
 fn extract_tmpl_candidate(
     body: &Body,
     block: BlockId,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> Option<TmplCandidate> {
     // First statement must be: let mut __r = ...
     let first_stmt = *body.blocks[block].stmts.first()?;
@@ -886,7 +833,7 @@ fn extract_tmpl_candidate(
                 let struct_view = unwrap_block_tail(body, init_value);
                 // Try pre-lowered form: String::with_capacity(N)
                 if let ExprKind::Call { func_id, .. } = &body.exprs[struct_view].kind
-                    && TmplCalleeIds::is(&callee_ids.with_capacity, *func_id)
+                    && TmplIdents::is(&idents.with_capacity, *func_id)
                 {
                     return Some(TmplCandidate {
                         buf_local_index: local_index,
@@ -904,7 +851,7 @@ fn extract_tmpl_candidate(
                     ..
                 } = &body.exprs[struct_view].kind
                 {
-                    if struct_name == "String" {
+                    if *struct_name == idents.string_struct {
                         // Verify the repr field contains an array_new call
                         let repr_field = fields
                             .iter()
@@ -912,7 +859,7 @@ fn extract_tmpl_candidate(
                         if !repr_field
                             .value
                             .as_expr()
-                            .is_some_and(|rv| array_new_has_capacity(body, rv, callee_ids))
+                            .is_some_and(|rv| array_new_has_capacity(body, rv, idents))
                         {
                             return None;
                         }
@@ -947,7 +894,7 @@ fn extract_tmpl_candidate(
         StmtKind::Break {
             label: Some(label),
             value: Some(val),
-        } if label == crate::name::TEMPLATE_BLOCK_LABEL => {
+        } if crate::name::is_template_block(label) => {
             match val.as_expr().map(|ve| &body.exprs[ve].kind) {
                 Some(ExprKind::Local { index, .. }) if *index == buf_local_index => {}
                 _ => return None,
@@ -989,7 +936,7 @@ fn extract_fmt_candidates(
     block: BlockId,
     hoisted_buf_index: u32,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> Vec<FmtCandidate> {
     // Phase A (read): decide candidacy without mutating the arena.
     struct Raw {
@@ -1034,18 +981,20 @@ fn extract_fmt_candidates(
             };
 
             let Some(ff) =
-                extract_formatter_fields(engine.body, value_expr, hoisted_buf_index, callee_ids)
+                extract_formatter_fields(engine.body, value_expr, hoisted_buf_index, idents)
             else {
                 continue;
             };
 
-            if ff.struct_name != "Formatter" {
+            if ff.struct_name != idents.formatter_struct {
                 continue;
             }
 
             // Find the `indent` field index
-            let Some((_, indent_field_index, _)) =
-                ff.fields.iter().find(|(name, _, _)| name == "indent")
+            let Some((_, indent_field_index, _)) = ff
+                .fields
+                .iter()
+                .find(|(name, _, _)| name == FormatterField::Indent.field_name())
             else {
                 continue;
             };
@@ -1053,7 +1002,7 @@ fn extract_fmt_candidates(
 
             // Verify all non-buf fields are constant (literals)
             let all_const = ff.fields.iter().all(|(name, _, value)| {
-                if name == "buf" {
+                if name == FormatterField::Buf.field_name() {
                     return true;
                 }
                 is_constant_operand(engine.body, *value)
@@ -1085,7 +1034,7 @@ fn extract_fmt_candidates(
         let struct_type = raw.ff.struct_type;
         let mut init_fields: Vec<ArenaStructField> = Vec::new();
         for (name, field_index, value) in &raw.ff.fields {
-            let new_value: Operand = if name == "buf" {
+            let new_value: Operand = if name == FormatterField::Buf.field_name() {
                 // Normalize buf to &mut __tmpl_buf
                 let buf_ty = engine.body.operand_type(*value);
                 let local = engine.alloc_expr(
@@ -1155,7 +1104,7 @@ fn extract_formatter_fields(
     body: &Body,
     value: ExprId,
     hoisted_buf_index: u32,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> Option<FmtFields> {
     let value_type_id = body.exprs[value].type_id;
     let value_span = body.exprs[value].span;
@@ -1165,13 +1114,11 @@ fn extract_formatter_fields(
             fields,
             struct_type,
         } => {
-            let buf_field = fields.iter().find(|f| f.name == "buf")?;
-            if !buf_field_references_local_operand(
-                body,
-                buf_field.value,
-                hoisted_buf_index,
-                callee_ids,
-            ) {
+            let buf_field = fields
+                .iter()
+                .find(|f| f.name == FormatterField::Buf.field_name())?;
+            if !buf_field_references_local_operand(body, buf_field.value, hoisted_buf_index, idents)
+            {
                 return None;
             }
             Some(FmtFields {
@@ -1201,7 +1148,7 @@ fn extract_formatter_fields(
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
-                callee_ids,
+                idents,
             )
         }
         ExprKind::Block(block) => {
@@ -1225,7 +1172,7 @@ fn extract_formatter_fields(
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
-                callee_ids,
+                idents,
             )
         }
         _ => None,
@@ -1244,7 +1191,7 @@ fn extract_formatter_fields_from_block(
     hoisted_buf_index: u32,
     value_type_id: TypeId,
     value_span: Span,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> Option<FmtFields> {
     let ExprKind::StructLiteral {
         struct_name,
@@ -1267,13 +1214,15 @@ fn extract_formatter_fields_from_block(
     };
 
     // Check if buf traces to hoisted buffer (directly or via intermediate local)
-    let buf_field = fields.iter().find(|f| f.name == "buf")?;
-    if buf_field_references_local_operand(body, buf_field.value, hoisted_buf_index, callee_ids) {
+    let buf_field = fields
+        .iter()
+        .find(|f| f.name == FormatterField::Buf.field_name())?;
+    if buf_field_references_local_operand(body, buf_field.value, hoisted_buf_index, idents) {
         return Some(make());
     }
 
     // Trace through intermediate local in the block
-    let buf_inner_local = extract_local_from_ref(body, buf_field.value.as_expr()?, callee_ids)?;
+    let buf_inner_local = extract_local_from_ref(body, buf_field.value.as_expr()?, idents)?;
     for s in &body.blocks[block].stmts {
         match &body.stmts[*s].kind {
             StmtKind::Let {
@@ -1302,7 +1251,7 @@ fn extract_formatter_fields_from_block(
 
 /// Extract the local index from a reference expression.
 /// Handles `&mut Local(N)`, `Local(N)`, and `ref.as_non_null(Local(N))`.
-fn extract_local_from_ref(body: &Body, e: ExprId, callee_ids: &TmplCalleeIds) -> Option<u32> {
+fn extract_local_from_ref(body: &Body, e: ExprId, idents: &TmplIdents) -> Option<u32> {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::Unary {
@@ -1313,7 +1262,7 @@ fn extract_local_from_ref(body: &Body, e: ExprId, callee_ids: &TmplCalleeIds) ->
             _ => None,
         },
         ExprKind::Call { func_id, args, .. }
-            if TmplCalleeIds::is(&callee_ids.ref_as_non_null, *func_id) =>
+            if TmplIdents::is(&idents.ref_as_non_null, *func_id) =>
         {
             args.first()
                 .and_then(|a| match a.expr.as_expr().map(|ae| &body.exprs[ae].kind) {
@@ -1355,17 +1304,17 @@ fn buf_field_references_local_operand(
     body: &Body,
     op: Operand,
     local_index: u32,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> bool {
     op.as_expr()
-        .is_some_and(|e| buf_field_references_local(body, e, local_index, callee_ids))
+        .is_some_and(|e| buf_field_references_local(body, e, local_index, idents))
 }
 
 fn buf_field_references_local(
     body: &Body,
     e: ExprId,
     local_index: u32,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) -> bool {
     match &body.exprs[e].kind {
         // &mut __tmpl_buf (NIR level)
@@ -1377,7 +1326,7 @@ fn buf_field_references_local(
             .is_some_and(|ie| is_local(body, ie, local_index)),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func_id, args, .. } => {
-            TmplCalleeIds::is(&callee_ids.ref_as_non_null, *func_id)
+            TmplIdents::is(&idents.ref_as_non_null, *func_id)
                 && args.len() == 1
                 && args[0]
                     .expr
@@ -1403,14 +1352,14 @@ fn is_constant_operand(body: &Body, op: Operand) -> bool {
 }
 
 /// Whether `expr` is an `array_new<u8>(N)` call carrying a capacity argument.
-fn array_new_has_capacity(body: &Body, e: ExprId, callee_ids: &TmplCalleeIds) -> bool {
+fn array_new_has_capacity(body: &Body, e: ExprId, idents: &TmplIdents) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, args, .. } => {
-            TmplCalleeIds::is(&callee_ids.array_new, *func_id) && !args.is_empty()
+            TmplIdents::is(&idents.array_new, *func_id) && !args.is_empty()
         }
         ExprKind::Cast { expr: inner, .. } => inner
             .as_expr()
-            .is_some_and(|ie| array_new_has_capacity(body, ie, callee_ids)),
+            .is_some_and(|ie| array_new_has_capacity(body, ie, idents)),
         _ => false,
     }
 }
@@ -1442,7 +1391,7 @@ fn transform_tmpl_block(
     candidate: &TmplCandidate,
     hoist_stmts: &mut Vec<StmtId>,
     type_table: &RefCell<TypeTable>,
-    callee_ids: &TmplCalleeIds,
+    idents: &TmplIdents,
 ) {
     let span = candidate.span;
     let string_type = candidate.string_type;
@@ -1502,8 +1451,7 @@ fn transform_tmpl_block(
     // After the String rename above, the block may contain one or more Formatter
     // creations (direct struct literals or inlined Formatter::new LabeledBlocks).
     // Each distinct Formatter is hoisted to its own local before the loop.
-    let fmt_candidates =
-        extract_fmt_candidates(engine, block, buf_local_index, type_table, callee_ids);
+    let fmt_candidates = extract_fmt_candidates(engine, block, buf_local_index, type_table, idents);
     if !fmt_candidates.is_empty() {
         transform_fmts_in_tmpl_block(engine, block, &fmt_candidates, hoist_stmts);
     }
@@ -1656,7 +1604,7 @@ fn transform_fmts_in_tmpl_block(
             info.formatter_type,
             info.indent_field_index,
             TypeTable::I32,
-            "indent",
+            FormatterField::Indent.field_name(),
             info.span,
         );
         let mut new_stmts = engine.body.blocks[block].stmts.clone();

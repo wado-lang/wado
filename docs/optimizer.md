@@ -47,7 +47,7 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 Allocation and aggregate:
 
-- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions, so control flow outweighs a straight-line operation and a cold or unreachable tail prices nothing; the weights are in the pass's `weight` module.
+- `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. Size is the callee's hot path priced in emitted Wasm instructions, so control flow outweighs a straight-line operation and a cold or unreachable tail prices nothing; the weights are in the pass's `weight` module. A callee over budget as written gets a second reading **after the fold its callers' constants cause**: a branch a constant argument decides costs the one arm it keeps, and a call the compile-time engine runs on constants costs nothing. Which parameters arrive constant is taken across every call site, so admission stays a property of the callee. Folded size alone would admit every marginal fold — measured -9% on cbor-twitter — so the fold must also delete a loop, or halve the body. Such a callee then receives no inlining itself: a body worth more copied than called is destroyed by growing it past the budget, and that is one-way. Holding it is what an `#[inline(never)]` on each leaf otherwise applies by hand.
 - `sroa` — decompose non-escaping struct/tuple locals into scalar locals. The highest-impact WasmGC pass.
 - `container_sroa` — turn `List<Struct>` / `List<Tuple>` into parallel per-field lists (array-of-structs → struct-of-arrays).
 - `sroa_param` — replace a single-field-struct reference parameter with its inner scalar, unwrapping the box that `&T` values allocate.
@@ -84,7 +84,7 @@ Loop and field:
 - `licm` — hoist loop-invariant field-access chains and non-trapping arithmetic out of loops. A field load blocked only by an opaque `&mut`-call clobber of its pointee type (a may-alias, e.g. `write_escaped_string(&mut buf, &s)` where a caller could pass `buf === s`) is still hoisted, then reloaded after each clobbering statement — the clobber-free path drops the per-iteration load while an alias still sees the fresh field. An evaluation-order gate refuses when a read could observe the stale hoist.
 - `condition_implication` — eliminate bounds/range checks implied false by a dominating loop guard, `if`, short-circuit, or early-exit; drop a constant-bounded index check; and, in a forward pass, drop a redundant re-check when an earlier access already proved the same index in bounds. Subsumes WIR bounds-check elimination.
 - `loop_version_bce` — split a loop into a checks-deleted fast path and an unchanged slow path when a bound relation holds by per-iteration transitivity; a simple fill loop further collapses to `array.fill`.
-- `tmpl_hoist` — hoist a template string's backing buffer out of a loop and reuse it when the result does not escape the iteration.
+- `tmpl_hoist` — hoist a template string's backing buffer out of a loop and reuse it when the result does not escape the iteration. It recognises an expansion by the label `synthesis::template` stamps on it, which is why `const_branch_prune` leaves that block un-flattened until the fixpoint ends.
 - `field_scalarize` — shadow hot GC fields in scalar locals across a loop, with dataflow-driven write-back and re-read.
 
 Whole-program and backend:
@@ -94,7 +94,7 @@ Whole-program and backend:
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
-- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. Delivering it means reaching a place that outlives the borrow: handing it on as a shared-reference argument asks the same question of that callee instead, a Wasm instruction over primitives cannot keep it at all, and a local assigned from a projection is another name for the same storage rather than an escape. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
 
 ## Lowering optimizations
 
@@ -108,7 +108,7 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 2. Box-local elimination — substitute the field read for a `Box<T>` local lowering minted.
 3. Data flow — forward constant struct fields for constant-index bounds-check elimination.
 4. Library rewrites — short-string append expansion; constant-array data promotion (only where packing encodes smaller than the inline `T.const` operands, since a data segment stores each element at full width while an operand is LEB128-compressed); large-literal splitting; elision of a whole-array zero fill on a fresh `array.new_default` (the `List::filled(n, 0)` shape).
-5. Peephole — Wasm instruction-selection rewrites with no NIR analogue.
+5. Peephole — Wasm instruction-selection rewrites with no NIR analogue, including `select` for a value-producing `if` whose arms are both cheap, pure and trap-free. That last one is `nir/select_lowering`'s dual for a shape NIR never holds: `&&` / `||` stay one node until `emit_binary_wir` lowers the short-circuit to a branch.
 6. Write-only local elimination — for locals only the WIR builder synthesises.
 7. Global cleanup — constant-initializer promotion, identical-global dedup, and dead-data pruning.
 8. Branch hints — `br_if` selection and trap-based cold/likely inference (also at `-O0`).

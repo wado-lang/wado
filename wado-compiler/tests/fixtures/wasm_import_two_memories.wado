@@ -1,0 +1,11 @@
+// The memory count covers the imported `env.memory` as well as a defined
+// one: an asset carrying both cannot share the component's memory.
+
+use _ from "./sub/wasm_import_two_memories.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "at most one memory is supported, found 2"
+}

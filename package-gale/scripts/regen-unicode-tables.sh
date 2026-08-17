@@ -4,8 +4,9 @@
 # Gale expands `\p{...}` / `\P{...}` into code-point ranges at grammar-parse
 # time. `\P` is the complement of `\p`, so an approximate table does not merely
 # miss characters — it admits them. The table is therefore generated from the
-# UCD rather than hand-maintained. General categories, scripts, blocks and
-# binary properties are covered; anything else is rejected loudly.
+# UCD rather than hand-maintained. General categories, scripts, blocks, binary
+# properties and the enumerated `Property=Value` names ANTLR4 answers are
+# covered; anything else is rejected loudly.
 #
 # Usage: scripts/regen-unicode-tables.sh [version]   (default: latest)
 # Needs network access to unicode.org and a built `wado` (WADO env, default
@@ -22,8 +23,15 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+mkdir -p "$WORK/auxiliary" "$WORK/extracted"
 for f in UnicodeData.txt Scripts.txt Blocks.txt PropList.txt DerivedCoreProperties.txt \
-    PropertyAliases.txt PropertyValueAliases.txt ReadMe.txt; do
+    PropertyAliases.txt PropertyValueAliases.txt ReadMe.txt \
+    LineBreak.txt EastAsianWidth.txt HangulSyllableType.txt IndicSyllabicCategory.txt \
+    VerticalOrientation.txt ArabicShaping.txt \
+    auxiliary/WordBreakProperty.txt auxiliary/SentenceBreakProperty.txt \
+    auxiliary/GraphemeBreakProperty.txt \
+    extracted/DerivedBidiClass.txt extracted/DerivedNumericType.txt \
+    extracted/DerivedDecompositionType.txt; do
     curl -fsS -o "$WORK/$f" "$BASE/$f"
 done
 # Emoji properties (`Extended_Pictographic`, `Emoji`, …) ship in their own file.

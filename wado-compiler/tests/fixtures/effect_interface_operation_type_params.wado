@@ -1,0 +1,14 @@
+// The dispatch record holds one funcref slot per operation, not one per
+// instantiation, so an operation cannot be generic.
+interface Box {
+    fn wrap<T>(v: T) -> T;
+}
+
+export fn run() {
+    Box::wrap(1);
+}
+
+__DATA__
+{
+    "compile_error": "cannot declare type parameters"
+}

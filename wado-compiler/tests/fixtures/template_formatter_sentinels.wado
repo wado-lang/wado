@@ -1,0 +1,30 @@
+// A spec that sets any field makes `synthesis::template` build the `Formatter`
+// literal itself rather than call `Formatter::new`, filling every unset field
+// from `compiler_item::FormatterField`'s constants. Those repeat
+// `Formatter::NO_WIDTH` / `PRECISION_DEFAULT`; this fixture fails if the copies
+// drift.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut s = "";
+    for let mut i = 0; i < 300; i += 1 {
+        s.push('a');
+    }
+
+    // Width set, precision not: Inspect still applies DEFAULT_SEQ_LIMIT, so the
+    // output is `"` + 256 chars + `"` + `...`, exactly as the un-widthed
+    // `${s:?}` in `template_inspect_default_cap.wado`. A precision of 0 would
+    // truncate to nothing; PRECISION_INFINITE would render all 300.
+    println(`${`${s:<1?}`.len()}`);
+
+    // Precision set, width not: no padding may appear. A width of 0 or -1 both
+    // mean "no minimum"; anything positive would pad.
+    println(`[${3.14159:.2}]`);
+
+    // Both unset except the fill-bearing alignment: the width sentinel still
+    // disables padding, so the fill character never appears.
+    println(`[${7:*^}]`);
+}
+
+__DATA__
+{"stdout": "261\n[3.14]\n[7]\n"}

@@ -63,6 +63,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:ordering_basic.wado::__modules_initialized: bool = 0;
+global global:ordering_basic.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 112, 112, 108, 101), used: 5 };
 
 fn "ordering_basic.wado/run"() with Stdout {
     let handle_15: i32;
@@ -174,7 +175,7 @@ fn "ordering_basic.wado/run"() with Stdout {
     handle_132 = "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_135);
     "core:cli/write_to_stream"(tx_136, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana > apple"), used: 14 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_132);
-    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }) {
+    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:ordering_basic.wado::__const_obj_0, global:ordering_basic.wado::__const_obj_0) {
         rx_144 = builtin::i32_wrap_i64(local.tee packed_143("wasi/stream-new"()));
         tx_145 = builtin::i32_wrap_i64(packed_143 >> 32_i64);
         handle_141 = "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_144);
@@ -278,11 +279,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b4 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b4 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l5;
         };
     };
@@ -304,14 +301,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
         haystack = self.repr;
         needle = other.repr;
         j = 0;
-        b9: block {
-            l10: loop {
-                break_if b9 j >= len;
+        b8: block {
+            l9: loop {
+                break_if b8 j >= len;
                 if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;
-                continue l10;
+                continue l9;
             };
         };
         break __inline_bytes_match_at_2: 1;

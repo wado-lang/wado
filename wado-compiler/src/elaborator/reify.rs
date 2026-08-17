@@ -693,6 +693,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 Item::Interface(effect_decl) => {
                     tir_module.add_effect(self.reify_effect_decl(effect_decl));
+                    // An operation's default body is an ordinary function under
+                    // a synthesized name; the dispatch wrapper's no-handler
+                    // branch calls it. Never dead-item-filtered: the only call
+                    // to it is synthesized after liveness ran.
+                    for method in default_impl_methods(effect_decl) {
+                        if let Some(tir_func) = self.reify_function(&method) {
+                            tir_module.add_function(tir_func);
+                        }
+                    }
                 }
                 Item::Resource(resource_decl) => {
                     tir_module.add_resource(self.reify_resource_decl(resource_decl));
@@ -3231,16 +3240,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
             parts.push(TirTemplatePart::Interpolation {
                 expr: Box::new(local_ref),
-                format_spec: Some(crate::tir::TemplateFormatSpec {
-                    fill: None,
-                    align: None,
-                    sign_plus: false,
-                    alternate: false,
-                    zero_pad: false,
-                    width: None,
-                    precision: None,
-                    type_char: Some('?'),
-                }),
+                format_spec: Some(crate::format_spec::TemplateFormatSpec::of_kind(
+                    crate::format_spec::FormatKind::Inspect,
+                )),
             });
             parts.push(TirTemplatePart::Literal("\n".to_string()));
         }
@@ -4675,11 +4677,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a template string `"…{expr}…"`: no interpolations concatenates to a
-    /// `StringLiteral` at reify time, a lone `String` interpolation with no
+    /// Reify a template string `` `…${expr}…` ``: no interpolations concatenates
+    /// to a `StringLiteral` at reify time, a lone `String` interpolation with no
     /// format spec forwards its expression unchanged, and everything else builds
-    /// `Vec<TirTemplatePart>` with specs from
-    /// [`super::template::parse_format_spec`].
+    /// `Vec<TirTemplatePart>` with specs from [`crate::format_spec::parse`].
     fn reify_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,
@@ -4704,8 +4705,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mut combined = String::new();
             for part in &template.parts {
                 if let ast::TemplatePart::String(s) = part {
-                    let unescaped = super::util::unescape_template_string(s).unwrap_or_default();
-                    combined.push_str(&unescaped);
+                    combined.push_str(&unescape_checked(s));
                 }
             }
             return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
@@ -4724,19 +4724,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for part in &template.parts {
             match part {
                 ast::TemplatePart::String(s) => {
-                    if !s.is_empty() {
-                        let unescaped =
-                            super::util::unescape_template_string(s).unwrap_or_default();
-                        if !unescaped.is_empty() {
-                            parts.push(TirTemplatePart::Literal(unescaped));
-                        }
+                    let unescaped = unescape_checked(s);
+                    if !unescaped.is_empty() {
+                        parts.push(TirTemplatePart::Literal(unescaped));
                     }
                 }
                 ast::TemplatePart::Interpolation { expr, format } => {
                     let resolved = self.reify_expr(expr, ctx, None);
-                    let format_spec = format
-                        .as_ref()
-                        .map(|f| super::template::parse_format_spec(&f.spec));
+                    let format_spec = format.as_ref().map(|f| {
+                        crate::format_spec::parse(&f.spec)
+                            .expect("the parser rejects a malformed format specifier")
+                    });
                     parts.push(TirTemplatePart::Interpolation {
                         expr: Box::new(resolved),
                         format_spec,
@@ -9495,12 +9493,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
             ast::Literal::LocationFunction => {
-                // `#function`; in a default, the calling function.
+                // `#function`; in a default, the calling function. Rendered,
+                // so an operation's default body reports the operation rather
+                // than the synthesized name its body is stored under.
                 let name = match &self.call_site_location {
                     Some(loc) => loc.function_name.clone(),
                     None => ctx.function_name.clone(),
                 };
-                TirExprKind::StringLiteral(name)
+                TirExprKind::StringLiteral(crate::name::display_function_name(&name))
             }
             ast::Literal::LocationFile => {
                 // `#file`; in a default, the caller's module.
@@ -10443,6 +10443,13 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
     Some((value, ty))
 }
 
+/// Decode a template literal segment. Only a module whose body walk logged no
+/// errors reaches reify, and that walk is what rejects a malformed escape.
+fn unescape_checked(raw: &str) -> String {
+    super::util::unescape_template_string(raw)
+        .expect("the body walk rejects a malformed template escape before reify runs")
+}
+
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> crate::tir::TirUnaryOp {
     use crate::tir::TirUnaryOp;
     match op {
@@ -10546,4 +10553,22 @@ fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeI
     }
 
     in_expr(body)
+}
+
+/// The operations an interface declares a default implementation for, each
+/// renamed to its synthesized function name.
+///
+/// The rename is what keeps a default out of the module's own namespace: an
+/// operation and a facade function that wraps it share a name by design
+/// (`core:log`'s `Log::event` and `event`), and every fact either pass records
+/// is keyed by the unchanged `AstId`, so resolve and reify still agree.
+pub(crate) fn default_impl_methods(decl: &crate::ast::InterfaceDecl) -> Vec<crate::ast::Function> {
+    decl.methods
+        .iter()
+        .filter(|method| method.body.is_some())
+        .map(|method| crate::ast::Function {
+            name: crate::name::effect_default_impl_name(&decl.name, &method.name),
+            ..method.clone()
+        })
+        .collect()
 }

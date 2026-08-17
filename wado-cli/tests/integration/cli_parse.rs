@@ -483,6 +483,33 @@ fn test_with_files() {
 }
 
 #[test]
+fn test_defaults_to_preopening_cwd() {
+    let parser = Parser::from_args(&["a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(
+        opts.preopened_dirs,
+        vec![(".".to_string(), ".".to_string())]
+    );
+}
+
+#[test]
+fn test_with_dir_replaces_default() {
+    let parser = Parser::from_args(&["--dir", "/tmp::/guest", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(
+        opts.preopened_dirs,
+        vec![("/tmp".to_string(), "/guest".to_string())]
+    );
+}
+
+#[test]
+fn test_no_dir() {
+    let parser = Parser::from_args(&["--no-dir", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert!(opts.preopened_dirs.is_empty());
+}
+
+#[test]
 fn test_with_filter_keeps_matching_paths() {
     // --filter is a path-based wildcard applied during parse: `*.wado`
     // keeps `a.wado` and drops `b.txt`.

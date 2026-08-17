@@ -351,11 +351,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b11 (if (result >> 4) == 0 -> i32 {
-                1;
-            } else {
-                (result & 15) != 0;
-            });
+            break_if b11 select i32((result >> 4) == 0, 1, (result & 15) != 0);
             continue l12;
         };
     };
@@ -439,9 +435,9 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
     }
     digit_count = 0;
     temp = self;
-    b19: block {
-        l20: loop {
-            break_if b19 temp == 0_i64;
+    b18: block {
+        l19: loop {
+            break_if b18 temp == 0_i64;
             digit_count = digit_count + 1;
             if temp >= 0_i64 {
                 temp = temp / 10_i64;
@@ -454,7 +450,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
                 }
                 temp = (signed_quot_9 + 1844674407370955161_i64) + carry_10;
             }
-            continue l20;
+            continue l19;
         };
     };
     offset_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, 0, global:core:prelude/primitive.wado::__const_obj_2, digit_count);
@@ -462,9 +458,9 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
     repr = self_20.repr;
     pos = offset_11 + digit_count;
     temp = self;
-    b23: block {
-        l24: loop {
-            break_if b23 temp == 0_i64;
+    b22: block {
+        l23: loop {
+            break_if b22 temp == 0_i64;
             pos = pos - 1;
             digit = 0;
             if temp >= 0_i64 {
@@ -485,7 +481,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(self, f) {
                 temp = (signed_quot_17 + 1844674407370955161_i64) + carry_18;
             }
             builtin::array_set_u8(repr, pos, (48 + digit) & 255);
-            continue l24;
+            continue l23;
         };
     };
 }

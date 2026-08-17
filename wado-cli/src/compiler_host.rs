@@ -15,15 +15,7 @@ use wado_compiler::{
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::run_cache::RunCache;
 use crate::runtime::create_kiln_engine;
-
-/// A slot list and an optional component are structurally valid whatever a
-/// panicking holder was doing, so recovering the guard is correct, not a
-/// fallback.
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
+use crate::sync::lock;
 
 /// AOT-compiled generator [`Component`]s, keyed by wasm SHA-256.
 ///
