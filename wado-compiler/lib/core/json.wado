@@ -1522,33 +1522,38 @@ impl JsonDeserializer {
     }
 
     /// Advances past a JSON string without allocating.
+    /// Skips a string token. Shares `scan_string_run` with the reading path so
+    /// a skipped string is held to the same UTF-8 rule as a materialized one.
     pub fn skip_string(&mut self) -> Result<(), DeserializeError> {
         // Assumes pos is at the opening '"'
         self.pos += 1;
-        while self.pos < self.input.len() {
-            let b = self.input.get_unchecked(self.pos) as u8 as char;
-            match b {
-                '"' => {
-                    self.pos += 1;
-                    return Result::Ok(());
-                },
-                '\\' => {
-                    self.pos += 1;
-                    if self.pos >= self.input.len() {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::eof(self.pos as i64));
-                    }
-                    if self.input.get_unchecked(self.pos) as u8 as char == 'u' {
-                        // \uXXXX — skip 4 hex digits
-                        self.pos += 4;
-                    }
-                },
-                _ => {
-                },
+        loop {
+            let start = self.pos;
+            let scan = self.scan_string_run(start);
+            if !scan.valid {
+                builtin::cold_path();
+                return Result::Err(self.invalid_utf8_string(start));
+            }
+            self.pos = scan.end;
+            if self.pos >= self.input.len() {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::eof(self.pos as i64));
+            }
+            if !scan.at_escape {
+                self.pos += 1;
+                return Result::Ok(());
+            }
+            self.pos += 1;
+            if self.pos >= self.input.len() {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::eof(self.pos as i64));
+            }
+            if self.input.get_unchecked(self.pos) as u8 as char == 'u' {
+                // \uXXXX — skip 4 hex digits
+                self.pos += 4;
             }
             self.pos += 1;
         }
-        return Result::Err(DeserializeError::eof(self.pos as i64));
     }
 
     /// Inline check for "true" / "false" / "null". Assumes first byte already matched.
@@ -1841,6 +1846,10 @@ impl DeserializeStruct for JsonStructAccess {
 
         if !scan.at_escape {
             // Fast path: key has no escapes, compare directly from input buffer
+            if !scan.valid {
+                builtin::cold_path();
+                return Result::Err(self.de.invalid_utf8_string(key_start));
+            }
             let key_end = self.de.pos;
             self.de.pos += 1;  // skip closing '"'
             self.de.expect_char(':' as i32)?;

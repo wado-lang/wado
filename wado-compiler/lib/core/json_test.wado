@@ -33,6 +33,11 @@ fn assert_bytes_eq_string<B: AsByteSlice>(bytes: &B, s: &String) {
     }
 }
 
+struct Utf8Rec {
+    a: String,
+}
+impl Deserialize for Utf8Rec;
+
 #[wire(name_policy = "camelCase")]
 struct PrettyUser {
     first_name: String,
@@ -647,6 +652,29 @@ test "from_bytes validates multibyte sequences during the scan" {
     // Multibyte content on both sides of an escape (the chunked slow path).
     let around: Result<String, DeserializeError> = from_string(`"日\\n本"`);
     assert around matches { Ok(v) && v == "日\n本" };
+}
+
+// UTF-8 validity must not depend on whether the schema happens to name the
+// field: an unknown field is skipped, and a key is compared as bytes, but both
+// still carry string content the input claims is UTF-8.
+test "from_bytes rejects invalid UTF-8 outside materialized values" {
+    // {"b":"<0xff>","a":"x"} -- bad byte inside a field `Rec` does not declare
+    let skipped: ByteList = [
+        0x7b, 0x22, 0x62, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x2c, 0x22, 0x61, 0x22, 0x3a, 0x22, 0x78, 0x22, 0x7d,
+    ];
+    let r: Result<Utf8Rec, DeserializeError> = from_bytes(skipped);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // {"<0xff>":"x","a":"y"} -- bad byte inside a key
+    let key: ByteList = [
+        0x7b, 0x22, 0xff, 0x22, 0x3a, 0x22, 0x78, 0x22, 0x2c, 0x22, 0x61, 0x22, 0x3a, 0x22, 0x79, 0x22, 0x7d,
+    ];
+    let r2: Result<Utf8Rec, DeserializeError> = from_bytes(key);
+    assert r2 matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+
+    // A skipped field with valid multibyte content still round-trips.
+    let ok: Result<Utf8Rec, DeserializeError> = from_string(`{"b":"\u65e5\u672c","a":"x"}`);
+    assert ok matches { Ok(v) && v.a == "x" };
 }
 
 test "to_bytes_canonical sorts map keys" {
