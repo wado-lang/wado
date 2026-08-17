@@ -20,7 +20,7 @@ pub fn gen_highlight(
 ) {
     gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens, query, ctx);
     if grammar.parser_rules.len() > 0 {
-        let mut fr = FnSpec::new("highlight_result", Vis::Pub);
+        let mut fr = FnSpec::new(&"highlight_result", Vis::Pub);
         fr.add_param(&"result", &"&ParseResult");
         fr.add_param(&"input", &"&String");
         fr.set_return_type(&"String");
@@ -33,7 +33,7 @@ pub fn gen_highlight(
         w.end();
         w.blank();
 
-        let mut f = FnSpec::new("highlight", Vis::Pub);
+        let mut f = FnSpec::new(&"highlight", Vis::Pub);
         f.add_param(&"input", &"&String");
         f.set_return_type(&"String");
         f.emit_begin(w);
@@ -42,7 +42,7 @@ pub fn gen_highlight(
         w.end();
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
-        let mut f = FnSpec::new("highlight", Vis::Pub);
+        let mut f = FnSpec::new(&"highlight", Vis::Pub);
         f.add_param(&"input", &"&String");
         f.set_return_type(&"String");
         f.emit_begin(w);
@@ -191,7 +191,7 @@ fn gen_highlight_mapping(
         }
     }
 
-    let mut f = FnSpec::new("highlight_mapping", Vis::Pub);
+    let mut f = FnSpec::new(&"highlight_mapping", Vis::Pub);
     f.set_return_type(&"HighlightMapping");
     f.emit_begin(w);
 
@@ -245,7 +245,7 @@ fn gen_highlight_run(w: &mut CodeWriter) {
     w.line(&"use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
     w.line(&"use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from \"wasi:filesystem\";");
     w.blank();
-    let mut run_fn = FnSpec::new("run");
+    let mut run_fn = FnSpec::new(&"run");
     run_fn.set_export();
     run_fn.add_effect(&"Stdout");
     run_fn.add_effect(&"Stderr");

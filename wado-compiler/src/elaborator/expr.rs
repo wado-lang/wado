@@ -4659,7 +4659,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TirExpr {
         let tt = self.tysys.type_table.borrow();
         let target_name = tt.type_name(target_type);
-        let from_name = tt.type_name(from_type);
+        let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::From);
         drop(tt);
 
@@ -4712,7 +4712,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Find the module that provides `impl From<FromType> for TargetType`.
-    fn find_from_impl_module(&self, target_name: &str, from_name: &str) -> ModuleSource {
+    fn find_from_impl_module(
+        &self,
+        target_name: &str,
+        from_name: &crate::name::FqTypeName,
+    ) -> ModuleSource {
         let from_trait_name = self
             .tysys
             .type_table
@@ -4732,7 +4736,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     header.trait_name.as_deref() == Some(from_trait_name.as_str())
                         && matches!(&header.trait_type, Some(ast::Type::Generic(g))
                         if g.args.first().is_some_and(|arg| {
-                            super::trait_env::get_type_name_static(arg) == from_name
+                            // The header's argument and the call's source type
+                            // are compared as the declarations they name, not
+                            // as the spellings each side wrote.
+                            super::trait_env::written_type_arg(arg, &self.tysys.resolutions)
+                                == *from_name
                         }))
                 })
         };

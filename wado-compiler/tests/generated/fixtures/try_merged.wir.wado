@@ -182,11 +182,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
-type "functype//try_merged.wado/try_merged.wado/HighError^core:prelude/traits.wado/From<LowError>::from" = fn(ref "try_merged.wado//LowError") -> ref "try_merged.wado//HighError";  // TypeId(66)
+type "functype//try_merged.wado/try_merged.wado/HighError^core:prelude/traits.wado/From<try_merged.wado/LowError>::from" = fn(ref "try_merged.wado//LowError") -> ref "try_merged.wado//HighError";  // TypeId(66)
 
-type "functype//try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<IoError>::from" = fn(ref "try_merged.wado//IoError") -> ref "try_merged.wado//AppError";  // TypeId(67)
+type "functype//try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<try_merged.wado/IoError>::from" = fn(ref "try_merged.wado//IoError") -> ref "try_merged.wado//AppError";  // TypeId(67)
 
-type "functype//try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<ParseError>::from" = fn(ref "try_merged.wado//ParseError") -> ref "try_merged.wado//AppError";  // TypeId(68)
+type "functype//try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<try_merged.wado/ParseError>::from" = fn(ref "try_merged.wado//ParseError") -> ref "try_merged.wado//AppError";  // TypeId(68)
 
 type "functype//core:prelude/primitive.wado/i64::fmt_decimal$spec0" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(69)
 
@@ -570,7 +570,7 @@ fn "try_merged.wado/high_op"(fail) {
     } else if @unlikely(__match_scrut_0 == 1) -> i32 {
         __qm_e = ref.as_non_null(__sroa_slot_8);
         cold_path;
-        return 1, 0, "try_merged.wado/try_merged.wado/HighError^core:prelude/traits.wado/From<LowError>::from"(__qm_e);
+        return 1, 0, "try_merged.wado/try_merged.wado/HighError^core:prelude/traits.wado/From<try_merged.wado/LowError>::from"(__qm_e);
     } else {
         unreachable;
     });
@@ -651,7 +651,7 @@ fn "try_merged.wado/process"(io_ok, valid) {
     } else if @unlikely(__vr_8_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
         __qm_e_3 = ref.as_non_null(__vr_8_mv_2);
         cold_path;
-        return struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<try_merged.wado/AppError>]" { 0: 1, 1: 0, 2: "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<IoError>::from"(__qm_e_3) };
+        return struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<try_merged.wado/AppError>]" { 0: 1, 1: 0, 2: "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<try_merged.wado/IoError>::from"(__qm_e_3) };
     } else {
         unreachable;
     });
@@ -668,7 +668,7 @@ fn "try_merged.wado/process"(io_ok, valid) {
     } else if @unlikely(__vr_9_mv_0 == 1) -> i32 {
         __qm_e_6 = ref.as_non_null(__vr_9_mv_2);
         cold_path;
-        return struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<try_merged.wado/AppError>]" { 0: 1, 1: 0, 2: "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<ParseError>::from"(__qm_e_6) };
+        return struct.new "tuple//[i32, i32, core:prelude/types.wado/Option<try_merged.wado/AppError>]" { 0: 1, 1: 0, 2: "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<try_merged.wado/ParseError>::from"(__qm_e_6) };
     } else {
         unreachable;
     });
@@ -1524,15 +1524,15 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     }
 }
 
-fn "try_merged.wado/try_merged.wado/HighError^core:prelude/traits.wado/From<LowError>::from"(value) {
+fn "try_merged.wado/try_merged.wado/HighError^core:prelude/traits.wado/From<try_merged.wado/LowError>::from"(value) {
     return struct.new "try_merged.wado//HighError::Low" { discriminant: 0, payload_0: value };
 }
 
-fn "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<IoError>::from"(value) {
+fn "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<try_merged.wado/IoError>::from"(value) {
     return struct.new "try_merged.wado//AppError::Io" { discriminant: 0, payload_0: value };
 }
 
-fn "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<ParseError>::from"(value) {
+fn "try_merged.wado/try_merged.wado/AppError^core:prelude/traits.wado/From<try_merged.wado/ParseError>::from"(value) {
     return struct.new "try_merged.wado//AppError::Parse" { discriminant: 1, payload_0: value };
 }
 

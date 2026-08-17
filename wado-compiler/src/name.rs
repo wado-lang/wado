@@ -485,8 +485,10 @@ pub struct LocalMethodName {
     pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
     pub method_name: String,
-    /// Method-level type args (e.g., `["i64"]` for `transform<i64>`)
-    pub method_type_args: Vec<String>,
+    /// Method-level type args (e.g., `[i64]` for `transform<i64>`), structured.
+    /// [`Self::full_method_name`] renders them; nothing stores the rendering,
+    /// so a call site's spelling and a definition's cannot drift.
+    pub method_type_args: Vec<FqTypeName>,
     /// Whether the struct name is a type parameter that should be substituted directly
     /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
     pub is_type_param_receiver: bool,
@@ -805,7 +807,7 @@ impl LocalMethodName {
         struct_name: FqTypeName,
         trait_name: Option<FqTraitName>,
         method_name: String,
-        method_type_args: Vec<String>,
+        method_type_args: Vec<FqTypeName>,
     ) -> Self {
         debug_assert!(
             struct_name.args().is_empty(),
@@ -835,7 +837,7 @@ impl LocalMethodName {
     pub fn with_type_args(
         &self,
         impl_type_args: &[FqTypeName],
-        method_type_args: &[String],
+        method_type_args: &[FqTypeName],
     ) -> Self {
         Self {
             struct_type_args: impl_type_args.to_vec(),
@@ -867,7 +869,7 @@ impl LocalMethodName {
     /// Panics if `self.trait_name` is `None` — type args on an inherent
     /// method don't have a trait to mangle.
     #[must_use]
-    pub fn with_trait_type_args(&self, trait_type_args: &[String]) -> Self {
+    pub fn with_trait_type_args(&self, trait_type_args: &[FqTypeName]) -> Self {
         let trait_name = self
             .trait_name
             .as_ref()
@@ -904,11 +906,12 @@ impl LocalMethodName {
     /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
-        if self.method_type_args.is_empty() {
-            self.method_name.clone()
-        } else {
-            format!("{}<{}>", self.method_name, self.method_type_args.join(","))
-        }
+        let args: Vec<String> = self
+            .method_type_args
+            .iter()
+            .map(FqTypeName::to_mangled)
+            .collect();
+        MethodName::format_method_with_args(&self.method_name, &args)
     }
 
     /// Generate the mangled name from the components.
@@ -948,16 +951,12 @@ impl LocalMethodName {
         }
     }
 
-    /// Replace the type `old` with `new` throughout this method's own
-    /// identity — the receiver and the receiver's type arguments.
+    /// Replace the type `old` with `new` throughout this method's identity — the
+    /// receiver and its type arguments, not the rendered `name`, which a
+    /// monomorphized call overwrites from its own key.
     ///
-    /// Here rather than on the rendered name: a monomorphized call is keyed on
-    /// `fq_base_struct_name` / `fq_struct_name`, and its `name` is overwritten
-    /// with whatever that key finds.
-    ///
-    /// `trait_name`'s arguments and `method_type_args` are still rendered
-    /// strings and are left alone — a CM type swap changes the receiver, not
-    /// the trait.
+    /// The trait is left alone: a CM type swap changes the receiver, not the
+    /// trait it implements.
     pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
         if let Receiver::Type(fq) = &self.receiver {
             self.receiver = Receiver::Type(fq.substitute(old, new));
@@ -965,15 +964,17 @@ impl LocalMethodName {
         for arg in &mut self.struct_type_args {
             *arg = arg.substitute(old, new);
         }
+        for arg in &mut self.method_type_args {
+            *arg = arg.substitute(old, new);
+        }
     }
 
-    /// A monomorphization-invariant identity built from the base struct / trait
-    /// names and the bare method name, dropping every type argument. A generic
-    /// method (`Result<T, E>::unwrap`) and each of its instantiations
-    /// (`Result<Fields, HeaderError>::unwrap`) share one key, whereas
-    /// [`Self::to_mangled_name`] embeds the type args and so differs per
-    /// instantiation. Used where a property of the method — not the
-    /// instantiation — is being keyed (e.g. whether it takes `self` by value).
+    /// A monomorphization-invariant identity: base struct / trait names and the
+    /// bare method name, every type argument dropped, so a generic method and its
+    /// instantiations share one key where [`Self::to_mangled_name`] would not.
+    ///
+    /// For keying a property of the method rather than of the instantiation —
+    /// whether it takes `self` by value, say.
     pub fn base_dispatch_key(&self) -> String {
         match &self.trait_name {
             Some(trait_name) => {
@@ -2245,9 +2246,9 @@ pub enum TypeHead {
     /// A declaration. Equality reads the [`crate::defs::DefId`], so two
     /// same-named declarations are two heads however they are spelled.
     Declared(DeclaredHead),
-    /// A struct shape no declaration names — an anonymous literal's, a closure
-    /// environment's, a synthesised adapter's. The type table interns it under
-    /// this `(module, name)` pair, so the rendering *is* the identity.
+    /// A shape no declaration names — an anonymous literal's, a closure
+    /// environment's, a synthesised adapter's. Nothing declares it, so the
+    /// rendering *is* the identity, scoped by the declaring module.
     Shape {
         module: crate::module_source::ModuleSource,
         name: String,
@@ -2265,6 +2266,17 @@ pub enum TypeHead {
 }
 
 impl TypeHead {
+    /// A monomorphized instantiation, named by the fused spelling it mangles to
+    /// (`Fn<1,i32>`, `List<…/Token>`). No declaration names one, so its
+    /// rendering is its identity — the same rule [`Self::Shape`] carries.
+    #[must_use]
+    pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
+        Self::Shape {
+            module: module.clone(),
+            name: mangled.to_string(),
+        }
+    }
+
     /// The head's own name, as its declaration writes it. Diagnostics; a mangle
     /// takes [`Self::rendered`], which disambiguates a function-local
     /// declaration.
@@ -2622,7 +2634,10 @@ impl DeclaredHead {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTraitName {
     head: TraitHead,
-    args: Vec<String>,
+    /// The trait's type arguments, structured — each an identity or a shape, never
+    /// a spelling, so an impl header's `Index<K>` and a call site's reach one head
+    /// and cannot render a trait segment differently.
+    args: Vec<FqTypeName>,
 }
 
 /// What an [`FqTraitName`]'s head names.
@@ -2664,9 +2679,9 @@ impl FqTraitName {
         }
     }
 
-    /// The same trait with its type arguments, each already mangled.
+    /// The same trait with its type arguments.
     #[must_use]
-    pub fn with_args(mut self, args: Vec<String>) -> Self {
+    pub fn with_args(mut self, args: Vec<FqTypeName>) -> Self {
         self.args = args;
         self
     }
@@ -2698,7 +2713,7 @@ impl FqTraitName {
     }
 
     #[must_use]
-    pub fn args(&self) -> &[String] {
+    pub fn args(&self) -> &[FqTypeName] {
         &self.args
     }
 
@@ -2718,14 +2733,16 @@ impl FqTraitName {
             TraitHead::Declared(head) => format!("{}/{}", head.module(), head.rendered()),
             TraitHead::Binder(name) => name.clone(),
         };
-        mangle_generic_name(&head, &self.args)
+        let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
+        mangle_generic_name(&head, &args)
     }
 
     /// The trait as source writes it: the declaring module dropped. Diagnostics
     /// only.
     #[must_use]
     pub fn to_display(&self) -> String {
-        mangle_generic_name(self.head.name(), &self.args)
+        let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
+        mangle_generic_name(self.head.name(), &args)
     }
 }
 

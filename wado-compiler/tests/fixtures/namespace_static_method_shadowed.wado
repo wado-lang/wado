@@ -1,0 +1,24 @@
+// A namespace-qualified static call beside a same-named local declaration must
+// reach the namespace's `Box2`. Keyed by the bare spelling, the return type and
+// the method identity pick the local one and disagree in codegen.
+use geo from "./sub/ns_static_shadow_geo.wado";
+
+struct Box2 {
+    n: i32,
+}
+
+impl Box2 {
+    fn wrap(n: i32) -> Box2 {
+        return Box2 { n: n + 1 };
+    }
+}
+
+test "namespace static call resolves to the namespace's declaration" {
+    let g = geo::Box2::wrap(41);
+    assert g.n == 1041;
+}
+
+test "the same spelling still reaches the local declaration" {
+    let l = Box2::wrap(41);
+    assert l.n == 42;
+}

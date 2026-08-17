@@ -1,0 +1,26 @@
+// A default argument's expression belongs to the module that wrote it, so this
+// module imports only `process` and `Ctx` is reached through the declaring
+// module's scope.
+//
+// The second `Ctx` below pins it: the derivation must answer from `process`'s
+// module, not from the name happening to be unique program-wide.
+
+use { process } from "./sub/default_arg_unimported_type_lib.wado";
+
+// Same name *and* same static method, so the caller's frame answers the whole of
+// `Ctx::new()` with the wrong declaration rather than merely failing to.
+struct Ctx { count: i32 }
+
+impl Ctx {
+    fn new() -> Ctx {
+        return Ctx { count: 1 };
+    }
+}
+
+export fn run() {
+    assert process() == 7;
+    assert Ctx::new().count == 1;
+}
+
+__DATA__
+{"stdout": ""}

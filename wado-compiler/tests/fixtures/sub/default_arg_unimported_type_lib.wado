@@ -1,0 +1,16 @@
+// The declaring module of a default argument whose expression names a type
+// only *this* module imports. A caller omitting the argument must still
+// reach `Ctx`: the expression was written here, and here is where its names
+// were walked.
+
+pub struct Ctx { pub count: i32 }
+
+impl Ctx {
+    pub fn new() -> Ctx {
+        return Ctx { count: 7 };
+    }
+}
+
+pub fn process(ctx: &Ctx = &Ctx::new()) -> i32 {
+    return ctx.count;
+}

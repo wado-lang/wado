@@ -12,7 +12,7 @@ use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FnDispatchTrait, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
@@ -69,12 +69,11 @@ pub(crate) struct TraitsStdlibNames {
 const KEYED: &str = "a compiler trait item names a declaration";
 
 /// The `(receiver, module, trait)` triples a demand-driven synthesis was asked
-/// for, and the shape the still-pending ones are accumulated in. The receiver
-/// is [`SynthesisCtx::key`]'s rendered head; the trait is its declaration.
-// TODO(declaration-identity): the receiver half is a spelling used as a set
-// key, which WEP 2026-08-12 forbids. Its Remaining work says what replaces it
-// and why a bare `DefId` is not it.
-pub(crate) type SynthRequests = IndexSet<(String, ModuleSource, crate::defs::DefId)>;
+/// for, and the shape the still-pending ones are accumulated in. Both halves
+/// that decide identity are identities: the receiver is its [`TypeHead`] —
+/// a declaration by its `DefId`, a shape no declaration names by its
+/// rendering — and the trait is its declaration.
+pub(crate) type SynthRequests = IndexSet<(TypeHead, ModuleSource, crate::defs::DefId)>;
 
 impl TraitsStdlibNames {
     pub(crate) fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
@@ -2898,62 +2897,74 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
 }
 
 impl SynthesisCtx<'_, '_, '_> {
-    /// `true` when the project already has this impl, user-written or derived
-    /// earlier in this pass. The two halves are scoped differently on purpose:
-    /// the AST-layer check is module-agnostic, so a user's
-    /// `impl Display for String` in `format` suppresses the fallback while
-    /// synthesising `string`; the in-pass `pending` check stays module-scoped.
-    pub(crate) fn has_impl(
+    /// `true` when a user-written impl anywhere in the project covers
+    /// `<trait> for <receiver>`. Module-agnostic on purpose, so a user's
+    /// `impl Display for String` suppresses the fallback in any module.
+    ///
+    /// The AST layer it reduces to is keyed by the spellings an `impl` header
+    /// writes, which is why the receiver arrives as an [`ImplReceiver`].
+    pub(crate) fn has_written_impl(
         &self,
         receiver: ImplReceiver<'_>,
         trait_key: &crate::defs::DefId,
     ) -> bool {
-        // Module-agnostic AST-layer check: any user-written impl, anywhere
-        // in the project, counts. During synthesis the synthesised layer of
-        // `TraitEnv` is empty (it is rebuilt by `collect_synthesised_impls`
-        // *after* this pass), so `impl_module_for` with no hint reduces to
-        // the AST layer.
-        if self
-            .trait_env
+        self.trait_env
             .impl_module_for(receiver, self.trait_env.defs.name(*trait_key), None)
             .is_some()
-        {
-            return true;
-        }
-        self.pending
-            .contains(&(receiver.spelling(), self.module.clone(), *trait_key))
     }
 
-    /// Note that this synthesis pass added `impl <trait_name> for <type_name>`
-    /// in the current module. Used for in-pass dedup only; the canonical
-    /// synthesis layer is rebuilt by `collect_synthesised_impls` after
+    /// `true` when this pass already recorded `<trait> for <head>` in the
+    /// current module. The in-pass record is module-scoped, so two modules'
+    /// same-named declarations each get their own derived impl.
+    pub(crate) fn pending_has_head(&self, head: &TypeHead, trait_key: &crate::defs::DefId) -> bool {
+        self.pending
+            .contains(&(head.clone(), self.module.clone(), *trait_key))
+    }
+
+    /// `true` when the project already has this impl, user-written or derived
+    /// earlier in this pass. The receiver is named in the declaration namespace
+    /// for the written-impl half — that index holds what headers write — and
+    /// compared as an identity for the in-pass half.
+    pub(crate) fn has_impl(&self, receiver: &TypeHead, trait_key: &crate::defs::DefId) -> bool {
+        self.has_written_impl(
+            ImplReceiver::Declared(&crate::name::DeclName::new(receiver.name())),
+            trait_key,
+        ) || self.pending_has_head(receiver, trait_key)
+    }
+
+    /// Note that this synthesis pass added `impl <trait> for <receiver>` in the
+    /// current module. Used for in-pass dedup only; the canonical synthesis
+    /// layer is rebuilt by `collect_synthesised_impls` after
     /// `synthesize_traits` returns.
     pub(crate) fn record_impl(&mut self, receiver: &FqTypeName, trait_key: &crate::defs::DefId) {
         self.pending
             .insert((Self::key(receiver), self.module.clone(), *trait_key));
     }
 
-    /// The in-pass dedup key of a receiver: its rendered head, which
-    /// disambiguates two same-named declarations in one module.
-    fn key(receiver: &FqTypeName) -> String {
-        receiver.head().rendered().to_string()
+    /// The in-pass dedup key of a receiver: its head — the declaration where
+    /// one names it, the rendering where none does. Two same-named
+    /// declarations are two keys, in one module or across two.
+    fn key(receiver: &FqTypeName) -> TypeHead {
+        receiver.head().clone()
     }
 
-    /// `true` when this pass already emitted `<trait> for <instance>`, where
-    /// the instance is named by the fused spelling it mangles to (`Fn<1,i32>`).
+    /// `true` when this pass already emitted `<trait> for <instance>`.
     ///
     /// Only the in-pass record can answer: an instantiation is not a
     /// declaration, so the impl indexes — which hold declarations — have no
     /// entry that could match it, whatever key one built.
-    pub(crate) fn instance_has_impl(&self, mangled: &str, trait_key: &crate::defs::DefId) -> bool {
-        self.pending
-            .contains(&(mangled.to_string(), self.module.clone(), *trait_key))
+    pub(crate) fn instance_has_impl(
+        &self,
+        instance: &TypeHead,
+        trait_key: &crate::defs::DefId,
+    ) -> bool {
+        self.pending_has_head(instance, trait_key)
     }
 
-    /// `true` when some `T: <trait_name>` bound (or an explicit marker) in
-    /// the project actually demanded `impl <trait_name> for <type_name>` in
-    /// the current module — see [`Self::requested`]. Only consulted for the
-    /// `Eq` / `Ord` sub-passes; the other auto-derives stay unconditional.
+    /// `true` when some `T: <trait>` bound (or an explicit marker) in the
+    /// project actually demanded `impl <trait> for <receiver>` in the current
+    /// module — see [`Self::requested`]. Only consulted for the `Eq` / `Ord`
+    /// sub-passes; the other auto-derives stay unconditional.
     pub(crate) fn is_requested(
         &self,
         receiver: &FqTypeName,
@@ -2974,8 +2985,7 @@ impl SynthesisCtx<'_, '_, '_> {
 
     /// `true` when this pass already emitted `<trait_name> for <type_name>`.
     fn pending_has(&self, receiver: &FqTypeName, trait_key: &crate::defs::DefId) -> bool {
-        self.pending
-            .contains(&(Self::key(receiver), self.module.clone(), *trait_key))
+        self.pending_has_head(receiver.head(), trait_key)
     }
 
     /// `true` when a *methodful* impl already covers `<trait_name> for
@@ -3710,7 +3720,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let span = synth_span();
     for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
         let mangled = tt.fq_type_name(type_id).to_mangled();
-        if ctx.instance_has_impl(&mangled, &inspect_fq.canonical().expect(KEYED)) {
+        let instance = TypeHead::instance(&module_source, &mangled);
+        if ctx.instance_has_impl(&instance, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(type_id);
@@ -3788,7 +3799,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled = sig.receiver().to_mangled();
-        if ctx.instance_has_impl(&mangled, &inspect_fq.canonical().expect(KEYED)) {
+        let instance = TypeHead::instance(&module_source, &mangled);
+        if ctx.instance_has_impl(&instance, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
@@ -4196,22 +4208,19 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // `Inspect` reaches a type by a trait impl, a free function of the same
     // mangled name (legacy stdlib), or a `Reflect*` blanket — which leaves no
     // per-type impl to find. A delegate is warranted for all three.
-    let has_inspect = |type_name: &str,
+    let has_inspect = |receiver: &TypeHead,
                        type_id: TypeId,
                        ctx: &SynthesisCtx<'_, '_, '_>,
                        tt: &mut TypeTable|
      -> bool {
-        if ctx.has_impl(
-            ImplReceiver::Declared(&crate::name::DeclName::new(type_name)),
-            &inspect_fq.canonical().expect(KEYED),
-        ) {
+        if ctx.has_impl(receiver, &inspect_fq.canonical().expect(KEYED)) {
             return true;
         }
         // The receiver is spelled as written — an instantiation (`Fn<1,i32>`)
         // has no declaration whose head could carry it — so the probe is a
         // rendering against the emitted function names, not an identity.
         let mangled = MethodName::format_local(
-            &FqTypeName::shape(&module_source, type_name),
+            &FqTypeName::shape(&module_source, receiver.rendered()),
             Some(&inspect_fq),
             &inspect_method,
         );
@@ -4229,18 +4238,13 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     };
 
     // Enums — delegate to Inspect (no multiline needed for enum names)
-    for (name, def) in module
-        .enums
-        .iter()
-        .map(|e| (e.name.clone(), e.def))
-        .collect::<Vec<_>>()
-    {
+    for def in module.enums.iter().map(|e| e.def).collect::<Vec<_>>() {
         let receiver = &FqTypeName::declared(tt.defs(), def);
         if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let enum_type = tt.make_enum(def);
-        if !has_inspect(&name, enum_type, ctx, &mut tt) {
+        if !has_inspect(receiver.head(), enum_type, ctx, &mut tt) {
             continue;
         }
         let ref_type = tt.make_ref(enum_type);
@@ -4381,16 +4385,12 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     }
 
     // Flags — delegate to Inspect (bit flags don't need pretty print)
-    let flags_infos: Vec<_> = module
-        .flags
-        .iter()
-        .map(|f| (f.name.clone(), f.type_id))
-        .collect();
+    let flags_types: Vec<_> = module.flags.iter().map(|f| f.type_id).collect();
 
-    for (name, flags_type_id) in &flags_infos {
+    for flags_type_id in &flags_types {
         let receiver = &tt.fq_base_type_name(*flags_type_id);
         if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED))
-            || !has_inspect(name, *flags_type_id, ctx, &mut tt)
+            || !has_inspect(receiver.head(), *flags_type_id, ctx, &mut tt)
         {
             continue;
         }
@@ -4416,7 +4416,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         }
         let receiver = &tt.fq_base_type_name(nt.type_id);
         if ctx.has_methodful_impl_anywhere(receiver, &inspect_alt_fq.canonical().expect(KEYED))
-            || !has_inspect(&nt.name, nt.type_id, ctx, &mut tt)
+            || !has_inspect(receiver.head(), nt.type_id, ctx, &mut tt)
         {
             continue;
         }
@@ -4441,8 +4441,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
         let mangled = tt.fq_type_name(type_id).to_mangled();
-        if ctx.instance_has_impl(&mangled, &inspect_alt_fq.canonical().expect(KEYED))
-            || !has_inspect(&mangled, type_id, ctx, &mut tt)
+        let instance = TypeHead::instance(&module_source, &mangled);
+        if ctx.instance_has_impl(&instance, &inspect_alt_fq.canonical().expect(KEYED))
+            || !has_inspect(&instance, type_id, ctx, &mut tt)
         {
             continue;
         }
@@ -4487,8 +4488,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled = sig.receiver().to_mangled();
-        if ctx.instance_has_impl(&mangled, &inspect_alt_fq.canonical().expect(KEYED))
-            || !has_inspect(&mangled, sig.repr_type_id, ctx, &mut tt)
+        let instance = TypeHead::instance(&module_source, &mangled);
+        if ctx.instance_has_impl(&instance, &inspect_alt_fq.canonical().expect(KEYED))
+            || !has_inspect(&instance, sig.repr_type_id, ctx, &mut tt)
         {
             continue;
         }
@@ -5122,12 +5124,11 @@ fn generate_fallback_impls(
     let fmt_type = tt.make_mut_ref(formatter_type);
 
     let needs_fallback = |receiver: &FqTypeName, ctx: &SynthesisCtx<'_, '_, '_>| -> bool {
-        let name = receiver.head().name();
         if ctx.has_methodful_impl_anywhere(receiver, &pair.target_trait.canonical().expect(KEYED)) {
             return false;
         }
         if ctx.has_impl(
-            ImplReceiver::Declared(&crate::name::DeclName::new(name)),
+            receiver.head(),
             &pair.delegate_trait.canonical().expect(KEYED),
         ) {
             return true;
@@ -5370,19 +5371,22 @@ fn generate_fallback_impls(
             continue;
         }
         let mangled = tt.fq_type_name(type_id).to_mangled();
-        if ctx.instance_has_impl(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
+        let instance = TypeHead::instance(&module_source, &mangled);
+        if ctx.instance_has_impl(&instance, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
-        let delegate_present = ctx.has_impl(
+        let delegate_present = ctx.has_written_impl(
             ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
             &pair.delegate_trait.canonical().expect(KEYED),
-        ) || {
-            let delegate_key = format!(
-                "{mangled}^{}::{}",
-                pair.delegate_trait, pair.delegate_method
-            );
-            all_fn_names.contains(&delegate_key)
-        };
+        ) || ctx
+            .pending_has_head(&instance, &pair.delegate_trait.canonical().expect(KEYED))
+            || {
+                let delegate_key = format!(
+                    "{mangled}^{}::{}",
+                    pair.delegate_trait, pair.delegate_method
+                );
+                all_fn_names.contains(&delegate_key)
+            };
         if !delegate_present {
             continue;
         }
@@ -5411,19 +5415,22 @@ fn generate_fallback_impls(
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled = sig.receiver().to_mangled();
-        if ctx.instance_has_impl(&mangled, &pair.target_trait.canonical().expect(KEYED)) {
+        let instance = TypeHead::instance(&module_source, &mangled);
+        if ctx.instance_has_impl(&instance, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
         }
-        let delegate_present = ctx.has_impl(
+        let delegate_present = ctx.has_written_impl(
             ImplReceiver::Instantiated(&crate::name::MangledName::new(mangled.clone())),
             &pair.delegate_trait.canonical().expect(KEYED),
-        ) || {
-            let delegate_key = format!(
-                "{mangled}^{}::{}",
-                pair.delegate_trait, pair.delegate_method
-            );
-            all_fn_names.contains(&delegate_key)
-        };
+        ) || ctx
+            .pending_has_head(&instance, &pair.delegate_trait.canonical().expect(KEYED))
+            || {
+                let delegate_key = format!(
+                    "{mangled}^{}::{}",
+                    pair.delegate_trait, pair.delegate_method
+                );
+                all_fn_names.contains(&delegate_key)
+            };
         if !delegate_present {
             continue;
         }

@@ -1820,10 +1820,10 @@ impl Monomorphizer {
                     .iter()
                     .map(|&t| type_table.fq_type_name(t))
                     .collect();
-                let method_type_arg_names: Vec<String> = key
+                let method_type_arg_names: Vec<FqTypeName> = key
                     .method_type_args
                     .iter()
-                    .map(|&t| type_table.mangle_type_arg_for_generic(t))
+                    .map(|&t| type_table.fq_type_name(t))
                     .collect();
                 // Blanket impl: struct name IS the type param (e.g., "I").
                 // Replace it with the concrete type name instead of appending type args.
@@ -2102,9 +2102,9 @@ impl Monomorphizer {
                             .iter()
                             .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
-                        let method_names: Vec<String> = sub_method_type_args
+                        let method_names: Vec<FqTypeName> = sub_method_type_args
                             .iter()
-                            .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                            .map(|&tid| type_table.fq_type_name(tid))
                             .collect();
                         if impl_names.is_empty() && method_names.is_empty() {
                             info.clone()
@@ -2135,7 +2135,7 @@ impl Monomorphizer {
                         if any_changed {
                             new_info.method_type_args = substituted_method_args
                                 .iter()
-                                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                                .map(|&tid| type_table.fq_type_name(tid))
                                 .collect();
                         }
                     }
@@ -3107,7 +3107,7 @@ impl Monomorphizer {
         if !sub_method_type_args.is_empty() {
             new_info.method_type_args = sub_method_type_args
                 .iter()
-                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                .map(|&tid| type_table.fq_type_name(tid))
                 .collect();
         }
         let new_func_name = new_info.to_mangled_name();

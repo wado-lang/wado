@@ -334,7 +334,7 @@ impl TypeSystem {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::trait_sig_of`] for a caller still holding a trait's spelling.
     pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&TraitSig> {
-        let decl = self.canonical_decl_key(trait_name)?;
+        let decl = self.decl_key_or_local(trait_name)?;
         trait_sig_of_with(
             decl,
             &self.tysys.resolutions,
@@ -447,9 +447,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
-        // A supertrait is a bound written in the trait's own declaration, so
-        // which trait it names is the answer already recorded for that site.
-        let Some(trait_decl) = self.decl_key_or_local(&trait_name) else {
+        // The header's own site says which trait it names, so an aliased
+        // `impl B for T` enforces `Base`'s supertraits.
+        let Some(trait_decl) = crate::resolve::head_site(trait_type)
+            .and_then(|site| self.decl_key_at(site, &trait_name))
+        else {
             return;
         };
         let supertraits: Vec<(String, Option<DefId>)> = self
@@ -544,20 +546,12 @@ impl TypeSystem {
         self.resolutions.defs().of_ast_id(decl)
     }
 
-    /// The declaration `type_id` is an instance of.
-    ///
-    /// A nominal type already knows its declaring node, and `Node<i32>` and
-    /// `Node<String>` know the one `Node` they were spelled from — so a caller
-    /// holding a type has an identity without reading the `(name, module)` pair
-    /// off it and resolving that again. This is what the pair stops being a key
-    /// for.
-    /// The declaration `type_id` was *registered* under.
-    ///
-    /// This asks `decl_of_type`, which answers from the registration table, so
-    /// it declines for a type whose head carries a declaration that was never
-    /// registered under a node — a `GenericResource` instantiation is the case
-    /// that bites. A caller that wants the head's declaration regardless wants
-    /// [`crate::tir::TypeTable::nominal_def`].
+    /// The declaration `type_id` is an instance of. A nominal type already knows
+    /// its declaring node, so a caller holding a type has an identity without
+    /// reading a `(name, module)` pair off it and resolving that again.
+    /// The declaration `type_id` was *registered* under, so it declines for a head
+    /// whose declaration never got a node — a `GenericResource` instantiation.
+    /// For the head's declaration regardless, use [`crate::tir::TypeTable::nominal_def`].
     pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
         let decl = self.type_table.borrow().decl_of_type(type_id)?;
         self.resolutions.defs().of_ast_id(decl)
@@ -1072,7 +1066,7 @@ impl TypeSystem {
         let nominal = self.type_table.borrow().nominal_head(type_id);
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
-            && let Some((name, module_source)) = nominal
+            && let Some((_, module_source)) = nominal
         {
             let receiver = self.type_table.borrow().impl_receiver_key(type_id);
             let serde_blocked =
@@ -1085,7 +1079,7 @@ impl TypeSystem {
                 if let Some(key) = self.synth_trait_key(tr) {
                     self.type_table
                         .borrow_mut()
-                        .record_bound_driven_synth_request(&name, &module_source, &key);
+                        .record_bound_driven_synth_request_for(type_id, &module_source, &key);
                 }
                 return true;
             }
@@ -1106,7 +1100,7 @@ impl TypeSystem {
                     .clone();
                 self.type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(&name, &module_source, &key);
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
             }
             return true;
         }
@@ -1155,14 +1149,14 @@ impl TypeSystem {
             }
         {
             if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
-                let (name, module_source) = self
+                let (_, module_source) = self
                     .type_table
                     .borrow()
                     .nominal_head(type_id)
                     .expect("a generic instance names a declaration");
                 self.type_table
                     .borrow_mut()
-                    .record_bound_driven_synth_request(&name, &module_source, &key);
+                    .record_bound_driven_synth_request_for(type_id, &module_source, &key);
             }
             return true;
         }
@@ -1395,35 +1389,36 @@ impl TypeSystem {
         })
     }
 
-    /// Whether `bound_name` is a synthesized reflection trait the subject type
-    /// is eligible for by kind (`ReflectStruct` on a struct, `ReflectVariant` on a
-    /// variant, …). These have no impl blocks, so the name-based search misses
-    /// them; a hit records the bound-driven synth request.
+    /// Whether `bound_name` is a synthesized reflection trait the subject is
+    /// eligible for by kind. These have no impl blocks, so the name-based search
+    /// misses them; a hit records the bound-driven synth request.
     ///
-    /// `type_name` is the declaration name: every lookup below goes through the
-    /// module scope, which keys declarations as source writes them.
+    /// One scope lookup keys every kind check below, so the four cannot each
+    /// reach a different declaration.
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,
         type_name: &crate::name::DeclName,
         bound_name: &str,
     ) -> bool {
-        let type_name = type_name.as_decl_str();
         let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
+            return false;
+        };
+        let Some(def) = scope.declaration_or_render(type_name.as_decl_str()) else {
             return false;
         };
         let subject = match on_bound {
             OnBoundTrait::ReflectStruct => scope
-                .struct_fields(type_name)
+                .struct_fields_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectVariant => scope
-                .variant_case(type_name)
+                .variant_cases_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectEnum => scope
-                .enum_case(type_name)
+                .enum_cases_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::ReflectFlags => scope
-                .flags_case(type_name)
+                .flags_members_of(def)
                 .map(|info| info.module_source.clone()),
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
@@ -1442,22 +1437,24 @@ impl TypeSystem {
         let Some(key) = self.synth_trait_key(on_bound) else {
             return false;
         };
+        let head = {
+            let tt = self.type_table.borrow();
+            FqTypeName::declared(tt.defs(), def).head().clone()
+        };
         self.type_table
             .borrow_mut()
-            .record_bound_driven_synth_request(type_name, &module_source, &key);
+            .record_bound_driven_synth_request(&head, &module_source, &key);
         true
     }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The trait declaration a reference site names.
+    /// The trait declaration a reference site names, from
+    /// [`crate::resolve::Resolutions`] and so resolved in the writing module: an
+    /// alias or a second module's same-named trait cannot displace it.
     ///
-    /// The answer comes from [`crate::resolve::Resolutions`] — resolved in the
-    /// module that wrote the reference — so an alias and a second module's
-    /// same-named trait cannot displace it. `written` feeds the fallback only:
-    /// the table is position-agnostic, so a site answering with something that
-    /// is no trait at all (a same-named enum case in the prelude) is the frame
-    /// derivation's to settle.
+    /// `written` feeds the fallback only, for a site answering with something that
+    /// is no trait at all — a same-named enum case in the prelude.
     pub(super) fn trait_decl_at(
         &self,
         site: crate::ast::AstId,
@@ -2115,7 +2112,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => vec![],
                         };
                         let Some(trait_key) = header
-                            .fq_trait(self.tysys.resolutions.defs())
+                            .fq_trait(&self.tysys.resolutions)
                             .and_then(|t| t.canonical())
                         else {
                             continue;
@@ -2234,7 +2231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 if bounds_ok {
                     let Some(trait_key) = header
-                        .fq_trait(self.tysys.resolutions.defs())
+                        .fq_trait(&self.tysys.resolutions)
                         .and_then(|t| t.canonical())
                     else {
                         continue;

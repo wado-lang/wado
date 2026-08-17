@@ -1,0 +1,12 @@
+// A call through a namespace import must see the callee's parameter types, or
+// the argument resolves with no expected type and a sequence literal never
+// coerces to its `List<i32>` parameter.
+use acc from "./sub/ns_param_types_helper.wado";
+
+test "namespace free call coerces the literal to the parameter type" {
+    assert acc::sum_free([1, 2, 3]) == 6;
+}
+
+test "namespace static call coerces the literal to the parameter type" {
+    assert acc::Acc::sum([1, 2, 3]) == 6;
+}

@@ -419,6 +419,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             anon_struct_fields: &empty_anon_struct,
                             local_item_renders: &empty_local_renders,
                             fn_local_items: &empty_local_items,
+                            decls: None,
                         };
                         let base_type_id = Self::resolve_type_static(
                             &newtype_decl.ty,
@@ -506,6 +507,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     anon_struct_fields: &empty_anon_struct,
                     local_item_renders: &empty_local_renders,
                     fn_local_items: &empty_local_items,
+                    decls: None,
                 };
                 match item {
                     Item::Struct(struct_decl) => {

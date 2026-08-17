@@ -263,11 +263,15 @@ impl ImplHeader {
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
-    pub(super) fn fq_trait(&self, defs: &crate::defs::DefTable) -> Option<name::FqTraitName> {
+    pub(super) fn fq_trait(
+        &self,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> Option<name::FqTraitName> {
         let trait_type = self.trait_type.as_ref()?;
         match self.trait_key.as_ref()? {
             ImplTargetKey::Decl(def) => Some(
-                name::FqTraitName::declared(defs, *def).with_args(written_type_args(trait_type)),
+                name::FqTraitName::declared(resolutions.defs(), *def)
+                    .with_args(written_type_args(trait_type, resolutions)),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
             ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
@@ -650,9 +654,10 @@ fn push_module(
 /// instance is materialised in the receiver type's.
 fn index_impl_modules(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
-    defs: &crate::defs::DefTable,
+    resolutions: &crate::resolve::Resolutions,
     concrete_only: bool,
 ) -> ImplModuleIndex {
+    let defs = resolutions.defs();
     let mut out = ImplModuleIndex::default();
     for header in impl_headers.values() {
         // A bodiless derive (`impl Deserialize for Point;`) asks for an impl,
@@ -670,7 +675,7 @@ fn index_impl_modules(
         if concrete_only && !header.type_params.is_empty() {
             continue;
         }
-        let Some(fq_trait) = header.fq_trait(defs) else {
+        let Some(fq_trait) = header.fq_trait(resolutions) else {
             continue;
         };
         out.record(
@@ -756,6 +761,12 @@ pub struct TraitEnv {
     /// Type name → modules declaring a `newtype` of that name, in build order.
     /// The fallback half of `find_struct_module_source`'s module lookup.
     pub(super) newtype_decl_modules: IndexMap<String, Vec<DefId>>,
+    /// Declared name → every declaration written under it, in build order.
+    /// The frame derivation's second tier reads this on every name that is not
+    /// an import, so it is keyed by name rather than scanned: the sets it
+    /// unions are whole-program, and every prelude spelling — `i32`, `String`,
+    /// `List` — would otherwise walk all of them before the prelude answered.
+    decls_by_name: IndexMap<String, Vec<DefId>>,
     /// Per-module namespace-import aliases, pre-computed once, so a query
     /// standing in a foreign module's perspective reads them instead of
     /// re-walking its `use` declarations. See [`namespace_imports_of`].
@@ -1255,8 +1266,18 @@ impl TraitEnv {
             let key = resolutions.declared(bound.id)?;
             decl_index.contains(&key).then_some(key)
         };
-        let trait_impl_modules = index_impl_modules(&impl_headers, defs, false);
-        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, defs, true);
+        let trait_impl_modules = index_impl_modules(&impl_headers, resolutions, false);
+        let concrete_trait_impl_modules = index_impl_modules(&impl_headers, resolutions, true);
+        let decls_by_name = index_decls_by_name(
+            defs,
+            [
+                &type_decl_index,
+                &decl_index,
+                &effect_decl_index,
+                &resource_decl_index,
+            ],
+            [&struct_like_decl_modules, &newtype_decl_modules],
+        );
 
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
         violations.extend(check_inherent_impl_collisions(defs, &impl_headers));
@@ -1293,6 +1314,7 @@ impl TraitEnv {
                 trait_decl_headers,
                 supertrait_closures,
                 function_type_params,
+                decls_by_name,
                 struct_like_decl_modules,
                 newtype_decl_modules,
                 module_namespace_imports,
@@ -1367,38 +1389,18 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// The one trait declaration named `name`, when exactly one module
-    /// declares it.
-    ///
-    /// For a reference the module's own scope cannot answer — a bodiless
-    /// derive (`impl Deserialize for Point;`) naming a stdlib trait the module
-    /// never `use`d. Declines when several modules declare the name: guessing
-    /// between them is the mis-identification this design exists to prevent.
-    pub(crate) fn unique_trait_decl_key(&self, name: &str) -> Option<DefId> {
-        let mut hits = self
-            .decl_index
-            .iter()
-            .filter(|def| self.defs.name(**def) == name);
-        let first = *hits.next()?;
-        hits.next().is_none().then_some(first)
-    }
-
-    /// The one effect or resource declaration named `name`, when exactly one
-    /// module declares it. Declines on ambiguity, like
-    /// [`Self::unique_trait_decl_key`].
-    pub(crate) fn unique_effect_or_resource_decl_key(&self, name: &str) -> Option<DefId> {
-        let mut hits = self
-            .effect_decl_index
-            .iter()
-            .chain(self.resource_decl_index.iter())
-            .filter(|def| self.defs.name(**def) == name);
-        let first = *hits.next()?;
-        hits.next().is_none().then_some(first)
-    }
-
     /// Whether `key` names a trait declaration.
     pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
         self.decl_index.contains(key)
+    }
+
+    /// Every declaration written under `name`, whichever module declares it.
+    ///
+    /// The frame derivation's raw material, and not a scope: it holds what
+    /// modules *declare*, never what they import, so no alias can steer it, and
+    /// it takes no vantage — the caller filters for the module it means.
+    pub(crate) fn decls_named<'n>(&'n self, name: &str) -> impl Iterator<Item = DefId> + 'n {
+        self.decls_by_name.get(name).into_iter().flatten().copied()
     }
 
     /// Declaring module of a struct-like type (struct / resource / variant /
@@ -1691,18 +1693,6 @@ pub(crate) enum ImplReceiver<'a> {
     /// separate two modules' same-named types — which is why it is a distinct
     /// variant rather than a receiver a caller flattened.
     Declared(&'a name::DeclName),
-}
-
-impl ImplReceiver<'_> {
-    /// The spelling this query names its receiver by, for the callers that key
-    /// their own in-pass state on the same string.
-    pub(crate) fn spelling(self) -> String {
-        match self {
-            ImplReceiver::Of(r) => r.head_key().into_string(),
-            ImplReceiver::Instantiated(m) => m.as_mangled_str().to_string(),
-            ImplReceiver::Declared(d) => d.as_decl_str().to_string(),
-        }
-    }
 }
 
 /// A receiver a lookup may try, kept in the form the thing that produced it
@@ -2448,34 +2438,106 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     }
 }
 
-/// [`get_type_name_static`] keeping the written type arguments
-/// (`Stream<u8>`), for the spellings a mangled name embeds.
-/// The type arguments a written trait position supplies, each rendered the
-/// way [`get_type_name_full_static`] renders one.
-///
-/// Read off the node that wrote them. Rendering the whole position and
-/// splitting the rendering back apart answers the same for a well-formed
-/// spelling and guesses for anything else, which is the failure this WEP is
-/// about.
-pub(super) fn written_type_args(ty: &ast::Type) -> Vec<String> {
+/// Invert the declaration indexes into declared name → declarations, name-keyed
+/// maps first so source order is kept, and each declaration landing once — a
+/// duplicate would make a caller taking the unique answer see two.
+fn index_decls_by_name(
+    defs: &crate::defs::DefTable,
+    sets: [&IndexSet<DefId>; 4],
+    maps: [&IndexMap<String, Vec<DefId>>; 2],
+) -> IndexMap<String, Vec<DefId>> {
+    let mut out: IndexMap<String, Vec<DefId>> = IndexMap::default();
+    let mut push = |def: DefId| {
+        let entry = out.entry(defs.name(def).to_string()).or_default();
+        if !entry.contains(&def) {
+            entry.push(def);
+        }
+    };
+    for map in maps {
+        for def in map.values().flatten() {
+            push(*def);
+        }
+    }
+    for set in sets {
+        for def in set {
+            push(*def);
+        }
+    }
+    out
+}
+
+/// The type arguments a written trait position supplies, structured — read off the
+/// nodes that wrote them, so each argument's own reference site says which
+/// declaration it names and an alias or namespace prefix reaches the same head.
+pub(super) fn written_type_args(
+    ty: &ast::Type,
+    resolutions: &crate::resolve::Resolutions,
+) -> Vec<name::FqTypeName> {
+    // `ns::Trait<T>` supplies its arguments the same as `Trait<T>` does — the
+    // namespace says which module declares the head, which is the reference
+    // site's question and not the argument list's.
     match ty {
-        ast::Type::Generic(generic) => generic.args.iter().map(get_type_name_full_static).collect(),
+        ast::Type::Generic(generic) => generic
+            .args
+            .iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect(),
+        ast::Type::NamespacedGeneric(ns) => ns
+            .args
+            .iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect(),
         _ => Vec::new(),
     }
 }
 
-pub(super) fn get_type_name_full_static(ty: &ast::Type) -> String {
+/// One written type argument as the identity it names.
+///
+/// A name that reaches no declaration keeps its spelling — there is no identity
+/// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
+pub(super) fn written_type_arg(
+    ty: &ast::Type,
+    resolutions: &crate::resolve::Resolutions,
+) -> name::FqTypeName {
+    let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
+        args.iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect()
+    };
     match ty {
-        ast::Type::Generic(generic) => {
-            let args: Vec<String> = generic.args.iter().map(get_type_name_full_static).collect();
-            // `, `, matching `Elaborator::get_type_name_full`: both render the
-            // written trait type into one mangled segment, and a separator only
-            // one of them uses splits a nested `Pair<i32, i32>` into two names.
-            format!("{}<{}>", generic.name, args.join(", "))
+        ast::Type::Reference(inner) => {
+            written_type_arg(inner, resolutions).with_reference(name::RefKind::Shared)
         }
-        ast::Type::Reference(inner) => format!("&{}", get_type_name_full_static(inner)),
-        ast::Type::MutReference(inner) => format!("&mut {}", get_type_name_full_static(inner)),
-        other => get_type_name_static(other),
+        ast::Type::MutReference(inner) => {
+            written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
+        }
+        ast::Type::Tuple(elems) if elems.is_empty() => {
+            name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
+        }
+        ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
+        _ => {
+            let head = match crate::resolve::head_site(ty).map(|site| resolutions.get(site)) {
+                Some(crate::resolve::Resolution::Def(def)) => {
+                    name::FqTypeName::of_head(resolutions.defs(), def)
+                }
+                Some(crate::resolve::Resolution::Binder(_)) => {
+                    name::FqTypeName::binder(&get_type_name_static(ty))
+                }
+                Some(crate::resolve::Resolution::Unresolved) | None => {
+                    name::FqTypeName::builtin(&get_type_name_static(ty))
+                }
+            };
+            match ty {
+                ast::Type::Generic(generic) => head.with_args(nested(&generic.args)),
+                // `ns::Pair<i32>` and `ns::Pair<bool>` are two instantiations
+                // of one declaration. Dropping the arguments here mangled both
+                // to the same segment, so the second `From` impl collided with
+                // the first, and a structural comparison against the
+                // argument's own type name matched neither.
+                ast::Type::NamespacedGeneric(ns) => head.with_args(nested(&ns.args)),
+                _ => head,
+            }
+        }
     }
 }
 

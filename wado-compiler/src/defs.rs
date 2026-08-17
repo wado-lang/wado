@@ -1,14 +1,6 @@
-//! Declaration identity.
-//!
-//! Every declaration in the program gets a [`DefId`]: an opaque index into the
-//! [`DefTable`] built once, after loading, from every module's items. It is the
-//! identity the compiler compares, and this module mints no others —
-//! [`DefTable::declare`] is the only constructor. Names travel the other way:
-//! [`DefTable::name`] renders one for a diagnostic or for a mangle.
-//!
-//! A spelling cannot reach an identity, so two modules' same-named
-//! declarations cannot be confused for one. What is left of that is
-//! `NAME_TO_IDENTITY` below, which the `enforcement` test keeps from growing.
+//! Declaration identity: every declaration gets a [`DefId`], the identity the
+//! compiler compares. [`DefTable::declare`] is its only constructor, and names
+//! travel the other way through [`DefTable::name`].
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
@@ -46,16 +38,12 @@ fn members<'a>(
         .collect()
 }
 
-/// Identity of a declaration.
+/// Identity of a declaration: a dense index minted only by [`DefTable::declare`],
+/// so equality is declaration identity and no id exists for a declaration that
+/// does not.
 ///
-/// A dense index, minted only by [`DefTable::declare`]. Equality is declaration
-/// identity: there is no spelling on it to compare instead, and no way to build
-/// one for a declaration that does not exist.
-///
-/// [`crate::ast::AstId`] is deliberately not reused for this. It is the id type
-/// of *every* node and [`AstId::fresh`] is public, so a use-site id would
-/// type-check wherever a declaration id is expected and one could be minted from
-/// nothing; it is also sparse, so per-declaration data could not be a `Vec`.
+/// Not [`crate::ast::AstId`]: that is every node's id type and `fresh` is public,
+/// so a use-site id would type-check here; it is also sparse.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DefId(u32);
 
@@ -158,23 +146,15 @@ struct Def {
     parent: Option<DefId>,
     /// Members declared inside this one, in source order.
     members: Vec<DefId>,
-    /// Declared inside a function body rather than at module level.
-    ///
-    /// Two sibling functions may each declare a `struct Point`, and both are
-    /// this module's `Point`, so the declared name alone cannot tell them
-    /// apart. Every registry keyed by a rendered name — the WIR struct
-    /// registry above all — needs the distinction, which is why
-    /// [`crate::name::mangle_local_item_name`] exists; this is how a renderer
-    /// knows to apply it.
+    /// Declared inside a function body rather than at module level. Two sibling
+    /// functions may each declare a `struct Point`, so a name-keyed registry needs
+    /// [`crate::name::mangle_local_item_name`]; this tells a renderer to apply it.
     function_local: bool,
 }
 
-/// Every declaration in the program, by [`DefId`].
-///
-/// Built once from the symbol table, which already keys each declaration by its
-/// declaring node. The table hands back what a declaration *is*; it deliberately
-/// cannot answer what a *name* means — that question needs a module scope, and
-/// only [`crate::resolve`] runs one.
+/// Every declaration in the program, by [`DefId`]. Hands back what a declaration
+/// *is*; what a *name* means needs a module scope, which only
+/// [`crate::resolve`] runs.
 #[derive(Debug, Default, Clone)]
 pub struct DefTable {
     defs: Vec<Def>,
@@ -189,19 +169,12 @@ impl DefTable {
         Self::build_seeded(None, modules, symbols)
     }
 
-    /// [`Self::build`], continuing an earlier table.
+    /// [`Self::build`], continuing an earlier table so a cached declaration fact
+    /// stays readable: a declaration the seed identifies keeps its [`DefId`], and
+    /// only what the seed never saw is minted here.
     ///
-    /// A [`DefId`] is an index into one table, so a declaration fact that
-    /// outlives the compile that produced it — the stdlib snapshot caches whole
-    /// `ImplSig`s — is only readable if that compile's identities are still the
-    /// same ones. Seeding keeps them: a declaration the seed already identifies
-    /// keeps its `DefId`, and only what the seed never saw is minted here. This
-    /// is what [`crate::tir::TypeTable`] does for `TypeId` and for the same
-    /// reason.
-    ///
-    /// Both tables index the same declaration nodes because the stdlib AST is
-    /// parsed once per process and shared, so an [`AstId`] means the same node
-    /// in both.
+    /// The stdlib AST is parsed once per process and shared, so an [`AstId`] means
+    /// the same node in both tables.
     #[must_use]
     pub fn build_seeded(
         seed: Option<&Self>,
@@ -722,15 +695,13 @@ mod tests {
 #[cfg(test)]
 const NAME_TO_IDENTITY: &[(&str, &str)] = &[
     (
-        "declaration_named",
-        "crate::resolve's own scope lookup — the one place a name is allowed \
-         to become an identity. Its callers are what the WEP is emptying, not \
-         this.",
+        "resolve",
+        "`Scopes::resolve` is the one scope, so it is the one place this shape \
+         belongs. Every other entry here exists because it is *not* this.",
     ),
     (
-        "value_named",
-        "the same lookup one tier longer, for a name written in value or \
-         pattern position",
+        "resolve_value",
+        "`Scopes::resolve` in the value namespace; see above.",
     ),
     (
         "imported_as",
@@ -763,6 +734,30 @@ mod enforcement {
         None
     }
 
+    /// The parameter types of `params`, split on the commas between them —
+    /// not on the ones inside `IndexMap<(ModuleSource, AstId), _>`, whose
+    /// spelling would otherwise read as a module parameter beside a name one.
+    fn param_types(params: &str) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut depth = 0usize;
+        let mut start = 0usize;
+        for (i, c) in params.char_indices() {
+            match c {
+                '<' | '(' | '[' => depth += 1,
+                '>' | ')' | ']' => depth = depth.saturating_sub(1),
+                ',' if depth == 0 => {
+                    out.push(&params[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(&params[start..]);
+        out.into_iter()
+            .filter_map(|p| p.split_once(':').map(|(_, ty)| ty.trim()))
+            .collect()
+    }
+
     /// Whether `signature` takes a module and a name and hands back a
     /// declaration.
     fn maps_a_name_to_an_identity(signature: &str) -> bool {
@@ -772,9 +767,10 @@ mod enforcement {
         let Some(params) = params.split_once('(').map(|(_, p)| p) else {
             return false;
         };
-        ret.contains("DefId")
-            && params.contains("ModuleSource")
-            && (params.contains("&str") || params.contains("String"))
+        let types = param_types(params.trim_end().trim_end_matches(')'));
+        let is_module = |ty: &&str| matches!(*ty, "ModuleSource" | "&ModuleSource");
+        let is_name = |ty: &&str| matches!(*ty, "&str" | "String" | "&String");
+        ret.contains("DefId") && types.iter().any(is_module) && types.iter().any(is_name)
     }
 
     fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -806,11 +802,11 @@ mod enforcement {
             let source = source
                 .split_once("\n#[cfg(test)]\nmod tests {")
                 .map_or(source.as_str(), |(before, _)| before);
+            // Every function, whatever its visibility. A private helper of this
+            // shape is reachable by everything in its module and hands out the
+            // same wrong answer, so exempting it would let the class grow
+            // wherever the module is large.
             for (offset, _) in source.match_indices("fn ") {
-                let line_start = source[..offset].rfind('\n').map_or(0, |i| i + 1);
-                if !source[line_start..offset].trim_start().starts_with("pub") {
-                    continue;
-                }
                 let Some(signature) = signature_at(source, offset) else {
                     continue;
                 };

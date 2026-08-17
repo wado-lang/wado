@@ -1,13 +1,6 @@
-//! Reference resolution: one answer per reference site.
-//!
-//! A name in Wado source is module-relative, so which declaration a spelling
-//! means is a fact about the module that wrote it. This pass answers that
-//! question once, at the site, and records the answer under the site's own
-//! [`AstId`]. Consumers read the table; none of them re-derives an identity from
-//! a name, and none of them needs a module it may not have.
-//!
-//! This is the only place a name becomes a [`DefId`]: [`Scope`] is private here,
-//! and [`crate::defs::DefTable`] has no name-keyed lookup of its own.
+//! Reference resolution: one answer per reference site, recorded under the
+//! site's own [`AstId`] because which declaration a spelling means is a fact
+//! about the module that wrote it. The only place a name becomes a [`DefId`].
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
@@ -223,30 +216,6 @@ impl Resolutions {
         &self.defs
     }
 
-    /// The declaration `name` means from `module`'s vantage, with no reference
-    /// site to key on.
-    ///
-    /// Runs the same scope order the walk runs at every site, minus the
-    /// binders — a caller holding a bare name is outside any item's type
-    /// parameters. One lookup, so a name-only answer and the answer that name's
-    /// site gets cannot differ.
-    #[must_use]
-    pub fn declaration_named(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        self.scopes.resolve(module, name)
-    }
-
-    /// [`Self::declaration_named`] for a name written in value or pattern
-    /// position, where a case is reachable and a type of the same name shadows
-    /// it.
-    ///
-    /// Same scope, one tier longer — a caller asks this rather than the type
-    /// query because of where the name is written, not because it wants a
-    /// second opinion.
-    #[must_use]
-    pub fn value_named(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        self.scopes.resolve_value(module, name)
-    }
-
     /// Every declaration `module` explicitly `use`d, by the local name it
     /// wrote — an alias where it wrote one, and the `ns$member` name a
     /// namespace import registers.
@@ -257,6 +226,17 @@ impl Resolutions {
             .into_iter()
             .flatten()
             .map(|(name, def)| (name.as_str(), *def))
+    }
+
+    /// The declaration the prelude puts in scope under `name`.
+    ///
+    /// The prelude tier alone. It takes no vantage and cannot be given one: the
+    /// prelude is in scope in every module, including one carrying
+    /// `#![no_prelude]`, so there is no module from which this answers
+    /// differently and no import that can steer it.
+    #[must_use]
+    pub fn prelude_decl(&self, name: &str) -> Option<DefId> {
+        self.scopes.prelude.get(name).copied()
     }
 
     /// The declaration `module` explicitly `use`d under the local name `name`.
@@ -756,8 +736,8 @@ mod tests {
             "pub struct Widget { a: i32 }",
             "pub struct Widget { b: i32 }",
         );
-        let here = r.declaration_named(&entry, "Widget").unwrap();
-        let there = r.declaration_named(&other, "Widget").unwrap();
+        let here = r.scopes.resolve(&entry, "Widget").unwrap();
+        let there = r.scopes.resolve(&other, "Widget").unwrap();
         assert_ne!(here, there);
         assert_eq!(r.defs().module(here), &entry);
         assert_eq!(r.defs().module(there), &other);
@@ -773,15 +753,15 @@ mod tests {
             "pub variant FieldKind { List(i32), Leaf }",
         );
         // `Leaf` reaches nothing in type position and its case in value position.
-        assert!(r.declaration_named(&entry, "Leaf").is_none());
-        let leaf = r.value_named(&entry, "Leaf").unwrap();
+        assert!(r.scopes.resolve(&entry, "Leaf").is_none());
+        let leaf = r.scopes.resolve_value(&entry, "Leaf").unwrap();
         assert_eq!(r.defs().kind(leaf), crate::defs::DefKind::VariantCase);
         assert_eq!(r.defs().module(leaf), &other);
 
         // `List` is both a case of the imported variant and this module's own
         // struct. The type wins in both positions.
-        let list = r.value_named(&entry, "List").unwrap();
-        assert_eq!(list, r.declaration_named(&entry, "List").unwrap());
+        let list = r.scopes.resolve_value(&entry, "List").unwrap();
+        assert_eq!(list, r.scopes.resolve(&entry, "List").unwrap());
         assert_eq!(r.defs().kind(list), crate::defs::DefKind::Struct);
         assert_eq!(r.defs().module(list), &entry);
     }
@@ -801,7 +781,7 @@ mod tests {
         assert_eq!(r.defs().name(def), "FieldKind");
         assert_eq!(r.defs().module(def), &other);
         // The variant's cases reach value position without entering this tier.
-        assert!(r.value_named(&entry, "Leaf").is_some());
+        assert!(r.scopes.resolve_value(&entry, "Leaf").is_some());
     }
 
     /// A namespace import enters its members under the qualification the
@@ -876,11 +856,11 @@ mod tests {
             r#"use { Widget as W } from "./other.wado";"#,
             "pub struct Widget { b: i32 }",
         );
-        let aliased = r.declaration_named(&entry, "W").unwrap();
+        let aliased = r.scopes.resolve(&entry, "W").unwrap();
         assert_eq!(r.defs().module(aliased), &other);
         assert_eq!(r.defs().name(aliased), "Widget");
         // The alias is the only spelling in scope; the original is not.
-        assert!(r.declaration_named(&entry, "Widget").is_none());
+        assert!(r.scopes.resolve(&entry, "Widget").is_none());
     }
 
     /// The table answers only for the sites the walk records, so its coverage
@@ -970,7 +950,7 @@ mod tests {
             "pub struct Widget { a: i32 }",
             "pub struct Other { b: i32 }",
         );
-        assert!(r.declaration_named(&entry, "Absent").is_none());
+        assert!(r.scopes.resolve(&entry, "Absent").is_none());
     }
 
     /// A reference site answers from the module that wrote it, so the same

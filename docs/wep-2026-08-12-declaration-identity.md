@@ -154,7 +154,10 @@ incidental fallbacks:
 5. the case names of variant / enum / flags types in scope, which a type of the
    same name always shadows.
 
-`Scope` is private to `crate::resolve`. `SymbolTable`'s name-keyed accessors,
+`Scope` is private to `crate::resolve`, and nothing outside it can run the walk
+by name: the scope is reached only through a reference site, and a caller
+holding a spelling and no site gets the frame derivation below instead — which
+is not a scope and cannot pretend to be one. `SymbolTable`'s name-keyed accessors,
 `ModuleImports` and `TypeLookup`'s import branch are deleted, and with them the
 name-scope half of `module_import_scope`; what survives it is `namespace_imports_of`,
 answering the one import fact the symbol table does not record — which module a
@@ -265,6 +268,16 @@ elaborated has contributed so far — are keyed by declaration, so a module-leve
 `struct Box` and a function-local one of that name are two entries rather than
 one the later insert wins. No separate tier is needed to keep the two apart.
 
+A key whose subject may also be a shape no declaration names takes the head
+rather than the declaration. `synthesis::traits::SynthRequests` — the
+`(receiver, module, trait)` triples a bound-driven derivation was asked for — is
+keyed by `TypeHead`: its `Declared` compares by `DefId`, its `Shape` — an
+anonymous literal, a monomorphized instantiation — by its rendering, which is
+all such a shape has. `SynthesisCtx::key` hands one over from `FqTypeName::head`
+instead of rendering it, and `TypeTable::record_bound_driven_synth_request` takes
+the same head off the receiver's own type, so the producer and the consumer
+cannot key two ways.
+
 This is what removes the consumers' need for a vantage. A pass reading a struct's
 fields does not need to know which module it is standing in, so it cannot stand
 in the wrong one, and `with_module_perspective_for` does not swap these tables
@@ -365,22 +378,32 @@ look up, no vantage to get wrong.
 
 ### 8. Mangled names are rendered once, never parsed
 
-Wasm needs a string, so one place produces one. `SymbolPath` is a structured
-function identity — the defining module, the receiver's `DefId` and type
-arguments, the trait's `DefId` and type arguments, the method name and its type
-arguments — and it renders on demand.
+Wasm needs a string, so one place produces one. `LocalMethodName` is the
+structured function identity — the defining module, the receiver and its type
+arguments, the trait and its type arguments, the method name and its type
+arguments, every head an identity or a shape — and it renders on demand.
 
 Every question a consumer answers today by splitting a mangled string
 (`split_local_method_name`, `split_trait_method_receiver`, `split_head_and_args`,
 `split_base_name`, `extract_local_name`, `rebase_monomorph_method`,
 `replace_type_name_in_mangled`) becomes a field access, and those functions are
 deleted rather than deprecated. `MangledName` is constructible only from a
-`SymbolPath`, so a declaration name cannot be promoted to a mangled one by hand.
+structured identity, so a declaration name cannot be promoted to a mangled one
+by hand.
 
-`FqTypeName`, `FqTraitName`, `Receiver`, `TypeHead`, `DeclName` and `DeclPath` are
-subsumed: their job was to keep a rendered string honest about which namespace it
-belonged to, and a `DefId` has no namespaces to confuse. `LocalMethodName`'s
-remaining stored spellings become derived renderings of the same `SymbolPath`.
+`FqTypeName`, `FqTraitName`, `Receiver`, `TypeHead` and `DeclName` are the
+pieces it is built from. Each keeps its own namespace honest — the mangled one,
+the declaration one — and each compares by the `DefId` its head carries, so
+being separate types costs nothing in identity.
+
+Nothing a name is built from is stored as text. `FqTraitName::args` and
+`LocalMethodName::method_type_args` hold `FqTypeName`s, and
+`trait_env::written_type_args` builds one per argument off the argument's own
+reference site — so an `impl Index<K>` header and a call site reach the same
+head, and a `From<Foo>` segment names the module that declares `Foo`. There is
+one renderer for a type argument: `TypeTable::mangle_type_arg_for_generic` _is_
+`FqTypeName::to_mangled`, so a definition's name and a lookup's name cannot be
+spelled by two functions that drift.
 
 Two rules survive from the structured-name work and still apply to the renderer:
 
@@ -434,8 +457,7 @@ decides which declaration is meant.
 
 ## Enforcement
 
-Each mechanism states what it makes impossible, not what it discourages. One of
-them is a ratchet rather than an absolute, and says so.
+Each mechanism states what it makes impossible, not what it discourages.
 
 - `DefId`'s field and `DefTable::declare` are both private to `crate::defs`. A
   pass cannot mint an identity. Enforced by the module system.
@@ -449,100 +471,65 @@ them is a ratchet rather than an absolute, and says so.
 - `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
   node without an id, so a new reference position cannot be added silently.
 - `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
-  for a reachable function taking a module and a name and handing back a
-  declaration. That is the shape of the chain this design removes, and the one
-  property the type system cannot state. The ones that remain are listed in
-  `NAME_TO_IDENTITY` with the reason each survives, so the class cannot grow
-  while it is being emptied; the test fails on a new one, and equally on a
-  stale entry, so the list shrinks as the work lands. Remaining work says which
-  entries are still to go and which two belong there.
+  for a function taking a module parameter and a name parameter and handing back
+  a declaration. That is the shape of the chain this design removes, and the one
+  property the type system cannot state. Visibility is not part of the shape:
+  the scan reads every `fn`, because a private helper of that shape answers the
+  same way for everything in its module, and a module is as large as it grows.
+  Four are listed in `NAME_TO_IDENTITY` with the reason each belongs there:
+  `Scopes::resolve` and `resolve_value`, which are the one scope and so the one
+  place the shape belongs; `imported_as`, which answers what a module imported
+  under a local name rather than what a spelling means; and `cm_decl_in`, the
+  Component Model boundary. The test fails on a fifth, and equally on a stale
+  entry, so neither the class nor the list can grow.
 
-## Remaining work
+## The frame derivation
 
-The design above is implemented far enough that the whole suite passes and the
-class of bug in Context is not reachable by any program the repository builds.
-It is not yet _unwritable_, which is what the design asks for.
+A name whose reference site is not at hand still has to reach a declaration:
+`find_struct_module_source` asked for a synthesis target, `symbol_named` for a
+mangled name, a `*_case(name)` lookup for a resolved type's rendered head.
+Nothing walks a module's scope for them. Three recorded facts answer instead, in
+order:
+
+1. `Resolutions::imported_as` — what this module `use`d under that local name.
+   The one import fact that is not a scope lookup: it cannot reach another
+   module's imports, and it answers with what an alias aliases.
+2. `TraitEnv::decls_named`, filtered to the module in hand — every declaration
+   written under the name, whichever module declares it. It holds what modules
+   _declare_, never what they import, so no alias can steer it.
+3. `Resolutions::prelude_decl` — what the prelude puts in scope under the name.
+   The prelude tier alone, and it takes no vantage because it cannot be given
+   one: the prelude is in scope in every module.
+
+The three are a module's own reach, so a declaration it cannot see stays unseen
+here — the derivation never widens to the whole program, and a name no module
+brought into scope is unresolved, the same answer the walk gives.
+
+Which module is "this" one is the walk's position, and the walk is not always
+standing where the name was written: a parameter or field default is read at the
+call site and written in the declaring module. The writing module answers first,
+or a caller declaring its own same-named type takes the answer away from the
+module that wrote the name — this WEP's defect class by the back door. Both
+frames come from the walk's position; the derivation takes no module, so no
+caller can supply a vantage.
+
+There is no fourth tier, and a qualified call does not reach the derivation at
+all where it can avoid it. `Type::method` names its receiver at its own path
+segment, which the resolve pass answered for like any other reference, so
+`impl_target_at` reads that site and the spelling is never split back into an
+identity. Reading the site is what keeps the gate and the resolution naming one
+declaration; where a caller holds only a mangled spelling and has no site to
+give, the derivation above answers, in the frame that wrote the name.
+
+Nor does any tier take a vantage it could get wrong: `decls_named` takes no
+module at all, and the derivation filters it by a frame of the walk's own. That
+is why it cannot be mistaken for a scope, and why
+`no_reachable_function_turns_a_name_into_an_identity` is a statement about
+production code rather than a ratchet over it.
 
 What still prevents some collisions by convention rather than by key is
 `name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
-index that reads that suffix back into a declaration. That is a convention every
-minting site and every lookup site has to keep. The evidence it is a convention:
-closing one fixture — two sibling functions each declaring `struct Box<T>` —
-took seven separate fixes, at type resolution, the struct literal, the WIR
-lookup key, template admission, template lookup, the registration name, and the
-instantiation scan. Each was a distinct caller of the same first-wins index. A
-removed mechanism takes one fix.
-
-- [ ] `Resolutions::declaration_named` / `declared_in` / `value_named` deleted,
-      and the Enforcement bullet they contradict becomes true: a pass holding
-      only a spelling cannot obtain an identity. `DefTable` itself already has
-      no such lookup; these three are what remain.
-      `declared_in` is gone: its callers each held a pair standing in for
-      something they already had, and `TypeLookup`'s whole `*_in(name, module)`
-      family went with it.
-
-      `declaration_named` / `value_named` have six callers left, and they are
-      the hard tail — each is a pass that genuinely has no site, rather than one
-      that mislaid it:
-
-      - `TypeLookup::declaration(name)` is the base of the `*_case(name)`
-        family. Every *written* type reference now reaches the family through
-        `declaration_at`, which asks the site; what is left on the by-name
-        forms is reached holding a resolved type's rendered head — a struct
-        literal's recorded name, a pattern's qualifier, a reflection subject —
-        each of which has the type it came from and should ask that instead.
-      - `decl_key_or_local` (19 callers) and the `canonical_decl_key` it is
-        built on (3 more) are the frame derivation: a name that reaches no import, no declaration of the
-        writing module and no prelude entry, for which only the declaration
-        indexes can answer.
-
-        A trait reference no longer goes through it. `fq_trait_name_undeclared`
-        existed for a bodiless derive naming a stdlib trait the module never
-        `use`d, and the premise was wrong: naming a trait is what `use` is for,
-        and the prelude — its implementation modules included — is in scope
-        everywhere without one, so a name reaching nothing at a bound's site
-        reaches nothing at all. It is deleted; no program in the repository
-        relied on it.
-      - `symbol_named` (8 callers) reads the symbol row behind a name. The four
-        that held an identifier now read its site through `symbol_at`; what is
-        left is reached from a mangled name or a synthesis target.
-      - `find_struct_module_source` answers which module a spelling means, for
-        a synthesised lookup that never had a site.
-      - `static_receiver_keys` files a static call under two vantages, because
-        a receiver that arrived through a namespace prefix lost its qualifier.
-        The call site's path still names the receiver with its owner segment,
-        which the walk answers for under `ns$Type` — the dispatch chain has to
-        carry that site down to here for it to be read.
-- [ ] `NAME_TO_IDENTITY` reduced to what belongs there. Four of the original
-      seven are left: `declaration_named` and `value_named` above, `imported_as`,
-      which answers what a module imported under a local name rather than what a
-      spelling means, and `cm_decl_in`, the Component Model boundary.
-      `decl_named_in`, `canonical_assoc_const_key` and `declare_for_test` are
-      gone. When only the last two are left, the Enforcement bullet above is a
-      statement about production code rather than a ratchet over it.
-
-      `declare_for_test` went with every `#[cfg(test)]` constructor that minted
-      a declaration outside the pass that declares, and with the unit tests
-      resting on them. A feature whose only unit test needs a hole cut in it is
-      covered by `tests/fixtures/` instead, which exercises the real path.
-- [ ] The bound-driven synthesis request key stops carrying a receiver
-      spelling. `synthesis::traits::SynthRequests` holds
-      `(receiver, module, trait)`, and the trait is already a `DefId` while
-      `SynthesisCtx::key` renders the receiver's head to a `String` — a
-      spelling as an equality operand, which §4 and §9 forbid. It does not
-      become a `DefId`: `SynthesisCtx::instance_has_impl` keys a monomorphized
-      instantiation, which no declaration names. It becomes the
-      declaration-or-shape sum this design already has — `TypeHead`, whose
-      `Declared` compares by its `DefId` and whose `Shape` compares by its
-      rendering. `FqTypeName::head` hands one over and `key` discards it. The
-      producers are `TypeTable::record_bound_driven_synth_request` and its
-      elaborator callers.
-- [ ] `SymbolPath`. `LocalMethodName` and `FqTypeName` already serve as the
-      structured identity a name renders from, and nothing parses a rendering
-      back. What is left is that `FqTraitName::args` and
-      `LocalMethodName::method_type_args` are still `Vec<String>` — rendered
-      arguments stored as text. `written_type_args` can now build a structured
-      head for each argument, since the arguments' own reference sites are
-      resolved; what it costs is that `mangle_type_name` and
-      `FqTypeName::mangled` are two renderers, so the mangles have to be brought
-      together rather than assumed to agree.
+index that reads it back into a declaration — a convention every minting and
+lookup site has to keep. Two sibling functions each declaring `struct Box<T>`
+took seven fixes to close, one per caller of that first-wins index; a removed
+mechanism takes one.

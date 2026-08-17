@@ -689,12 +689,14 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
     symbol_by_type: TypeMap<crate::ast::AstId>,
-    /// `(type_name, module, trait_name)` triples that satisfied a `Serialize` /
+    /// `(receiver head, module, trait)` triples that satisfied a `Serialize` /
     /// `Deserialize` / `Eq` / `Ord` bound structurally during elaboration
-    /// (bound-driven synthesis, WEP 2026-06-25). Keyed nominally rather than by
-    /// `TypeId`, so a generic records once against its declaration. Lives on the
-    /// shared `TypeTable` because elaboration runs one `Elaborator` per module.
-    bound_driven_synth_requests: IndexSet<(String, ModuleSource, crate::defs::DefId)>,
+    /// (bound-driven synthesis, WEP 2026-06-25). Keyed by the receiver's head
+    /// rather than by `TypeId`, so a generic records once against its
+    /// declaration. Lives on the shared `TypeTable` because elaboration runs one
+    /// `Elaborator` per module.
+    bound_driven_synth_requests:
+        IndexSet<(crate::name::TypeHead, ModuleSource, crate::defs::DefId)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -1484,28 +1486,41 @@ impl TypeTable {
         &mut self.compiler_items
     }
 
-    /// Record that `type_name` (declared in `module_source`) satisfied a
-    /// `T: <trait_name>` bound structurally (bound-driven synthesis). A
-    /// no-op if already recorded for this triple — the same type is
-    /// typically rediscovered from many call sites, so the pre-check
-    /// avoids reallocating the key each time.
+    /// Record that `head` satisfied a `T: <trait>` bound structurally. A no-op if
+    /// already recorded — the same type is rediscovered from many call sites.
+    ///
+    /// The head is the identity synthesis compares: a declaration by its
+    /// [`crate::defs::DefId`], a shape by its rendering.
     pub fn record_bound_driven_synth_request(
         &mut self,
-        type_name: &str,
+        head: &crate::name::TypeHead,
         module_source: &ModuleSource,
         trait_key: &crate::defs::DefId,
     ) {
         let already_recorded = self
             .bound_driven_synth_requests
             .iter()
-            .any(|(n, m, t)| n == type_name && m == module_source && t == trait_key);
+            .any(|(h, m, t)| h == head && m == module_source && t == trait_key);
         if !already_recorded {
             self.bound_driven_synth_requests.insert((
-                type_name.to_string(),
+                head.clone(),
                 module_source.clone(),
                 *trait_key,
             ));
         }
+    }
+
+    /// [`Self::record_bound_driven_synth_request`] for a receiver held as a
+    /// type: the head comes off the type itself, so it is the same head
+    /// synthesis builds for that receiver.
+    pub fn record_bound_driven_synth_request_for(
+        &mut self,
+        receiver: TypeId,
+        module_source: &ModuleSource,
+        trait_key: &crate::defs::DefId,
+    ) {
+        let head = self.fq_base_type_name(receiver).head().clone();
+        self.record_bound_driven_synth_request(&head, module_source, trait_key);
     }
 
     /// Requests recorded by [`Self::record_bound_driven_synth_request`] so
@@ -1517,7 +1532,7 @@ impl TypeTable {
     pub fn bound_driven_synth_requests(
         &self,
         mut matches: impl FnMut(&crate::defs::DefId) -> bool,
-    ) -> Vec<(String, ModuleSource, crate::defs::DefId)> {
+    ) -> Vec<(crate::name::TypeHead, ModuleSource, crate::defs::DefId)> {
         self.bound_driven_synth_requests
             .iter()
             .filter(|(_, _, trait_key)| matches(trait_key))
@@ -3538,81 +3553,15 @@ impl TypeTable {
         format_type_name(info)
     }
 
-    /// Mangle `id` as a type argument inside a generic instance's or monomorph's
-    /// identity name — the `T` in `Result<unit, T>`. Unlike
-    /// [`Self::mangle_type_name`], every named user-defined head is qualified by
-    /// its declaring `ModuleSource`, or two same-named types collapse onto one
-    /// WIR identity and the second inherits the first's representation.
+    /// Mangle `id` as a type argument inside a generic instance's identity — the
+    /// `T` in `Result<unit, T>`. Unlike [`Self::mangle_type_name`], every named
+    /// head is qualified by its declaring module, or two same-named types collapse.
+    ///
+    /// Delegates to [`crate::name::FqTypeName::to_mangled`], the one renderer, so
+    /// a definition's name and a lookup's cannot disagree.
+    #[must_use]
     pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
-        match self.get(id) {
-            ResolvedType::Variant { def }
-            | ResolvedType::Enum { def }
-            | ResolvedType::Resource { def }
-            | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => {
-                format!("{}/{}", self.def_module(*def), self.def_name(*def))
-            }
-            // A struct mangles as a type argument by its rendered spelling:
-            // `TreeMap<String,i32>` and `TreeMap<String,String>` are distinct
-            // arguments, and naming both `TreeMap` collides the functions
-            // instantiated over them.
-            ResolvedType::Struct { def, type_args } => format!(
-                "{}/{}",
-                self.struct_head_module(*def),
-                self.struct_rendered_name(*def, type_args)
-            ),
-            ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.def_name(*def);
-                let module_source = self.def_module(*def);
-                // Qualify the BASE name of the instance and recursively
-                // qualify each type argument so the result is identical
-                // to the qualified name produced once the instance is
-                // substituted to a `Struct` by the monomorphizer.
-                // Without this, the mangled name flips at the
-                // substitution boundary and downstream registries see
-                // two distinct mangled names for the same logical type.
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.mangle_type_arg_for_generic(*t))
-                    .collect();
-                // A tuple is module-independent, so it carries no module prefix
-                // (its elements stay qualified).
-                if Self::is_tuple_type(name) {
-                    return crate::name::mangle_tuple_type(&args);
-                }
-                let unqualified =
-                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
-                format!("{module_source}/{unqualified}")
-            }
-            // Ref / MutRef are preserved in the mangled output so that
-            // `Box<T>` and `Box<&T>` (semantically distinct instantiations)
-            // map to distinct mangled names. Stripping refs here used to
-            // collapse two `InstantiationKey`s like `[List<char>]` and
-            // `[&List<char>]` to the same mangled function name, breaking
-            // `function_id_for` injectivity in `project.functions`
-            // (issue #1093). Sites that want the "base type name" use
-            // `mangle_type_name` (or `base_type_name`), which peels refs by
-            // delegating through `TypeNameInfo::Ref`.
-            ResolvedType::Ref(inner) => {
-                format!("&{}", self.mangle_type_arg_for_generic(*inner))
-            }
-            ResolvedType::MutRef(inner) => {
-                format!("&mut {}", self.mangle_type_arg_for_generic(*inner))
-            }
-            // A raw GC array must carry its element's *qualified* mangle.
-            // Delegating to `mangle_type_name` (the `_` arm) mangles the
-            // element unqualified, so `Array<Foo>` built from two modules'
-            // same-named structs collapses to one mangle — merging their
-            // otherwise-distinct `$value_copy$` helpers into a single helper
-            // whose one concrete signature then mismatches the other array's
-            // ref type (invalid Wasm). Structs / variants / generic instances
-            // are already module-qualified above; arrays must match.
-            ResolvedType::BuiltinArray(elem) => {
-                crate::name::mangle_builtin_array_type(&self.mangle_type_arg_for_generic(*elem))
-            }
-            // Primitives / functions delegate to `mangle_type_name`.
-            _ => self.mangle_type_name(id),
-        }
+        self.fq_type_name(id).to_mangled()
     }
 
     /// Module-qualifying analogue of

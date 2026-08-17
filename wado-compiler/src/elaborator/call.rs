@@ -15,6 +15,7 @@ use super::instantiate::Instantiation;
 use super::scope::Scope;
 use super::sem::decls::FunctionSig;
 use super::sig::MethodSig;
+use super::trait_env;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
@@ -131,6 +132,22 @@ impl CalleeIdentKind<'_> {
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
+        }
+    }
+
+    /// The reference site of a qualified callee's receiver segment — the `Type` of
+    /// `Type::method`, which the walk answered for in the module that wrote it.
+    ///
+    /// Two segments exactly: consumers pair this with the prefix they split off
+    /// `effective_name`, and only here are the two the same segment. A namespace
+    /// prefix, an unqualified call and `Rewritten` all answer `None`.
+    fn receiver_site(&self) -> Option<ast::AstId> {
+        match self {
+            Self::AsIs(ident) => match ident.segments.as_slice() {
+                [receiver, _method] => Some(receiver.id),
+                _ => None,
+            },
+            _ => None,
         }
     }
 }
@@ -460,6 +477,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let effective_name = callee_kind.effective_name();
+        // The receiver of `Type::method` is named at its own segment, and the
+        // walk answered for it. Every receiver lookup below goes through that
+        // site, so the spelling is never split back into an identity.
+        let receiver_site = callee_kind.receiver_site();
 
         // First, determine expected parameter types to handle coercion.
         let (mut param_types, callee_slots) = self.lookup_function_signature(effective_name);
@@ -631,7 +652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Static method call (Type::method). Static methods are
             // registered with mangled names "Type::method".
-            else if self.is_static_method(prefix, suffix) {
+            else if self.is_static_method_at(receiver_site, prefix, suffix) {
                 // Record the receiver-type segment (prefix) as a reference to
                 // the type's decl. After `Self::` / `T::` rewriting, `prefix`
                 // is the concrete type name and the segment's AstId is the
@@ -791,31 +812,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                // Re-coerce literal-number args to inferred parameter types and
-                // typecheck each arg against the substituted parameter type.
-                // Before inference, the literal args were resolved with `TypeParam`
-                // (or `Unknown`) as the expected type, so they fell back to defaults
-                // (i32/f64). Now that we know the concrete substitution, retry
-                // coercion and verify the inferred type-arg binding is consistent
-                // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
-                // fail because `T` cannot be both `u8` and `u32`).
-                if !method_type_args.is_empty() || !impl_type_args_inferred.is_empty() {
-                    let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    let substituted: Vec<TypeId> = raw_param_types
-                        .iter()
-                        .map(|&t| self.substitute_type_params(t, &combined_type_args))
-                        .collect();
-                    self.recoerce_literal_args(&call.args, &mut args, &substituted);
-                    for (i, arg) in args.iter().enumerate() {
-                        if let Some(&expected) = substituted.get(i) {
-                            self.typecheck(
-                                arg.type_id,
-                                expected,
-                                call.args.get(i).map_or(call.span, ast::Expr::span),
-                            );
-                        }
+                // Literal args resolved against `TypeParam`/`Unknown` fell back to
+                // i32/f64, so re-coerce once the substitution is known. A
+                // non-generic call is checked too, or a mismatch only shows at
+                // codegen, as an invalid module rather than at its own span.
+                let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let substituted: Vec<TypeId> =
+                    if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
+                        raw_param_types
+                    } else {
+                        let mut combined_type_args = impl_type_args_inferred.clone();
+                        combined_type_args.extend_from_slice(&method_type_args);
+                        raw_param_types
+                            .iter()
+                            .map(|&t| self.substitute_type_params(t, &combined_type_args))
+                            .collect()
+                    };
+                self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                for (i, arg) in args.iter().enumerate() {
+                    if let Some(&expected) = substituted.get(i) {
+                        self.typecheck(
+                            arg.type_id,
+                            expected,
+                            call.args.get(i).map_or(call.span, ast::Expr::span),
+                        );
                     }
                 }
 
@@ -1145,8 +1165,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type =
-                        self.lookup_static_method_return_type(&method_ref, &final_mangled);
+                    let mut return_type = self.lookup_static_method_return_type(
+                        &method_ref,
+                        &receiver,
+                        &final_mangled,
+                    );
                     if !method_type_args.is_empty() {
                         return_type = self.substitute_type_params(return_type, &method_type_args);
                     }
@@ -1162,33 +1185,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     };
 
-                    let param_is_mut =
-                        self.lookup_static_method_param_is_mut(type_name, method_name);
+                    // The importing module never names `Type` on its own, so a
+                    // bare-name key reaches nothing and every `mut` parameter
+                    // would read as non-mut for the mutation and alias passes.
+                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                    });
+                    let param_is_mut = self.lookup_static_method_param_is_mut_keyed(
+                        type_name,
+                        method_name,
+                        ns_key.as_ref(),
+                    );
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
                         name: final_mangled,
                         monomorph_info,
+                        // The receiver `final_mangled` was built from: DCE and
+                        // monomorphization key on this, so a different one here
+                        // names a different type than the call reaches.
                         method_info: Some(LocalMethodName::new(
-                            self.qualified_receiver_name(type_name),
+                            receiver,
                             trait_name,
                             method_name.to_string(),
                         )),
                     };
 
-                    // Record so reify replays the same Call shape via its
-                    // `static_method_dispatch` early return — without
-                    // re-running `locate_static_method_impl` /
-                    // `lookup_static_method_*` from the AST alone. Carry the
-                    // parameter defaults so reify pads omitted trailing
-                    // arguments, matching the unqualified `Type::method()` path.
+                    // Recorded so reify replays this Call shape without re-running
+                    // dispatch. Empty defaults would leave codegen a call short an
+                    // argument; empty types would leave reify padding untyped.
                     let param_defaults = self.lookup_static_method_param_defaults_keyed(
                         type_name,
                         method_name,
-                        None,
+                        ns_key.as_ref(),
                     );
-                    let param_types =
-                        self.lookup_static_method_param_types_keyed(type_name, method_name, None);
+                    let param_types = self.lookup_static_method_param_types_keyed(
+                        type_name,
+                        method_name,
+                        ns_key.as_ref(),
+                    );
+                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
+                        param_types.clone()
+                    } else {
+                        param_types
+                            .iter()
+                            .map(|&t| self.substitute_type_params(t, &method_type_args))
+                            .collect()
+                    };
+                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    for (i, arg) in args.iter().enumerate() {
+                        if let Some(&expected) = checked.get(i) {
+                            self.typecheck(
+                                arg.type_id,
+                                expected,
+                                call.args.get(i).map_or(call.span, ast::Expr::span),
+                            );
+                        }
+                    }
+
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
@@ -1702,6 +1756,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
                 return (params, Vec::new());
+            }
+
+            // A namespace member's signature lives in that module, which no
+            // bare-name lookup reaches. Without it the arguments resolve with no
+            // expected type, so a sequence literal never coerces to its `List`
+            // parameter and reaches codegen mismatched.
+            if self.sem.imports.namespace_imports.contains_key(prefix) {
+                let ns_source = self.sem.imports.namespace_imports[prefix].clone();
+                if let Some(sig) = self.tysys.signatures.function_sig(&ns_source, suffix) {
+                    return (
+                        sig.decl.param_types.clone(),
+                        sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
+                    );
+                }
+                // `is_static_method` above declines the `ns::Type::method`
+                // shape, so the receiver resolves through the namespace instead.
+                if let Some((type_name, method_name)) = suffix.split_once("::")
+                    && let Some(def) = self.namespace_member(prefix, type_name)
+                {
+                    let ns_key =
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+                    let params = self.lookup_static_method_param_types_keyed(
+                        type_name,
+                        method_name,
+                        Some(&ns_key),
+                    );
+                    if !params.is_empty() {
+                        let slots = self.lookup_static_method_slots_keyed(method_name, &ns_key);
+                        return (params, slots);
+                    }
+                }
             }
             return (Vec::new(), Vec::new());
         }
@@ -2577,7 +2662,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The canonical signature of the receiver-less method `method_name` on
-    /// `struct_name` — declared by an `impl` block or by a `resource`.
+    /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
+    /// hold a name split out of a mangled spelling, so there is no site to take.
     pub(super) fn static_method_sig(
         &self,
         struct_name: &str,
@@ -2867,9 +2953,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let final_return_type = return_type;
 
             // Build method_info with is_type_param_receiver = true
-            let method_type_arg_names: Vec<String> = method_type_args
+            let method_type_arg_names: Vec<FqTypeName> = method_type_args
                 .iter()
-                .map(|t| self.tysys.type_table.borrow().mangle_type_name(*t))
+                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
             let mut method_info = LocalMethodName::new(
                 FqTypeName::binder(type_param_name),

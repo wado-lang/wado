@@ -442,9 +442,9 @@ pub(crate) struct FromCallFacts {
     /// `type_name(target_type)` — the call's struct prefix
     /// (`LocalMethodName::struct_name` / `base_struct_name`).
     pub(crate) target_name: crate::name::FqTypeName,
-    /// `type_name(from_type)` — the conversion source type's name,
-    /// used to build `LocalMethodName::trait_name`'s `From<…>` form.
-    pub(crate) from_name: String,
+    /// `fq_type_name(from_type)` — the conversion source type, used to build
+    /// `LocalMethodName::trait_name`'s `From<…>` form.
+    pub(crate) from_name: crate::name::FqTypeName,
     /// The `From` trait, named by the module that declares it.
     pub(crate) from_trait_name: crate::name::FqTraitName,
 }

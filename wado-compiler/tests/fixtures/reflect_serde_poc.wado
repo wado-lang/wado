@@ -265,7 +265,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> FromWire for L {
                 let policy = ReflectFlags::<L>::wire_name_policy();
                 let mut raw: u64 = 0;
                 for let item of items {
-                    let name = String::from_wire(&item)?;
+                    let name = String::from_wire(item)?;
                     let mut found = false;
                     for let bit of ReflectFlags::<L>::members() {
                         if wire_name(&bit, policy) == name {

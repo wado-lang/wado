@@ -2164,6 +2164,13 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) local_item_renders: &'a IndexMap<(String, ModuleSource), crate::defs::DefId>,
     /// The local items in scope at the walk's position, highest precedence.
     pub(crate) fn_local_items: &'a IndexMap<String, crate::defs::DefId>,
+    /// The declaration indexes — the frame derivation, for a caller holding a
+    /// rendered head rather than the site that wrote one. They hold what
+    /// modules *declare*, so no import alias can steer them, and they decline
+    /// when several modules declare the name. `None` for the collection passes
+    /// that run before the indexes exist; every name they resolve is written,
+    /// so its site answers.
+    pub(crate) decls: Option<&'a super::trait_env::TraitEnv>,
 }
 
 impl<'a> TypeLookup<'a> {
@@ -2276,27 +2283,38 @@ impl<'a> TypeLookup<'a> {
         }
     }
 
-    /// Which declaration `name` reaches from the module this view stands in.
+    /// Which declaration `name` names in the frame this view stands in — for a
+    /// caller holding a rendering. Not a scope: a name with a site goes through
+    /// [`Self::declaration_at`], which reads what the resolve pass recorded.
     ///
-    /// The one place a `TypeLookup` turns a spelling into an identity, and it
-    /// does not do the turning: [`crate::resolve::Resolutions`] answered it
-    /// once, in the module that wrote the name. The function-local items ahead
-    /// of it are the walk's own position — a local item is visible only after
-    /// its declaration statement, which no whole-program table records.
+    /// The function-local items tried ahead of the indexes are the walk's own
+    /// position; a local item is visible only after its declaration statement.
     pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
         let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
         if let Some(def) = self.fn_local_items.get(name) {
             return Some(*def);
         }
+        // The frame derivation. A *written* reference reaches this view through
+        // `declaration_at`, which asks the site the walk answered for; what is
+        // left here arrived holding a rendered head, for which only the
+        // declaration index can answer. The three tiers are the module's own
+        // reach — what it imported, what it declares, what the prelude gives
+        // it — so a declaration this module cannot see stays unseen here.
         self.resolutions
-            .declaration_named(self.current_module_source, name)
+            .imported_as(self.current_module_source, name)
+            .or_else(|| {
+                self.decls?
+                    .decls_named(name)
+                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
+            })
+            .or_else(|| self.resolutions.prelude_decl(name))
     }
 
     /// [`Self::declaration`], falling back to the local-item rendering index
     /// for a caller that arrived holding a `{name}@{AstId}` spelling rather
     /// than the declaration it renders.
-    fn declaration_or_render(&self, name: &str) -> Option<crate::defs::DefId> {
+    pub(super) fn declaration_or_render(&self, name: &str) -> Option<crate::defs::DefId> {
         self.declaration(name).or_else(|| {
             self.local_item_renders
                 .get(&(name.to_string(), self.current_module_source.clone()))

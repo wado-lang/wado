@@ -751,7 +751,12 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
         names.array_fq.clone(),
-        Some(names.index_value.clone().with_args(vec!["i32".to_string()])),
+        Some(
+            names
+                .index_value
+                .clone()
+                .with_args(vec![crate::name::FqTypeName::builtin("i32")]),
+        ),
         "index_value".to_string(),
     );
     let iv_mangled = iv_info.to_mangled_name();

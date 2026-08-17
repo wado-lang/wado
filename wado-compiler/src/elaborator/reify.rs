@@ -269,14 +269,24 @@ pub(crate) struct CallSiteLocation {
 impl<'a, H: CompilerHost> Reify<'a, H> {
     /// The symbol `name` reaches from `module` — see
     /// [`super::Elaborator::symbol_named`], which answers the same way from the
-    /// same table, so annotate and reify cannot disagree about what a name
+    /// same tables, so annotate and reify cannot disagree about what a name
     /// means.
     pub(crate) fn symbol_named(
         &self,
         module: &ModuleSource,
         name: &str,
     ) -> Option<&'a crate::symbol::Symbol> {
-        let def = self.tysys.resolutions.declaration_named(module, name)?;
+        // Three recorded facts, in the order the scope stores them and none of
+        // them a walk: what this module `use`d under the name, what it declares
+        // itself, and what the prelude puts in scope everywhere. No spelling
+        // another module happens to share can steer any of them.
+        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
+            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
+        }
+        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
+            return Some(symbol);
+        }
+        let def = self.tysys.resolutions.prelude_decl(name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
@@ -466,6 +476,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // repopulates.
             local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
+            decls: Some(&self.tysys.trait_env),
         }
     }
 

@@ -1,0 +1,23 @@
+// A static method checks its arguments like every other call; unchecked, a
+// mismatch reached codegen instead of its own span.
+struct Acc {
+    total: i32,
+}
+
+impl Acc {
+    fn sum(xs: List<i32>) -> i32 {
+        let mut t = 0;
+        for let x of xs {
+            t = t + x;
+        }
+        return t;
+    }
+}
+
+test "mismatched argument to a static method" {
+    let xs = [1, 2, 3];
+    assert Acc::sum(xs) == 6;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'List<i32>', found '[i32, i32, i32]'"}
