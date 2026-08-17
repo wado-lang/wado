@@ -5221,13 +5221,8 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
     return null;
 }
 
-/// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented with
-/// error-path recovery for RuleRef inners: when the lookahead is in the
-/// inner's FIRST set (so an element plausibly starts here) but the scan
-/// failed, re-parse the inner for real. The result is kept only if it actually
-/// recovered (a diagnostic was recorded or `recovering` was set), so a broken
-/// element lands in the tree; a clean re-parse is undone and the loop breaks,
-/// preserving valid-input behaviour where the scan merely under-approximated.
+/// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented on the error
+/// path with a diagnostic-only re-parse of a RuleRef inner (see the body).
 fn gen_rep_break_with_recovery(
     w: &mut CodeWriter,
     scan_pos: &String,
@@ -5249,25 +5244,14 @@ fn gen_rep_break_with_recovery(
             return;
         }
         w.begin(&`if ${scan_pos} < 0`);
-        // The scan failed but the lookahead is in the body's FIRST set, so a
-        // malformed element *plausibly* starts here. Parse it for real and keep
-        // the result only if it actually recovered (recorded a diagnostic or set
-        // `recovering`): then its repair edits stay in the tree and the cursor
-        // advances past the broken element. If instead it parsed cleanly, the
-        // scan merely under-approximated a valid element that belongs to the
-        // caller's continuation — undo the speculative parse and break, the
-        // behaviour-preserving loop exit. (Without this guard, stealing such an
-        // element from the caller mis-parses valid input.)
+        // Gate on the body's FIRST set, so the probe has something to report.
         w.begin(&`if ${ctx.first_check_str(loop_first)}`);
-        // Speculative, diagnostic-only re-parse: the lookahead is in the body's
-        // FIRST set, so an element *plausibly* starts here, but the scan failed.
-        // Static scan cannot tell a malformed element (recover, keep) from a
-        // valid one that belongs to the caller's continuation (yield, drop) — a
-        // trailing `expression?` after `statement*` looks identical to a
-        // malformed statement. Committing edits would steal the caller's tokens,
-        // so run the probe under `speculating` (no edits), keep only the deepest
-        // error it records in `pending` (surfaced if the overall parse fails),
-        // restore the cursor / tree / flags, and exit the loop.
+        // Backtracking, and deliberate — the standing rule covers the accept
+        // path, and this runs only once the scan has failed. Committing edits
+        // would steal the caller's tokens, so everything but `pending` is
+        // rolled back: that message is what points the diagnostic at the
+        // offending token rather than the start of input
+        // (`driver_cst_error_recovery_test`).
         w.line(&"let _rec_pos = p.pos;");
         w.line(&"let _rec_cp = p.b.checkpoint();");
         w.line(&"let _rec_sav = p.recovering;");
@@ -6252,15 +6236,6 @@ fn gen_prediction_code(
     gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display);
 }
 
-/// Emit the per-decision preamble for a save-and-rewind speculative alt
-/// dispatch: snapshot the cursor, the builder, and the pending error so a
-/// rejected alt can be rolled back completely.
-fn emit_spec_alt_preamble(w: &mut CodeWriter) {
-    w.line(&"let saved = p.pos;");
-    w.line(&"let _spec_cp = p.b.checkpoint();");
-    w.line(&"let _spec_pend = p.pending;");
-    w.line(&"let _spec_code = p.pending_code;");
-}
 
 /// Emit the per-alt index dispatch shared by the longest-match tournament
 /// (`var` = `_sd_best_i`) and the AtEndConflict ATN route (`var` = `_atn_alt`):
@@ -6289,32 +6264,6 @@ fn emit_index_pick_dispatch(
     w.line(&`return ${*fn_name}_alt_${last_idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
 }
 
-/// Emit one speculative alt attempt. The alt runs under `speculating` so a
-/// deeper mismatch records no recovery edits and only sets `recovering`; on
-/// failure the cursor, builder, and pending error are rolled back to the
-/// `emit_spec_alt_preamble` snapshot and the next alt is tried, on success the
-/// rule returns. Mirrors the repeat probe in `gen_rep_break_with_recovery`.
-fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenContext, rule_display: &String) {
-    w.line(&"let _ss = p.speculating;");
-    w.line(&"p.speculating = true;");
-    w.line(&`${*call};`);
-    w.line(&"p.speculating = _ss;");
-    w.begin(&"if p.recovering");
-    if ctx.is_trace() {
-        w.line(&`trace_try(p, &${str_lit(*rule_display)}, ${idx}, false);`);
-    }
-    w.line(&"p.pos = saved;");
-    w.line(&"p.b.truncate(_spec_cp);");
-    w.line(&"p.pending = _spec_pend;");
-    w.line(&"p.pending_code = _spec_code;");
-    w.line(&"p.recovering = false;");
-    w.else_begin(&"else");
-    if ctx.is_trace() {
-        w.line(&`trace_try(p, &${str_lit(*rule_display)}, ${idx}, true);`);
-    }
-    emit_no_viable_return(w, ctx);
-    w.end();
-}
 
 /// Whether a `Consume` node's terminal really is every reachable alt's element
 /// at `skip`, and so whether emit advances the cursor past it. Read by both
@@ -6534,107 +6483,17 @@ fn gen_prediction_code_inner(
                     emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
                     return;
                 }
-                // Check if any alternatives have scan functions available.
-                // If ALL non-last alternatives have scans, we run a longest-match
-                // scan tournament: scan each, parse the winner. If some have
-                // scans and some don't, use a hybrid approach.
-                let mut all_have_scans = true;
-                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                    let idx = sorted_indices[i];
-                    if !alt_has_scan(&alts[idx].elements, ctx) {
-                        all_have_scans = false;
-                        break;
-                    }
-                }
-
-                if all_have_scans && sorted_indices.len() >= 2 {
-                    // All non-last alternatives have scan functions.
-                    // Check if ALL scans are full (cover entire alternative) —
-                    // including the last alt, which we need to scan for
-                    // longest-match dispatch.
-                    if alts_all_scan_full(&sorted_indices, alts, ctx) {
-                        emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
-                    } else {
-                        // Some scans are partial — scan success is a hint,
-                        // not a guarantee. Use save/restore with scan guards.
-                        emit_spec_alt_preamble(w);
-                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                            let idx = sorted_indices[i];
-                            let is_last = i == sorted_indices.len() - 1;
-                            if is_last {
-                                if ctx.is_trace() {
-                                    w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                                }
-                                w.line(
-                                    &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
-                                );
-                            } else {
-                                let has_scan = alt_has_scan(&alts[idx].elements, ctx);
-                                let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
-                                if is_full {
-                                    // Full scan: success guarantees parse success.
-                                    w.begin(
-                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
-                                    );
-                                    if ctx.is_trace() {
-                                        w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                                    }
-                                    w.line(
-                                        &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(
-                                            ctx,
-                                        )});`,
-                                    );
-                                    w.end();
-                                } else if has_scan {
-                                    // Partial scan: try parse, fall through on failure.
-                                    w.begin(
-                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
-                                    );
-                                    emit_spec_alt_try(
-                                        w,
-                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                        idx,
-                                        ctx,
-                                        rule_display,
-                                    );
-                                    w.end();
-                                } else {
-                                    // No scan: save-and-rewind speculative parse.
-                                    emit_spec_alt_try(
-                                        w,
-                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                        idx,
-                                        ctx,
-                                        rule_display,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Fallback: save-and-rewind speculative parse pattern.
-                    emit_spec_alt_preamble(w);
-                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                        let idx = sorted_indices[i];
-                        let is_last = i == sorted_indices.len() - 1;
-                        if is_last {
-                            if ctx.is_trace() {
-                                w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                            }
-                            w.line(
-                                &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
-                            );
-                        } else {
-                            emit_spec_alt_try(
-                                w,
-                                &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                idx,
-                                ctx,
-                                rule_display,
-                            );
-                        }
-                    }
-                }
+                // Every alternative reaching codegen scans in full:
+                // non-scannability's only source is a `RuleRef` to a name that
+                // is not a parser rule, which `ir.wado` rejects first. The
+                // partial-scan and no-scan lowerings this retires were a
+                // try-fail-retry backtracker, so assert the premise instead of
+                // keeping a path only breaking it can reach.
+                assert sorted_indices.len() >= 2,
+                    `Ambiguous node for ${*rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
+                let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
+                assert all_scan_full, `an alternative of ${*rule_display} is not fully scannable`;
+                emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
             } else {
                 // Prefix already consumed — should not happen.
                 // Consume nodes that lead to Ambiguous are stripped at build time.
@@ -6723,40 +6582,12 @@ fn collect_referenced_scan_alts(
             if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
                 return;
             }
+            // The emit's tournament scans every alt, in this order.
             let mut sorted_indices = a.alts.sorted();
             sort_group_by_element_count(&mut sorted_indices, alts);
-            let mut all_have_scans = true;
-            for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                if !alt_has_scan(&alts[sorted_indices[i]].elements, ctx) {
-                    all_have_scans = false;
-                    break;
-                }
-            }
-            if !(all_have_scans && sorted_indices.len() >= 2) {
-                return;
-            }
-            // `all_full` ⇒ longest-match tournament scans every alt; otherwise
-            // the hybrid path scans only the non-last alts that have a scan.
-            let mut all_full = true;
-            for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                let idx = sorted_indices[i];
-                if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
-                    all_full = false;
-                    break;
-                }
-            }
-            if all_full {
-                for let idx of &sorted_indices {
-                    if !out.contains(idx) {
-                        out.push(*idx);
-                    }
-                }
-            } else {
-                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                    let idx = sorted_indices[i];
-                    if alt_has_scan(&alts[idx].elements, ctx) && !out.contains(&idx) {
-                        out.push(idx);
-                    }
+            for let idx of &sorted_indices {
+                if !out.contains(idx) {
+                    out.push(*idx);
                 }
             }
         },

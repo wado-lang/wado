@@ -33,14 +33,6 @@ Empty right now.
 
 - [ ] A rule-argument action whose host type contains `[]` (`r[int[] arr]`) ends early and its remainder leaks into the grammar text: the action stripper ends a `[...]` at the first unescaped `]`, which is right for the char sets the corpus does exercise. No corpus grammar hits this.
 
-### Generated-code smells — recorded, not queued
-
-Rollback shapes in the emitted parser, each against the "No backtracking, ever" standing rule in [`AGENTS.md`](./AGENTS.md). None is known to mis-parse anything today.
-
-- [ ] The repeat-exit recovery probe (`let _rec_pos = p.pos;`, 51 sites in the Rust parser, 70 files corpus-wide) re-parses the loop body under `speculating` and restores cursor, builder and flags, so its only surviving effect is a better `pending` message — an unbounded recursive parse bought for a diagnostic, over input the scan already walked.
-- [ ] `emit_spec_alt_try` is a literal try-fail-retry: parse an alt, rewind cursor / tree / pending on `recovering`, try the next. **No grammar in the committed corpus reaches it** (`_spec_cp` matches nothing under `tests/generated/`). Delete the path or add a fixture — an untested backtracker is worse than either.
-- [ ] `TreeBuilder::checkpoint` / `truncate` serve only those two yet are emitted into every generated file; `cst_json` never calls `truncate`. Gate them the way `follow` / `atn` are gated.
-
 ## Stage C — action / predicate execution
 
 Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
