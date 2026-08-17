@@ -2906,6 +2906,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return coerced.type_id;
         }
 
+        // Tuple literal cast to a tuple type: `[1, 2] as [i64, i64]`. Each
+        // element takes the target's own element type, exactly as the annotated
+        // form does — resolving the literal on its own would type it `[i32,
+        // i32]` and leave codegen a `StructNew` of the wrong shape. A spread
+        // element needs the general path, which expands it.
+        let has_spread = matches!(&cast.expr, ast::Expr::TupleLiteral(t)
+            if t.elements.iter().any(|e| matches!(e, ast::Expr::Spread(..))));
+        let expected_elems = self.tysys.type_table.borrow().as_tuple(target_type);
+        if let ast::Expr::TupleLiteral(tuple_lit) = &cast.expr
+            && !has_spread
+            && let Some(expected_elems) = expected_elems
+        {
+            if tuple_lit.elements.len() != expected_elems.len() {
+                let from_name = self.tysys.type_table.borrow().type_name(target_type);
+                let _ = self.emit(TypeError::InvalidCast {
+                    from: format!("a {}-element tuple", tuple_lit.elements.len()),
+                    to: from_name,
+                    hint: "the two tuples have different arities".to_string(),
+                    span: cast.span,
+                });
+                return target_type;
+            }
+            for (elem, expected) in tuple_lit.elements.iter().zip(expected_elems) {
+                let resolved = self.resolve_expr(elem, ctx, Some(expected));
+                self.typecheck(resolved, expected, elem.span());
+            }
+            self.sem
+                .types
+                .expression_types
+                .insert(cast.expr.id(), target_type);
+            return target_type;
+        }
+        // A spread needs the general literal path, which expands it. Typecheck
+        // the result against the target so a widening the expansion cannot do
+        // reads as the mismatch the annotated form reports, not an ICE.
+        if matches!(&cast.expr, ast::Expr::TupleLiteral(_))
+            && has_spread
+            && expected_elems.is_some()
+        {
+            let resolved = self.resolve_expr(&cast.expr, ctx, Some(target_type));
+            self.typecheck(resolved, target_type, cast.expr.span());
+            return target_type;
+        }
+
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
         let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {

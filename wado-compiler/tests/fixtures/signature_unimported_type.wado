@@ -1,0 +1,20 @@
+// A signature's types reach every caller's locals, so an unresolved one leaks
+// the same untyped local a `let` annotation would.
+
+use { from_bytes } from "core:json";
+
+struct Rec {
+    a: String,
+}
+
+fn helper() -> Result<Rec, DeserializeError> {
+    let bytes: ByteList = [0x7b, 0x7d];
+    return from_bytes(bytes);
+}
+
+export fn run() {
+    let parsed = helper();
+}
+
+__DATA__
+{"compile_error": "unknown type 'DeserializeError'"}

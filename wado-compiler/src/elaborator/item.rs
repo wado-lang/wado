@@ -2050,6 +2050,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
         let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
+        // A signature's types reach every caller's locals, so an unresolved one
+        // leaks the same untyped local a `let` annotation would (see
+        // `reject_unresolved_annotation`). The frame still holds this
+        // function's own type parameters here, so they are not mistaken for
+        // unknown names.
+        for param in &func.params {
+            scope.reject_unresolved_annotation(&param.ty);
+        }
+        if let Some(ty) = func.return_type.as_ref() {
+            scope.reject_unresolved_annotation(ty);
+        }
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
         drop(scope);
         self.sem

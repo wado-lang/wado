@@ -369,7 +369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reaches WIR build as a local with no type. A `let` annotation names no
     /// type parameter it does not already have in scope, so the site's answer
     /// is decisive here in a way it is not in a bound or signature position.
-    fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
+    pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
         if self.logger.has_errors() {
             return;
         }
