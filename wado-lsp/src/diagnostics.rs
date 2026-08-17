@@ -74,12 +74,13 @@ fn span_to_range(
     encoding: PositionEncoding,
 ) -> Range {
     // A `DiagnosticSpan`'s end is optional, unlike a lexer `Span`'s: default it
-    // to a one-column range on the start line. Everything after that is the
-    // same conversion every other query does, so it happens in one place.
+    // to a one-column range on the start line. `max(1)` keeps that width for a
+    // span whose column is 0 — kiln generator diagnostics report one — because
+    // the conversion subtracts 1 from both ends.
     let end_line = span.end_line.unwrap_or(span.line);
     let end_column = span
         .end_column
-        .unwrap_or_else(|| span.column.saturating_add(1));
+        .unwrap_or_else(|| span.column.max(1).saturating_add(1));
     text::range_from_codepoints(
         (span.line, span.column),
         (end_line, end_column),
@@ -317,6 +318,28 @@ mod tests {
         .unwrap();
         // Codepoint 5 → "// 🦀" → 3 ASCII + 1 codepoint (2 utf-16 units) = 5 utf-16 units.
         assert_eq!(diag.range.start.character, 5);
+    }
+
+    #[test]
+    fn zero_column_span_without_an_end_stays_one_column_wide() {
+        // Kiln generator diagnostics report `column: 0`. Deriving the default
+        // end in 1-based space and then decrementing collapsed those to a
+        // zero-width range the editor draws nothing for.
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "generator said so".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "gen.wado".to_string(),
+                line: 0,
+                column: 0,
+                end_line: None,
+                end_column: None,
+            }),
+        };
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
+        assert_eq!(diag.range.start.character, 0);
+        assert_eq!(diag.range.end.character, 1, "range must not be zero-width");
     }
 
     #[test]

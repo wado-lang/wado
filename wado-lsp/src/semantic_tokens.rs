@@ -301,9 +301,10 @@ impl AstVisitor for SpanCollector {
         match ty {
             Type::Named(t) => self.spans.insert(t.span.start, token_type::TYPE),
             Type::Generic(t) => self.spans.insert(t.span.start, token_type::TYPE),
-            // The span covers `ns::name<args>`, so its start is the namespace.
-            Type::NamespacedGeneric(t) => self.spans.insert(t.span.start, token_type::NAMESPACE),
-            Type::Function(_)
+            // `ns::Value` and `Self::Item` parse to the same node, so the head
+            // is not knowably a namespace; leave it to the symbol map.
+            Type::NamespacedGeneric(_)
+            | Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
@@ -832,12 +833,12 @@ mod tests {
     }
 
     #[test]
-    fn namespaced_generic_namespace_is_a_namespace() {
-        // The legend has advertised `namespace` since the first version while
-        // nothing ever emitted it.
-        let src = "use { Value } from \"core:json\";\nfn f(v: json::Value<i32>) {}\n";
+    fn associated_type_qualifier_is_not_a_namespace() {
+        // `Self::Item` and `json::Value` parse to the same node, so the AST
+        // cannot call the head a namespace — `Self` is a type.
+        let src = "trait T {\n    type Item;\n    fn get(&self) -> Self::Item<i32>;\n}\n";
         let tokens = compute(src, None);
-        assert_eq!(kind_of(&tokens, src, 1, "json"), token_type::NAMESPACE);
+        assert_ne!(kind_of(&tokens, src, 2, "Self"), token_type::NAMESPACE);
     }
 
     #[test]
