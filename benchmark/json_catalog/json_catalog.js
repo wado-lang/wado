@@ -71,7 +71,10 @@ const catalogObj = JSON.parse(jsonData);
 
 console.log(`json-catalog: ${size} bytes`);
 
-bench("Ser", size, "B", () => JSON.stringify(catalogObj).length);
+// Encoded, because `String.length` counts UTF-16 units rather than UTF-8 bytes,
+// and the other two rows produce UTF-8 bytes.
+const encoder = new TextEncoder();
+bench("Ser", size, "B", () => encoder.encode(JSON.stringify(catalogObj)).length);
 
 const counts = bench("De", size, "B", () => {
   const catalog = JSON.parse(jsonData);

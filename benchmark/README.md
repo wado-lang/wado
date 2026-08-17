@@ -46,8 +46,8 @@ Sieve of Eratosthenes up to 2M (array operations).
 | JavaScript     | 553.17 M nums/s | 3.615 ms | 1.94x   |
 | **Wado**       | 378.61 M nums/s | 5.282 ms | 2.84x   |
 
-The 2 MB buffer stays within the L2 TLB's 4K-page reach: at 32M the same code
-swings 38% on whether a runtime's allocator got transparent huge pages.
+The 2 MB buffer stays within the L2 TLB's 4K-page reach. A larger one makes the
+row turn on whether a runtime's allocator got transparent huge pages.
 
 ### Float-to-String
 
@@ -68,6 +68,11 @@ against `serde_json` (Rust) and `JSON.stringify` / `JSON.parse` (JS), CBOR puts
 JSON source size in both, so the CBOR figures stay readable next to the JSON
 ones; `vs best` ranks within one codec.
 
+Every serialize row produces UTF-8 bytes — the JS one encodes with
+`TextEncoder`, since `String.length` counts UTF-16 units. Deserialize is not
+symmetric: Rust and Wado build a typed struct tree, `JSON.parse` an untyped
+object graph with no field or type checking.
+
 ### twitter
 
 `twitter.json` (631514 bytes): a Twitter API search response with 100 statuses.
@@ -76,17 +81,17 @@ JSON serialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)    |   2.12 GB/s | 0.298 ms | 1.00x   |
-| JavaScript (JSON)    |   1.91 GB/s | 0.330 ms | 1.11x   |
-| **Wado** (core:json) | 643.16 MB/s | 0.981 ms | 3.29x   |
+| Rust (serde_json)    |   2.01 GB/s | 0.314 ms | 1.00x   |
+| JavaScript (JSON)    |   1.50 GB/s | 0.421 ms | 1.34x   |
+| **Wado** (core:json) | 615.58 MB/s | 1.025 ms | 3.26x   |
 
 JSON deserialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)    | 896.53 MB/s | 0.704 ms | 1.00x   |
-| JavaScript (JSON)    | 658.11 MB/s | 0.960 ms | 1.36x   |
-| **Wado** (core:json) | 164.71 MB/s | 3.834 ms | 5.45x   |
+| Rust (serde_json)    | 856.10 MB/s | 0.738 ms | 1.00x   |
+| JavaScript (JSON)    | 663.19 MB/s | 0.952 ms | 1.29x   |
+| **Wado** (core:json) | 156.18 MB/s | 4.043 ms | 5.48x   |
 
 CBOR serialize:
 
@@ -111,17 +116,17 @@ JSON serialize:
 
 | Implementation       |  Throughput |   ms/iter | vs best |
 | -------------------- | ----------: | --------: | ------- |
-| Rust (serde_json)    | 961.14 MB/s |  2.342 ms | 1.00x   |
-| JavaScript (JSON)    | 594.45 MB/s |  3.787 ms | 1.62x   |
-| **Wado** (core:json) | 173.44 MB/s | 12.978 ms | 5.54x   |
+| Rust (serde_json)    | 920.59 MB/s |  2.445 ms | 1.00x   |
+| JavaScript (JSON)    | 577.79 MB/s |  3.896 ms | 1.59x   |
+| **Wado** (core:json) | 166.58 MB/s | 13.513 ms | 5.53x   |
 
 JSON deserialize:
 
 | Implementation       |  Throughput |   ms/iter | vs best |
 | -------------------- | ----------: | --------: | ------- |
-| JavaScript (JSON)    | 432.44 MB/s |  5.206 ms | 1.00x   |
-| Rust (serde_json)    | 355.59 MB/s |  6.330 ms | 1.22x   |
-| **Wado** (core:json) | 175.29 MB/s | 12.841 ms | 2.47x   |
+| JavaScript (JSON)    | 429.78 MB/s |  5.238 ms | 1.00x   |
+| Rust (serde_json)    | 343.80 MB/s |  6.548 ms | 1.25x   |
+| **Wado** (core:json) | 173.85 MB/s | 12.947 ms | 2.47x   |
 
 CBOR serialize:
 
@@ -146,18 +151,18 @@ JSON serialize:
 
 | Implementation       | Throughput |  ms/iter | vs best |
 | -------------------- | ---------: | -------: | ------- |
-| Rust (serde_json)    |  4.06 GB/s | 0.425 ms | 1.00x   |
-| JavaScript (JSON)    |  1.54 GB/s | 1.124 ms | 2.64x   |
-| **Wado** (core:json) |  1.08 GB/s | 1.606 ms | 3.78x   |
+| Rust (serde_json)    |  3.92 GB/s | 0.440 ms | 1.00x   |
+| JavaScript (JSON)    |  1.43 GB/s | 1.204 ms | 2.74x   |
+| **Wado** (core:json) |  1.03 GB/s | 1.678 ms | 3.81x   |
 
 JSON deserialize:
 
 | Implementation        |  Throughput |  ms/iter | vs best |
 | --------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)     |   1.18 GB/s | 1.469 ms | 1.00x   |
-| JavaScript (JSON)     | 912.85 MB/s | 1.892 ms | 1.29x   |
-| **Wado** (PoC parser) | 405.15 MB/s | 4.263 ms | 2.90x   |
-| **Wado** (core:json)  | 270.31 MB/s | 6.389 ms | 4.35x   |
+| Rust (serde_json)     |   1.14 GB/s | 1.514 ms | 1.00x   |
+| JavaScript (JSON)     | 873.77 MB/s | 1.977 ms | 1.31x   |
+| **Wado** (PoC parser) | 394.38 MB/s | 4.379 ms | 2.89x   |
+| **Wado** (core:json)  | 272.46 MB/s | 6.339 ms | 4.19x   |
 
 The PoC row (`json_catalog_v2.wado`) is a hand-written parser for this one
 schema, not a general decoder. It is the mark `core:json` should reach first.
@@ -181,8 +186,8 @@ CBOR deserialize:
 zlib compression and decompression of `twitter.json` (631514 bytes). The C row
 is compiled to Wasm with wasi-sdk's clang `-O3` and run on wasmtime; the Rust
 and JavaScript rows are native. Every row compresses at deflate level 6, but
-each library's level table trades ratio for speed a little differently: output
-runs 51278 to 56927 bytes, and each row decompresses the stream it produced.
+each library's level table trades ratio for speed a little differently, so the
+rows differ in output size and each decompresses the stream it produced.
 
 Compress:
 
@@ -217,8 +222,8 @@ Parse 81 SQL statements (13321 bytes). Two parsers are generated from the same
 | Java (ANTLR4)       |  0.10 MB/s | 138.706 ms | 118.15x |
 
 Java (ANTLR4) is the head-to-head for Gale's generated parser, on the JVM and
-JIT-warmed to steady state (per-parse time flattens after ~50 parses, so the gap
-is algorithmic, not a warmup artifact). The cost is full-context LL — this
+JIT-warmed to steady state, so the gap is algorithmic rather than a warmup
+artifact. The cost is full-context LL — this
 grammar's ambiguities defeat the two-stage SLL fast path. Needs `java`; skipped
 if absent.
 
@@ -305,9 +310,9 @@ Four workers — a small VM running one instance:
 | `POST /event/abcd1234/comment`  |     373,798 |                  227,640 |                84,187 |                    64,281 |
 | `GET /static/index.html`        |     373,769 |                  228,782 |                86,381 |                    72,744 |
 
-`wado serve` edges out Hono on Node and trails Bun by ~2.6x and Axum by ~4.2x.
-It also stops gaining past roughly eight workers. Its `content-length` header
-costs it ~6% of a request, nearly all of it the header value's allocation.
+`wado serve` places third, ahead of Hono on Node. It stops gaining past roughly
+eight workers, and the allocation behind its `content-length` header value costs
+it a few percent of every request.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).

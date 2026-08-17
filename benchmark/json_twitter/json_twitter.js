@@ -71,7 +71,10 @@ const obj = JSON.parse(jsonData);
 
 console.log(`json-twitter: ${size} bytes`);
 
-bench("Ser", size, "B", () => JSON.stringify(obj).length);
+// Encoded, because `String.length` counts UTF-16 units — 15.8% under the UTF-8
+// byte count on this dataset — and the other two rows produce UTF-8 bytes.
+const encoder = new TextEncoder();
+bench("Ser", size, "B", () => encoder.encode(JSON.stringify(obj)).length);
 
 const count = bench("De", size, "B", () => {
   const resp = JSON.parse(jsonData);
