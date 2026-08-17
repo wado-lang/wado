@@ -1899,12 +1899,26 @@ impl FunctionContext {
         is_mut: bool,
         defining_ast_id: Option<AstId>,
     ) -> u32 {
+        self.add_local_at(name, type_id, is_mut, defining_ast_id, Span::default())
+    }
+
+    /// [`Self::add_local`] for a binding written in source, whose span a
+    /// diagnostic can point at.
+    pub(super) fn add_local_at(
+        &mut self,
+        name: String,
+        type_id: TypeId,
+        is_mut: bool,
+        defining_ast_id: Option<AstId>,
+        span: Span,
+    ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
         self.locals.push(crate::tir::TirLocal {
             name: name.clone(),
             type_id,
             is_mut,
+            span,
         });
 
         let scope = self.scopes.last_mut().unwrap();

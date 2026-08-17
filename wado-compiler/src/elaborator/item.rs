@@ -2246,7 +2246,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
                 scope.typecheck(resolved, expected, default_ast.span());
             }
-            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            let index = ctx.add_local_at(
+                param.name.clone(),
+                type_id,
+                param.is_mut,
+                Some(param.id),
+                param.span,
+            );
             scope.record_local_symbol(
                 param.id,
                 &param.name,
@@ -2626,7 +2632,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
                 scope.typecheck(resolved, expected, default_ast.span());
             }
-            let index = ctx.add_local(param.name.clone(), type_id, param.is_mut, Some(param.id));
+            let index = ctx.add_local_at(
+                param.name.clone(),
+                type_id,
+                param.is_mut,
+                Some(param.id),
+                param.span,
+            );
             scope.record_local_symbol(
                 param.id,
                 &param.name,

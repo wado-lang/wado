@@ -1,0 +1,22 @@
+// A variant payload, a closure parameter and a closure return type each name a
+// type this module never imported. None of them went through the `let` checks,
+// and each reached WIR build as an untyped slot; the declared-type invariant
+// (`unresolved_types`) is what makes the class a diagnostic rather than an
+// assert, and the declaration-side checks are what point at the source.
+
+use { from_bytes } from "core:json";
+
+struct Rec {
+    a: String,
+}
+
+variant Wrapped {
+    Payload(Result<Rec, DeserializeError>),
+    Empty,
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "unknown type 'DeserializeError'"}

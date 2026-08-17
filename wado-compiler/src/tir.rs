@@ -5148,6 +5148,9 @@ pub struct TirLocal {
     pub name: String,
     pub type_id: TypeId,
     pub is_mut: bool,
+    /// Where the binding was written. Default for a synthesised slot, which
+    /// no diagnostic can point at.
+    pub span: Span,
 }
 
 impl TirLocal {
@@ -5159,6 +5162,7 @@ impl TirLocal {
             name: format!("__local_{index}"),
             type_id,
             is_mut,
+            span: Span::default(),
         }
     }
 }

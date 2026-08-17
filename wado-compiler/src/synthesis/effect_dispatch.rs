@@ -1107,6 +1107,7 @@ impl LowerCtx {
                     name: format!("__local_{idx}"),
                     type_id: ty,
                     is_mut: false,
+                    span: crate::token::Span::default(),
                 });
                 idx
             }

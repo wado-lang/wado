@@ -717,7 +717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
                 let mut closure_candidate = ast_value;
                 while let ast::Expr::Unary(u) = closure_candidate {
@@ -841,7 +841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let is_mut =
                     let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local(name.clone(), type_id, is_mut, Some(*id));
+                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
             }
             _ => {
@@ -2391,7 +2391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let elem_type: TypeId =
                         inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    ctx.add_local(name.clone(), elem_type, is_mut, Some(*id));
+                    ctx.add_local_at(name.clone(), elem_type, is_mut, Some(*id), *name_span);
                     self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
                 }
             }
@@ -2512,7 +2512,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } => {
                         let is_mut =
                             for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
-                        ctx.add_local(name.clone(), bind_elem_type, is_mut, Some(*id));
+                        ctx.add_local_at(
+                            name.clone(),
+                            bind_elem_type,
+                            is_mut,
+                            Some(*id),
+                            *name_span,
+                        );
                         self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
                     }
                     Pattern::Tuple(_, _) | Pattern::Struct { .. } => {

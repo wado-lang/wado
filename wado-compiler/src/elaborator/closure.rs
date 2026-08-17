@@ -64,6 +64,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_fn: Option<&ExpectedFn>,
     ) -> TypeId {
         if let Some(ty) = &param.ty {
+            self.reject_unresolved_annotation(ty);
             return self.resolve_type(ty);
         }
         if let Some(ef) = expected_fn
@@ -157,6 +158,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An explicit `|params| -> Type ...` annotation is the authoritative
         // return type; otherwise fall back to the expected fn type from the
         // surrounding context (e.g. a `let f: fn(..) -> R = ..` binding).
+        if let Some(ty) = closure.return_type.as_ref() {
+            self.reject_unresolved_annotation(ty);
+        }
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
         let body_expected = declared_return.or_else(|| {
             expected_fn

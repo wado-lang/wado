@@ -346,6 +346,7 @@ pub fn alloc_named_local(
         name,
         type_id: ty,
         is_mut,
+        span: crate::token::Span::default(),
     });
     idx
 }
@@ -361,6 +362,7 @@ pub fn locals_from_params(params: &[TirParam]) -> Vec<TirLocal> {
             name: p.name.clone(),
             type_id: p.type_id,
             is_mut: p.is_mut,
+            span: crate::token::Span::default(),
         })
         .collect()
 }
@@ -373,6 +375,7 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
         name: name.to_string(),
         type_id,
         is_mut,
+        span: crate::token::Span::default(),
     }
 }
 

@@ -155,6 +155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Each variant case has exactly one payload type.
                         // Unit variants have `()` (unit type) payload.
                         let payload = if let Some(payload_ty) = &case.payload {
+                            scope.reject_unresolved_annotation(payload_ty);
                             scope.resolve_type(payload_ty)
                         } else {
                             TypeTable::UNIT
