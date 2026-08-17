@@ -1,37 +1,9 @@
-//! Consume-only Kiln invocation index for LSP queries.
+//! Consume-only Kiln invocation index for LSP queries (WEP 2026-04-12
+//! §"Consume-only mode").
 //!
-//! The LSP runs without a Wasm runtime that can execute generator
-//! components: native `wado-cli` provides one through wasmtime, but the
-//! `wasm32-wasip2` LSP host (VS Code Wasm, browser playground) cannot.
-//! Per WEP 2026-04-12 §"Consume-only mode", the LSP
-//! redirects `use { ... } from "<schema>"` clauses to the on-disk
-//! generator output recorded in `<output_dir>/<primary>.kiln.json`.
-//!
-//! Because the consume-only host cannot run the generator, it cannot
-//! re-derive any of the hashes the metadata records, so validating them
-//! would only make the redirect silently die and break every query over
-//! a generated symbol. Consume-only therefore **trusts the on-disk
-//! artifact**: if the metadata records an entry output that still exists
-//! (and stays within the workspace), the redirect fires regardless of
-//! schema / options / generator / reads / output-byte drift. Verifying
-//! that drift is `wado check`'s job (native, runtime-backed).
-//!
-//! [`prepare_invocations`] does this: it parses the entry source
-//! (in-memory, no extra I/O on the source itself), walks up to the
-//! nearest `wado.toml` to find the manifest root, collects every inline
-//! `with { generator: { ... } }` clause, and for each invocation either:
-//!
-//! - registers `(decl_file, from) → kiln:/abs/path/to/entry.wado` in the
-//!   returned [`InvocationIndex`] when the metadata records an entry
-//!   output that exists on disk, or
-//! - emits [`Code::KilnStaleCache`] via `host.emit_diagnostic` and
-//!   leaves the entry unregistered (no metadata, no entry recorded, or
-//!   the output is missing / escapes the workspace), so the import
-//!   surfaces as a normal resolution error and the user sees a clear
-//!   "re-run `wado compile`" hint.
-//!
-//! The helper performs no writes — `<primary>.kiln.json` and the
-//! generated outputs are only read.
+//! No LSP host can run a generator component, so it cannot re-derive the hashes
+//! `<output_dir>/<primary>.kiln.json` records. Redirects therefore trust that
+//! artifact and fire on any drift; verifying drift is `wado check`'s job.
 
 use std::path::{Path, PathBuf};
 
@@ -40,28 +12,12 @@ use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filenam
 use wado_compiler::kiln::{InvocationIndex, InvocationPath, collect_inline_invocations};
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
-/// Build a consume-only [`InvocationIndex`] for the entry document.
+/// Build a consume-only [`InvocationIndex`] for the entry document. Empty when
+/// the entry has no inline `with` clause or no enclosing `wado.toml`.
 ///
-/// `entry_filename` must match the `filename` argument the semantics
-/// pipeline receives downstream; otherwise the compiler-side redirect
-/// lookup misses. `Engine::*` query methods feed the URI through
-/// `uri_to_filename` and pass that string to both this helper and the
-/// downstream `wado_compiler::load` call.
-///
-/// Takes `&Module` (the parsed entry AST) instead of source bytes so
-/// the LSP can share the parse result with the downstream load stage —
-/// see `Engine::snapshot` for the shared-parse flow. **Contract**:
-/// `entry_ast` must derive from the same bytes the caller subsequently
-/// passes to `wado_compiler::load`; otherwise the spans this helper
-/// emits via [`Code::KilnStaleCache`] will point at locations that
-/// don't exist in the source the rest of the snapshot is built against.
-///
-/// Every file this reads or probes goes through the host; only path
-/// normalisation ([`safe_join`], [`canonicalized`]) touches the filesystem, and
-/// it degrades to the lexical form where there is none.
-///
-/// Returns an empty index when the entry has no inline `with` clauses
-/// or no enclosing `wado.toml` is found.
+/// **Contract**: `entry_filename` and `entry_ast` must be the same filename and
+/// bytes the caller then passes to `wado_compiler::load` — otherwise the
+/// redirect lookup misses and the spans emitted here name nothing.
 pub async fn prepare_invocations<H: CompilerHost>(
     entry_filename: &str,
     entry_ast: &Module,
@@ -162,10 +118,9 @@ async fn resolve_invocation<H: CompilerHost>(
     let metadata_key = metadata_path.display().to_string();
     let bytes = match host.load_source(&metadata_key).await {
         Ok(bytes) => bytes,
-        // An absent cache is the ordinary "not generated yet" case; one that is
-        // there but will not read is a different thing to report. Presence is a
-        // second question because a host may report both as the same
-        // `SourceError` — `FilesystemCompilerHost` does.
+        // Asked as a second question, not read off `SourceError`: a host may
+        // report absent and unreadable as the same variant, and
+        // `FilesystemCompilerHost` does.
         Err(_) if !host.source_exists(&metadata_key).await => {
             return Err(format!("no cache at {}", metadata_path.display()));
         }
@@ -187,8 +142,7 @@ async fn resolve_invocation<H: CompilerHost>(
     // The entry module imports its generated siblings by relative path, so a
     // missing one would fail the import opaquely; refusing the whole redirect
     // surfaces the actionable `re-run wado compile` hint instead. Presence and
-    // path-sandbox only — not the hash validation consume-only skips, and not a
-    // read: the loader is about to read these itself if the redirect fires.
+    // path-sandbox only — not the hash validation consume-only skips.
     let mut entry_abs: Option<PathBuf> = None;
     for output in &metadata.outputs {
         let Some(abs) = safe_join(manifest_root, &output.path) else {

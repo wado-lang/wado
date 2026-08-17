@@ -1,9 +1,8 @@
 //! Reading the workspace off disk: the governing `wado.toml`, `wado.lock`, and
-//! what the warm `~/wado` cache actually holds.
+//! what the warm `~/wado` cache holds.
 //!
-//! [`wado_manifest`] stays pure — it says where a dependency *belongs*, given a
-//! parsed lock. Everything that opens a file to find out lives here, inside the
-//! filesystem host, so a host without a filesystem simply never runs it.
+//! [`wado_manifest`] says where a dependency *belongs*; opening a file to find
+//! out what is there happens here, inside the host a browser never runs.
 
 use std::path::{Path, PathBuf};
 
@@ -16,10 +15,8 @@ use wado_manifest::{DependencySource, LockFile, Manifest, ManifestError, read_wo
 /// The nearest ancestor of `start` (inclusive) that contains a `wado.toml`.
 /// `start` may name a file or a directory.
 ///
-/// Absolutized first — a relative path's parent chain runs out after one
-/// `pop()` — so **the result is always absolute**. Callers re-anchoring other
-/// paths against it must express those in the same frame; every current
-/// caller derives its input from an absolute `file:` URI.
+/// Absolutized first, so **the result is always absolute** — a caller
+/// re-anchoring other paths against it must express those in the same frame.
 #[must_use]
 pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
     let mut dir = absolutize(start);
@@ -64,9 +61,8 @@ pub fn resolve_member_manifest(
 /// The workspace governing `member_dir` — its root directory and `wado.toml`
 /// contents — if `member_dir` is a member of one.
 ///
-/// A manifest that itself declares `[workspace]` is the workspace authority, not
-/// a governed member, so it returns `None`. Otherwise walk up to the nearest
-/// ancestor whose `[workspace].members` glob covers the member.
+/// A manifest that itself declares `[workspace]` is the authority, not a
+/// governed member, so it returns `None`.
 #[must_use]
 pub fn governing_workspace(member_dir: &Path, member_content: &str) -> Option<(PathBuf, String)> {
     if read_workspace_members(member_content).is_some() {

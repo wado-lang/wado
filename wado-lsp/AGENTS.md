@@ -15,7 +15,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                                                                                       |
 | `src/ast_search.rs`         | `FirstMatch` + `find_in_module`: the short-circuiting module walk that hover's local renderer and definition's `#include` path finder share                                                      |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                                  |
-| `src/host/discovery.rs`     | The filesystem reads behind `dependency_index`: governing `wado.toml`, `wado.lock`, and what the warm `~/wado` cache holds. `wado-manifest` stays pure and says only where a dependency belongs   |
+| `src/host/discovery.rs`     | The filesystem reads behind `dependency_index`: governing `wado.toml`, `wado.lock`, and what the warm `~/wado` cache holds. `wado-manifest` itself stays pure                                    |
 | `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                           |
 | `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, `range_from_codepoints` (the one span→`Range` conversion), and the shared `LineIndex`                  |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`)          |
@@ -32,7 +32,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                                                                                              |
 | `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                                                                                             |
 | `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                                                                                        |
-| `src/test_support.rs`       | Shared in-memory `MapHost` and the `open` / `open_files` fixture builders for unit + integration tests (`#[doc(hidden)] pub`); replaces per-file `TestHost` and per-file setup duplication       |
+| `src/test_support.rs`       | Shared in-memory `MapHost` and the `open` / `open_files` fixture builders for unit + integration tests (`#[doc(hidden)] pub`), so no test grows its own                                          |
 
 ### AST walking
 

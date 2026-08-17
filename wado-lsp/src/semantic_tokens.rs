@@ -94,16 +94,13 @@ pub struct SemanticToken {
 /// count. [`delta_encode`] later converts both into the negotiated LSP
 /// position encoding.
 pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
-    // 1. Lex (resilient — always succeeds; malformed input simply yields
-    // recovery tokens which classify_token treats as plain).
+    // Resilient: malformed input yields recovery tokens, which classify as plain.
     let lex_result = lex(source);
     let tokens = lex_result.tokens;
     let comments = lex_result.comments;
 
-    // 2. Obtain the AST that drives the heuristic fallback (type-position
-    // spans) and the parameter-id set. Reuse the snapshot's already-parsed
-    // entry module when available; only parse ourselves when there is no
-    // snapshot (loader failure), so the common path does not re-parse.
+    // Reuse the snapshot's parse when there is one, so the common path does not
+    // lex and parse the entry source twice.
     let snapshot_ast = sem.and_then(|s| s.modules.get(&s.entry_module_source));
     let owned_parse = snapshot_ast.is_none().then(|| wado_compiler::parse(source));
     let ast = snapshot_ast
@@ -111,13 +108,10 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
         .expect("snapshot AST or freshly parsed AST is present");
     let ast_spans = collect_ast_spans(ast);
 
-    // 3. Precompute the resolved-symbol classification map (byte start →
-    // (token type, modifiers)) in one linear pass over the semantics. This
-    // makes per-token identifier classification an O(1) lookup instead of a
-    // positional AST search (`cursor_at`/`ast_id_at`) per token.
+    // One linear pass, so per-token classification is a lookup rather than a
+    // positional AST search.
     let sem_classes = sem.map(|s| build_semantic_classes(s, &ast_spans));
 
-    // 4. Classify lexer tokens
     let mut result = Vec::new();
     for i in 0..tokens.len() {
         if let Some(st) = classify_token(source, &tokens, i, &ast_spans, sem_classes.as_ref()) {
@@ -125,13 +119,8 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
         }
     }
 
-    // 5. Add comments
-    //
-    // LSP semantic tokens MUST NOT span lines. Block comments / doc
-    // comments that cross a newline are skipped here — the editor's
-    // TextMate grammar (or the language's syntactic highlighter)
-    // already covers them and a half-encoded LSP token would render
-    // worse than no token at all.
+    // LSP semantic tokens MUST NOT span lines, so a multi-line comment is left
+    // to the editor's syntactic highlighter rather than half-encoded.
     for comment in &comments {
         if comment.span.line != comment.span.end_line {
             continue;
@@ -151,7 +140,6 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
         });
     }
 
-    // 6. Sort by position
     result.sort_by(|a, b| a.line.cmp(&b.line).then(a.start_char.cmp(&b.start_char)));
     result
 }
@@ -773,10 +761,8 @@ mod tests {
 
     #[test]
     fn resource_method_signature_types_are_types() {
-        // `Item::Resource` was unreachable from the crate's own AST walk, so
-        // nothing in a resource method's signature reached `visit_type`. Asserted
-        // without semantics: the AST walk is the only thing that can classify
-        // these, so a regression cannot be masked by the symbol map.
+        // Asserted without semantics: only the AST walk can classify these, so
+        // the symbol map cannot mask a regression.
         let src = "resource R {\n    fn m(&self, count: Wide) -> Tall;\n}\nfn run() {}\n";
         let tokens = compute(src, None);
         assert_eq!(kind_of(&tokens, src, 1, "Wide"), token_type::TYPE);
@@ -785,7 +771,6 @@ mod tests {
 
     #[test]
     fn test_block_closure_parameter_is_a_parameter() {
-        // Same gap for `Item::Test`: nothing inside a test block was walked.
         let src =
             "fn run() {}\ntest \"t\" {\n    let g = |count: i32| count;\n    let _ = g(1);\n}\n";
         let sem = sem_of(src);
@@ -795,8 +780,6 @@ mod tests {
 
     #[test]
     fn struct_field_default_expression_is_walked() {
-        // `field.default` is an expression the compiler's walk reaches; the
-        // hand-rolled copy stopped at the field type.
         let src = "struct S { n: i32 = C }\nglobal C: i32 = 1;\nfn run() {}\n";
         let sem = sem_of(src);
         let tokens = compute(src, Some(&sem));

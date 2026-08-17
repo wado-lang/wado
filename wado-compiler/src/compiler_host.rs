@@ -367,8 +367,8 @@ pub trait CompilerHost: Send + Sync {
 
     /// Whether `path` names something this host can load, without loading it.
     ///
-    /// Defaults to a full [`Self::load_source`]; a filesystem host overrides it
-    /// with a stat so a presence check does not pay for the bytes.
+    /// The default *does* load; a filesystem host overrides it with a stat so a
+    /// presence check does not pay for the bytes.
     fn source_exists(&self, path: &str) -> impl Future<Output = bool> + Send {
         async move { self.load_source(path).await.is_ok() }
     }

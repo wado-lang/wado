@@ -1,9 +1,7 @@
 //! Workspace-member matching rules.
 //!
-//! Pure path logic: whether a `[workspace].members` glob covers a directory,
-//! and the options every glob in the toolchain is matched with. Locating the
-//! governing workspace is a filesystem walk and lives with the host that does
-//! it (`wado_lsp::host::discovery`).
+//! Pure path logic. Locating the governing workspace is a filesystem walk and
+//! lives in `wado_lsp::host::discovery`.
 
 use std::path::Path;
 

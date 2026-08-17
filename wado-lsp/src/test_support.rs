@@ -35,8 +35,6 @@ use crate::Engine;
 pub const TEST_PATH: &str = "/test.wado";
 
 /// An [`Engine`] with one document open, and the host serving the fixture.
-///
-/// Here so a test that builds its own setup stands out as deliberate.
 pub struct Opened {
     pub engine: Engine,
     pub host: MapHost,

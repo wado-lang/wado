@@ -1,10 +1,8 @@
 //! Where a `[dependencies]` entry belongs, derived from the manifest and an
 //! already-parsed `wado.lock`.
 //!
-//! Pure: coordinates, versions, and cache paths, with no disk touched. Reading
-//! the lock and checking what is actually there is the host's job — see
-//! `wado_lsp::host::discovery`, which drives these from both the LSP (warm
-//! cache, offline) and `wado-cli` (cold cache, fetching).
+//! Pure: coordinates, versions, and cache paths, no disk touched. Reading the
+//! lock and checking what is there is `wado_lsp::host::discovery`'s job.
 
 use std::path::{Path, PathBuf};
 

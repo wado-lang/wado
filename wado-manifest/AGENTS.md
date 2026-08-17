@@ -11,4 +11,4 @@ specification.
 - It performs no I/O — no filesystem, no network, no env. Fetching is injected
   by `wado-cli` through the `DependencyProvider` seam; reading the disk belongs
   to the filesystem `CompilerHost` (`wado_lsp::host::discovery`). Keep both
-  boundaries: this crate says where a dependency *belongs*, never what is there.
+  boundaries: this crate says where a dependency _belongs_, never what is there.
