@@ -1655,6 +1655,39 @@ impl<'a> PatternLowerer<'a> {
         ));
     }
 
+    /// Bind what a compound pattern destructures to a temp its projections
+    /// read, and answer the temp's index and name.
+    ///
+    /// A hoist, not a binding: the temp holds the very value that stood inline,
+    /// and the pattern's own bindings take their copies through
+    /// [`Self::emit_binding_let`] — so this one takes none. It is also minted
+    /// during lowering, after the seed walk that registers `$value_copy$`
+    /// helpers has run, so asking for a copy here names a helper that does not
+    /// exist.
+    fn emit_pattern_temp_let(
+        &mut self,
+        value: TirExpr,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+    ) -> (u32, String) {
+        let local_index = self.alloc_local(value.type_id);
+        let name = self.next_temp_name();
+        let type_id = value.type_id;
+        out.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: true,
+            },
+            span,
+        ));
+        (local_index, name)
+    }
+
     /// Lower `LetDestructure` to explicit Let statements
     fn lower_let_pattern(
         &mut self,
@@ -1695,24 +1728,8 @@ impl<'a> PatternLowerer<'a> {
 
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
-                // Allocate temp local for the tuple
-                let tuple_temp_index = self.alloc_local(value.type_id);
-                let tuple_temp_name = self.next_temp_name();
-
-                // Create Let for the tuple
-                let tuple_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: tuple_temp_name.clone(),
-                        local_index: tuple_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(tuple_let);
+                let (tuple_temp_index, tuple_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // Get element types
                 let elem_types = type_table
@@ -1760,24 +1777,8 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                // For variant patterns in LetDestructure, extract payload
-                // Allocate temp for variant
-                let variant_temp_index = self.alloc_local(value.type_id);
-                let variant_temp_name = self.next_temp_name();
-
-                let variant_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: variant_temp_name.clone(),
-                        local_index: variant_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(variant_let);
+                let (variant_temp_index, variant_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // If there are bindings, extract payload
                 if let Some(binding) = bindings.first() {
@@ -1809,23 +1810,8 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirPattern::Struct { fields, .. } => {
-                // Allocate temp local for the struct
-                let struct_temp_index = self.alloc_local(value.type_id);
-                let struct_temp_name = self.next_temp_name();
-
-                let struct_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: struct_temp_name.clone(),
-                        local_index: struct_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(struct_let);
+                let (struct_temp_index, struct_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // Get field type info from struct definition
                 let struct_fields_info = self.get_struct_fields(
@@ -1904,22 +1890,8 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse
-                let tuple_temp_index = self.alloc_local(value.type_id);
-                let tuple_temp_name = self.next_temp_name();
-
-                let tuple_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: tuple_temp_name.clone(),
-                        local_index: tuple_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(tuple_let);
+                let (tuple_temp_index, tuple_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 let elem_types = type_table
                     .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
@@ -1968,23 +1940,9 @@ impl<'a> PatternLowerer<'a> {
                     && !(*payload_type == TypeTable::UNIT
                         && matches!(binding, TirPattern::Wildcard))
                 {
-                    // Allocate temp and extract payload
-                    let variant_temp_index = self.alloc_local(value.type_id);
-                    let variant_temp_name = self.next_temp_name();
 
-                    let variant_let = TirStmt::new(
-                        TirStmtKind::Let {
-                            name: variant_temp_name.clone(),
-                            local_index: variant_temp_index,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id: value.type_id,
-                            value,
-                            skip_value_copy: false,
-                        },
-                        span,
-                    );
-                    out.push(variant_let);
+                    let (variant_temp_index, variant_temp_name) =
+                        self.emit_pattern_temp_let(value, span, out);
 
                     let payload_expr = TirExpr::new(
                         TirExprKind::VariantPayload {
@@ -2015,22 +1973,8 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Struct { fields, .. } => {
                 // Nested struct - allocate temp and recurse
-                let struct_temp_index = self.alloc_local(value.type_id);
-                let struct_temp_name = self.next_temp_name();
-
-                let struct_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: struct_temp_name.clone(),
-                        local_index: struct_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(struct_let);
+                let (struct_temp_index, struct_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 let struct_fields_info = self.get_struct_fields(
                     type_table.get_local_type(struct_temp_index, &self.locals),
