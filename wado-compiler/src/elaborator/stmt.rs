@@ -352,6 +352,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
+    /// Report a name in a local `let` annotation that no declaration answers
+    /// here. The module-wide pre-check (`validate_ast_type_names`) passes a
+    /// type that exists in some loaded module but was never imported, and
+    /// resolution then yields `UNKNOWN`, which typechecks as deferred and
+    /// reaches WIR build as a local with no type. A `let` annotation names no
+    /// type parameter it does not already have in scope, so the site's answer
+    /// is decisive here in a way it is not in a bound or signature position.
+    fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
+        if self.logger.has_errors() {
+            return;
+        }
+        match ty {
+            ast::Type::Named(named) => {
+                if named.name == "Self"
+                    || self
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&named.name)
+                    || self.type_decl_at(Some(named.id), &named.name).is_some()
+                {
+                    return;
+                }
+                if self.resolve_named_type(named.id, &named.name, named.span, false)
+                    != crate::tir::TypeTable::UNKNOWN
+                {
+                    return;
+                }
+                let _ = self.emit(TypeError::UnknownType {
+                    name: named.name.clone(),
+                    span: named.span,
+                });
+            }
+            ast::Type::Generic(generic) => {
+                for arg in &generic.args {
+                    self.reject_unresolved_annotation(arg);
+                }
+            }
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                self.reject_unresolved_annotation(inner);
+            }
+            ast::Type::Tuple(elems) => {
+                for elem in elems {
+                    self.reject_unresolved_annotation(elem);
+                }
+            }
+            ast::Type::Function(_)
+            | ast::Type::NamespacedGeneric(_)
+            | ast::Type::TypePackSpread(_, _)
+            | ast::Type::Infer(_)
+            | ast::Type::Error(_) => {}
+        }
+    }
+
     /// Resolve a local newtype, reporting whether its base came out known.
     ///
     /// An unknown base registers nothing: a newtype registered against
@@ -446,6 +500,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let resolved = self.resolve_type(annotated_type);
+            self.reject_unresolved_annotation(annotated_type);
             let target_type = if Self::first_infer_span(annotated_type).is_some() {
                 TypeTable::ERROR
             } else {
