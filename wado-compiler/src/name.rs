@@ -951,14 +951,11 @@ impl LocalMethodName {
         }
     }
 
-    /// Replace the type `old` with `new` throughout this method's own
-    /// identity — the receiver and the receiver's type arguments.
+    /// Replace the type `old` with `new` throughout this method's identity — the
+    /// receiver and its type arguments, not the rendered `name`, which a
+    /// monomorphized call overwrites from its own key.
     ///
-    /// Here rather than on the rendered name: a monomorphized call is keyed on
-    /// `fq_base_struct_name` / `fq_struct_name`, and its `name` is overwritten
-    /// with whatever that key finds.
-    ///
-    /// The trait is left alone — a CM type swap changes the receiver, not the
+    /// The trait is left alone: a CM type swap changes the receiver, not the
     /// trait it implements.
     pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
         if let Receiver::Type(fq) = &self.receiver {
@@ -972,13 +969,12 @@ impl LocalMethodName {
         }
     }
 
-    /// A monomorphization-invariant identity built from the base struct / trait
-    /// names and the bare method name, dropping every type argument. A generic
-    /// method (`Result<T, E>::unwrap`) and each of its instantiations
-    /// (`Result<Fields, HeaderError>::unwrap`) share one key, whereas
-    /// [`Self::to_mangled_name`] embeds the type args and so differs per
-    /// instantiation. Used where a property of the method — not the
-    /// instantiation — is being keyed (e.g. whether it takes `self` by value).
+    /// A monomorphization-invariant identity: base struct / trait names and the
+    /// bare method name, every type argument dropped, so a generic method and its
+    /// instantiations share one key where [`Self::to_mangled_name`] would not.
+    ///
+    /// For keying a property of the method rather than of the instantiation —
+    /// whether it takes `self` by value, say.
     pub fn base_dispatch_key(&self) -> String {
         match &self.trait_name {
             Some(trait_name) => {
@@ -2258,9 +2254,8 @@ pub enum TypeHead {
     /// same-named declarations are two heads however they are spelled.
     Declared(DeclaredHead),
     /// A shape no declaration names — an anonymous literal's, a closure
-    /// environment's, a synthesised adapter's, a monomorphized instantiation's.
-    /// Nothing declares it, so the rendering *is* the identity, and the
-    /// declaring module scopes it.
+    /// environment's, a synthesised adapter's. Nothing declares it, so the
+    /// rendering *is* the identity, scoped by the declaring module.
     Shape {
         module: crate::module_source::ModuleSource,
         name: String,
@@ -2646,10 +2641,9 @@ impl DeclaredHead {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTraitName {
     head: TraitHead,
-    /// The trait's type arguments, structured. Each is an identity or a shape,
-    /// never a spelling: an impl header's `Index<K>` and a call site's
-    /// `Index<K>` reach one head through their own reference sites, so the two
-    /// sides of a mangled trait segment cannot render it differently.
+    /// The trait's type arguments, structured — each an identity or a shape, never
+    /// a spelling, so an impl header's `Index<K>` and a call site's reach one head
+    /// and cannot render a trait segment differently.
     args: Vec<FqTypeName>,
 }
 

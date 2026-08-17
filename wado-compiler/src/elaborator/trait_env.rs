@@ -2469,14 +2469,9 @@ fn index_decls_by_name(
     out
 }
 
-/// The type arguments a written trait position supplies, structured.
-///
-/// Read off the nodes that wrote them, and each argument's own reference site
-/// says which declaration it names — so an alias, a namespace prefix and a
-/// function-local item reach the head a call site's `TypeId` reaches. Rendering
-/// the whole position and splitting the rendering back apart answers the same
-/// for a well-formed spelling and guesses for anything else, which is the
-/// failure this WEP is about.
+/// The type arguments a written trait position supplies, structured — read off the
+/// nodes that wrote them, so each argument's own reference site says which
+/// declaration it names and an alias or namespace prefix reaches the same head.
 pub(super) fn written_type_args(
     ty: &ast::Type,
     resolutions: &crate::resolve::Resolutions,

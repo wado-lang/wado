@@ -2265,16 +2265,12 @@ impl<'a> TypeLookup<'a> {
         }
     }
 
-    /// Which declaration `name` names in the frame this view stands in.
+    /// Which declaration `name` names in the frame this view stands in — for a
+    /// caller holding a rendering. Not a scope: a name with a site goes through
+    /// [`Self::declaration_at`], which reads what the resolve pass recorded.
     ///
-    /// Not a scope: a name reaches its own declaration through
-    /// [`Self::declaration_at`], which reads the answer the resolve pass
-    /// recorded for the site that wrote it. This is what is left for a caller
-    /// holding a rendering, and it is two recorded facts rather than a second
-    /// walk — what this module imported under the name, then what some module
-    /// declares under it. The function-local items ahead of them are the walk's
-    /// own position: a local item is visible only after its declaration
-    /// statement, which no whole-program table records.
+    /// The function-local items tried ahead of the indexes are the walk's own
+    /// position; a local item is visible only after its declaration statement.
     pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
         let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);

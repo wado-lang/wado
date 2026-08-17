@@ -239,13 +239,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .expect("an item declaration has an identity")
     }
 
-    /// The symbol `name` reaches from `module`, for a caller whose reference
-    /// site is not at hand — a mangled name, a synthesis target. Prefer
-    /// [`Self::symbol_at`], which reads the answer the walk recorded.
-    ///
-    /// No scope is run: the identity comes from the import record and the
-    /// declaration index, and the symbol row is read back off the declaring
-    /// node.
+    /// The symbol `name` reaches from `module`, for a caller whose reference site
+    /// is not at hand — a mangled name, a synthesis target. No scope is run.
+    /// Prefer [`Self::symbol_at`], which reads the answer the walk recorded.
     pub(crate) fn symbol_named(
         &self,
         module: &ModuleSource,
@@ -889,14 +885,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// The declaration a written reference names, keyed on the site that wrote
-    /// it.
-    ///
-    /// The walk answered for the site in the module that wrote the name, so an
-    /// alias, a namespace prefix and a function-local item reach their own
-    /// declarations with no vantage supplied. `name` is the frame derivation's
-    /// input, never a second opinion: it is read only where the site reaches
-    /// nothing, and then only by the declaration indexes.
+    /// The declaration a written reference names, keyed on the site that wrote it,
+    /// so an alias, a namespace prefix and a function-local item each reach their
+    /// own. `name` is read only where the site reaches nothing.
     pub(crate) fn decl_key_at(
         &self,
         site: crate::ast::AstId,
@@ -909,29 +900,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The declaration indexes, for a caller holding a spelling whose reference
-    /// site is not at hand — a rendered head, a synthesis target.
+    /// site is not at hand — a rendered head, a synthesis target. Each frame is
+    /// one module, so a hit is unique; an unaccounted name falls to the prelude.
     ///
-    /// Two recorded facts, not a second walk: what a frame imported under the
-    /// name, then what that frame itself declares under it. Both are scoped to
-    /// one module, so a hit is unique by construction — no whole-program scan
-    /// picks between same-named declarations. A name no frame accounts for
-    /// falls to the prelude.
-    ///
-    /// Where the walk stands in one module reading an expression another wrote
-    /// — a parameter or field default — the *writing* module answers first. It
-    /// is the module the spelling was written in, so it is the frame; the
-    /// module the walk happens to stand in is not a second opinion about what
-    /// the author meant. Trying the standing frame first is how a caller that
-    /// declares its own same-named type takes the answer away from the module
-    /// that wrote the name.
-    ///
-    /// The frames come from the walk's own position, never from a caller: this
-    /// takes a name and no module, so no vantage can be supplied to it.
+    /// The frames come from the walk's own position — this takes no module, so no
+    /// caller can supply a vantage. Where the walk reads an expression another
+    /// module wrote, that writing module answers first, or a caller declaring its
+    /// own same-named type takes the answer away from the one that wrote it.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
-        // A type parameter in scope shadows every declaration of that name, so
-        // a frame writing `T` means its own binder even where a `struct T`
-        // exists. A binder is not a declaration, so it has no identity — and
-        // the indexes, which cannot see binders, would answer with the struct.
+        // A binder shadows every declaration of its name and has no identity of
+        // its own; the indexes cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
@@ -955,14 +933,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.tysys.resolutions.prelude_decl(name)
     }
 
-    /// The trait a bound's reference site names. `written` supplies the type
+    /// The trait a bound's reference site names; `written` supplies the type
     /// arguments and the diagnostic spelling.
     ///
-    /// A site that names no declaration carries no identity, and none is
-    /// invented for it: naming a trait is what `use` is for, and the prelude —
-    /// its implementation modules included — is in scope everywhere without
-    /// one, so a name reaching nothing here reaches nothing at all. The mangle
-    /// falls back to the spelling and the reference is reported elsewhere.
+    /// A site naming no declaration gets no invented identity — `use` and the
+    /// prelude are the only ways to name a trait, so a name reaching nothing here
+    /// reaches nothing at all, and the mangle falls back to the spelling.
     pub(super) fn fq_trait_name_at(
         &self,
         site: crate::ast::AstId,
@@ -1450,17 +1426,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.impl_target_at(None, type_name)
     }
 
-    /// [`Self::impl_target`] for a receiver written at a reference site.
+    /// [`Self::impl_target`] for a receiver written at a reference site, so
+    /// `Type::method` keys to what `Type` names *in the module that wrote it* —
+    /// a default spliced into a same-named caller is where the two come apart.
     ///
-    /// The segment the walk answered for decides, so `Type::method` keys to the
-    /// declaration `Type` names *in the module that wrote it* — not to whatever
-    /// the frame in hand happens to call `Type`. A default argument spliced
-    /// into a caller that declares its own same-named type is where the two
-    /// come apart, and the site is the only thing that separates them.
-    ///
-    /// A binder answers nothing, so `Self::` / `T::` — whose segment is the
-    /// binder token — falls through to the spelling, which by then is the
-    /// concrete name the rewrite produced.
+    /// A binder answers nothing, so `Self::` / `T::` falls through to the
+    /// spelling, by then the concrete name the rewrite produced.
     pub(crate) fn impl_target_at(
         &self,
         site: Option<crate::ast::AstId>,

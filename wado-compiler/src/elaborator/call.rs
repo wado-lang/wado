@@ -135,16 +135,12 @@ impl CalleeIdentKind<'_> {
         }
     }
 
-    /// The reference site of a qualified callee's receiver segment — the `Type`
-    /// of `Type::method`, which the walk answered for in the module that wrote
-    /// it.
+    /// The reference site of a qualified callee's receiver segment — the `Type` of
+    /// `Type::method`, which the walk answered for in the module that wrote it.
     ///
-    /// Two segments exactly, because the consumers pair this site with the
-    /// prefix they split off `effective_name`, and only here are the two the
-    /// same segment. `ns::Type::method` splits to the *namespace*, which the
-    /// namespace dispatch path resolves from the receiver's own type instead.
-    /// `None` likewise for an unqualified call and for `Rewritten`, whose
-    /// spelling no longer belongs to any segment the walk saw.
+    /// Two segments exactly: consumers pair this with the prefix they split off
+    /// `effective_name`, and only here are the two the same segment. A namespace
+    /// prefix, an unqualified call and `Rewritten` all answer `None`.
     fn receiver_site(&self) -> Option<ast::AstId> {
         match self {
             Self::AsIs(ident) => match ident.segments.as_slice() {
@@ -816,18 +812,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                // Re-coerce literal-number args to inferred parameter types and
-                // typecheck each arg against the substituted parameter type.
-                // Before inference, the literal args were resolved with `TypeParam`
-                // (or `Unknown`) as the expected type, so they fell back to defaults
-                // (i32/f64). Now that we know the concrete substitution, retry
-                // coercion and verify the inferred type-arg binding is consistent
-                // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
-                // fail because `T` cannot be both `u8` and `u32`).
-                // A non-generic static method has nothing to substitute, but its
-                // arguments are checked just the same: left unchecked, a
-                // mismatched argument reaches codegen and fails there as an
-                // invalid module instead of at its own span.
+                // Literal args resolved against `TypeParam`/`Unknown` fell back to
+                // i32/f64, so re-coerce once the substitution is known. A
+                // non-generic call is checked too, or a mismatch only shows at
+                // codegen, as an invalid module rather than at its own span.
                 let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
@@ -840,8 +828,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .map(|&t| self.substitute_type_params(t, &combined_type_args))
                             .collect()
                     };
-                // `substituted` is empty when the name reaches several impls, so
-                // the check applies exactly where the parameter types are known.
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(&expected) = substituted.get(i) {
@@ -1199,9 +1185,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     };
 
-                    // Keyed by the namespace member, not by the bare spelling:
-                    // the importing module never names `Type` on its own, so a
-                    // name-only key reaches nothing and every `mut` parameter
+                    // The importing module never names `Type` on its own, so a
+                    // bare-name key reaches nothing and every `mut` parameter
                     // would read as non-mut for the mutation and alias passes.
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
@@ -1216,10 +1201,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         module_source: struct_module,
                         name: final_mangled,
                         monomorph_info,
-                        // The same receiver `final_mangled` was built from: the
-                        // call's name and its method identity must agree, or
-                        // DCE and monomorphization key on a different type than
-                        // the one being called.
+                        // The receiver `final_mangled` was built from: DCE and
+                        // monomorphization key on this, so a different one here
+                        // names a different type than the call reaches.
                         method_info: Some(LocalMethodName::new(
                             receiver,
                             trait_name,
@@ -1227,13 +1211,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    // Record so reify replays the same Call shape via its
-                    // `static_method_dispatch` early return — without
-                    // re-running `locate_static_method_impl` /
-                    // `lookup_static_method_*` from the AST alone. Carry the
-                    // parameter defaults so reify pads omitted trailing
-                    // arguments, matching the unqualified `Type::method()` path.
-                    // Empty defaults would leave codegen a call short an
+                    // Recorded so reify replays this Call shape without re-running
+                    // dispatch. Empty defaults would leave codegen a call short an
                     // argument; empty types would leave reify padding untyped.
                     let param_defaults = self.lookup_static_method_param_defaults_keyed(
                         type_name,
@@ -1245,8 +1224,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         ns_key.as_ref(),
                     );
-                    // The same argument check the unqualified `Type::method`
-                    // arm performs.
                     let checked: Vec<TypeId> = if method_type_args.is_empty() {
                         param_types.clone()
                     } else {
@@ -1781,12 +1758,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return (params, Vec::new());
             }
 
-            // `ns::func` — a free function through a namespace import. Its
-            // signature lives in the namespace's module, which no bare-name
-            // lookup reaches. Without it the arguments resolve with no expected
-            // type, so a literal that only coerces when one is supplied — a
-            // sequence literal to a `List` parameter — keeps its own type and
-            // reaches codegen mismatched.
+            // A namespace member's signature lives in that module, which no
+            // bare-name lookup reaches. Without it the arguments resolve with no
+            // expected type, so a sequence literal never coerces to its `List`
+            // parameter and reaches codegen mismatched.
             if self.sem.imports.namespace_imports.contains_key(prefix) {
                 let ns_source = self.sem.imports.namespace_imports[prefix].clone();
                 if let Some(sig) = self.tysys.signatures.function_sig(&ns_source, suffix) {
@@ -1795,10 +1770,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
                     );
                 }
-                // `ns::Type::method` — a static method on a namespace member.
-                // `is_static_method` above declines this shape (the importing
-                // module never names `Type` on its own), so the receiver is
-                // resolved through the namespace and the index keyed on it.
+                // `is_static_method` above declines the `ns::Type::method`
+                // shape, so the receiver resolves through the namespace instead.
                 if let Some((type_name, method_name)) = suffix.split_once("::")
                     && let Some(def) = self.namespace_member(prefix, type_name)
                 {

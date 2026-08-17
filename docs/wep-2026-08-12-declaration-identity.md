@@ -507,13 +507,11 @@ brought into scope is unresolved, the same answer the walk gives.
 
 Which module is "this" one is the walk's position, and the walk is not always
 standing where the name was written: a parameter or field default is read at the
-call site and written in the declaring module. The writing module is then the
-frame, and it answers first — the module the walk stands in is not a second
-opinion about what the author meant. Trying the standing frame first is how a
-caller that declares its own same-named type takes the answer away from the
-module that wrote the name, which is this WEP's defect class arriving by the
-back door. Both frames come from the walk's own position; the derivation takes a
-name and no module, so no caller can supply a vantage to it.
+call site and written in the declaring module. The writing module answers first,
+or a caller declaring its own same-named type takes the answer away from the
+module that wrote the name — this WEP's defect class by the back door. Both
+frames come from the walk's position; the derivation takes no module, so no
+caller can supply a vantage.
 
 There is no fourth tier, and a qualified call does not reach the derivation at
 all where it can avoid it. `Type::method` names its receiver at its own path
@@ -531,10 +529,7 @@ production code rather than a ratchet over it.
 
 What still prevents some collisions by convention rather than by key is
 `name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
-index that reads that suffix back into a declaration. That is a convention every
-minting site and every lookup site has to keep. The evidence it is a convention:
-closing one fixture — two sibling functions each declaring `struct Box<T>` —
-took seven separate fixes, at type resolution, the struct literal, the WIR
-lookup key, template admission, template lookup, the registration name, and the
-instantiation scan. Each was a distinct caller of the same first-wins index. A
-removed mechanism takes one fix.
+index that reads it back into a declaration — a convention every minting and
+lookup site has to keep. Two sibling functions each declaring `struct Box<T>`
+took seven fixes to close, one per caller of that first-wins index; a removed
+mechanism takes one.

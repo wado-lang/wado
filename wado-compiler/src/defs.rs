@@ -1,14 +1,6 @@
-//! Declaration identity.
-//!
-//! Every declaration in the program gets a [`DefId`]: an opaque index into the
-//! [`DefTable`] built once, after loading, from every module's items. It is the
-//! identity the compiler compares, and this module mints no others —
-//! [`DefTable::declare`] is the only constructor. Names travel the other way:
-//! [`DefTable::name`] renders one for a diagnostic or for a mangle.
-//!
-//! A spelling cannot reach an identity, so two modules' same-named
-//! declarations cannot be confused for one. What is left of that is
-//! `NAME_TO_IDENTITY` below, which the `enforcement` test keeps from growing.
+//! Declaration identity: every declaration gets a [`DefId`], the identity the
+//! compiler compares. [`DefTable::declare`] is its only constructor, and names
+//! travel the other way through [`DefTable::name`].
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
@@ -46,16 +38,12 @@ fn members<'a>(
         .collect()
 }
 
-/// Identity of a declaration.
+/// Identity of a declaration: a dense index minted only by [`DefTable::declare`],
+/// so equality is declaration identity and no id exists for a declaration that
+/// does not.
 ///
-/// A dense index, minted only by [`DefTable::declare`]. Equality is declaration
-/// identity: there is no spelling on it to compare instead, and no way to build
-/// one for a declaration that does not exist.
-///
-/// [`crate::ast::AstId`] is deliberately not reused for this. It is the id type
-/// of *every* node and [`AstId::fresh`] is public, so a use-site id would
-/// type-check wherever a declaration id is expected and one could be minted from
-/// nothing; it is also sparse, so per-declaration data could not be a `Vec`.
+/// Not [`crate::ast::AstId`]: that is every node's id type and `fresh` is public,
+/// so a use-site id would type-check here; it is also sparse.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DefId(u32);
 
@@ -158,23 +146,15 @@ struct Def {
     parent: Option<DefId>,
     /// Members declared inside this one, in source order.
     members: Vec<DefId>,
-    /// Declared inside a function body rather than at module level.
-    ///
-    /// Two sibling functions may each declare a `struct Point`, and both are
-    /// this module's `Point`, so the declared name alone cannot tell them
-    /// apart. Every registry keyed by a rendered name — the WIR struct
-    /// registry above all — needs the distinction, which is why
-    /// [`crate::name::mangle_local_item_name`] exists; this is how a renderer
-    /// knows to apply it.
+    /// Declared inside a function body rather than at module level. Two sibling
+    /// functions may each declare a `struct Point`, so a name-keyed registry needs
+    /// [`crate::name::mangle_local_item_name`]; this tells a renderer to apply it.
     function_local: bool,
 }
 
-/// Every declaration in the program, by [`DefId`].
-///
-/// Built once from the symbol table, which already keys each declaration by its
-/// declaring node. The table hands back what a declaration *is*; it deliberately
-/// cannot answer what a *name* means — that question needs a module scope, and
-/// only [`crate::resolve`] runs one.
+/// Every declaration in the program, by [`DefId`]. Hands back what a declaration
+/// *is*; what a *name* means needs a module scope, which only
+/// [`crate::resolve`] runs.
 #[derive(Debug, Default, Clone)]
 pub struct DefTable {
     defs: Vec<Def>,
@@ -189,19 +169,12 @@ impl DefTable {
         Self::build_seeded(None, modules, symbols)
     }
 
-    /// [`Self::build`], continuing an earlier table.
+    /// [`Self::build`], continuing an earlier table so a cached declaration fact
+    /// stays readable: a declaration the seed identifies keeps its [`DefId`], and
+    /// only what the seed never saw is minted here.
     ///
-    /// A [`DefId`] is an index into one table, so a declaration fact that
-    /// outlives the compile that produced it — the stdlib snapshot caches whole
-    /// `ImplSig`s — is only readable if that compile's identities are still the
-    /// same ones. Seeding keeps them: a declaration the seed already identifies
-    /// keeps its `DefId`, and only what the seed never saw is minted here. This
-    /// is what [`crate::tir::TypeTable`] does for `TypeId` and for the same
-    /// reason.
-    ///
-    /// Both tables index the same declaration nodes because the stdlib AST is
-    /// parsed once per process and shared, so an [`AstId`] means the same node
-    /// in both.
+    /// The stdlib AST is parsed once per process and shared, so an [`AstId`] means
+    /// the same node in both tables.
     #[must_use]
     pub fn build_seeded(
         seed: Option<&Self>,

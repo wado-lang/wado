@@ -546,20 +546,12 @@ impl TypeSystem {
         self.resolutions.defs().of_ast_id(decl)
     }
 
-    /// The declaration `type_id` is an instance of.
-    ///
-    /// A nominal type already knows its declaring node, and `Node<i32>` and
-    /// `Node<String>` know the one `Node` they were spelled from — so a caller
-    /// holding a type has an identity without reading the `(name, module)` pair
-    /// off it and resolving that again. This is what the pair stops being a key
-    /// for.
-    /// The declaration `type_id` was *registered* under.
-    ///
-    /// This asks `decl_of_type`, which answers from the registration table, so
-    /// it declines for a type whose head carries a declaration that was never
-    /// registered under a node — a `GenericResource` instantiation is the case
-    /// that bites. A caller that wants the head's declaration regardless wants
-    /// [`crate::tir::TypeTable::nominal_def`].
+    /// The declaration `type_id` is an instance of. A nominal type already knows
+    /// its declaring node, so a caller holding a type has an identity without
+    /// reading a `(name, module)` pair off it and resolving that again.
+    /// The declaration `type_id` was *registered* under, so it declines for a head
+    /// whose declaration never got a node — a `GenericResource` instantiation.
+    /// For the head's declaration regardless, use [`crate::tir::TypeTable::nominal_def`].
     pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
         let decl = self.type_table.borrow().decl_of_type(type_id)?;
         self.resolutions.defs().of_ast_id(decl)
@@ -1459,14 +1451,12 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The trait declaration a reference site names.
+    /// The trait declaration a reference site names, from
+    /// [`crate::resolve::Resolutions`] and so resolved in the writing module: an
+    /// alias or a second module's same-named trait cannot displace it.
     ///
-    /// The answer comes from [`crate::resolve::Resolutions`] — resolved in the
-    /// module that wrote the reference — so an alias and a second module's
-    /// same-named trait cannot displace it. `written` feeds the fallback only:
-    /// the table is position-agnostic, so a site answering with something that
-    /// is no trait at all (a same-named enum case in the prelude) is the frame
-    /// derivation's to settle.
+    /// `written` feeds the fallback only, for a site answering with something that
+    /// is no trait at all — a same-named enum case in the prelude.
     pub(super) fn trait_decl_at(
         &self,
         site: crate::ast::AstId,

@@ -2533,9 +2533,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Look up static method return type based on struct name and method name
     /// `receiver` is the declaration the call site resolved, not a spelling to
-    /// re-resolve: a namespace-qualified `ns::Type::method` names a type the
-    /// caller's own frame either lacks or — with a same-named local
-    /// declaration — answers wrongly.
+    /// re-resolve: beside a same-named local declaration, the caller's own frame
+    /// answers with the wrong one.
     pub(super) fn lookup_static_method_return_type(
         &mut self,
         method_ref: &StaticMethodRef,
@@ -2563,12 +2562,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Search via pre-built index (handles impls defined outside the struct's defining module).
-        // The declaration the call site resolved is the key. A name-and-module
-        // search prefers the caller's own frame, so `ns::Type::method` beside a
-        // same-named local `Type` would answer with the local declaration's
-        // signature. Only a receiver naming no declaration — a shape, a binder —
-        // still needs that search.
+        // The resolved declaration is the key; the name-and-module search behind
+        // it prefers the caller's own frame and would answer with a same-named
+        // local `Type`. Only a receiver naming no declaration still needs it.
         let static_keys = receiver.head().def().map_or_else(
             || self.static_receiver_keys(Some(&method_ref.module), struct_name),
             |def| {
@@ -2842,14 +2838,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.lookup_static_method_param_is_mut_keyed(struct_name, method_name, None)
     }
 
-    /// The return type every static method the bucket declares under this name
-    /// agrees on, or `None` when they disagree.
-    ///
-    /// Unlike a parameter type, a return type can survive an overload set:
-    /// conversion impls all return the receiver, so `From<i16>` beside
-    /// `From<i32>` answers `i8` either way and the choice does not matter. Only a
-    /// genuine disagreement declines, where answering would type the call as
-    /// another impl's result.
+    /// The return type every static method under this name agrees on, `None` when
+    /// they disagree. An overload set still answers: every `From` impl returns the
+    /// receiver, so which one this call reaches cannot change the result.
     fn agreed_static_method_return(
         &self,
         static_key: &crate::elaborator::trait_env::ImplTargetKey,
@@ -2868,14 +2859,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         returns.all(|r| r == first).then_some(first)
     }
 
-    /// The static method the receiver's bucket declares under this name, or
-    /// `None` when the name does not determine one.
-    ///
-    /// Several entries share a name whenever several impls declare it — two
-    /// `From` impls both declare `from` — and the index holds nothing to choose
-    /// between them. It declines rather than picking the first, which would hand
-    /// the caller another impl's signature; a conversion that must choose goes
-    /// through [`Self::conversion_preselect`], which decides by the argument.
+    /// The static method declared under this name, `None` when several impls
+    /// declare it and the index has nothing to choose between them. A conversion
+    /// that must choose goes through [`Self::conversion_preselect`].
     fn unique_static_method_sig(
         &self,
         static_key: &crate::elaborator::trait_env::ImplTargetKey,
@@ -2908,9 +2894,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Like [`Self::lookup_static_method_param_is_mut`] but takes a pre-resolved
-    /// canonical receiver key, for the same reason as
-    /// [`Self::lookup_static_method_param_types_keyed`]: a namespace member the
-    /// importing module never names on its own is unreachable by bare spelling.
+    /// receiver key, which a namespace member's bare spelling cannot reach.
     pub(super) fn lookup_static_method_param_is_mut_keyed(
         &self,
         struct_name: &str,

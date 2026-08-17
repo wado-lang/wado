@@ -2898,15 +2898,11 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
 
 impl SynthesisCtx<'_, '_, '_> {
     /// `true` when a user-written impl anywhere in the project covers
-    /// `<trait> for <receiver>`.
+    /// `<trait> for <receiver>`. Module-agnostic on purpose, so a user's
+    /// `impl Display for String` suppresses the fallback in any module.
     ///
-    /// Module-agnostic on purpose, so a user's `impl Display for String` in
-    /// `format` suppresses the fallback while synthesising `string`. During
-    /// synthesis the synthesised layer of [`TraitEnv`] is empty (it is rebuilt
-    /// by `collect_synthesised_impls` *after* this pass), so `impl_module_for`
-    /// with no hint reduces to the AST layer. That index is keyed by the
-    /// spellings an `impl` header writes, which is why the receiver arrives as
-    /// an [`ImplReceiver`] rather than as an identity.
+    /// The AST layer it reduces to is keyed by the spellings an `impl` header
+    /// writes, which is why the receiver arrives as an [`ImplReceiver`].
     pub(crate) fn has_written_impl(
         &self,
         receiver: ImplReceiver<'_>,

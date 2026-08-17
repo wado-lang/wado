@@ -1,13 +1,6 @@
-//! Reference resolution: one answer per reference site.
-//!
-//! A name in Wado source is module-relative, so which declaration a spelling
-//! means is a fact about the module that wrote it. This pass answers that
-//! question once, at the site, and records the answer under the site's own
-//! [`AstId`]. Consumers read the table; none of them re-derives an identity from
-//! a name, and none of them needs a module it may not have.
-//!
-//! This is the only place a name becomes a [`DefId`]: [`Scope`] is private here,
-//! and [`crate::defs::DefTable`] has no name-keyed lookup of its own.
+//! Reference resolution: one answer per reference site, recorded under the
+//! site's own [`AstId`] because which declaration a spelling means is a fact
+//! about the module that wrote it. The only place a name becomes a [`DefId`].
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 

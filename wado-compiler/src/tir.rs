@@ -1486,14 +1486,11 @@ impl TypeTable {
         &mut self.compiler_items
     }
 
-    /// Record that the receiver `head` (declared in `module_source`) satisfied a
-    /// `T: <trait>` bound structurally (bound-driven synthesis). A no-op if
-    /// already recorded for this triple — the same type is typically
-    /// rediscovered from many call sites, so the pre-check avoids cloning the
-    /// key each time.
+    /// Record that `head` satisfied a `T: <trait>` bound structurally. A no-op if
+    /// already recorded — the same type is rediscovered from many call sites.
     ///
     /// The head is the identity synthesis compares: a declaration by its
-    /// [`crate::defs::DefId`], a shape no declaration names by its rendering.
+    /// [`crate::defs::DefId`], a shape by its rendering.
     pub fn record_bound_driven_synth_request(
         &mut self,
         head: &crate::name::TypeHead,
@@ -3556,17 +3553,12 @@ impl TypeTable {
         format_type_name(info)
     }
 
-    /// Mangle `id` as a type argument inside a generic instance's or monomorph's
-    /// identity name — the `T` in `Result<unit, T>`. Unlike
-    /// [`Self::mangle_type_name`], every named user-defined head is qualified by
-    /// its declaring `ModuleSource`, or two same-named types collapse onto one
-    /// WIR identity and the second inherits the first's representation.
+    /// Mangle `id` as a type argument inside a generic instance's identity — the
+    /// `T` in `Result<unit, T>`. Unlike [`Self::mangle_type_name`], every named
+    /// head is qualified by its declaring module, or two same-named types collapse.
     ///
-    /// One renderer, not two: the structured name is the identity and
-    /// [`crate::name::FqTypeName::to_mangled`] is the only thing that spells
-    /// one. A definition's name and a lookup's name therefore cannot disagree
-    /// — the failure WEP 2026-08-12 calls out, which a second mangler
-    /// reproducing this by hand is exactly how you get.
+    /// Delegates to [`crate::name::FqTypeName::to_mangled`], the one renderer, so
+    /// a definition's name and a lookup's cannot disagree.
     #[must_use]
     pub fn mangle_type_arg_for_generic(&self, id: TypeId) -> String {
         self.fq_type_name(id).to_mangled()
