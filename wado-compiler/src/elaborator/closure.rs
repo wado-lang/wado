@@ -149,7 +149,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, p)| {
                 let type_id = self.closure_param_type(p, i, expected_fn.as_ref());
-                closure_ctx.add_local(p.name.clone(), type_id, p.is_mut, Some(p.id));
+                closure_ctx.add_local_at(
+                    p.name.clone(),
+                    type_id,
+                    p.is_mut,
+                    Some(p.id),
+                    p.name_span,
+                );
                 self.record_local_symbol(p.id, &p.name, p.name_span, p.is_mut, type_id);
                 (p.name.clone(), type_id)
             })

@@ -4335,7 +4335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         match binding {
             ast::Pattern::Ident { id, name, span } => {
-                ctx.add_local(name.clone(), binding_type, false, Some(*id));
+                ctx.add_local_at(name.clone(), binding_type, false, Some(*id), *span);
                 self.record_local_symbol(*id, name, *span, false, binding_type);
             }
             ast::Pattern::Tuple(elems, _) => {
@@ -4348,7 +4348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, elem) in elems.iter().enumerate() {
                     if let ast::Pattern::Ident { id, name, span } = elem {
                         let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        ctx.add_local(name.clone(), elem_type, false, Some(*id));
+                        ctx.add_local_at(name.clone(), elem_type, false, Some(*id), *span);
                         self.record_local_symbol(*id, name, *span, false, elem_type);
                     }
                 }

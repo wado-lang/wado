@@ -1129,7 +1129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .intern(ResolvedType::MutRef(type_id)),
                     RefBinding::None => type_id,
                 };
-                ctx.add_local(name.clone(), binding_type, pat_mut, Some(*id));
+                ctx.add_local_at(name.clone(), binding_type, pat_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
@@ -1560,7 +1560,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .intern(ResolvedType::MutRef(scrutinee_type)),
                     RefBinding::None => scrutinee_type,
                 };
-                let index = ctx.add_local(name.clone(), binding_type, is_mut, Some(*id));
+                let index =
+                    ctx.add_local_at(name.clone(), binding_type, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
                 vec![(name.clone(), index, binding_type)]
             }
@@ -2365,7 +2366,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_destructured = matches!(&for_of.binding, crate::ast::Pattern::Tuple(..));
 
         ctx.enter_scope();
-        ctx.add_local(binding_name.clone(), binding_type, is_mut, binding_id);
+        ctx.add_local_at(
+            binding_name.clone(),
+            binding_type,
+            is_mut,
+            binding_id,
+            binding_name_span.unwrap_or_default(),
+        );
         if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
             self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
