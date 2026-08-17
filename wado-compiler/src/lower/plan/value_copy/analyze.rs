@@ -59,8 +59,18 @@ struct SeedWalker<'a> {
 
 impl SeedWalker<'_> {
     fn record_if_wrap(&mut self, expr: &TirExpr) {
-        if should_wrap(expr, self.type_table, self.oracle) {
-            self.out.insert(expr.type_id);
+        self.record_wrap_target(expr, expr.type_id);
+    }
+
+    /// The fold decides on the value's type but wraps the *destination*'s, and
+    /// the two differ where the destination is written: a `Let`'s declared type,
+    /// a deref-assign's referent. Seed what the fold will ask for, or the helper
+    /// it names does not exist.
+    fn record_wrap_target(&mut self, value: &TirExpr, dest: TypeId) {
+        if should_wrap(value, self.type_table, self.oracle)
+            && super::needs_value_copy(dest, self.type_table)
+        {
+            self.out.insert(dest);
         }
     }
 
@@ -78,6 +88,7 @@ impl TirRefVisitor for SeedWalker<'_> {
         match &stmt.kind {
             TirStmtKind::Let {
                 value,
+                type_id,
                 skip_value_copy,
                 ..
             } => {
@@ -85,7 +96,7 @@ impl TirRefVisitor for SeedWalker<'_> {
                 // copy depends on per-function move analysis this walk cannot
                 // see. An unused helper is dead code `dce` removes.
                 if !*skip_value_copy {
-                    self.record_if_wrap(value);
+                    self.record_wrap_target(value, *type_id);
                 }
             }
             TirStmtKind::LetDestructure { value, .. } => {
@@ -129,6 +140,10 @@ impl TirRefVisitor for SeedWalker<'_> {
                 );
                 if replaces_whole_value {
                     self.record_if_wrap(value);
+                    // `try_expand_deref_aggregate_assign` writes the referent
+                    // field by field and copies the RHS as the referent's type,
+                    // which a coercion can make wider than the RHS's own.
+                    self.record_wrap_target(value, target.type_id);
                 }
             }
             // An aggregate literal stores each element / field by value, so a

@@ -1001,22 +1001,24 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit a call to the `$value_copy$T(...)` helper.
     ///
-    /// The caller has already decided a copy is due (`should_wrap_value_copy`,
-    /// which gates on `needs_value_copy`), so a missing helper is a hole in the
-    /// seed walk, not a type that needs no copy. Returning the value unwrapped
-    /// there would emit an alias where the semantics call for a fresh value —
-    /// silently, and only for the sites the walk did not reach.
+    /// The wrap decision is made on the *value*'s type, while the type wrapped
+    /// is the destination's — a deref target, a `Let`'s declared type — so a
+    /// destination that is itself a reference reaches here needing no copy at
+    /// all, and passes through. Where the destination does need one, a missing
+    /// helper is a hole in the seed walk: passing the value through would alias
+    /// where the semantics call for a fresh value.
     fn wrap_value_copy(&self, value: ExprId, type_id: tir::TypeId) -> ExprId {
         let span = self.expr_span(value);
         let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
         else {
-            panic!(
-                "no value-copy helper for {}, which the fold is wrapping",
-                self.base
-                    .type_table
-                    .borrow()
-                    .mangle_type_arg_for_generic(type_id)
+            let tt = self.base.type_table.borrow();
+            assert!(
+                !value_copy::needs_value_copy(type_id, &tt),
+                "the seed walk registered no value-copy helper for {}",
+                tt.mangle_type_arg_for_generic(type_id)
             );
+            drop(tt);
+            return value;
         };
         let func = nir::FunctionRef {
             module_source: helper_module.clone(),
