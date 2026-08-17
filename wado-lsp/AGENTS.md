@@ -13,9 +13,11 @@ Language service engine for the Wado compiler toolchain.
 | File                        | Role                                                                                                                                                                                             |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/lib.rs`                | `Engine` struct: document state + per-document `Semantics` snapshot cache + query dispatch                                                                                                       |
+| `src/ast_search.rs`         | `FirstMatch` + `find_in_module`: the short-circuiting module walk that hover's local renderer and definition's `#include` path finder share                                                      |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                                  |
+| `src/host/discovery.rs`     | The filesystem reads behind `dependency_index`: governing `wado.toml`, `wado.lock`, and what the warm `~/wado` cache holds. `wado-manifest` itself stays pure                                    |
 | `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                           |
-| `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, and the `LineIndex` every batch conversion shares                                                      |
+| `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, `range_from_codepoints` (the one span→`Range` conversion), and the shared `LineIndex`                  |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`)          |
 | `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                                                                                            |
@@ -30,7 +32,17 @@ Language service engine for the Wado compiler toolchain.
 | `src/server/dispatch.rs`    | LSP method routing, position-encoding negotiation, and server-lifecycle enforcement                                                                                                              |
 | `src/server/rpc.rs`         | LSP wire types (params, capabilities, notifications)                                                                                                                                             |
 | `src/bin/wado-lsp.rs`       | Binary entrypoint; drives `run_stdio()` via `futures::executor::block_on`                                                                                                                        |
-| `src/test_support.rs`       | Shared in-memory `MapHost` for unit + integration tests (`#[doc(hidden)] pub`); replaces per-file `TestHost` duplication                                                                         |
+| `src/test_support.rs`       | Shared in-memory `MapHost` and the `open` / `open_files` fixture builders for unit + integration tests (`#[doc(hidden)] pub`), so no test grows its own                                          |
+
+### AST walking
+
+Every AST walk goes through `wado_compiler::ast::AstVisitor` and its `walk_*`
+functions — never a hand-written traversal, which silently skips whatever a
+later AST node adds.
+
+The contextual keywords (`test`, `do`, `resume`) lex as identifiers, so only
+`TestDecl::span` / `ResumeExpr::span` / `WithHandlerExpr::do_span` can classify
+them as keywords.
 
 ### Engine
 
@@ -91,8 +103,8 @@ passthrough) → UTF-8 → UTF-16 (LSP default; only chosen when the
 client offers nothing else). The codepoint semantics come from
 `lexer.rs::Lexer::advance`, which increments `column` per Unicode
 scalar value, not per byte and not per UTF-16 code unit. Every
-conversion lives in `text.rs` and routes through
-`codepoint_offset_to_character` / `character_to_codepoint_offset`.
+conversion lives in `text.rs`: `character_to_codepoint_offset` inbound,
+`range_from_codepoints` / `codepoints_to_code_units` outbound.
 
 ### Diagnostics
 
@@ -137,7 +149,10 @@ the un-normalised form opened a duplicate tab for an already-open file.
 
 ### DiagnosticCollector
 
-`DiagnosticCollector` in `lib.rs` wraps any `CompilerHost`, delegating `load_source` while silently collecting all emitted diagnostics. This avoids modifying or depending on a specific host implementation.
+`DiagnosticCollector` in `lib.rs` wraps any `CompilerHost`, delegating every
+capability while also collecting the diagnostics that pass through. Falling back
+to a trait default instead of delegating would silently drop the wrapped host's
+dependency index — and, for `source_exists`, turn a stat back into a full read.
 
 ### Stdio server
 

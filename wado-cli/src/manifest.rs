@@ -3,7 +3,7 @@ use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
-use wado_lsp::workspace::governing_workspace;
+use wado_lsp::host::discovery::governing_workspace;
 use wado_manifest::{Manifest, ManifestError};
 
 use crate::args::CliExit;

@@ -3,8 +3,9 @@
 Parsing, validation, and dependency resolution for `wado.toml` and `wado.lock`.
 
 Pure and `wasm32-unknown-unknown`-safe: this crate models and resolves the
-dependency graph but performs **no I/O**. Network, git, and filesystem fetching
-are injected by `wado-cli` through the `DependencyProvider` seam.
+dependency graph but performs **no I/O**. Network and git fetching are injected
+by `wado-cli` through the `DependencyProvider` seam; reading the disk belongs to
+the filesystem `CompilerHost` (`wado_lsp::host::discovery`).
 
 See [WEP: Package Manifest](../docs/wep-2026-02-14-package-manifest.md) for the
 specification.

@@ -2,18 +2,11 @@
 //! across parameters, locals, items, types, method calls, imports, effects,
 //! and file-path jumps.
 
-use wado_lsp::test_support::MapHost;
-use wado_lsp::{DefinitionResult, Engine, Position};
+use wado_lsp::test_support::{self, TEST_PATH};
+use wado_lsp::{DefinitionResult, Position};
 
 async fn def_at(source: &str, line: u32, character: u32) -> Option<DefinitionResult> {
-    let path = "/test.wado";
-    let uri = format!("file://{path}");
-    let host = MapHost::single(path, source);
-    let mut engine = Engine::new();
-    engine.open_document(&uri, source.to_string());
-    engine
-        .definition(&uri, Position { line, character }, &host)
-        .await
+    def_at_in(&[(TEST_PATH, source)], TEST_PATH, line, character).await
 }
 
 async fn def_at_in(
@@ -22,17 +15,9 @@ async fn def_at_in(
     line: u32,
     character: u32,
 ) -> Option<DefinitionResult> {
-    let uri = format!("file://{entry}");
-    let host = MapHost::with_files(files);
-    let entry_source = files
-        .iter()
-        .find(|(p, _)| *p == entry)
-        .map(|(_, s)| *s)
-        .expect("entry file present");
-    let mut engine = Engine::new();
-    engine.open_document(&uri, entry_source.to_string());
-    engine
-        .definition(&uri, Position { line, character }, &host)
+    let doc = test_support::open_files(files, entry);
+    doc.engine
+        .definition(&doc.uri, Position { line, character }, &doc.host)
         .await
 }
 

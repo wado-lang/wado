@@ -1009,6 +1009,10 @@ impl LocalMethodName {
 }
 
 /// A unified function identifier that can be either a free function or a method.
+///
+/// Not boxed despite the size gap: `optimize/dce.rs` builds these per call-graph
+/// edge, where an allocation costs more than the stack bytes it saves.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FunctionId {
     Free(FreeFunctionName),

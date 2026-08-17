@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use wado_compiler::{Code, Diagnostic as CompilerDiagnostic, Severity as CompilerSeverity};
 
 use crate::macros::lsp_repr_u32_enum;
-use crate::text::{LineIndex, PositionEncoding};
+use crate::text::{self, LineIndex, PositionEncoding};
 
 lsp_repr_u32_enum!(
     /// LSP-compatible diagnostic severity. Serializes as the 1..=4 integer
@@ -73,35 +73,18 @@ fn span_to_range(
     lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Range {
-    let start_line = span.line.saturating_sub(1) as u32;
-    let end_line = span
-        .end_line
-        .map_or(start_line, |l| l.saturating_sub(1) as u32);
-    let start_codepoint = span.column.saturating_sub(1) as u32;
-    let end_codepoint = span
+    // Default to one column wide. `max(1)` holds that width at column 0 — kiln
+    // generator diagnostics report one — since both ends lose 1 below.
+    let end_line = span.end_line.unwrap_or(span.line);
+    let end_column = span
         .end_column
-        .map_or(start_codepoint.saturating_add(1), |c| {
-            c.saturating_sub(1) as u32
-        });
-
-    let (start_char, end_char) = match lines {
-        Some(lines) => (
-            lines.to_character(start_line, start_codepoint, encoding),
-            lines.to_character(end_line, end_codepoint, encoding),
-        ),
-        None => (start_codepoint, end_codepoint),
-    };
-
-    Range {
-        start: Position {
-            line: start_line,
-            character: start_char,
-        },
-        end: Position {
-            line: end_line,
-            character: end_char,
-        },
-    }
+        .unwrap_or_else(|| span.column.max(1).saturating_add(1));
+    text::range_from_codepoints(
+        (span.line, span.column),
+        (end_line, end_column),
+        lines,
+        encoding,
+    )
 }
 
 /// Convert a compiler diagnostic to an LSP-compatible diagnostic.
@@ -333,6 +316,25 @@ mod tests {
         .unwrap();
         // Codepoint 5 → "// 🦀" → 3 ASCII + 1 codepoint (2 utf-16 units) = 5 utf-16 units.
         assert_eq!(diag.range.start.character, 5);
+    }
+
+    #[test]
+    fn zero_column_span_without_an_end_stays_one_column_wide() {
+        let compiler_diag = CompilerDiagnostic {
+            severity: CompilerSeverity::Error,
+            code: Code::TypeMismatch,
+            message: "generator said so".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "gen.wado".to_string(),
+                line: 0,
+                column: 0,
+                end_line: None,
+                end_column: None,
+            }),
+        };
+        let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
+        assert_eq!(diag.range.start.character, 0);
+        assert_eq!(diag.range.end.character, 1, "range must not be zero-width");
     }
 
     #[test]

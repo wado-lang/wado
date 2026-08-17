@@ -345,27 +345,27 @@ impl AstVisitor for HintCollector<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::query::test_ctx::with_ctx;
     use crate::test_support::MapHost;
     use crate::text::PositionEncoding;
     use futures::executor::block_on;
 
+    const WHOLE_DOCUMENT: Range = Range {
+        start: Position {
+            line: 0,
+            character: 0,
+        },
+        end: Position {
+            line: u32::MAX,
+            character: u32::MAX,
+        },
+    };
+
     async fn hints_for(source: &str) -> Vec<InlayHint> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
-        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf16);
-        let max_range = Range {
-            start: Position {
-                line: 0,
-                character: 0,
-            },
-            end: Position {
-                line: u32::MAX,
-                character: u32::MAX,
-            },
-        };
-        inlay_hints(&ctx, max_range)
+        with_ctx(source, PositionEncoding::Utf16, |ctx| {
+            inlay_hints(ctx, WHOLE_DOCUMENT)
+        })
+        .await
     }
 
     /// Sugar: collect (label, kind) pairs for assertions that don't care about positions.

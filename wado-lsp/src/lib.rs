@@ -1,5 +1,7 @@
 mod macros;
 
+mod ast_search;
+
 mod definition;
 mod diagnostics;
 mod document_highlight;
@@ -16,7 +18,6 @@ pub mod server;
 pub mod test_support;
 pub mod text;
 pub mod uri;
-pub mod workspace;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -69,9 +70,9 @@ impl std::error::Error for SymbolQueryError {}
 /// library consumers.
 ///
 /// Manages open documents and answers LSP-style queries (diagnostics, hover,
-/// definition, references, document highlight, semantic tokens, inlay
-/// hints). `Engine` itself performs no I/O: every query takes a `&impl
-/// CompilerHost`, so the caller decides how imported modules are loaded.
+/// definition, references, document highlight, semantic tokens, inlay hints).
+/// Every file it reads goes through the `&impl CompilerHost` each query takes,
+/// so the caller decides what the language service can see.
 ///
 /// ## Snapshot cache
 ///
@@ -747,6 +748,10 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.load_source(path).await
     }
 
+    async fn source_exists(&self, path: &str) -> bool {
+        self.inner.source_exists(path).await
+    }
+
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
         // Capture for the snapshot cache, then forward so the inner host's
         // own side effects (e.g. CLI stderr logging) still happen.
@@ -814,7 +819,7 @@ async fn build_semantics<H: CompilerHost>(
     }
     let invocations = match override_invocations {
         Some(index) => index,
-        None => kiln::prepare_invocations(filename, &parsed.ast, host),
+        None => kiln::prepare_invocations(filename, &parsed.ast, host).await,
     };
     match wado_compiler::load(
         parsed,
