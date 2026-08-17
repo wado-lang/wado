@@ -14,7 +14,7 @@
 //! generator of the same package share the tree without colliding.
 //!
 //! The path *layout* lives in [`wado_manifest::cache`] — pure, portable string
-//! logic — and the `root` in [`wado_manifest::cache_root`], so the CLI (which
+//! logic — and the `root` in [`wado_lsp::host::discovery::cache_root`], so the CLI (which
 //! fetches) and the language server (which reads offline) resolve one identical
 //! path. This module adds the concrete `PathBuf`s and the atomic writer.
 
@@ -24,13 +24,13 @@ use std::path::{Path, PathBuf};
 /// The dependency cache root: `$WADO_ROOT`, else `~/wado`. Shares the resolver
 /// with the language server so both agree on where the cache lives.
 pub fn root() -> Result<PathBuf, String> {
-    wado_manifest::cache_root()
+    wado_lsp::host::discovery::cache_root()
         .ok_or_else(|| "cannot locate the home directory; set WADO_ROOT".to_string())
 }
 
 /// Resolve the Wado root from `$XDG_CONFIG_HOME/wado/config.toml`'s `root` key
 /// and export it as `$WADO_ROOT` when that env var is unset, so the shared
-/// [`wado_manifest::cache_root`] resolver (and the embedded LSP server) observe
+/// [`wado_lsp::host::discovery::cache_root`] resolver (and the embedded LSP server) observe
 /// the configured root. Config parsing lives here — the single native host — so
 /// the crates below it (`wado-manifest`, `wado-lsp`) never pull
 /// a TOML parser. Precedence: an existing `$WADO_ROOT` wins; else the

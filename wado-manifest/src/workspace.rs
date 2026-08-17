@@ -1,49 +1,15 @@
-//! Workspace-member discovery and manifest inheritance.
+//! Workspace-member matching rules.
 //!
-//! A workspace member's `wado.toml` force-inherits fields (e.g. `version`) from
-//! the workspace root's `[workspace.package]`, so loading it standalone fails.
-//! These helpers locate the governing workspace and apply inheritance, so a
-//! member is loadable as a path dependency — by the dependency-index builders
-//! in `wado-lsp` / `wado-cli` and by `wado update`'s resolver alike.
+//! Pure path logic: whether a `[workspace].members` glob covers a directory,
+//! and the options every glob in the toolchain is matched with. Locating the
+//! governing workspace is a filesystem walk and lives with the host that does
+//! it (`wado_lsp::host::discovery`).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use crate::{Manifest, ManifestError, read_workspace_members};
 use glob::{MatchOptions, Pattern};
 
 pub const MANIFEST_FILENAME: &str = "wado.toml";
-
-/// The nearest ancestor of `start` (inclusive) that contains a `wado.toml`.
-/// `start` may name a file or a directory.
-///
-/// Absolutized first — a relative path's parent chain runs out after one
-/// `pop()` — so **the result is always absolute**. Callers re-anchoring other
-/// paths against it must express those in the same frame; every current
-/// caller derives its input from an absolute `file:` URI.
-#[must_use]
-pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
-    let mut dir = absolutize(start);
-    loop {
-        if dir.join(MANIFEST_FILENAME).is_file() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
-}
-
-/// `p` against the current directory when relative, or `p` itself when the
-/// process has no readable current directory.
-pub fn absolutize(p: &Path) -> PathBuf {
-    if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(p))
-            .unwrap_or_else(|_| p.to_path_buf())
-    }
-}
 
 /// Glob match options shared by the file walker (`wado-cli`'s discover, which
 /// re-exports this) and workspace-member matching, so `members` globs and the
@@ -57,54 +23,10 @@ pub const WALK_MATCH_OPTIONS: MatchOptions = MatchOptions {
     require_literal_leading_dot: false,
 };
 
-/// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
-/// `member_dir` belongs to a workspace; otherwise parse it standalone.
-///
-/// # Errors
-/// Propagates TOML, inheritance, and validation errors for the merged member.
-pub fn resolve_member_manifest(
-    member_dir: &Path,
-    member_content: &str,
-) -> Result<Manifest, ManifestError> {
-    match governing_workspace(member_dir, member_content) {
-        Some((_, root_content)) => crate::resolve_member(member_content, &root_content),
-        None => member_content.parse(),
-    }
-}
-
-/// The workspace governing `member_dir` — its root directory and `wado.toml`
-/// contents — if `member_dir` is a member of one.
-///
-/// A manifest that itself declares `[workspace]` is the workspace authority, not
-/// a governed member, so it returns `None`. Otherwise walk up to the nearest
-/// ancestor whose `[workspace].members` glob covers the member.
+/// Whether `member_dir` matches any `members` glob, evaluated against the
+/// member path relative to the workspace root. No filesystem walk.
 #[must_use]
-pub fn governing_workspace(member_dir: &Path, member_content: &str) -> Option<(PathBuf, String)> {
-    if read_workspace_members(member_content).is_some() {
-        return None;
-    }
-    let mut dir = member_dir.to_path_buf();
-    while dir.pop() {
-        let candidate = dir.join(MANIFEST_FILENAME);
-        if !candidate.is_file() {
-            continue;
-        }
-        let Ok(content) = std::fs::read_to_string(&candidate) else {
-            continue;
-        };
-        if let Some(members) = read_workspace_members(&content)
-            && workspace_governs(&dir, &members, member_dir)
-        {
-            return Some((dir, content));
-        }
-    }
-    None
-}
-
-/// Whether `member_dir` matches any `members` glob, evaluated as a pure path
-/// match (no filesystem walk) against the member path relative to the workspace
-/// root.
-fn workspace_governs(root_dir: &Path, members: &[String], member_dir: &Path) -> bool {
+pub fn workspace_governs(root_dir: &Path, members: &[String], member_dir: &Path) -> bool {
     let Ok(rel) = member_dir.strip_prefix(root_dir) else {
         return false;
     };
@@ -116,47 +38,42 @@ fn workspace_governs(root_dir: &Path, members: &[String], member_dir: &Path) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
-    fn member_manifest_inherits_version_from_the_workspace() {
-        // A member omitting `version` (force-inherited) resolves by applying
-        // `[workspace.package]` — the case a standalone parse rejects.
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("wado.toml"),
-            "[workspace]\nmembers = [\"member\"]\n\n[workspace.package]\nversion = \"0.4.0\"\n",
-        )
-        .unwrap();
-        let member_dir = tmp.path().join("member");
-        std::fs::create_dir(&member_dir).unwrap();
-        let member_toml = "[package]\nname = \"member\"\n";
-        std::fs::write(member_dir.join("wado.toml"), member_toml).unwrap();
-
-        let manifest = resolve_member_manifest(&member_dir, member_toml).unwrap();
-        assert_eq!(manifest.package.unwrap().version, "0.4.0");
+    fn a_members_glob_covers_its_directory() {
+        let root = PathBuf::from("/ws");
+        let members = ["member".to_string(), "packages/*".to_string()];
+        assert!(workspace_governs(&root, &members, &root.join("member")));
+        assert!(workspace_governs(&root, &members, &root.join("packages/a")));
     }
 
     #[test]
-    fn standalone_manifest_parses_without_a_workspace() {
-        let tmp = tempfile::tempdir().unwrap();
-        let toml = "[package]\nname = \"solo\"\nversion = \"1.0.0\"\n";
-        let manifest = resolve_member_manifest(tmp.path(), toml).unwrap();
-        assert_eq!(manifest.package.unwrap().name, "solo");
+    fn an_uncovered_directory_is_not_governed() {
+        // A directory under the root but outside `members` inherits nothing.
+        let root = PathBuf::from("/ws");
+        let members = ["member".to_string()];
+        assert!(!workspace_governs(&root, &members, &root.join("outsider")));
     }
 
     #[test]
-    fn non_member_directory_does_not_inherit() {
-        // A directory under a workspace root but not covered by `members` is not
-        // governed, so a manifest missing `version` there fails rather than
-        // silently inheriting.
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("wado.toml"),
-            "[workspace]\nmembers = [\"member\"]\n\n[workspace.package]\nversion = \"0.4.0\"\n",
-        )
-        .unwrap();
-        let outsider = tmp.path().join("outsider");
-        std::fs::create_dir(&outsider).unwrap();
-        assert!(governing_workspace(&outsider, "[package]\nname = \"x\"\n").is_none());
+    fn a_star_does_not_cross_directories() {
+        // `require_literal_separator`: `packages/*` covers direct children only.
+        let root = PathBuf::from("/ws");
+        let members = ["packages/*".to_string()];
+        assert!(!workspace_governs(
+            &root,
+            &members,
+            &root.join("packages/a/nested")
+        ));
+    }
+
+    #[test]
+    fn a_directory_outside_the_root_is_not_governed() {
+        assert!(!workspace_governs(
+            Path::new("/ws"),
+            &["member".to_string()],
+            Path::new("/elsewhere/member"),
+        ));
     }
 }

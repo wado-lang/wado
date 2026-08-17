@@ -114,7 +114,7 @@ Wado-specific features:
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
 - `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT.
-- `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution, plus the workspace discovery and offline `[dependencies]` placement that read them off disk.
+- `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution. Pure: no I/O. Reading the disk lives in `wado-lsp/src/host/discovery.rs`, inside the filesystem `CompilerHost`.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module. (`wado-bundled-icu/` is a not-yet-wired spike.)
 - `docs/` — the language spec (`docs/spec.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
