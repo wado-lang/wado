@@ -4,8 +4,11 @@
 // point (app.js) so both runtimes run identical routes.
 //
 //   bun run benchmark/http_routing/app.bun.js
+//
+// Scaling out is one process per core, each binding the same port with
+// SO_REUSEPORT; bench.sh spawns them and owns their lifetime.
 
 import { createApp } from './app.routes.js'
 
 const port = Number(process.env.PORT ?? 3002)
-Bun.serve({ fetch: createApp().fetch, port })
+Bun.serve({ fetch: createApp().fetch, port, reusePort: true })

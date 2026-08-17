@@ -1,100 +1,53 @@
 #!/usr/bin/env bash
 # HTTP routing benchmark: `wado serve` vs Hono (Node.js & Bun) vs Axum.
 #
-# Methodology for stable cross-server ratios on a noisy (cloud) host:
+# Two deployment shapes are measured, because they rank differently:
 #
-#   * CPU pinning — servers run on one core set, the `oha` load
-#     generator on a disjoint set, so the two never contend for a core.
-#   * Round-robin interleaving — every server stays up for the whole
-#     run; each request is measured in short slices that rotate across
-#     servers, repeated for ROUNDS rounds. A throttling episode then
-#     hits every server within the same time window, so ratios survive
-#     it even when absolute throughput drifts.
-#   * Max aggregation — contention and throttling only ever lower
-#     throughput, so the fastest slice across rounds is the cleanest
-#     estimate of true capacity. Round 1 doubles as a warmup: its cold
-#     numbers lose to later rounds and drop out.
+#   * 1 worker  — a 1-core container scaled out horizontally (k8s).
+#   * 4 workers — a small VM running one instance.
 #
-# Absolute numbers are not comparable across machines or runs — only the
-# ratios between servers within one run are.
+# Every server gets the same worker count and the same pinned cores in a
+# given shape, so the table compares servers rather than core budgets.
+# Node scales out with `node:cluster`, Bun with SO_REUSEPORT, `wado serve`
+# with --workers, Axum with TOKIO_WORKER_THREADS.
 #
-# Env overrides: SLICE (default 3s), ROUNDS (default 3),
-# CONNECTIONS (default 50), OHA_CORE_COUNT (default nproc/4).
+# The load generator is pinned to a disjoint core set and given the larger
+# share; a saturated `oha` silently caps the fastest servers and compresses
+# every ratio, so each shape ends with a headroom check that re-runs the
+# fastest result with twice the connections and reports any gain.
+#
+# Env overrides: SLICE (default 10s), ROUNDS (default 3), SHAPES
+# (default "1 4"), CONNECTIONS_PER_WORKER (default 100).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SLICE="${SLICE:-3}"
+SLICE="${SLICE:-10}"
 ROUNDS="${ROUNDS:-3}"
-CONNECTIONS="${CONNECTIONS:-50}"
+SHAPES="${SHAPES:-1 4}"
+CONNECTIONS_PER_WORKER="${CONNECTIONS_PER_WORKER:-100}"
 WADO_BIN="../../target/release/wado"
-WADO_ADDR="127.0.0.1:8080"
 HONO_PORT="3000"
 AXUM_PORT="3001"
 BUN_PORT="3002"
+WADO_PORT="8080"
 
-# Hono's official router-benchmark request set ("METHOD PATH" per entry):
-# short static, static sharing a radix, dynamic, mixed static/dynamic,
-# POST, long static, wildcard.
+# One request per routing behaviour the routers differ on: static match,
+# dynamic parameter, method dispatch over a mixed static/dynamic path, and
+# wildcard. Hono's official router benchmark set, minus the entries that
+# only vary depth or the radix sibling of a case already covered.
 REQUESTS=(
   "GET /user"
-  "GET /user/comments"
   "GET /user/lookup/username/hey"
-  "GET /event/abcd1234/comments"
   "POST /event/abcd1234/comment"
-  "GET /very/deeply/nested/route/hello/there"
   "GET /static/index.html"
 )
 
-# `oha` is installed via `cargo install oha` and may not be on PATH
-# under `mise run`; fall back to the default cargo bin location.
 OHA_BIN="$(command -v oha || true)"
 [ -z "$OHA_BIN" ] && OHA_BIN="$HOME/.cargo/bin/oha"
 
-# CPU pinning: split cores between the servers and the load generator so
-# they never share a core. The load generator gets a quarter of the
-# cores (at least one), the servers the rest — `oha` is far lighter than
-# a server, and an even split would cram a multi-worker server onto too
-# few cores. Multi-threaded servers are then sized to the server core
-# count (see SERVER_CORE_COUNT below) so none is over-threaded.
-# `env` is a no-op prefix when pinning is off, which keeps the command
-# arrays safe to expand under `set -u`.
 NPROC="$(nproc)"
-if command -v taskset >/dev/null 2>&1 && [ "$NPROC" -ge 2 ]; then
-  # OHA_CORE_COUNT may be overridden to retune the split (e.g. =2 on a
-  # 4-core host gives an even server/oha split, raising the oha
-  # throughput ceiling at the cost of fewer server cores).
-  OHA_CORE_COUNT="${OHA_CORE_COUNT:-$((NPROC / 4))}"
-  [ "$OHA_CORE_COUNT" -lt 1 ] && OHA_CORE_COUNT=1
-  SERVER_CORE_COUNT=$((NPROC - OHA_CORE_COUNT))
-  SERVER_CORES="0-$((SERVER_CORE_COUNT - 1))"
-  OHA_CORES="${SERVER_CORE_COUNT}-$((NPROC - 1))"
-  SERVER_PIN=(taskset -c "$SERVER_CORES")
-  OHA_PIN=(taskset -c "$OHA_CORES")
-  echo "CPU pinning: servers on cores ${SERVER_CORES} (${SERVER_CORE_COUNT}), oha on cores ${OHA_CORES}"
-else
-  SERVER_PIN=(env)
-  OHA_PIN=(env)
-  SERVER_CORE_COUNT="$NPROC"
-  echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
-fi
-
-PIDS=()
-cleanup() {
-  for p in "${PIDS[@]:-}"; do
-    [ -n "$p" ] && kill "$p" 2>/dev/null || true
-  done
-}
-trap cleanup EXIT
-
-wait_ready() {
-  local url="$1"
-  for _ in $(seq 1 120); do
-    curl -fs -o /dev/null "$url" 2>/dev/null && return 0
-    sleep 0.5
-  done
-  echo "ERROR: server not ready at $url" >&2
-  return 1
-}
+PIN_AVAILABLE=0
+command -v taskset >/dev/null 2>&1 && [ "$NPROC" -ge 4 ] && PIN_AVAILABLE=1
 
 echo "=== Building wado (release) ==="
 cargo build --release --quiet --manifest-path ../../wado-cli/Cargo.toml
@@ -105,83 +58,150 @@ cargo build --release --quiet --manifest-path Cargo.toml
 echo "=== Installing Hono dependencies ==="
 npm install --prefix . --silent --no-audit --no-fund
 
-# Server roster, populated in start order. Hono on Bun is optional.
-# Every server is driven over HTTP/1.1; README.md says why.
-SERVER_NAMES=()
-SERVER_URLS=()
-register() {
-  SERVER_NAMES+=("$1")
-  SERVER_URLS+=("$2")
+PIDS=()
+cleanup() {
+  for p in "${PIDS[@]:-}"; do
+    [ -n "$p" ] && kill "$p" 2>/dev/null || true
+  done
+  PIDS=()
+}
+trap cleanup EXIT
+
+wait_ready() {
+  for _ in $(seq 1 120); do
+    curl -fs -o /dev/null "$1" 2>/dev/null && return 0
+    sleep 0.5
+  done
+  echo "ERROR: server not ready at $1" >&2
+  return 1
 }
 
-# Multi-threaded servers are sized to the server core budget so none is
-# over-threaded onto its pinned cores: `wado serve` via --workers, Axum
-# (Tokio) via TOKIO_WORKER_THREADS. Node and Bun drive their HTTP server
-# from a single thread and need no knob.
-echo "=== Starting servers ==="
-"${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "$WADO_ADDR" \
-  --workers "$SERVER_CORE_COUNT" app.wado >/dev/null 2>&1 &
-PIDS+=($!)
-register "Wado (wado serve)" "http://${WADO_ADDR}"
+# Throughput of one (url, method, path) slice, in whole req/s.
+measure() {
+  "${OHA_PIN[@]}" "$OHA_BIN" -m "$2" -z "${SLICE}s" -c "$CONNECTIONS" \
+    --no-tui "${1}${3}" 2>/dev/null |
+    awk '/Requests\/sec/ {printf "%.0f", $2}'
+}
 
-PORT="$HONO_PORT" "${SERVER_PIN[@]}" node app.js >/dev/null 2>&1 &
-PIDS+=($!)
-register "JavaScript (Hono on Node)" "http://127.0.0.1:${HONO_PORT}"
+SERVER_NAMES=()
+SERVER_URLS=()
 
-if command -v bun >/dev/null 2>&1; then
-  PORT="$BUN_PORT" "${SERVER_PIN[@]}" bun run app.bun.js >/dev/null 2>&1 &
+start_servers() {
+  local workers="$1"
+  SERVER_NAMES=()
+  SERVER_URLS=()
+
+  "${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "127.0.0.1:${WADO_PORT}" \
+    --workers "$workers" app.wado >/dev/null 2>&1 &
   PIDS+=($!)
-  register "JavaScript (Hono on Bun)" "http://127.0.0.1:${BUN_PORT}"
-else
-  echo "  SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
-fi
+  SERVER_NAMES+=("Wado (wado serve)")
+  SERVER_URLS+=("http://127.0.0.1:${WADO_PORT}")
 
-PORT="$AXUM_PORT" TOKIO_WORKER_THREADS="$SERVER_CORE_COUNT" \
-  "${SERVER_PIN[@]}" ./target/release/axum_server >/dev/null 2>&1 &
-PIDS+=($!)
-register "Rust (Axum)" "http://127.0.0.1:${AXUM_PORT}"
+  PORT="$HONO_PORT" WORKERS="$workers" "${SERVER_PIN[@]}" node app.js >/dev/null 2>&1 &
+  PIDS+=($!)
+  SERVER_NAMES+=("JavaScript (Hono on Node)")
+  SERVER_URLS+=("http://127.0.0.1:${HONO_PORT}")
 
-for url in "${SERVER_URLS[@]}"; do
-  wait_ready "${url}/status"
-done
+  if command -v bun >/dev/null 2>&1; then
+    # Bun has no cluster primary: one process per worker, all sharing the
+    # port through SO_REUSEPORT.
+    for _ in $(seq 1 "$workers"); do
+      PORT="$BUN_PORT" "${SERVER_PIN[@]}" bun run app.bun.js >/dev/null 2>&1 &
+      PIDS+=($!)
+    done
+    SERVER_NAMES+=("JavaScript (Hono on Bun)")
+    SERVER_URLS+=("http://127.0.0.1:${BUN_PORT}")
+  else
+    echo "  SKIP: bun not found (install bun or add it to benchmark/mise.toml)"
+  fi
 
-# Per-(server, request) best result, keyed "<server_idx>|<request_idx>".
-declare -A BEST
+  PORT="$AXUM_PORT" TOKIO_WORKER_THREADS="$workers" \
+    "${SERVER_PIN[@]}" ./target/release/axum_server >/dev/null 2>&1 &
+  PIDS+=($!)
+  SERVER_NAMES+=("Rust (Axum)")
+  SERVER_URLS+=("http://127.0.0.1:${AXUM_PORT}")
 
-echo "=== Measuring (slice=${SLICE}s, rounds=${ROUNDS}, connections=${CONNECTIONS}) ==="
-for round in $(seq 1 "$ROUNDS"); do
-  echo "--- round ${round}/${ROUNDS} ---"
+  for url in "${SERVER_URLS[@]}"; do wait_ready "${url}/status"; done
+}
+
+run_shape() {
+  local workers="$1"
+  CONNECTIONS=$((CONNECTIONS_PER_WORKER * workers))
+
+  if [ "$PIN_AVAILABLE" -eq 1 ]; then
+    SERVER_PIN=(taskset -c "0-$((workers - 1))")
+    OHA_PIN=(taskset -c "${workers}-$((NPROC - 1))")
+    echo "CPU pinning: servers on cores 0-$((workers - 1)), oha on cores ${workers}-$((NPROC - 1))"
+  else
+    SERVER_PIN=(env)
+    OHA_PIN=(env)
+    echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
+  fi
+
+  start_servers "$workers"
+
+  declare -A BEST=()
+  local si ri req method path rps
+  for si in "${!SERVER_NAMES[@]}"; do
+    echo "--- ${SERVER_NAMES[$si]} ---"
+    # Warm up every route once; the JITs need it and the discarded slice
+    # also settles the accept queues.
+    for req in "${REQUESTS[@]}"; do
+      measure "${SERVER_URLS[$si]}" "${req%% *}" "${req#* }" >/dev/null
+    done
+    for ri in "${!REQUESTS[@]}"; do
+      req="${REQUESTS[$ri]}"
+      method="${req%% *}"
+      path="${req#* }"
+      for _ in $(seq 1 "$ROUNDS"); do
+        rps=$(measure "${SERVER_URLS[$si]}" "$method" "$path")
+        [ -z "$rps" ] && rps=0
+        [ "$rps" -gt "${BEST[${si}|${ri}]:-0}" ] && BEST[${si}|${ri}]="$rps"
+      done
+    done
+  done
+
+  echo
+  echo "=== ${workers} worker(s): max req/s over ${ROUNDS} rounds (higher is better) ==="
+  printf '%-44s' "Request"
+  for name in "${SERVER_NAMES[@]}"; do printf '%26s' "$name"; done
+  printf '\n'
   for ri in "${!REQUESTS[@]}"; do
-    req="${REQUESTS[$ri]}"
-    method="${req%% *}"
-    path="${req#* }"
-    for si in "${!SERVER_NAMES[@]}"; do
-      out=$("${OHA_PIN[@]}" "$OHA_BIN" -m "$method" -z "${SLICE}s" \
-        -c "$CONNECTIONS" --no-tui "${SERVER_URLS[$si]}${path}" 2>/dev/null)
-      rps=$(echo "$out" | awk '/Requests\/sec/ {printf "%.0f", $2}')
-      [ -z "$rps" ] && rps=0
-      key="${si}|${ri}"
-      if [ "$rps" -gt "${BEST[$key]:-0}" ]; then
-        BEST[$key]="$rps"
+    printf '%-44s' "${REQUESTS[$ri]}"
+    for si in "${!SERVER_NAMES[@]}"; do printf '%26s' "${BEST[${si}|${ri}]:-0}"; done
+    printf '\n'
+  done
+
+  # Headroom check: re-run the fastest cell with twice the connections. A
+  # gain means `oha` — not the server — set that number, and every result
+  # in the shape is suspect.
+  local top=0 top_si=0 top_ri=0
+  for si in "${!SERVER_NAMES[@]}"; do
+    for ri in "${!REQUESTS[@]}"; do
+      if [ "${BEST[${si}|${ri}]:-0}" -gt "$top" ]; then
+        top="${BEST[${si}|${ri}]}"; top_si="$si"; top_ri="$ri"
       fi
     done
   done
-done
+  req="${REQUESTS[$top_ri]}"
+  CONNECTIONS=$((CONNECTIONS * 2))
+  local retry
+  retry=$(measure "${SERVER_URLS[$top_si]}" "${req%% *}" "${req#* }")
+  echo
+  printf 'Headroom check: %s @ %s — %s req/s, %s req/s at 2x connections' \
+    "${SERVER_NAMES[$top_si]}" "$req" "$top" "$retry"
+  if [ "$retry" -gt $((top * 105 / 100)) ]; then
+    printf ' — WARNING: load generator saturated, results are a floor\n'
+  else
+    printf ' — ok\n'
+  fi
 
-echo
-echo "=== Results: max req/s over ${ROUNDS} rounds (higher is better) ==="
-printf '%-44s' "Request"
-for name in "${SERVER_NAMES[@]}"; do
-  printf '%26s' "$name"
-done
-printf '\n'
-for ri in "${!REQUESTS[@]}"; do
-  printf '%-44s' "${REQUESTS[$ri]}"
-  for si in "${!SERVER_NAMES[@]}"; do
-    printf '%26s' "${BEST[${si}|${ri}]:-0}"
-  done
-  printf '\n'
-done
+  cleanup
+  sleep 1
+}
 
-echo
-echo "Done (slice=${SLICE}s, rounds=${ROUNDS}, connections=${CONNECTIONS} per slice)."
+for shape in $SHAPES; do
+  echo
+  echo "########## ${shape} worker(s) per server ##########"
+  run_shape "$shape"
+done
