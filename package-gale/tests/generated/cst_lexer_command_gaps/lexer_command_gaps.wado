@@ -1257,25 +1257,46 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_set_mode: i32 = -1;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
-            end = try_WORD(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
-            end = try_ZERO(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
-            end = try_NUMBER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
-            end = try_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 2; }
-            end = try_PRAGMA_OPEN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PRAGMA_OPEN; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            if first_char matches { '\t' | '\n' | '\r' | ' ' } {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else if first_char matches { '#' } {
+                end = try_PRAGMA_OPEN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PRAGMA_OPEN; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else if first_char matches { '/' } {
+                end = try_COMMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 2; }
+            } else if first_char matches { 'z' } {
+                end = try_WORD(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+                end = try_ZERO(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else if first_char matches { 'a'..='z' } {
+                end = try_WORD(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else if first_char matches { '0'..='9' } {
+                end = try_NUMBER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else {
+                end = try_WORD(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WORD; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+                end = try_NUMBER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NUMBER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            }
         } else if current_mode == 1 {
-            end = try_PRAGMA(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PRAGMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
-            end = try_PRAGMA_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PRAGMA_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
-            end = try_PRAGMA_END(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PRAGMA_END; best_push_mode = -1; best_pop_mode = false; best_set_mode = 0; best_channel = 0; }
+            if first_char matches { '\t' | ' ' } {
+                end = try_PRAGMA_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PRAGMA_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else if first_char matches { '\n' } {
+                end = try_PRAGMA_END(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PRAGMA_END; best_push_mode = -1; best_pop_mode = false; best_set_mode = 0; best_channel = 0; }
+            } else if first_char matches { '_' | 'a'..='z' | 'A'..='Z' } {
+                end = try_PRAGMA(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PRAGMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            } else {
+                end = try_PRAGMA(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PRAGMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_channel = 0; }
+            }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1382,22 +1403,21 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -1477,7 +1497,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1528,7 +1548,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1542,9 +1562,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1570,7 +1590,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1593,7 +1613,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1640,7 +1660,6 @@ fn scan_text(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn _parse_text__inner(p: &mut Parser) -> () {
-    let start = p.peek_start();
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;

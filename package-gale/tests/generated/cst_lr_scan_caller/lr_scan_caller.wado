@@ -2126,22 +2126,21 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, atn_stack: [], atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -2221,7 +2220,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -2272,7 +2271,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2286,9 +2285,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2314,7 +2313,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2337,7 +2336,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2453,7 +2452,6 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn _parse_stat__inner_alt_0(p: &mut Parser) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 8;
     let expr = _parse_expr(p);
     let lit_and = p.expect(TK_LIT_AND, &SYNC_0);
@@ -2478,7 +2476,6 @@ fn _parse_stat__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 17;
     let expr = _parse_expr(p);
     let semicolon = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
@@ -2517,16 +2514,13 @@ fn _parse_stat__inner(p: &mut Parser) -> () {
             if _sd_best_i == 0 {
                 return _parse_stat__inner_alt_0(p);
             }
-            if _sd_best_i == 1 {
-                return _parse_stat__inner_alt_1(p);
-            }
             return _parse_stat__inner_alt_1(p);
         }
     }
     p.no_viable(
         "no alternative of stat matches",
         p.peek_span(),
-        [token_kind_name(TK_ID), token_kind_name(TK_LIT_BETWEEN)],
+        &SYNC_2,
     );
     return;
 }
@@ -2547,7 +2541,6 @@ fn _parse_stat(p: &mut Parser) -> () {
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
         let id = p.expect(TK_ID, &EMPTY_SYNC);
@@ -2565,7 +2558,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     p.no_viable(
         "no alternative of expr matches",
         p.peek_span(),
-        [token_kind_name(TK_ID), token_kind_name(TK_LIT_BETWEEN)],
+        &SYNC_2,
     );
     return;
 }
