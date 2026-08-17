@@ -998,17 +998,30 @@ fn sll_find_common_terminal(configs: &List<SllConfig>) -> Option<Element> {
     return Option::<Element>::Some(*first_elem);
 }
 
-fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
+pub fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
     return match [*a, *b] {
         [Leaf(ai), Leaf(bi)] => ai == bi,
-        // Compare only the alt set, not the halt reason: branch merging
-        // must keep folding same-alt Ambiguous children together whichever
-        // edge produced them, or the tree shape would change.
-        [Ambiguous(aa), Ambiguous(ba)] => aa.alts == ba.alts,
+        [Ambiguous(aa), Ambiguous(ba)] => ambiguous_eq(&aa, &ba),
         [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
         [Dispatch(da), Dispatch(db)] => dispatch_eq(&da, &db),
         _ => false,
     };
+}
+
+/// Whether two `Ambiguous` nodes emit the same code: the alt set, plus what
+/// `ambiguous_node_routes_via_atn` reads. Only `AtEndConflict` can route to
+/// the simulator and only it reads `branch_tokens`, so every other reason
+/// folds — merging two that route differently would hand one branch's tokens
+/// to the other's routing.
+fn ambiguous_eq(a: &AmbiguousNode, b: &AmbiguousNode) -> bool {
+    if a.alts != b.alts {
+        return false;
+    }
+    let a_at_end = a.reason matches { AtEndConflict };
+    if a_at_end != b.reason matches { AtEndConflict } {
+        return false;
+    }
+    return !a_at_end || a.branch_tokens == b.branch_tokens;
 }
 
 /// Structural equality of two sub-dispatches. Branch order is compared

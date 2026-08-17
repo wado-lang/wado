@@ -598,11 +598,10 @@ fn gen_scan_lr_functions(
     f2.emit_begin(w);
     w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.emit_follow())});`);
     w.line(&"if pos < 0 { return -1; }");
-    let side = LrDispatchSide { scan: true, fn_name: *fn_name, scan_fn_name: "", use_prec: false };
     if atn_loop_dec >= 0 {
-        gen_lr_suffix_dispatch_atn(w, &side, lr_alts, lr_dispatch, ctx, atn_loop_dec);
+        gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
-        gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
+        gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
     w.line(&"return pos;");
     w.end();
@@ -662,44 +661,32 @@ fn gen_scan_lr_suffix_helpers(
 // No static scan gate is emitted: the simulator's decision is the commit.
 fn gen_lr_suffix_dispatch_atn(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut GenContext,
     decision: i32,
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
-    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin(&"loop");
-    if side.scan {
-        w.line(
-            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
-        );
-        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.fn_name, &"tokens", &"pos", ctx);
-    } else {
-        w.line(
-            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
-        );
-        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.scan_fn_name, &"&p.kinds", &"p.pos", ctx);
-    }
-    w.line(&`let _lr_pos0 = ${pos_expr};`);
+    w.line(
+        &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+    );
+    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, &"tokens", &"pos", ctx);
+    w.line(&"let _lr_pos0 = pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr_idx = lr_alts[valid[i]].alt_index;
-        let suffix_fn = `${side.fn_name}_lr_${lr_idx}`;
+        let suffix_fn = `${*fn_name}_lr_${lr_idx}`;
         if is_first {
             w.begin(&`if _atn_alt == ${i}`);
             is_first = false;
         } else {
             w.else_begin(&`else if _atn_alt == ${i}`);
         }
-        if side.scan {
-            w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.emit_follow())});`);
-            w.line(&"if pos < 0 { return -1; }");
-        } else {
-            w.line(&`result = ${suffix_fn}(p, result, start${follow_sep(ctx.emit_follow())});`);
-        }
+        w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.emit_follow())});`);
+        w.line(&"if pos < 0 { return -1; }");
     }
     if !is_first {
         w.else_begin(&"else");
@@ -708,17 +695,10 @@ fn gen_lr_suffix_dispatch_atn(
     } else {
         w.line(&"break;");
     }
-    w.begin(&`if ${pos_expr} == _lr_pos0`);
+    w.begin(&"if pos == _lr_pos0");
     w.line(&"break;");
     w.end();
     w.end();  // loop
-}
-
-struct LrDispatchSide {
-    scan: bool,
-    fn_name: String,
-    scan_fn_name: String,  // parse side only
-    use_prec: bool,  // parse side only
 }
 
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
@@ -781,24 +761,18 @@ fn emit_lr_atn_group_repick(
 
 fn gen_lr_branch_call(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     lr_idx: i32,
     prec: i32,
     emit_follow: bool,
     mid_operand_gated: bool = false,
 ) {
-    let suffix_fn = `${side.fn_name}_lr_${lr_idx}`;
-    if side.scan {
-        gen_scan_lr_call_with_prec(w, &suffix_fn, prec, emit_follow, mid_operand_gated);
-    } else {
-        let scan_suffix_fn = `${side.scan_fn_name}_lr_${lr_idx}`;
-        gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, side.use_prec, emit_follow);
-    }
+    gen_scan_lr_call_with_prec(w, &`${*fn_name}_lr_${lr_idx}`, prec, emit_follow, mid_operand_gated);
 }
 
 fn gen_lr_suffix_dispatch(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
@@ -810,13 +784,8 @@ fn gen_lr_suffix_dispatch(
     let lr_precs = projected.1;
     let suffix_first_sets = projected.2;
 
-    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     w.begin(&"loop");
-    if side.scan {
-        w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    } else {
-        w.line(&"let suffix_kind = p.peek_kind();");
-    }
+    w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     // No-progress guard, mirroring the ATN twins
     // (`gen_lr_suffix_dispatch_atn` / `gen_lr_fn_atn`): every valid LR
     // suffix begins with a mandatory operator token, so a committed
@@ -824,7 +793,7 @@ fn gen_lr_suffix_dispatch(
     // structural rather than relying on each suffix consuming input — a
     // suffix that yielded an empty `valid_lr_alts` member would otherwise
     // spin here.
-    w.line(&`let _lr_pos0 = ${pos_expr};`);
+    w.line(&"let _lr_pos0 = pos;");
 
     let mut is_first = true;
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
@@ -846,11 +815,11 @@ fn gen_lr_suffix_dispatch(
         if group.len() == 1 {
             let lr_idx = valid_lr_indices[group[0]];
             let prec = lr_precs[group[0]];
-            gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+            gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
         } else {
             gen_lr_overlap_dispatch(
                 w,
-                side,
+                fn_name,
                 rule,
                 group,
                 &valid_lr_indices,
@@ -869,7 +838,7 @@ fn gen_lr_suffix_dispatch(
     } else {
         w.line(&"break;");
     }
-    w.begin(&`if ${pos_expr} == _lr_pos0`);
+    w.begin(&"if pos == _lr_pos0");
     w.line(&"break;");
     w.end();
     w.end();  // loop
@@ -908,7 +877,7 @@ fn gen_scan_lr_call_with_prec(
 
 fn gen_lr_overlap_dispatch(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     rule: &ParserRule,
     group: &List<i32>,
     valid_lr_indices: &List<i32>,
@@ -946,7 +915,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if suffix_kind == ${*tk}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 emitted.insert(*tk);
             }
         }
@@ -976,12 +945,8 @@ fn gen_lr_overlap_dispatch(
         } else {
             w.else_begin(&`else if suffix_kind == ${*shared_tk}`);
         }
-        let second_accessor = if side.scan {
-            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
-            "second_kind";
-        } else {
-            "p.peek_at(1)";
-        };
+        w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
+        let second_accessor = "second_kind";
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
@@ -998,10 +963,10 @@ fn gen_lr_overlap_dispatch(
             let alt = &rule.alternatives[lr_idx];
             if k == last_k {
                 if sub_first {
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                    gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                    gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -1013,7 +978,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if ${sub_cond}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
             }
         }
         emitted.insert(*shared_tk);
@@ -3365,7 +3330,7 @@ fn gen_lr_fn_atn(
 /// suffix begins to match then fails on a later element, corrupting the tree.
 /// So consult the side-effect-free scan twin (`scan_<rule>_lr_<idx>`) and only
 /// commit to the (mutating) suffix parse when the scan confirms it matches —
-/// mirroring the typed `gen_lr_call_with_prec`.
+/// mirroring the parse side of `gen_lr_fn`.
 fn emit_lr_branch(
     w: &mut CodeWriter,
     lr: &LrAlt,
@@ -6252,37 +6217,6 @@ fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx:
     return [];
 }
 
-fn gen_lr_call_with_prec(
-    w: &mut CodeWriter,
-    suffix_fn: &String,
-    scan_suffix_fn: &String,
-    prec: i32,
-    use_prec: bool,
-    emit_follow: bool,
-) {
-    // First-token dispatch alone can mis-predict an LR continuation when the
-    // suffix's first token is shared with the atom (e.g.
-    // `statement: letterA | statement letterA 'b'`). In that case the suffix
-    // can begin to match and then fail on a later element, leaving `p.pos`
-    // mid-suffix and corrupting any enclosing repetition driver. Consult the
-    // scan twin first — it has no side effects — and only commit to the
-    // (mutating) parse when the scan confirms the suffix would succeed.
-    if use_prec {
-        w.begin(&`if ${prec} >= min_prec`);
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
-        w.line(&"break;");
-        w.end();
-        w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
-    } else {
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
-        w.line(&"break;");
-        w.end();
-        w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
-    }
-}
 
 /// Project lower's `LrDispatchData` (which indexes into `lr_alts`)
 /// into emit's per-alt arrays — alt indices in `rule.alternatives`,
