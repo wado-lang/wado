@@ -21,7 +21,7 @@ Compares WebAssembly binary sizes across different languages.
 
 ## Results
 
-Measured 2026-08-16 with rustc 1.97.1, Zig 0.16.0, Moonbit 0.1.20260807, and
+Measured 2026-08-17 with rustc 1.97.1, Zig 0.16.0, Moonbit 0.1.20260807, and
 wasi-sdk 33.0. Sizes are toolchain- but not host-dependent, so a row whose
 toolchain has not moved does not need remeasuring.
 
@@ -62,7 +62,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      283,799 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      263,926 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,483,481 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
