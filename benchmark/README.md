@@ -206,15 +206,15 @@ Decompress:
 
 ### SQL Parse
 
-Parse 81 SQL statements (13366 bytes). Two parsers are generated from the same
+Parse 81 SQL statements (13321 bytes). Two parsers are generated from the same
 `SQLite.g4` — the Gale one and ANTLR4's own (Java) — alongside the hand-written
 `sqlparser-rs`.
 
 | Implementation      | Throughput |    ms/iter | vs best |
 | ------------------- | ---------: | ---------: | ------- |
-| Rust (sqlparser-rs) | 11.87 MB/s |   1.126 ms | 1.00x   |
-| **Wado** (Gale)     | 10.27 MB/s |   1.301 ms | 1.16x   |
-| Java (ANTLR4)       |  0.10 MB/s | 132.364 ms | 117.55x |
+| Rust (sqlparser-rs) | 11.35 MB/s |   1.174 ms | 1.00x   |
+| **Wado** (Gale)     |  9.69 MB/s |   1.374 ms | 1.17x   |
+| Java (ANTLR4)       |  0.10 MB/s | 138.706 ms | 118.15x |
 
 Java (ANTLR4) is the head-to-head for Gale's generated parser, on the JVM and
 JIT-warmed to steady state (per-parse time flattens after ~50 parses, so the gap
@@ -224,7 +224,7 @@ if absent.
 
 ### Syntax Highlight
 
-Highlight 81 SQL statements (13366 bytes). Gale-generated highlighter vs five
+Highlight 81 SQL statements (13321 bytes). Gale-generated highlighter vs five
 reference SQL highlighters:
 
 - **Prism.js** — regex-based, the speed reference (ultimate goal)
@@ -240,14 +240,19 @@ reference SQL highlighters:
 Labels here name the highlighter rather than the language: this benchmark is
 about what a browser would run.
 
-| Implementation                | Throughput |   ms/iter | vs best |
-| ----------------------------- | ---------: | --------: | ------- |
-| Prism.js                      | 14.99 MB/s |  0.892 ms | 1.00x   |
-| **Gale** (Wado)               |  8.20 MB/s |  1.629 ms | 1.83x   |
-| Lezer (CodeMirror)            |  4.74 MB/s |  2.819 ms | 3.16x   |
-| tree-sitter (Rust native)     |  3.98 MB/s |  3.359 ms | 3.77x   |
-| tree-sitter (web-tree-sitter) |  2.56 MB/s |  5.216 ms | 5.85x   |
-| Shiki (JS engine)             |  1.09 MB/s | 12.265 ms | 13.75x  |
+| Implementation                |  Throughput |   ms/iter | vs best |
+| ----------------------------- | ----------: | --------: | ------- |
+| Prism.js                      |  11.18 MB/s |  1.191 ms | 1.00x   |
+| **Gale** (Wado)               |   7.46 MB/s |  1.785 ms | 1.50x   |
+| Lezer (CodeMirror)            |   4.52 MB/s |  2.950 ms | 2.48x   |
+| tree-sitter (Rust native)     |   4.25 MB/s |  3.135 ms | 2.63x   |
+| tree-sitter (web-tree-sitter) |   2.62 MB/s |  5.087 ms | 4.27x   |
+| Shiki (JS engine)             | 976.63 KB/s | 13.640 ms | 11.45x  |
+
+Every highlighter parses the corpus without errors. Constructs two of them
+mishandled — `AUTOINCREMENT`, `INSERT OR REPLACE`, `LIKE ... ESCAPE` — are
+written another way at the same token count, since a highlighter that gives up
+on a region skips the work of colouring it.
 
 ### Grammar Generation
 

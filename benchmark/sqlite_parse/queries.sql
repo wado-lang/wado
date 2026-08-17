@@ -2,7 +2,7 @@
 -- Mix of DDL, DML, expressions, subqueries, CTEs, joins, set operations.
 
 CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY ASC,
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL,
     password_hash TEXT NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY ASC,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     body TEXT,
@@ -25,7 +25,7 @@ CREATE TABLE posts (
 );
 
 CREATE TABLE comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY ASC,
     post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id),
     parent_id INTEGER REFERENCES comments(id),
@@ -34,7 +34,7 @@ CREATE TABLE comments (
 );
 
 CREATE TABLE tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY ASC,
     name TEXT NOT NULL UNIQUE
 );
 
@@ -54,7 +54,7 @@ CREATE TABLE sessions (
 );
 
 CREATE TABLE audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY ASC,
     user_id INTEGER REFERENCES users(id),
     action TEXT NOT NULL,
     entity_type TEXT NOT NULL,
@@ -278,8 +278,8 @@ FROM posts p
 INNER JOIN users u ON p.user_id = u.id
 WHERE p.status = 'published';
 
-INSERT OR REPLACE INTO users (id, username, email, password_hash)
-VALUES (1, 'alice', 'newalice@example.com', 'newhash1');
+REPLACE INTO users (id, username, email, password_hash, created_at)
+VALUES (1, 'alice', 'newalice@example.com', 'newhash1', '2024-01-01');
 
 SELECT p.title,
        SUBSTR(p.body, 1, 100) || '...' AS excerpt,
@@ -295,7 +295,7 @@ FROM posts p
 INNER JOIN users u ON p.user_id = u.id
 WHERE p.body IS NOT NULL
   AND LENGTH(p.body) > 0
-  AND p.title LIKE '%SQL%' ESCAPE '\'
+  AND p.title LIKE '%SQL%'
   AND p.published_at BETWEEN '2024-01-01' AND '2024-12-31'
   AND p.view_count >= 0
   AND (p.status = 'published' OR p.status = 'archived')
