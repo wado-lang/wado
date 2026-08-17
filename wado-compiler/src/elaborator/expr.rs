@@ -3068,20 +3068,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // A tuple reaching here is a sequence literal whose target builds no
-        // sequence (`[1, 2] as Array<i32>`): the coercion above declined it and
-        // no representation relates the two, so reify would hand codegen a
-        // `StructNew` typed as the target. The annotation form of the same
-        // binding is a plain type mismatch, and so is this.
-        if !self.tysys.type_table.borrow().is_tuple(target_type)
-            && self.tysys.type_table.borrow().is_tuple(source_type)
-        {
+        // An aggregate reaching here relates to the target by no representation:
+        // every coercion above declined it, so reify would hand codegen a
+        // `StructNew` typed as the target (`[1, 2] as Array<i32>`,
+        // `a as [i64, i64]`, `{ a: 1 } as List<i32>`). `as` between two
+        // aggregates is only ever a newtype step, which shares a base; the
+        // annotated form of the same binding is a plain type mismatch, and so
+        // is this.
+        let unrelated_aggregate = {
+            let tt = self.tysys.type_table.borrow();
+            // `i128` / `u128` are structs here but carry their own cast rules
+            // below, and a resource is a handle, not an aggregate value.
+            let wide_int = |id| {
+                matches!(tt.get(id), ResolvedType::Struct { def, .. }
+                    if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
+            };
+            let source_is_aggregate = !wide_int(source_type)
+                && !wide_int(target_type)
+                && (tt.is_tuple(source_type)
+                    || matches!(tt.get(source_type), ResolvedType::Struct { .. }));
+            source_is_aggregate
+                && tt.get_ultimate_base_type(source_type) != tt.get_ultimate_base_type(target_type)
+        };
+        if unrelated_aggregate {
             let from_name = self.tysys.type_table.borrow().type_name(source_type);
             let to_name = self.tysys.type_table.borrow().type_name(target_type);
             let _ = self.emit(TypeError::InvalidCast {
                 from: from_name,
                 to: to_name,
-                hint: "the target builds no sequence from a literal".to_string(),
+                hint: "the two types share no representation; `as` between aggregates is a newtype step".to_string(),
                 span: cast.span,
             });
             // The target type is the cast's answer, as the other invalid-cast

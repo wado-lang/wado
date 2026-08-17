@@ -339,6 +339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
+            scope.reject_unresolved_annotation(&field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());

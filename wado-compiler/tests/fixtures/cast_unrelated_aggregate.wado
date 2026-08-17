@@ -1,0 +1,15 @@
+// `as` between two aggregates is only ever a newtype step, which shares a base.
+// Anything else has no representation relating the two, so reify handed codegen
+// a `StructNew` typed as the target. A non-literal source and a struct literal
+// both reach this, not just the sequence-literal case.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let pair = [1, 2];
+    let widened = pair as [i64, i64];
+    println(`${widened.0}`);
+}
+
+__DATA__
+{"compile_error": "cannot cast '[i32, i32]' to '[i64, i64]'"}

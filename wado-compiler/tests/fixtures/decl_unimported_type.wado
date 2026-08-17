@@ -1,0 +1,20 @@
+// A declaration's types reach every use site's locals, so an unresolved one
+// leaks an untyped local the same way a `let` annotation would. Struct fields
+// and `impl` method signatures resolve through their own scopes, not the
+// free-function path.
+
+use { from_bytes } from "core:json";
+
+struct Rec {
+    a: String,
+}
+
+struct Holder {
+    parsed: Result<Rec, DeserializeError>,
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "unknown type 'DeserializeError'"}

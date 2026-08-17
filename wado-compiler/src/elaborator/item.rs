@@ -1223,6 +1223,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
+            // Same reach as a free function's signature; see
+            // `reject_unresolved_annotation`.
+            for param in &method.params {
+                frame_scope.reject_unresolved_annotation(&param.ty);
+            }
+            if let Some(ty) = method.return_type.as_ref() {
+                frame_scope.reject_unresolved_annotation(ty);
+            }
             let mut type_params: Vec<(String, TypeId)> = frame
                 .impl_type_params
                 .iter()
@@ -1350,6 +1358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
+            scope.reject_unresolved_annotation(&field.ty);
             if let Some(serde_default) = field
                 .attrs
                 .iter()
@@ -1516,6 +1525,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .return_type
                 .as_ref()
                 .map(|t| method_scope.resolve_type(t));
+            // Same reach as a free function's signature; see
+            // `reject_unresolved_annotation`.
+            for param in &method.params {
+                method_scope.reject_unresolved_annotation(&param.ty);
+            }
+            if let Some(ty) = method.return_type.as_ref() {
+                method_scope.reject_unresolved_annotation(ty);
+            }
 
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
@@ -1693,6 +1710,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_ref()
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
+            // Same reach as a free function's signature; see
+            // `reject_unresolved_annotation`.
+            for param in &method.params {
+                scope.reject_unresolved_annotation(&param.ty);
+            }
+            if let Some(ty) = method.return_type.as_ref() {
+                scope.reject_unresolved_annotation(ty);
+            }
             if method.is_async
                 && scope
                     .tysys
