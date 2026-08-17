@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786973261899,
+  "lastUpdate": 1786974124971,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49073,6 +49073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/42482a3ce12c1deff035618a6bfca67bae41efe9"
         },
         "date": 1786973261344,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78ec2622cca80f7bf88c7e24bab8cd09eed8181e",
+          "message": "Merge pull request #1839 from wado-lang/claude/declaration-identity-wep-checklist-x81htl\n\nfix(elaborator): reach declarations through reference sites, not spellings",
+          "timestamp": "2026-08-17T22:29:08+09:00",
+          "tree_id": "96db36901c36d782009deb0f67cb6418a3f30614",
+          "url": "https://github.com/wado-lang/wado/commit/78ec2622cca80f7bf88c7e24bab8cd09eed8181e"
+        },
+        "date": 1786974124377,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
