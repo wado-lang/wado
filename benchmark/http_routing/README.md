@@ -13,10 +13,9 @@ benchmark** —
 
 - **12 routes** from `src/tool.mts` (static, single-parameter, and
   wildcard routes, including a `GET`/`POST` collision on `/event/:id`).
-- **4 request shapes** from `src/bench.mts` — static, dynamic, `POST`
-  over a mixed static/dynamic path, and wildcard. The remaining three
-  only vary depth or the radix sibling of a case already covered, so
-  dropping them buys measurement time for the second worker shape.
+- **4 request shapes** from `src/bench.mts` — static, dynamic, `POST` over a
+  mixed static/dynamic path, and wildcard. The other three only vary depth or
+  a covered case's radix sibling.
 
 All four servers register the same 12 routes and return the same
 `{ "route": ..., "params": [...] }` JSON shape, so the comparison
@@ -29,31 +28,24 @@ driven end to end over HTTP, so the four are compared as whole servers.
 
 ### Equal core budgets
 
-Throughput scales with worker count, so a table is only a comparison of
-servers when every server gets the same one. Two shapes are measured:
-**1 worker**, a 1-core container scaled out horizontally, and **4
-workers**, a small VM running one instance. Node scales out with
-`node:cluster` (`SCHED_NONE`, so the kernel distributes accepts), Bun
-with one `SO_REUSEPORT` process per worker, `wado serve` with
-`--workers`, Axum with `TOKIO_WORKER_THREADS`.
+Throughput scales with worker count, so a table compares servers only when
+every server gets the same one. Two shapes are measured: **1 worker**, a
+1-core container scaled out horizontally, and **4 workers**, a small VM
+running one instance. Node scales out with `node:cluster` (`SCHED_NONE`), Bun
+with one `SO_REUSEPORT` process per worker, `wado serve` with `--workers`,
+Axum with `TOKIO_WORKER_THREADS`.
 
 ### Keeping the load generator off the critical path
 
-A saturated `oha` caps the fastest servers and compresses every ratio,
-which reads as "the servers are closer than they are". Guards:
+A saturated `oha` caps the fastest servers and compresses every ratio, which
+reads as "the servers are closer than they are". Servers take cores
+`0..workers-1` and `oha` the rest, offered concurrency scales with
+`CONNECTIONS_PER_WORKER`, and each shape ends by re-running its fastest result
+at twice the connections — a gain there means `oha` set that number, and the
+run says so.
 
-- **CPU pinning** — servers take cores `0..workers-1`, `oha` the rest
-  (`taskset`), so the two never contend and `oha` always has the larger
-  share.
-- **Connection scaling** — `CONNECTIONS_PER_WORKER` (default 100) keeps
-  offered concurrency proportional to server capacity.
-- **Headroom check** — each shape ends by re-running its fastest result
-  with twice the connections. A gain means `oha` set that number, and
-  the run prints a warning.
-
-Each server is warmed over every route, then each request is measured
-for `ROUNDS` slices and the fastest kept: contention only ever lowers
-throughput, so the best slice is the cleanest estimate of capacity.
+Each server is warmed over every route, then each request is measured for
+`ROUNDS` slices and the fastest kept.
 
 The four servers span four runtimes:
 

@@ -278,8 +278,7 @@ Hono's official router benchmark route set driven with `oha`. See
 `http_routing/README.md` for the full route set and methodology.
 
 Throughput (requests/sec, higher is better), all over HTTP/1.1. Every server
-gets the same worker count and the same pinned cores, and each table ends with a
-headroom check confirming `oha` was not the ceiling.
+gets the same worker count and the same pinned cores.
 
 One worker — a 1-core container scaled out horizontally:
 
@@ -300,8 +299,7 @@ Four workers — a small VM running one instance:
 | `GET /static/index.html`        |     165,837 |                  131,001 |                    71,801 |                47,465 |
 
 `wado serve` is the slowest of the four in both shapes, and stops gaining past
-roughly eight workers (8 → 12 workers is +2.6%), so its ceiling on a larger host
-is lower than the four-worker figures suggest.
+roughly eight workers.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).

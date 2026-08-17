@@ -5,8 +5,7 @@
 //
 //   bun run benchmark/http_routing/app.bun.js
 //
-// Scaling out is one process per core, each binding the same port with
-// SO_REUSEPORT; bench.sh spawns them and owns their lifetime.
+// bench.sh spawns one of these per worker and owns their lifetime.
 
 import { createApp } from './app.routes.js'
 

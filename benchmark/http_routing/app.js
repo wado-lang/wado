@@ -12,9 +12,8 @@ import { createApp } from './app.routes.js'
 const port = Number(process.env.PORT ?? 3000)
 const workers = Number(process.env.WORKERS ?? 1)
 
-// SCHED_NONE lets the kernel distribute accepts across workers; the default
-// SCHED_RR routes every connection through the primary, which caps throughput
-// well below what the workers can serve.
+// The default SCHED_RR routes every connection through the primary, capping
+// throughput well below what the workers can serve.
 cluster.schedulingPolicy = cluster.SCHED_NONE
 
 if (workers > 1 && cluster.isPrimary) {

@@ -1,23 +1,8 @@
 #!/usr/bin/env bash
-# HTTP routing benchmark: `wado serve` vs Hono (Node.js & Bun) vs Axum.
+# HTTP routing benchmark: `wado serve` vs Hono (Node.js & Bun) vs Axum, over
+# one worker shape per entry in SHAPES. README.md covers the methodology.
 #
-# Two deployment shapes are measured, because they rank differently:
-#
-#   * 1 worker  — a 1-core container scaled out horizontally (k8s).
-#   * 4 workers — a small VM running one instance.
-#
-# Every server gets the same worker count and the same pinned cores in a
-# given shape, so the table compares servers rather than core budgets.
-# Node scales out with `node:cluster`, Bun with SO_REUSEPORT, `wado serve`
-# with --workers, Axum with TOKIO_WORKER_THREADS.
-#
-# The load generator is pinned to a disjoint core set and given the larger
-# share; a saturated `oha` silently caps the fastest servers and compresses
-# every ratio, so each shape ends with a headroom check that re-runs the
-# fastest result with twice the connections and reports any gain.
-#
-# Env overrides: SLICE (default 10s), ROUNDS (default 3), SHAPES
-# (default "1 4"), CONNECTIONS_PER_WORKER (default 100).
+# Overrides: SLICE, ROUNDS, SHAPES, CONNECTIONS_PER_WORKER.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -31,10 +16,7 @@ AXUM_PORT="3001"
 BUN_PORT="3002"
 WADO_PORT="8080"
 
-# One request per routing behaviour the routers differ on: static match,
-# dynamic parameter, method dispatch over a mixed static/dynamic path, and
-# wildcard. Hono's official router benchmark set, minus the entries that
-# only vary depth or the radix sibling of a case already covered.
+# One request per routing behaviour the routers differ on.
 REQUESTS=(
   "GET /user"
   "GET /user/lookup/username/hey"
@@ -76,7 +58,7 @@ wait_ready() {
   return 1
 }
 
-# Throughput of one (url, method, path) slice, in whole req/s.
+# Whole req/s, so the callers can compare with -gt.
 measure() {
   "${OHA_PIN[@]}" "$OHA_BIN" -m "$2" -z "${SLICE}s" -c "$CONNECTIONS" \
     --no-tui "${1}${3}" 2>/dev/null |
@@ -103,8 +85,7 @@ start_servers() {
   SERVER_URLS+=("http://127.0.0.1:${HONO_PORT}")
 
   if command -v bun >/dev/null 2>&1; then
-    # Bun has no cluster primary: one process per worker, all sharing the
-    # port through SO_REUSEPORT.
+    # Bun has no cluster primary; the processes share the port via SO_REUSEPORT.
     for _ in $(seq 1 "$workers"); do
       PORT="$BUN_PORT" "${SERVER_PIN[@]}" bun run app.bun.js >/dev/null 2>&1 &
       PIDS+=($!)
@@ -144,8 +125,7 @@ run_shape() {
   local si ri req method path rps
   for si in "${!SERVER_NAMES[@]}"; do
     echo "--- ${SERVER_NAMES[$si]} ---"
-    # Warm up every route once; the JITs need it and the discarded slice
-    # also settles the accept queues.
+    # Discarded: the JS rows need it to reach steady state.
     for req in "${REQUESTS[@]}"; do
       measure "${SERVER_URLS[$si]}" "${req%% *}" "${req#* }" >/dev/null
     done
@@ -172,9 +152,7 @@ run_shape() {
     printf '\n'
   done
 
-  # Headroom check: re-run the fastest cell with twice the connections. A
-  # gain means `oha` — not the server — set that number, and every result
-  # in the shape is suspect.
+  # A gain at 2x connections means `oha` set that number, not the server.
   local top=0 top_si=0 top_ri=0
   for si in "${!SERVER_NAMES[@]}"; do
     for ri in "${!REQUESTS[@]}"; do
