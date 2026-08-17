@@ -28,7 +28,33 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 pub struct AliasInfo {
     pub aliased: LocalSet,
     pub untrackable: LocalSet,
-    pub alias_groups: IndexMap<u32, IndexSet<u32>>,
+    pub alias_groups: AliasGroups,
+}
+
+/// The alias equivalence classes, stored once per class and indexed by member.
+///
+/// Members are unique by construction (each comes from one union-find key), so
+/// a slice carries them; the per-member indirection keeps a class of `m` locals
+/// at `O(m)`. Giving every member its own copy of the class instead is
+/// `O(m^2)`, which a generated parser reaches easily — its reference locals
+/// share one pointee struct, so they land in a single class.
+#[derive(Default, Clone, Debug)]
+pub struct AliasGroups {
+    root_of: IndexMap<u32, u32>,
+    members_of: IndexMap<u32, Vec<u32>>,
+}
+
+impl AliasGroups {
+    pub fn is_empty(&self) -> bool {
+        self.root_of.is_empty()
+    }
+
+    /// The alias class containing `local`, itself included, or `None` when
+    /// `local` is in no class.
+    pub fn members(&self, local: u32) -> Option<&[u32]> {
+        let root = self.root_of.get(&local)?;
+        self.members_of.get(root).map(Vec::as_slice)
+    }
 }
 
 /// Apply `f` to every node reachable from the body root, parents before
@@ -223,7 +249,7 @@ fn build_mut_escaped(
     aliased: &IndexSet<u32>,
     syntactic_mut: IndexSet<u32>,
     call_immutability: &CallImmutability,
-    alias_groups: &IndexMap<u32, IndexSet<u32>>,
+    alias_groups: &AliasGroups,
 ) -> IndexSet<u32> {
     let local_type = |idx: u32| locals.get(idx as usize).map(|l| l.type_id);
     // Keep a local in `mut_escaped` unless it is provably immutable across
@@ -241,7 +267,7 @@ fn build_mut_escaped(
     if !alias_groups.is_empty() {
         let seed: Vec<u32> = esc.iter().copied().collect();
         for v in seed {
-            if let Some(group) = alias_groups.get(&v) {
+            if let Some(group) = alias_groups.members(v) {
                 for &member in group {
                     esc.insert(member);
                 }
@@ -960,21 +986,29 @@ fn same_pointee_reference_edges(
 /// body walk — read off `locals` alone) before its shared walk extends it via
 /// [`collect_alias_edges_node`] for every `let dst = src` / `dst = src` copy
 /// found in the body.
-fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32>> {
+fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     if edges.is_empty() {
-        return IndexMap::default();
+        return AliasGroups::default();
     }
-    // Union-find via simple parent pointers; locals are sparse u32s.
+    // Union-find via simple parent pointers; locals are sparse u32s. `find` is
+    // iterative: a chain of `let dst = src` copies makes the parent chain as
+    // long as the class, which recursion walks one stack frame at a time.
     let mut parent: IndexMap<u32, u32> = IndexMap::default();
     fn find(parent: &mut IndexMap<u32, u32>, x: u32) -> u32 {
-        let p = *parent.get(&x).unwrap_or(&x);
-        if p == x {
-            x
-        } else {
-            let r = find(parent, p);
-            parent.insert(x, r);
-            r
+        let mut root = x;
+        while let Some(&p) = parent.get(&root)
+            && p != root
+        {
+            root = p;
         }
+        let mut cur = x;
+        while let Some(&p) = parent.get(&cur)
+            && p != cur
+        {
+            parent.insert(cur, root);
+            cur = p;
+        }
+        root
     }
     for (a, b) in edges {
         parent.entry(a).or_insert(a);
@@ -986,18 +1020,17 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> IndexMap<u32, IndexSet<u32
         }
     }
     let keys: Vec<u32> = parent.keys().copied().collect();
-    let mut groups: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
-    for k in &keys {
-        let r = find(&mut parent, *k);
-        groups.entry(r).or_default().insert(*k);
+    let mut root_of: IndexMap<u32, u32> = IndexMap::default();
+    let mut members_of: IndexMap<u32, Vec<u32>> = IndexMap::default();
+    for k in keys {
+        let r = find(&mut parent, k);
+        root_of.insert(k, r);
+        members_of.entry(r).or_default().push(k);
     }
-    let mut out: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
-    for set in groups.into_values() {
-        for &k in &set {
-            out.insert(k, set.clone());
-        }
+    AliasGroups {
+        root_of,
+        members_of,
     }
-    out
 }
 
 /// True when copying a `type_id` value between locals aliases them onto one heap
@@ -1204,5 +1237,67 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             | ExprKind::EnumConstruct { .. } => {}
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn members(groups: &AliasGroups, local: u32) -> Option<Vec<u32>> {
+        groups.members(local).map(|m| {
+            let mut v: Vec<u32> = m.to_vec();
+            v.sort_unstable();
+            v
+        })
+    }
+
+    #[test]
+    fn disjoint_edges_form_separate_groups() {
+        let groups = alias_groups_from_edges(vec![(1, 2), (3, 4)]);
+        assert_eq!(members(&groups, 1), Some(vec![1, 2]));
+        assert_eq!(members(&groups, 2), Some(vec![1, 2]));
+        assert_eq!(members(&groups, 3), Some(vec![3, 4]));
+        assert_eq!(members(&groups, 5), None);
+    }
+
+    #[test]
+    fn shared_endpoints_merge_transitively() {
+        let groups = alias_groups_from_edges(vec![(1, 2), (2, 3), (10, 11)]);
+        assert_eq!(members(&groups, 1), Some(vec![1, 2, 3]));
+        assert_eq!(members(&groups, 3), Some(vec![1, 2, 3]));
+        assert_eq!(members(&groups, 10), Some(vec![10, 11]));
+    }
+
+    #[test]
+    fn no_edges_yields_no_groups() {
+        let groups = alias_groups_from_edges(Vec::new());
+        assert!(groups.is_empty());
+        assert_eq!(members(&groups, 0), None);
+    }
+
+    /// Every member used to hold its own copy of the member set, so a function
+    /// whose reference locals share a pointee struct cost `O(m^2)`. These sizes
+    /// are ordinary for a generated parser and intractable under that shape, so
+    /// the case doubles as the complexity guard.
+    #[test]
+    fn one_large_group_is_linear() {
+        const N: u32 = 20_000;
+        let star: Vec<(u32, u32)> = (1..=N).map(|i| (0, i)).collect();
+        let groups = alias_groups_from_edges(star);
+        assert_eq!(groups.members(0).map(<[u32]>::len), Some(N as usize + 1));
+        assert_eq!(groups.members(N).map(<[u32]>::len), Some(N as usize + 1));
+    }
+
+    /// A chain unions each local onto the next, so resolving the first root
+    /// walks the whole chain — depth the union-find must survive, which a
+    /// recursive `find` does not.
+    #[test]
+    fn long_chain_collapses_to_one_group() {
+        const N: u32 = 20_000;
+        let chain: Vec<(u32, u32)> = (0..N).map(|i| (i, i + 1)).collect();
+        let groups = alias_groups_from_edges(chain);
+        assert_eq!(groups.members(0).map(<[u32]>::len), Some(N as usize + 1));
+        assert_eq!(groups.members(N).map(<[u32]>::len), Some(N as usize + 1));
     }
 }
