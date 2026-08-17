@@ -1389,14 +1389,12 @@ impl TypeSystem {
         })
     }
 
-    /// Whether `bound_name` is a synthesized reflection trait the subject type
-    /// is eligible for by kind (`ReflectStruct` on a struct, `ReflectVariant` on a
-    /// variant, …). These have no impl blocks, so the name-based search misses
-    /// them; a hit records the bound-driven synth request.
+    /// Whether `bound_name` is a synthesized reflection trait the subject is
+    /// eligible for by kind. These have no impl blocks, so the name-based search
+    /// misses them; a hit records the bound-driven synth request.
     ///
-    /// `type_name` is the declaration name. One scope lookup turns it into the
-    /// subject's declaration; every kind check below is keyed by that
-    /// declaration, so the four kinds cannot each reach a different one.
+    /// One scope lookup keys every kind check below, so the four cannot each
+    /// reach a different declaration.
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,

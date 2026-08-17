@@ -1,12 +1,6 @@
-// A namespace-qualified generic supplies its type arguments like any other:
-// `geo::Pair<i32>` and `geo::Pair<bool>` are two instantiations of one
-// declaration, and the two `From` impls below must stay apart.
-//
-// Read off the written nodes, the namespace only says which module declares
-// the head — the argument list is the same list either way. Dropping it
-// mangled both impls to one trait segment, so the second registration
-// collided with the first and the `From` lookup, comparing structurally
-// against the argument's own type name, matched neither.
+// A namespace-qualified generic supplies its type arguments like any other, so
+// the two `From` impls below must stay apart. Dropping the argument list mangled
+// both to one trait segment and the `From` lookup then matched neither.
 use geo from "./sub/ns_qualified_generic_args_lib.wado";
 
 struct Summary {

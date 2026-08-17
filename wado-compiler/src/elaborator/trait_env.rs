@@ -2438,12 +2438,9 @@ pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
     }
 }
 
-/// Invert the declaration indexes into declared name → declarations.
-///
-/// The name-keyed maps come first so a struct keeps the position it had when
-/// the union was read in source order, and a declaration in two of the sources
-/// — a struct is in the struct-like map and in the type index both — must land
-/// once: a duplicate would make a caller taking the unique answer see two.
+/// Invert the declaration indexes into declared name → declarations, name-keyed
+/// maps first so source order is kept, and each declaration landing once — a
+/// duplicate would make a caller taking the unique answer see two.
 fn index_decls_by_name(
     defs: &crate::defs::DefTable,
     sets: [&IndexSet<DefId>; 4],

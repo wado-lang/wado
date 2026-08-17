@@ -1,20 +1,14 @@
-// A default argument's expression belongs to the module that wrote it, so a
-// caller omitting the argument need not import what the expression names.
-// Here `process`'s default is `&Ctx::new()` and this module imports only
-// `process` — `Ctx` is reached through the *declaring* module's scope.
+// A default argument's expression belongs to the module that wrote it, so this
+// module imports only `process` and `Ctx` is reached through the declaring
+// module's scope.
 //
-// Before the fix this compiled only because a name that reached nothing fell
-// through to a whole-program unique-name lookup, so it broke the moment a
-// second `Ctx` existed anywhere in the program. The second declaration below
-// pins that: the derivation must answer from `process`'s module, not from the
-// name being unique.
+// The second `Ctx` below pins it: the derivation must answer from `process`'s
+// module, not from the name happening to be unique program-wide.
 
 use { process } from "./sub/default_arg_unimported_type_lib.wado";
 
-// Same name *and* same static method, so the caller's frame can answer the
-// whole of `Ctx::new()` with the wrong declaration rather than merely failing
-// to answer it. A gate that reads the site while the resolution reads the name
-// passes the first check and returns this `Ctx`.
+// Same name *and* same static method, so the caller's frame answers the whole of
+// `Ctx::new()` with the wrong declaration rather than merely failing to.
 struct Ctx { count: i32 }
 
 impl Ctx {

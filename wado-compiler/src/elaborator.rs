@@ -903,10 +903,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// site is not at hand — a rendered head, a synthesis target. Each frame is
     /// one module, so a hit is unique; an unaccounted name falls to the prelude.
     ///
-    /// The frames come from the walk's own position — this takes no module, so no
-    /// caller can supply a vantage. Where the walk reads an expression another
-    /// module wrote, that writing module answers first, or a caller declaring its
-    /// own same-named type takes the answer away from the one that wrote it.
+    /// The frames are the walk's own position, never a caller's. Where it reads an
+    /// expression another module wrote, that writing module answers first.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
         // A binder shadows every declaration of its name and has no identity of
         // its own; the indexes cannot see binders and would answer `struct T`.

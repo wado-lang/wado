@@ -2662,13 +2662,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The canonical signature of the receiver-less method `method_name` on
-    /// `struct_name` — declared by an `impl` block or by a `resource`.
-    ///
-    /// Both callers reach this holding a name split out of a mangled spelling
-    /// with no reference site behind it, so there is no site to take. The
-    /// receiver still keys through [`Elaborator::decl_key_or_local`], which
-    /// derives in the frame that wrote the name rather than the one the walk
-    /// stands in.
+    /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
+    /// hold a name split out of a mangled spelling, so there is no site to take.
     pub(super) fn static_method_sig(
         &self,
         struct_name: &str,
