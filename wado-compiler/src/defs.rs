@@ -761,8 +761,6 @@ mod enforcement {
         None
     }
 
-    /// Whether `signature` takes a module and a name and hands back a
-    /// declaration.
     /// The parameter types of `params`, split on the commas between them —
     /// not on the ones inside `IndexMap<(ModuleSource, AstId), _>`, whose
     /// spelling would otherwise read as a module parameter beside a name one.
@@ -787,6 +785,8 @@ mod enforcement {
             .collect()
     }
 
+    /// Whether `signature` takes a module and a name and hands back a
+    /// declaration.
     fn maps_a_name_to_an_identity(signature: &str) -> bool {
         let Some((params, ret)) = signature.split_once("->") else {
             return false;

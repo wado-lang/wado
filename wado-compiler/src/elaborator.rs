@@ -911,11 +911,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration indexes, for a caller holding a spelling whose reference
     /// site is not at hand — a rendered head, a synthesis target.
     ///
-    /// Two recorded facts, not a second walk: what this module imported under
-    /// the name, then what some module declares under it. The indexes hold what
-    /// modules *declare*, and they decline when several declare the name rather
-    /// than picking one — guessing between them is the mis-identification this
-    /// design exists to prevent.
+    /// Two recorded facts, not a second walk: what a frame imported under the
+    /// name, then what that frame itself declares under it. Both are scoped to
+    /// one module, so a hit is unique by construction — no whole-program scan
+    /// picks between same-named declarations. A name no frame accounts for
+    /// falls to the prelude.
     ///
     /// Where the walk stands in one module reading an expression another wrote
     /// — a parameter or field default — the *writing* module answers first. It

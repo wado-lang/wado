@@ -1170,8 +1170,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type =
-                        self.lookup_static_method_return_type(&method_ref, &final_mangled);
+                    let mut return_type = self.lookup_static_method_return_type(
+                        &method_ref,
+                        &receiver,
+                        &final_mangled,
+                    );
                     if !method_type_args.is_empty() {
                         return_type = self.substitute_type_params(return_type, &method_type_args);
                     }
@@ -1187,15 +1190,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     };
 
-                    let param_is_mut =
-                        self.lookup_static_method_param_is_mut(type_name, method_name);
+                    // Keyed by the namespace member, not by the bare spelling:
+                    // the importing module never names `Type` on its own, so a
+                    // name-only key reaches nothing and every `mut` parameter
+                    // would read as non-mut for the mutation and alias passes.
+                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                    });
+                    let param_is_mut = self.lookup_static_method_param_is_mut_keyed(
+                        type_name,
+                        method_name,
+                        ns_key.as_ref(),
+                    );
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
                         name: final_mangled,
                         monomorph_info,
+                        // The same receiver `final_mangled` was built from: the
+                        // call's name and its method identity must agree, or
+                        // DCE and monomorphization key on a different type than
+                        // the one being called.
                         method_info: Some(LocalMethodName::new(
-                            self.qualified_receiver_name(type_name),
+                            receiver,
                             trait_name,
                             method_name.to_string(),
                         )),
@@ -1207,16 +1224,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `lookup_static_method_*` from the AST alone. Carry the
                     // parameter defaults so reify pads omitted trailing
                     // arguments, matching the unqualified `Type::method()` path.
-                    // Both keyed by the namespace member, not by the bare
-                    // spelling: the importing module never names `Type` on its
-                    // own, so a name-only key reaches nothing. The defaults
-                    // would come back empty and reify would pad nothing,
-                    // leaving codegen a call short an argument; the parameter
-                    // types would come back empty and reify would pad what
-                    // defaults it has untyped.
-                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
-                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
-                    });
+                    // Empty defaults would leave codegen a call short an
+                    // argument; empty types would leave reify padding untyped.
                     let param_defaults = self.lookup_static_method_param_defaults_keyed(
                         type_name,
                         method_name,

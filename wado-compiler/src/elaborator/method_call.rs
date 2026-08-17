@@ -2081,8 +2081,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Look up return type
-        let mut return_type =
-            self.lookup_static_method_return_type(&method_ref, &mangled_func_name);
+        let mut return_type = self.lookup_static_method_return_type(
+            &method_ref,
+            &mangled_struct_name,
+            &mangled_func_name,
+        );
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -2240,7 +2243,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(trait_name.clone()),
             None,
         );
-        let template_return = self.lookup_static_method_return_type(&method_ref, &template_name);
+        let template_return = self.lookup_static_method_return_type(
+            &method_ref,
+            &FqTypeName::binder(&blanket_param),
+            &template_name,
+        );
         if template_return == TypeTable::UNKNOWN {
             return None;
         }
@@ -2525,9 +2532,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Look up static method return type based on struct name and method name
+    /// `receiver` is the declaration the call site resolved, not a spelling to
+    /// re-resolve: a namespace-qualified `ns::Type::method` names a type the
+    /// caller's own frame either lacks or — with a same-named local
+    /// declaration — answers wrongly.
     pub(super) fn lookup_static_method_return_type(
         &mut self,
         method_ref: &StaticMethodRef,
+        receiver: &FqTypeName,
         mangled_func_name: &str,
     ) -> TypeId {
         let struct_name = method_ref.type_name.as_str();
@@ -2538,29 +2550,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Also try with just StructName::method (for non-generic types)
-        let simple_name = MethodName::format_local(
-            &self.qualified_receiver_name(struct_name),
-            None,
-            method_name,
-        );
+        let simple_name = MethodName::format_local(receiver, None, method_name);
         if let Some(&return_type) = self.sem.decls.function_return_types.get(&simple_name) {
             return return_type;
         }
 
         // Try with trait-qualified name (StructName^TraitName::method)
         if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled = MethodName::format_local(
-                &self.qualified_receiver_name(struct_name),
-                Some(&trait_name),
-                method_name,
-            );
+            let trait_mangled = MethodName::format_local(receiver, Some(&trait_name), method_name);
             if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
                 return return_type;
             }
         }
 
         // Search via pre-built index (handles impls defined outside the struct's defining module).
-        let static_keys = self.static_receiver_keys(Some(&method_ref.module), struct_name);
+        // The declaration the call site resolved is the key. A name-and-module
+        // search prefers the caller's own frame, so `ns::Type::method` beside a
+        // same-named local `Type` would answer with the local declaration's
+        // signature. Only a receiver naming no declaration — a shape, a binder —
+        // still needs that search.
+        let static_keys = receiver.head().def().map_or_else(
+            || self.static_receiver_keys(Some(&method_ref.module), struct_name),
+            |def| {
+                vec![super::trait_env::ImplTargetKey::of_decl(
+                    self.tysys.resolutions.defs(),
+                    def,
+                )]
+            },
+        );
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of
@@ -2839,7 +2856,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<bool> {
-        let type_target = self.impl_target(struct_name);
+        self.lookup_static_method_param_is_mut_keyed(struct_name, method_name, None)
+    }
+
+    /// Like [`Self::lookup_static_method_param_is_mut`] but takes a pre-resolved
+    /// canonical receiver key, for the same reason as
+    /// [`Self::lookup_static_method_param_types_keyed`]: a namespace member the
+    /// importing module never names on its own is unreachable by bare spelling.
+    pub(super) fn lookup_static_method_param_is_mut_keyed(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        static_key_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
+    ) -> Vec<bool> {
+        let type_target = static_key_hint
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(struct_name));
         self.impl_method_sigs(&type_target, method_name)
             .into_iter()
             .find(|sig| sig.self_kind == ast::SelfKind::None)
@@ -3568,8 +3600,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Look up return type using the actual struct name
-        let mut return_type =
-            self.lookup_static_method_return_type(&method_ref, &final_mangled_name);
+        let mut return_type = self.lookup_static_method_return_type(
+            &method_ref,
+            &actual_struct_fq,
+            &final_mangled_name,
+        );
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices
