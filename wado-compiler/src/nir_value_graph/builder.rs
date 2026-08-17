@@ -26,6 +26,12 @@ struct HeapState {
     field_global: IndexMap<u32, HeapVersion>,
     /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
+    /// One version standing in for a `per_local` entry on every `mut_escaped`
+    /// local. An impure call invalidates that whole set at once, and versions
+    /// are only ever compared per key, so a shared version reads identically to
+    /// a distinct one per local — at `O(1)` per call instead of the
+    /// `O(escaped)` a bump each cost.
+    escaped_version: HeapVersion,
 }
 
 impl HeapState {
@@ -36,6 +42,7 @@ impl HeapState {
             per_local: IndexMap::default(),
             field_global: IndexMap::default(),
             default_version: HeapVersion::INITIAL,
+            escaped_version: HeapVersion::INITIAL,
         }
     }
 
@@ -49,10 +56,13 @@ impl HeapState {
     /// generation that could have invalidated it. `root` is `None` when the
     /// receiver is not a determinable bare `Local`, so per-slot / per-local
     /// precision does not apply — only `field_global` and `default`.
-    fn version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
+    fn version_of(&self, root: Option<u32>, field: u32, root_escaped: bool) -> HeapVersion {
         let mut v = self.default_version;
         if let Some(&fg) = self.field_global.get(&field) {
             v = v.max(fg);
+        }
+        if root_escaped {
+            v = v.max(self.escaped_version);
         }
         if let Some(r) = root {
             if let Some(&pl) = self.per_local.get(&r) {
@@ -63,6 +73,12 @@ impl HeapState {
             }
         }
         v
+    }
+
+    /// Invalidate every `mut_escaped` local's fields in one step.
+    fn bump_escaped(&mut self) {
+        let v = self.fresh();
+        self.escaped_version = v;
     }
 
     fn bump_slot(&mut self, root: u32, field: u32) {
@@ -85,6 +101,7 @@ impl HeapState {
         self.per_slot.clear();
         self.per_local.clear();
         self.field_global.clear();
+        self.escaped_version = HeapVersion::INITIAL;
         self.default_version = v;
     }
 
@@ -97,6 +114,7 @@ impl HeapState {
             per_local: self.per_local.clone(),
             field_global: self.field_global.clone(),
             default_version: self.default_version,
+            escaped_version: self.escaped_version,
         }
     }
 
@@ -105,6 +123,7 @@ impl HeapState {
         self.per_local = snap.per_local;
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
+        self.escaped_version = snap.escaped_version;
     }
 
     /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
@@ -118,12 +137,14 @@ impl HeapState {
         self.per_local.clone_from(&snap.per_local);
         self.field_global.clone_from(&snap.field_global);
         self.default_version = snap.default_version;
+        self.escaped_version = snap.escaped_version;
         let max = snap
             .per_slot
             .values()
             .chain(snap.per_local.values())
             .chain(snap.field_global.values())
             .chain(std::iter::once(&snap.default_version))
+            .chain(std::iter::once(&snap.escaped_version))
             .copied()
             .max()
             .unwrap_or(HeapVersion::INITIAL);
@@ -137,6 +158,7 @@ pub(crate) struct HeapSnapshot {
     per_local: IndexMap<u32, HeapVersion>,
     field_global: IndexMap<u32, HeapVersion>,
     default_version: HeapVersion,
+    escaped_version: HeapVersion,
 }
 
 /// A snapshot of *all* flow-sensitive builder state at a program point:
@@ -669,18 +691,34 @@ impl<'a> Builder<'a> {
     /// can reach; otherwise every `mut_escaped` local is bumped — not just this
     /// call's arguments, since a mutable reference that escaped earlier may have
     /// been retained.
+    /// [`HeapState::version_of`] with the `mut_escaped` membership it needs to
+    /// apply the shared escape version.
+    fn heap_version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
+        let escaped = root.is_some_and(|r| self.mut_escaped.contains(&r));
+        self.heap_state.version_of(root, field, escaped)
+    }
+
     fn bump_call_effects(&mut self, call: ExprId) {
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
         // opaque `ValueId`s and heap versions are handed out in visit order, so
         // this keeps the value graph a deterministic function of the program
         // regardless of how the alias sets were built (#1440).
+        // An impure call invalidates the whole `mut_escaped` set, which the
+        // shared escape version covers in one step. A pure one reaches only the
+        // `untrackable` locals, too few to be worth a set-wide version, so those
+        // keep their individual `per_local` bump.
+        if !pure {
+            self.heap_state.bump_escaped();
+        }
         for i in 0..self.mut_escaped_sorted.len() {
             let l = self.mut_escaped_sorted[i];
-            if pure && !self.untrackable.contains(&l) {
-                continue;
+            if pure {
+                if !self.untrackable.contains(&l) {
+                    continue;
+                }
+                self.heap_state.bump_local(l);
             }
-            self.heap_state.bump_local(l);
             self.invalidate_local_with_source(l, Some(OpaqueSource::Local(l)));
         }
     }
@@ -960,7 +998,7 @@ impl<'a> Builder<'a> {
                             && bare_local
                             && !self.untrackable.contains(&r)
                         {
-                            let ver = self.heap_state.version_of(Some(r), field_index);
+                            let ver = self.heap_version_of(Some(r), field_index);
                             self.field_store.insert((rv, field_index, ver), v);
                         }
                     }
@@ -1081,7 +1119,7 @@ impl<'a> Builder<'a> {
                     Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
                     None => (walked, inner_e.and_then(|ie| self.receiver_root(ie))),
                 };
-                let heap_ver = self.heap_state.version_of(root, field_index);
+                let heap_ver = self.heap_version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
@@ -1285,7 +1323,7 @@ impl<'a> Builder<'a> {
                 Operand::Expr(e) => self.value_of.get(&e).copied(),
             };
             if let Some(fv) = fv {
-                let ver = self.heap_state.version_of(Some(root), field_index);
+                let ver = self.heap_version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }
         }
@@ -1320,12 +1358,12 @@ impl<'a> Builder<'a> {
             .field_store
             .iter()
             .filter_map(|(&(recv, field, ver), &stored)| {
-                (recv == src_recv && ver == self.heap_state.version_of(Some(src), field))
+                (recv == src_recv && ver == self.heap_version_of(Some(src), field))
                     .then_some((field, stored))
             })
             .collect();
         for (field, stored) in live {
-            let dst_ver = self.heap_state.version_of(Some(dst_root), field);
+            let dst_ver = self.heap_version_of(Some(dst_root), field);
             self.field_store.insert((dst_recv, field, dst_ver), stored);
         }
     }
@@ -1583,6 +1621,17 @@ impl<'a> Builder<'a> {
         } else {
             pre.default_version
         };
+        // The escape version joins like `default_version`: an arm that bumped it
+        // means the set may have been written on some path in, so the merge
+        // takes a fresh one that no pre-branch read can match.
+        let escaped_changed = live
+            .iter()
+            .any(|a| a.escaped_version != pre.escaped_version);
+        let new_escaped = if escaped_changed {
+            self.heap_state.fresh()
+        } else {
+            pre.escaped_version
+        };
         let new_per_slot = self.join_overlay(
             new_default,
             &pre.per_slot,
@@ -1605,6 +1654,7 @@ impl<'a> Builder<'a> {
         self.heap_state.per_local = new_per_local;
         self.heap_state.field_global = new_field_global;
         self.heap_state.default_version = new_default;
+        self.heap_state.escaped_version = new_escaped;
     }
 
     /// Join one overlay map across the live arms. A key keeps its pre version
@@ -2268,3 +2318,4 @@ mod tests {
         assert_eq!(build_with(&escaped([0, 1])), build_with(&escaped([1, 0])));
     }
 }
+
