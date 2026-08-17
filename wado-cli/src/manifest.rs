@@ -3,8 +3,8 @@ use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
+use wado_manifest::governing_workspace;
 use wado_manifest::{Manifest, ManifestError};
-use wado_workspace::governing_workspace;
 
 use crate::args::CliExit;
 

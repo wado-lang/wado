@@ -219,7 +219,7 @@ async fn nearest_manifest_dir<H: CompilerHost>(start: &Path, host: &H) -> Option
     }
     let mut dir = start.to_path_buf();
     while dir.pop() {
-        let manifest = dir.join(wado_workspace::MANIFEST_FILENAME);
+        let manifest = dir.join(wado_manifest::MANIFEST_FILENAME);
         if host.source_exists(&manifest.display().to_string()).await {
             return Some(dir);
         }

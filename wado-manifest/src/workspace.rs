@@ -8,8 +8,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::{Manifest, ManifestError, read_workspace_members};
 use glob::{MatchOptions, Pattern};
-use wado_manifest::{Manifest, ManifestError, read_workspace_members};
 
 pub const MANIFEST_FILENAME: &str = "wado.toml";
 
@@ -67,7 +67,7 @@ pub fn resolve_member_manifest(
     member_content: &str,
 ) -> Result<Manifest, ManifestError> {
     match governing_workspace(member_dir, member_content) {
-        Some((_, root_content)) => wado_manifest::resolve_member(member_content, &root_content),
+        Some((_, root_content)) => crate::resolve_member(member_content, &root_content),
         None => member_content.parse(),
     }
 }

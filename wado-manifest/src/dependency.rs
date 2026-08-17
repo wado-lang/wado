@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use wado_manifest::{DependencySource, LockFile, Manifest};
+use crate::{DependencySource, LockFile, Manifest};
 
 /// The file that satisfies one `[dependencies]` entry.
 #[derive(Debug, PartialEq, Eq)]
@@ -156,9 +156,8 @@ fn registry_component_need(
         .ok_or_else(|| format!("no `wado.lock` version for {package:?}; run `wado update`"))?;
     let cache_root =
         cache_root.ok_or_else(|| format!("no cache root for {package:?}; set `WADO_ROOT`"))?;
-    let relative =
-        wado_manifest::cache::registry_cache_relative(registry_url, package, None, version)
-            .ok_or_else(|| format!("cannot place {package:?} in the cache"))?;
+    let relative = crate::cache::registry_cache_relative(registry_url, package, None, version)
+        .ok_or_else(|| format!("cannot place {package:?} in the cache"))?;
     Ok(RegistryComponentNeed {
         name: name.to_string(),
         registry_url: registry_url.clone(),
@@ -183,7 +182,7 @@ fn git_dependency_entry(
         .ok_or_else(|| format!("no `wado.lock` entry for {name:?}; run `wado update`"))?;
     let root =
         cache_root().ok_or_else(|| format!("no cache root for {name:?}; set `WADO_ROOT`"))?;
-    let relative = wado_manifest::cache::git_worktree_relative(url, version, resolved_ref)
+    let relative = crate::cache::git_worktree_relative(url, version, resolved_ref)
         .ok_or_else(|| format!("cannot place {name:?} in the cache (bad git url {url:?})"))?;
     let worktree_root = root.join(relative);
     // The `.ready` completion marker (written last by `wado-cli`'s materializer)
@@ -292,7 +291,7 @@ mod tests {
 
     use super::{RegistryComponentNeed, registry_component_need};
 
-    fn manifest_with_registry_dep() -> wado_manifest::Manifest {
+    fn manifest_with_registry_dep() -> crate::Manifest {
         "[package]\nname=\"app\"\nversion=\"0.1.0\"\n\n\
          [registries]\ndefault=\"oci://ghcr.io\"\n\n\
          [dependencies]\n\"wado-lang:cm-catalog\" = { version = \"^0.1\" }\n"

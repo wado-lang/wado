@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, Severity, SourceError};
-use wado_workspace::{DependencyEntry, absolutize};
+use wado_manifest::{DependencyEntry, absolutize};
 
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
@@ -99,7 +99,7 @@ impl CompilerHost for FilesystemCompilerHost {
 
 /// Build the compiler's dependency index from a manifest's `[dependencies]`.
 ///
-/// The bridge between what [`wado_workspace::dependency::resolve_all`] found on
+/// The bridge between what [`wado_manifest::dependency::resolve_all`] found on
 /// disk and what the loader consults: source entries are re-expressed relative
 /// to `base` — the same base `load_source` joins against — so `use { … } from
 /// "<name>"` resolves to them, prebuilt components keep their absolute cache
@@ -114,7 +114,7 @@ pub fn dependency_index_from(
 ) -> DependencyIndex {
     let mut index = DependencyIndex::default();
     let base_abs = absolutize(base);
-    for (name, entry) in wado_workspace::dependency::resolve_all(manifest, manifest_dir) {
+    for (name, entry) in wado_manifest::dependency::resolve_all(manifest, manifest_dir) {
         match entry {
             Ok(DependencyEntry::Source(path)) => {
                 index
@@ -134,9 +134,9 @@ pub fn dependency_index_from(
 
 /// The nearest `wado.toml` at or above `start`, parsed, with its directory.
 fn nearest_manifest(start: &Path) -> Option<(wado_manifest::Manifest, PathBuf)> {
-    let dir = wado_workspace::nearest_manifest_dir(start)?;
-    let text = std::fs::read_to_string(dir.join(wado_workspace::MANIFEST_FILENAME)).ok()?;
-    let manifest = wado_workspace::resolve_member_manifest(&dir, &text).ok()?;
+    let dir = wado_manifest::nearest_manifest_dir(start)?;
+    let text = std::fs::read_to_string(dir.join(wado_manifest::MANIFEST_FILENAME)).ok()?;
+    let manifest = wado_manifest::resolve_member_manifest(&dir, &text).ok()?;
     Some((manifest, dir))
 }
 

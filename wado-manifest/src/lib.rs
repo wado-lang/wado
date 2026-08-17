@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod dependency;
 mod lockfile;
 mod manifest;
 mod metadata;
@@ -6,7 +7,9 @@ mod provider;
 mod resolve;
 mod validate;
 mod version;
+pub mod workspace;
 
+pub use dependency::{DependencyEntry, RegistryComponentNeed, cache_root, package_lib_entry};
 pub use lockfile::{LockFile, LockFileError, LockedPackage};
 pub use manifest::{
     Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, ManifestWarning,
@@ -23,3 +26,7 @@ pub use provider::{
 pub use resolve::{ResolveError, resolve};
 pub use validate::{PublishError, validate_for_publish};
 pub use version::{Version, VersionError, VersionSpecifier};
+pub use workspace::{
+    MANIFEST_FILENAME, WALK_MATCH_OPTIONS, absolutize, governing_workspace, nearest_manifest_dir,
+    resolve_member_manifest,
+};
