@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786966253906,
+  "lastUpdate": 1786973261899,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49029,6 +49029,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/40b7d5cedfcb7655c42aa9097f5fc8a88e958b87"
         },
         "date": 1786966253020,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42482a3ce12c1deff035618a6bfca67bae41efe9",
+          "message": "Merge pull request #1840 from wado-lang/bench/refresh-results-and-tlb-stable-sieve\n\nchore(benchmark): refresh results and size sieve below the TLB cliff",
+          "timestamp": "2026-08-17T22:14:41+09:00",
+          "tree_id": "7d7d8f8658068991f40bb775dc3586d597beefc1",
+          "url": "https://github.com/wado-lang/wado/commit/42482a3ce12c1deff035618a6bfca67bae41efe9"
+        },
+        "date": 1786973261344,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
