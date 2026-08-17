@@ -83,7 +83,7 @@ function sieveCount(isPrime, limit) {
 }
 
 function main() {
-  const limit = 10000000;
+  const limit = 2000000;
 
   // Allocate the sieve buffer once, outside the timed region.
   const isPrime = new Uint8Array(limit + 1);

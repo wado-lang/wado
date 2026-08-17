@@ -19,7 +19,7 @@ compression, parsing, and application server.
 # pure computation
 mise run count-prime   # integer arithmetic (count primes to 1M)
 mise run mandelbrot    # float arithmetic (1024x768 fractal)
-mise run sieve         # array operations (sieve of Eratosthenes to 10M)
+mise run sieve         # array operations (sieve of Eratosthenes to 2M)
 mise run fts           # float-to-string conversion
 
 # serde & compression

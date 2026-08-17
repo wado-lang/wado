@@ -94,7 +94,7 @@ int sieve_count(bool *is_prime, int limit) {
 }
 
 int main() {
-    int limit = 10000000;
+    int limit = 2000000;
 
     // Allocate the sieve buffer once, outside the timed region.
     bool *is_prime = malloc((limit + 1) * sizeof(bool));
