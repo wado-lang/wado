@@ -270,3 +270,101 @@ pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
     })?;
     Ok(dep_path.join(lib))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A workspace root with one `members` entry, and that member's directory.
+    fn workspace_with_member(member: &str) -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(MANIFEST_FILENAME),
+            format!(
+                "[workspace]\nmembers = [\"{member}\"]\n\n[workspace.package]\nversion = \"0.4.0\"\n"
+            ),
+        )
+        .unwrap();
+        let member_dir = tmp.path().join(member);
+        std::fs::create_dir(&member_dir).unwrap();
+        (tmp, member_dir)
+    }
+
+    #[test]
+    fn member_manifest_inherits_version_from_the_workspace() {
+        // A member omitting `version` (force-inherited) resolves by applying
+        // `[workspace.package]` — the case a standalone parse rejects.
+        let (_tmp, member_dir) = workspace_with_member("member");
+        let member_toml = "[package]\nname = \"member\"\n";
+        std::fs::write(member_dir.join(MANIFEST_FILENAME), member_toml).unwrap();
+
+        let manifest = resolve_member_manifest(&member_dir, member_toml).unwrap();
+        assert_eq!(manifest.package.unwrap().version, "0.4.0");
+    }
+
+    #[test]
+    fn standalone_manifest_parses_without_a_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let toml = "[package]\nname = \"solo\"\nversion = \"1.0.0\"\n";
+        let manifest = resolve_member_manifest(tmp.path(), toml).unwrap();
+        assert_eq!(manifest.package.unwrap().name, "solo");
+    }
+
+    #[test]
+    fn non_member_directory_does_not_inherit() {
+        // A directory under a workspace root but not covered by `members` is not
+        // governed, so a manifest missing `version` there fails rather than
+        // silently inheriting.
+        let (tmp, _member_dir) = workspace_with_member("member");
+        let outsider = tmp.path().join("outsider");
+        std::fs::create_dir(&outsider).unwrap();
+        assert!(governing_workspace(&outsider, "[package]\nname = \"x\"\n").is_none());
+    }
+
+    #[test]
+    fn a_workspace_member_resolves_as_a_path_dependency() {
+        // The whole point of the walk: a path dependency pointing at a member
+        // must reach its `[package].lib` rather than failing the inheritance.
+        let (_tmp, member_dir) = workspace_with_member("member");
+        std::fs::write(
+            member_dir.join(MANIFEST_FILENAME),
+            "[package]\nname = \"member\"\nlib = \"src/lib.wado\"\n",
+        )
+        .unwrap();
+
+        let entry = package_lib_entry(&member_dir).expect("member resolves");
+        assert_eq!(entry, member_dir.join("src/lib.wado"));
+    }
+
+    #[test]
+    fn a_single_wado_file_is_its_own_entry() {
+        assert_eq!(
+            package_lib_entry(Path::new("/pkg/solo.wado")).unwrap(),
+            PathBuf::from("/pkg/solo.wado"),
+        );
+    }
+
+    #[test]
+    fn a_package_without_a_lib_entry_says_so() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(MANIFEST_FILENAME),
+            "[package]\nname = \"nolib\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let err = package_lib_entry(tmp.path()).unwrap_err();
+        assert!(err.contains("[package].lib"), "{err}");
+    }
+
+    #[test]
+    fn nearest_manifest_dir_walks_up_to_the_root() {
+        let (tmp, member_dir) = workspace_with_member("member");
+        let nested = member_dir.join("src");
+        std::fs::create_dir(&nested).unwrap();
+        // No `wado.toml` in the member, so the walk continues to the root.
+        assert_eq!(
+            nearest_manifest_dir(&nested.join("main.wado")),
+            Some(tmp.path().to_path_buf()),
+        );
+    }
+}

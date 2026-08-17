@@ -323,8 +323,8 @@ mod tests {
     #[test]
     fn zero_column_span_without_an_end_stays_one_column_wide() {
         // Kiln generator diagnostics report `column: 0`. Deriving the default
-        // end in 1-based space and then decrementing collapsed those to a
-        // zero-width range the editor draws nothing for.
+        // end in 1-based space and decrementing it afterwards would collapse
+        // those to a zero-width range the editor draws nothing for.
         let compiler_diag = CompilerDiagnostic {
             severity: CompilerSeverity::Error,
             code: Code::TypeMismatch,
