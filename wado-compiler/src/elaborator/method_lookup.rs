@@ -121,7 +121,6 @@ impl TypeSystem {
     pub(crate) fn inherent_impl_type_args_match(
         &self,
         impl_ty: &Type,
-        impl_params: &[ast::GenericParam],
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
         let inner = match impl_ty {
@@ -137,10 +136,9 @@ impl TypeSystem {
             return true;
         };
         for (i, arg) in generic.args.iter().enumerate() {
-            // A concrete arg (recursing into nested generics, excluding declared
-            // impl params) must equal the receiver's arg; a free type param
-            // matches anything.
-            if let Some(expected) = self.concrete_arg_mangled(arg, impl_params) {
+            // A concrete arg (recursing into nested generics) must equal the
+            // receiver's arg; one naming no declaration matches anything.
+            if let Some(expected) = self.concrete_arg_mangled(arg) {
                 let Some(&recv) = args.get(i) else {
                     return false;
                 };
@@ -159,27 +157,32 @@ impl TypeSystem {
     /// generic args (`List<Box<u8>>`) are constrained, not silently accepted.
     ///
     /// The header wrote these arguments, so each has a reference site the
-    /// resolve pass answered for. Nothing here re-resolves the spelling: the
-    /// argument of an `impl Holder<Tag>` reaches the `Tag` this module imported
-    /// even when another module declares one too.
-    fn concrete_arg_mangled(
-        &self,
-        arg: &Type,
-        impl_params: &[ast::GenericParam],
-    ) -> Option<String> {
+    /// resolve pass answered for, whatever it is spelled like. Nothing here
+    /// re-resolves the spelling: the argument of an `impl Holder<Tag>` reaches
+    /// the `Tag` this module imported even when another module declares one too,
+    /// and `crate::resolve::head_site` finds the site for a namespace-qualified
+    /// `ns::Tag` as readily as for a bare name — matching on the spelling's
+    /// *shape* is what let that one through unconstrained.
+    fn concrete_arg_mangled(&self, arg: &Type) -> Option<String> {
+        let head = crate::resolve::head_site(arg).and_then(|site| self.mangled_decl_name_at(site));
         match arg {
-            Type::Named(named) => self.mangled_decl_name_at(named.id, impl_params),
-            Type::Generic(g) => {
-                let parts: Vec<String> = g
-                    .args
+            Type::Named(_) => head,
+            // A head naming no declaration is a binder, and a binder head keeps
+            // its own spelling: `impl<T> Foo<T<i32>>` constrains on `T<i32>`.
+            Type::Generic(g) => Some(crate::name::mangle_generic_name(
+                &head.unwrap_or_else(|| g.name.clone()),
+                &g.args
                     .iter()
-                    .map(|a| self.concrete_arg_mangled(a, impl_params))
-                    .collect::<Option<Vec<String>>>()?;
-                let head = self
-                    .mangled_decl_name_at(g.id, impl_params)
-                    .unwrap_or_else(|| g.name.clone());
-                Some(crate::name::mangle_generic_name(&head, &parts))
-            }
+                    .map(|a| self.concrete_arg_mangled(a))
+                    .collect::<Option<Vec<String>>>()?,
+            )),
+            Type::NamespacedGeneric(ns) => Some(crate::name::mangle_generic_name(
+                &head?,
+                &ns.args
+                    .iter()
+                    .map(|a| self.concrete_arg_mangled(a))
+                    .collect::<Option<Vec<String>>>()?,
+            )),
             _ => None,
         }
     }
@@ -188,19 +191,15 @@ impl TypeSystem {
     /// in the form the receiver side of the comparison carries. `None` for a
     /// binder, for a name that reaches nothing, and for a node no walk saw.
     ///
-    /// `impl_params` are the header's own binders. The walk answers
-    /// [`crate::resolve::Resolution::Binder`] for them, so this check is what
-    /// covers a header whose arguments predate the walk — a synthesised impl.
-    fn mangled_decl_name_at(
-        &self,
-        site: crate::ast::AstId,
-        impl_params: &[ast::GenericParam],
-    ) -> Option<String> {
+    /// The header's own type parameters need no separate check: a binder shadows
+    /// every declaration of its name, so the walk answers
+    /// [`crate::resolve::Resolution::Binder`] for one and this hands back `None`.
+    /// Comparing the resolved declaration's name against them instead answered
+    /// "binder" for an alias whose target happens to be spelled like one, and
+    /// dropped a constraint the header wrote.
+    fn mangled_decl_name_at(&self, site: crate::ast::AstId) -> Option<String> {
         let def = self.resolutions.declared_if_walked(site)?;
         let defs = self.resolutions.defs();
-        if impl_params.iter().any(|p| p.name == defs.name(def)) {
-            return None;
-        }
         {
             let tt = self.type_table.borrow();
             if let Some(id) = tt.type_of_symbol(&defs.ast_id(def)) {
@@ -815,17 +814,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         header: &ImplHeader,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        self.tysys.inherent_impl_type_args_match(
-            &header.ty,
-            &header.type_params,
-            receiver_type_args,
-        ) && self.tysys.check_impl_block_bounds(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            &header.type_params,
-            &header.ty,
-            receiver_type_args,
-        )
+        self.tysys
+            .inherent_impl_type_args_match(&header.ty, receiver_type_args)
+            && self.tysys.check_impl_block_bounds(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                &header.type_params,
+                &header.ty,
+                receiver_type_args,
+            )
     }
 
     /// `MethodInfo` for `method_name` on the inherent `impl` block at

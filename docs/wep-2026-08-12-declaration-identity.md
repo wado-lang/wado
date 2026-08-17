@@ -579,6 +579,18 @@ depended on declarations no module involved could see. All three are gone.
   `impl Holder<Tag>` stopped applying the moment an unrelated module declared its
   own `Tag`. The header wrote that argument, so it has a reference site;
   `concrete_arg_mangled` reads it (`cross_module_same_name_impl_arg`).
+
+  Reading the site is the whole of it, and two further rules follow. The
+  header's own type parameters need no separate check: a binder shadows every
+  declaration of its name, so the walk answers `Binder` and the argument is free
+  without a name being compared. Comparing the resolved declaration's name
+  against the header's binders instead answers "binder" for an alias whose target
+  happens to be spelled like one, and silently drops a constraint the header
+  wrote (`impl_arg_alias_shadows_impl_binder`). And whether an argument
+  constrains is a question about the declaration it names, not about the shape of
+  the spelling naming it — matching only `Type::Named` and `Type::Generic` let a
+  namespace-qualified `ns::Tag` through as "names nothing, matches anything".
+  `resolve::head_site` answers for all three (`impl_arg_ns_qualified`).
 - `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
   and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
   _first declaring module in build order_, with no ambiguity check at all. Every

@@ -1308,11 +1308,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_ref == Some(trait_)
-                    && self.inherent_impl_type_args_match(
-                        &header.ty,
-                        &header.type_params,
-                        type_args,
-                    )
+                    && self.inherent_impl_type_args_match(&header.ty, type_args)
                     && self.check_impl_block_bounds(
                         ctx,
                         scope,

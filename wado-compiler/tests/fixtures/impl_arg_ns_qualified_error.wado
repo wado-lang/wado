@@ -1,0 +1,18 @@
+// `impl<Tag> Slot<tag::Tag, Tag>` — a concrete impl argument written with a
+// namespace prefix.
+//
+// Whether an argument constrains is a question about the declaration it names,
+// not about the shape of the spelling that names it. Matching only `Type::Named`
+// and `Type::Generic` dropped `Type::NamespacedGeneric` to "names nothing, so
+// matches anything", and the impl applied to every first argument. Every
+// spelling has a head reference site, so all three ask it.
+
+use { Slot } from "./sub/impl_arg_ns_qualified_holder.wado";
+
+export fn run() {
+    let s = Slot { a: "not a Tag", b: 7 };
+    let _ = s.n();
+}
+
+__DATA__
+{"compile_error": "no method 'n' found"}
