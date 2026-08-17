@@ -136,9 +136,8 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
 /// `sync` by reference to one of these, so a terminal on the valid hot path
 /// neither rebuilds nor copies the set.
 pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
-    // `EMPTY_SYNC` is also the empty wanted-set every failure path passes to
-    // `fail`, and the `Parser` runtime is emitted even for a lexer-only
-    // grammar — so it cannot be gated on there being parser rules.
+    // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
+    // `Parser` runtime is still emitted — needs it too.
     w.line(&"global EMPTY_SYNC: List<i32> = [];");
     for let entry of &ctx.sync_sets() {
         w.line(&`global SYNC_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);

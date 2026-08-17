@@ -1044,7 +1044,10 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
+    if follow.is_empty() {
+        return *prefix;
+    }
+    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
     for let depth of prefix {
         combined.push(*depth);
     }
@@ -1355,22 +1358,21 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -1450,7 +1452,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1501,7 +1503,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1515,9 +1517,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1543,7 +1545,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1566,7 +1568,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1771,7 +1773,6 @@ fn scan_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let stmt = _parse_stmt(p, &FOLLOW_MASK_0);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1789,7 +1790,6 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_stmt__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let item = _parse_item(p, follow);
     return;
 }
@@ -1802,7 +1802,6 @@ fn _parse_stmt__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_stmt__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let item = _parse_item(p, &FOLLOW_MASK_1);
     let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);
     return;
@@ -1838,16 +1837,13 @@ fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if _sd_best_i == 0 {
                 return _parse_stmt__inner_alt_0(p, follow);
             }
-            if _sd_best_i == 1 {
-                return _parse_stmt__inner_alt_1(p, follow);
-            }
             return _parse_stmt__inner_alt_1(p, follow);
         }
     }
     p.no_viable(
         "no alternative of stmt matches",
         p.peek_span(),
-        [token_kind_name(TK_ID)],
+        &SYNC_0,
     );
     return;
 }
@@ -1864,9 +1860,8 @@ fn _parse_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_item__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let name = _parse_name(p, &FOLLOW_MASK_2);
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
     let inner = _parse_inner(p, &FOLLOW_MASK_3);
     let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
     return;
@@ -1886,7 +1881,6 @@ fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let name = _parse_name(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_AS && _kind_set_2(p.peek_at(1))) {
         if p.peek_kind() == TK_LIT_AS {
@@ -1929,7 +1923,7 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         if p.peek_kind() == TK_LIT_IDX {
-            let lit_idx = p.expect(TK_LIT_IDX, &SYNC_1);
+            let lit_idx = p.expect(TK_LIT_IDX, &SYNC_0);
             let name = _parse_name(p, follow);
         } else {
             let lit_no = p.expect(TK_LIT_NO, &SYNC_2);
@@ -2023,9 +2017,6 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 if _sd_best_i == 1 {
                     return _parse_item__inner_alt_1(p, follow);
                 }
-                if _sd_best_i == 0 {
-                    return _parse_item__inner_alt_0(p, follow);
-                }
                 return _parse_item__inner_alt_0(p, follow);
             } else {
                 let _sd_tokens = &p.kinds;
@@ -2046,9 +2037,6 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     if _sd_best_i == 1 {
                         return _parse_item__inner_alt_1(p, follow);
                     }
-                    if _sd_best_i == 0 {
-                        return _parse_item__inner_alt_0(p, follow);
-                    }
                     return _parse_item__inner_alt_0(p, follow);
                 }
             }
@@ -2057,7 +2045,7 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     p.no_viable(
         "no alternative of item matches",
         p.peek_span(),
-        [token_kind_name(TK_ID)],
+        &SYNC_0,
     );
     return;
 }
@@ -2074,7 +2062,6 @@ fn _parse_item(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
         let id = p.expect(TK_ID, &EMPTY_SYNC);
@@ -2089,7 +2076,7 @@ fn _parse_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     p.no_viable(
         "no alternative of alias matches",
         p.peek_span(),
-        [token_kind_name(TK_ID), token_kind_name(TK_LIT_LPAREN)],
+        &SYNC_3,
     );
     return;
 }
@@ -2106,14 +2093,13 @@ fn _parse_alias(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_inner__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_NUMBER {
         let number = p.expect(TK_NUMBER, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
         let inner = _parse_inner(p, &FOLLOW_MASK_3);
         let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
@@ -2121,7 +2107,7 @@ fn _parse_inner__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     p.no_viable(
         "no alternative of inner matches",
         p.peek_span(),
-        [token_kind_name(TK_NUMBER), token_kind_name(TK_LIT_LPAREN)],
+        &SYNC_1,
     );
     return;
 }
@@ -2138,7 +2124,6 @@ fn _parse_inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
@@ -2243,8 +2228,8 @@ fn _kind_set_3(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
-global SYNC_1: List<i32> = [TK_ID];
+global SYNC_0: List<i32> = [TK_ID];
+global SYNC_1: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
 global SYNC_2: List<i32> = [TK_LIT_IDX];
 global SYNC_3: List<i32> = [TK_ID, TK_LIT_LPAREN];
 

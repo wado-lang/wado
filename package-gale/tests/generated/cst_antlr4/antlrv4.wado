@@ -1090,7 +1090,10 @@ impl LexerView {
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
+    if follow.is_empty() {
+        return *prefix;
+    }
+    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
     for let depth of prefix {
         combined.push(*depth);
     }
@@ -3759,126 +3762,225 @@ pub fn tokenize(input: &String) -> TokenStream with LexerAdaptor {
         let mut best_more = false;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
-            end = try_DOC_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOC_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
-            end = try_BLOCK_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
-            end = try_LINE_COMMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_UNTERMINATED_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_BEGIN_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_BEGIN_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
-            end = try_ACTION(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ACTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_OPTIONS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OPTIONS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_TOKENS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_TOKENS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_CHANNELS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CHANNELS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_IMPORT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_IMPORT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_FRAGMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_FRAGMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_LEXER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LEXER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_PARSER(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PARSER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_GRAMMAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GRAMMAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_PROTECTED(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PROTECTED; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_PUBLIC(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PUBLIC; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_PRIVATE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PRIVATE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_RETURNS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RETURNS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_LOCALS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LOCALS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_THROWS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_THROWS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_CATCH(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_CATCH; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_FINALLY(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_FINALLY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_MODE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_MODE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_COLON(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_COLONCOLON(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COLONCOLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_COMMA(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_COMMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_SEMI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SEMI; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_LPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_RPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_RBRACE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_RARROW(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RARROW; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_LT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_GT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_ASSIGN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_QUESTION(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_QUESTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_STAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_STAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_PLUS_ASSIGN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUS_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_PLUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_PLUS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_OR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_OR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_DOLLAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_RANGE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RANGE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_DOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_AT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_AT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_POUND(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_POUND; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_NOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_NOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 2; best_act = -1; }
+            if first_char matches { '\t' | '\n' | '\u{c}' | '\r' | ' ' } {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 2; best_act = -1; }
+            } else if first_char matches { '#' } {
+                end = try_POUND(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_POUND; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '$' } {
+                end = try_DOLLAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '\'' } {
+                end = try_STRING_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_STRING_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_STRING_LITERAL; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '(' } {
+                end = try_LPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { ')' } {
+                end = try_RPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RPAREN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '*' } {
+                end = try_STAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_STAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '+' } {
+                end = try_PLUS_ASSIGN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PLUS_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_PLUS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PLUS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { ',' } {
+                end = try_COMMA(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_COMMA; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '-' } {
+                end = try_RARROW(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RARROW; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '.' } {
+                end = try_RANGE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RANGE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_DOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '/' } {
+                end = try_DOC_COMMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DOC_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
+                end = try_BLOCK_COMMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
+                end = try_LINE_COMMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 3; best_act = -1; }
+            } else if first_char matches { '0' } {
+                end = try_INT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { ':' } {
+                end = try_COLON(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_COLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_COLONCOLON(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_COLONCOLON; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { ';' } {
+                end = try_SEMI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_SEMI; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '<' } {
+                end = try_LT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '=' } {
+                end = try_ASSIGN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '>' } {
+                end = try_GT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '?' } {
+                end = try_QUESTION(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_QUESTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '@' } {
+                end = try_AT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_AT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '[' } {
+                end = try_BEGIN_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_BEGIN_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 0; }
+            } else if first_char matches { 'c' } {
+                end = try_CHANNELS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_CHANNELS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_CATCH(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_CATCH; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'f' } {
+                end = try_FRAGMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_FRAGMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_FINALLY(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_FINALLY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'g' } {
+                end = try_GRAMMAR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_GRAMMAR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'i' } {
+                end = try_IMPORT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_IMPORT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'l' } {
+                end = try_LEXER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LEXER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_LOCALS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LOCALS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'm' } {
+                end = try_MODE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_MODE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'o' } {
+                end = try_OPTIONS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OPTIONS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'p' } {
+                end = try_PARSER(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PARSER; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_PROTECTED(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PROTECTED; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_PUBLIC(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PUBLIC; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_PRIVATE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_PRIVATE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'r' } {
+                end = try_RETURNS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RETURNS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 't' } {
+                end = try_TOKENS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_TOKENS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_THROWS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_THROWS; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '{' } {
+                end = try_ACTION(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ACTION; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '|' } {
+                end = try_OR(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_OR; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '}' } {
+                end = try_RBRACE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RBRACE; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '~' } {
+                end = try_NOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_NOT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '1'..='9' } {
+                end = try_INT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { 'A'..='Z' | 'a'..='z' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='˿' | 'Ͱ'..='ͽ' | 'Ϳ'..='῿' | '‌'..='‍' | '⁰'..='↏' | 'Ⰰ'..='⿯' | '、'..='퟿' | '豈'..='﷏' | 'ﷰ'..='�' } {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else {
+                end = try_INT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_INT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            }
         } else if current_mode == 1 {
-            end = try_NESTED_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_ARGUMENT_ESCAPE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_ARGUMENT_STRING_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_ARGUMENT_CHAR_LITERAL(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_END_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_END_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
-            end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_ARGUMENT_CONTENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            if first_char matches { '"' } {
+                end = try_ARGUMENT_STRING_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '\'' } {
+                end = try_ARGUMENT_CHAR_LITERAL(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '[' } {
+                end = try_NESTED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { '\\' } {
+                end = try_ARGUMENT_ESCAPE(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else if first_char matches { ']' } {
+                end = try_END_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_END_ARGUMENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 1; }
+                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else {
+                end = try_UNTERMINATED_ARGUMENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_ARGUMENT; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_ARGUMENT_CONTENT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ARGUMENT_CONTENT; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            }
         } else if current_mode == 2 {
-            end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
-            end = try_LEXER_CHAR_SET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-            end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            if first_char matches { ']' } {
+                end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
+                end = try_LEXER_CHAR_SET(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            } else {
+                end = try_LEXER_CHAR_SET_BODY(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LEXER_CHAR_SET_BODY; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = true; best_channel = 0; best_act = -1; }
+                end = try_UNTERMINATED_CHAR_SET(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_UNTERMINATED_CHAR_SET; best_push_mode = -1; best_pop_mode = true; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
+            }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -4143,22 +4245,21 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -4238,7 +4339,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -4289,7 +4390,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -4303,9 +4404,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -4331,7 +4432,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -4354,7 +4455,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -4688,9 +4789,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
         if pos == sp { break; }
     }
     if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_COMMA { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; }
+        pos += 1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -4769,10 +4868,7 @@ fn scan_arg_action_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
     if pos >= tokens.len() || tokens[pos] != TK_BEGIN_ARGUMENT { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_ARGUMENT_CONTENT {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_ARGUMENT_CONTENT { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
+        pos += 1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_END_ARGUMENT { return -1; }
     pos += 1;
@@ -4807,42 +4903,40 @@ fn scan_rules(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
+fn scan_rule_spec_alt_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_parser_rule_spec(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_rule_spec_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_lexer_rule_spec(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_20(alt_kind) {
-            pos = start;
-            try_0: {
-                pos = scan_parser_rule_spec(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
+            pos = scan_rule_spec_alt_0(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_FRAGMENT {
             let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                pos = scan_parser_rule_spec(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                pos = scan_lexer_rule_spec(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
+            let try_0_end = scan_rule_spec_alt_0(tokens, start, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_rule_spec_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_TOKEN_REF {
-            pos = start;
-            try_1: {
-                pos = scan_lexer_rule_spec(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
+            pos = scan_rule_spec_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -5089,9 +5183,7 @@ fn scan_labeled_alt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
 fn scan_lexer_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_FRAGMENT {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_FRAGMENT { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; }
+        pos += 1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_TOKEN_REF { return -1; }
     pos += 1;
@@ -5165,6 +5257,11 @@ fn scan_lexer_alt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
+fn scan_lexer_elements_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    return pos;
+}
+
 fn scan_lexer_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -5184,17 +5281,13 @@ fn scan_lexer_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                 }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_1: {
-                if pos > best { best = pos; }
-            }
+            let try_1_end = scan_lexer_elements_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
-            pos = start;
-            try_1: {
-                break scan_alts;
-            }
+            pos = scan_lexer_elements_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         }
     }
@@ -5238,9 +5331,7 @@ fn scan_lexer_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
                 pos = scan_action_block(tokens, pos, &follow_prepend(&FOLLOW_MASK_5, follow), 0);
                 if pos < 0 { break try_2; }
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 break scan_alts;
             }
@@ -5399,6 +5490,11 @@ fn scan_alt_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
+fn scan_alternative_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    return pos;
+}
+
 fn scan_alternative(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -5423,19 +5519,27 @@ fn scan_alternative(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_1: {
-                if pos > best { best = pos; }
-            }
+            let try_1_end = scan_alternative_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
-            pos = start;
-            try_1: {
-                break scan_alts;
-            }
+            pos = scan_alternative_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         }
+    }
+    return pos;
+}
+
+fn scan_element_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_atom(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && _kind_set_10(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+        let sp = pos;
+        pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; }
     }
     return pos;
 }
@@ -5458,31 +5562,13 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_1: {
-                pos = scan_atom(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos < tokens.len() && _kind_set_10(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos > best { best = pos; }
-            }
+            let try_1_end = scan_element_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _kind_set_22(alt_kind) {
-            pos = start;
-            try_1: {
-                pos = scan_atom(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos < tokens.len() && _kind_set_10(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                break scan_alts;
-            }
+            pos = scan_element_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_LPAREN {
             pos = start;
@@ -5498,9 +5584,7 @@ fn scan_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 pos = scan_action_block(tokens, pos, follow, 0);
                 if pos < 0 { break try_3; }
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
@@ -5679,9 +5763,7 @@ fn scan_ebnf_suffix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 if pos >= tokens.len() || tokens[pos] != TK_QUESTION { break try_0; }
                 pos += 1;
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 break scan_alts;
             }
@@ -5692,9 +5774,7 @@ fn scan_ebnf_suffix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 if pos >= tokens.len() || tokens[pos] != TK_STAR { break try_1; }
                 pos += 1;
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 break scan_alts;
             }
@@ -5705,9 +5785,7 @@ fn scan_ebnf_suffix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 if pos >= tokens.len() || tokens[pos] != TK_PLUS { break try_2; }
                 pos += 1;
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 break scan_alts;
             }
@@ -5716,6 +5794,13 @@ fn scan_ebnf_suffix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
             return -1;
         }
     }
+    return pos;
+}
+
+fn scan_lexer_atom_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_terminal_def(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -5732,21 +5817,13 @@ fn scan_lexer_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_1: {
-                pos = scan_terminal_def(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
+            let try_1_end = scan_lexer_atom_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_TOKEN_REF {
-            pos = start;
-            try_1: {
-                pos = scan_terminal_def(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
+            pos = scan_lexer_atom_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_NOT {
             pos = start;
@@ -6160,7 +6237,6 @@ fn scan_qualified_identifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let grammar_decl = _parse_grammar_decl(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -6235,7 +6311,6 @@ fn _parse_grammar_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_grammar_decl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let grammar_type = _parse_grammar_type(p, &FOLLOW_MASK_0);
     let identifier = _parse_identifier(p, &FOLLOW_MASK_1);
     let semi = p.expect(TK_SEMI, &EMPTY_SYNC);
@@ -6254,7 +6329,6 @@ fn _parse_grammar_decl(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_grammar_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LEXER {
         let lexer = p.expect(TK_LEXER, &SYNC_0);
@@ -6273,7 +6347,7 @@ fn _parse_grammar_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     p.no_viable(
         "no alternative of grammarType matches",
         p.peek_span(),
-        [token_kind_name(TK_LEXER), token_kind_name(TK_PARSER), token_kind_name(TK_GRAMMAR)],
+        &SYNC_1,
     );
     return;
 }
@@ -6290,7 +6364,6 @@ fn _parse_grammar_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_prequel_construct__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_OPTIONS {
         let options_spec = _parse_options_spec(p, follow);
@@ -6315,7 +6388,7 @@ fn _parse_prequel_construct__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     p.no_viable(
         "no alternative of prequelConstruct matches",
         p.peek_span(),
-        [token_kind_name(TK_OPTIONS), token_kind_name(TK_IMPORT), token_kind_name(TK_TOKENS), token_kind_name(TK_CHANNELS), token_kind_name(TK_AT)],
+        &SYNC_2,
     );
     return;
 }
@@ -6332,8 +6405,7 @@ fn _parse_prequel_construct(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let options = p.expect(TK_OPTIONS, &SYNC_1);
+    let options = p.expect(TK_OPTIONS, &SYNC_3);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -6373,9 +6445,8 @@ fn _parse_options_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_2);
-    let assign = p.expect(TK_ASSIGN, &SYNC_2);
+    let assign = p.expect(TK_ASSIGN, &SYNC_4);
     let option_value = _parse_option_value(p, follow);
     return;
 }
@@ -6392,7 +6463,6 @@ fn _parse_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 }
 
 fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         let identifier = _parse_identifier(p, follow);
@@ -6417,7 +6487,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let dot = p.expect(TK_DOT, &SYNC_3);
+            let dot = p.expect(TK_DOT, &SYNC_5);
             let identifier = _parse_identifier(p, follow);
         }
         return;
@@ -6437,7 +6507,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     p.no_viable(
         "no alternative of optionValue matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_ACTION), token_kind_name(TK_INT)],
+        &SYNC_4,
     );
     return;
 }
@@ -6454,8 +6524,7 @@ fn _parse_option_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let import_ = p.expect(TK_IMPORT, &SYNC_3);
+    let import_ = p.expect(TK_IMPORT, &SYNC_5);
     let delegate_grammar = _parse_delegate_grammar(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -6477,7 +6546,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &SYNC_3);
+        let comma = p.expect(TK_COMMA, &SYNC_5);
         let delegate_grammar = _parse_delegate_grammar(p, follow);
     }
     let semi = p.expect(TK_SEMI, &EMPTY_SYNC);
@@ -6496,7 +6565,6 @@ fn _parse_delegate_grammars(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_delegate_grammar__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, follow);
     return;
 }
@@ -6509,9 +6577,8 @@ fn _parse_delegate_grammar__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: 
 }
 
 fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_2);
-    let assign = p.expect(TK_ASSIGN, &SYNC_3);
+    let assign = p.expect(TK_ASSIGN, &SYNC_5);
     let identifier_2 = _parse_identifier(p, follow);
     return;
 }
@@ -6548,16 +6615,13 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if _sd_best_i == 1 {
                 return _parse_delegate_grammar__inner_alt_1(p, follow);
             }
-            if _sd_best_i == 0 {
-                return _parse_delegate_grammar__inner_alt_0(p, follow);
-            }
             return _parse_delegate_grammar__inner_alt_0(p, follow);
         }
     }
     p.no_viable(
         "no alternative of delegateGrammar matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF)],
+        &SYNC_5,
     );
     return;
 }
@@ -6574,8 +6638,7 @@ fn _parse_delegate_grammar(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_tokens_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let tokens = p.expect(TK_TOKENS, &SYNC_1);
+    let tokens = p.expect(TK_TOKENS, &SYNC_3);
     if _kind_set_1(p.peek_kind()) {
         let id_list = _parse_id_list(p, &EMPTY_FOLLOW);
     }
@@ -6595,8 +6658,7 @@ fn _parse_tokens_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_channels_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let channels = p.expect(TK_CHANNELS, &SYNC_1);
+    let channels = p.expect(TK_CHANNELS, &SYNC_3);
     if _kind_set_1(p.peek_kind()) {
         let id_list = _parse_id_list(p, &EMPTY_FOLLOW);
     }
@@ -6616,7 +6678,6 @@ fn _parse_channels_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, follow);
     loop {
         if p.recovering { break; }
@@ -6639,7 +6700,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &SYNC_3);
+        let comma = p.expect(TK_COMMA, &SYNC_5);
         let identifier = _parse_identifier(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -6660,8 +6721,7 @@ fn _parse_id_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let at = p.expect(TK_AT, &SYNC_4);
+    let at = p.expect(TK_AT, &SYNC_6);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -6693,7 +6753,6 @@ fn _parse_action_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_action_scope_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         let identifier = _parse_identifier(p, follow);
@@ -6710,7 +6769,7 @@ fn _parse_action_scope_name__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     p.no_viable(
         "no alternative of actionScopeName matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_LEXER), token_kind_name(TK_PARSER)],
+        &SYNC_6,
     );
     return;
 }
@@ -6727,7 +6786,6 @@ fn _parse_action_scope_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let action = p.expect(TK_ACTION, &EMPTY_SYNC);
     return;
 }
@@ -6744,8 +6802,7 @@ fn _parse_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_arg_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let begin_argument = p.expect(TK_BEGIN_ARGUMENT, &SYNC_5);
+    let begin_argument = p.expect(TK_BEGIN_ARGUMENT, &SYNC_7);
     while p.peek_kind() == TK_ARGUMENT_CONTENT {
         let argument_content = p.expect(TK_ARGUMENT_CONTENT, &EMPTY_SYNC);
     }
@@ -6765,10 +6822,9 @@ fn _parse_arg_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let mode = p.expect(TK_MODE, &SYNC_3);
+    let mode = p.expect(TK_MODE, &SYNC_5);
     let identifier = _parse_identifier(p, &FOLLOW_MASK_1);
-    let semi = p.expect(TK_SEMI, &SYNC_6);
+    let semi = p.expect(TK_SEMI, &SYNC_8);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -6813,7 +6869,6 @@ fn _parse_mode_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_rules__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -6858,7 +6913,6 @@ fn _parse_rules(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_rule_spec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lexer_rule_spec = _parse_lexer_rule_spec(p, follow);
     return;
 }
@@ -6871,7 +6925,6 @@ fn _parse_rule_spec__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<L
 }
 
 fn _parse_rule_spec__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let parser_rule_spec = _parse_parser_rule_spec(p, follow);
     return;
 }
@@ -6910,9 +6963,6 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                     if _sd_best_i == 0 {
                         return _parse_rule_spec__inner_alt_0(p, follow);
                     }
-                    if _sd_best_i == 1 {
-                        return _parse_rule_spec__inner_alt_1(p, follow);
-                    }
                     return _parse_rule_spec__inner_alt_1(p, follow);
                 }
             }
@@ -6925,7 +6975,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     p.no_viable(
         "no alternative of ruleSpec matches",
         p.peek_span(),
-        [token_kind_name(TK_PUBLIC), token_kind_name(TK_PRIVATE), token_kind_name(TK_PROTECTED), token_kind_name(TK_FRAGMENT), token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF)],
+        &SYNC_9,
     );
     return;
 }
@@ -6942,11 +6992,10 @@ fn _parse_rule_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     if _kind_set_5(p.peek_kind()) {
         let rule_modifiers = _parse_rule_modifiers(p, &EMPTY_FOLLOW);
     }
-    let rule_ref = p.expect(TK_RULE_REF, &SYNC_7);
+    let rule_ref = p.expect(TK_RULE_REF, &SYNC_10);
     if p.peek_kind() == TK_BEGIN_ARGUMENT {
         let arg_action_block = _parse_arg_action_block(p, &EMPTY_FOLLOW);
     }
@@ -6987,9 +7036,9 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }
         let rule_prequel = _parse_rule_prequel(p, &EMPTY_FOLLOW);
     }
-    let colon = p.expect(TK_COLON, &SYNC_8);
+    let colon = p.expect(TK_COLON, &SYNC_11);
     let rule_block = _parse_rule_block(p, &FOLLOW_MASK_1);
-    let semi = p.expect(TK_SEMI, &SYNC_9);
+    let semi = p.expect(TK_SEMI, &SYNC_12);
     let exception_group = _parse_exception_group(p, follow);
     return;
 }
@@ -7006,7 +7055,6 @@ fn _parse_parser_rule_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_exception_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -7054,8 +7102,7 @@ fn _parse_exception_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_exception_handler__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let catch = p.expect(TK_CATCH, &SYNC_10);
+    let catch = p.expect(TK_CATCH, &SYNC_13);
     let arg_action_block = _parse_arg_action_block(p, &FOLLOW_MASK_4);
     let action_block = _parse_action_block(p, follow);
     return;
@@ -7073,8 +7120,7 @@ fn _parse_exception_handler(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_finally_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let finally = p.expect(TK_FINALLY, &SYNC_11);
+    let finally = p.expect(TK_FINALLY, &SYNC_14);
     let action_block = _parse_action_block(p, follow);
     return;
 }
@@ -7091,7 +7137,6 @@ fn _parse_finally_clause(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_rule_prequel__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_OPTIONS {
         let options_spec = _parse_options_spec(p, follow);
@@ -7104,7 +7149,7 @@ fn _parse_rule_prequel__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     p.no_viable(
         "no alternative of rulePrequel matches",
         p.peek_span(),
-        [token_kind_name(TK_OPTIONS), token_kind_name(TK_AT)],
+        &SYNC_15,
     );
     return;
 }
@@ -7121,8 +7166,7 @@ fn _parse_rule_prequel(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_rule_returns__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let returns = p.expect(TK_RETURNS, &SYNC_10);
+    let returns = p.expect(TK_RETURNS, &SYNC_13);
     let arg_action_block = _parse_arg_action_block(p, follow);
     return;
 }
@@ -7139,8 +7183,7 @@ fn _parse_rule_returns(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let throws = p.expect(TK_THROWS, &SYNC_3);
+    let throws = p.expect(TK_THROWS, &SYNC_5);
     let qualified_identifier = _parse_qualified_identifier(p, follow);
     loop {
         if p.recovering { break; }
@@ -7163,7 +7206,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &SYNC_3);
+        let comma = p.expect(TK_COMMA, &SYNC_5);
         let qualified_identifier = _parse_qualified_identifier(p, follow);
     }
     return;
@@ -7181,8 +7224,7 @@ fn _parse_throws_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_locals_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let locals = p.expect(TK_LOCALS, &SYNC_10);
+    let locals = p.expect(TK_LOCALS, &SYNC_13);
     let arg_action_block = _parse_arg_action_block(p, follow);
     return;
 }
@@ -7199,8 +7241,7 @@ fn _parse_locals_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_rule_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let at = p.expect(TK_AT, &SYNC_3);
+    let at = p.expect(TK_AT, &SYNC_5);
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4);
     let action_block = _parse_action_block(p, follow);
     return;
@@ -7218,7 +7259,6 @@ fn _parse_rule_action(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_rule_modifiers__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -7267,7 +7307,6 @@ fn _parse_rule_modifiers(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_rule_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -7276,7 +7315,7 @@ fn _parse_rule_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     p.no_viable(
         "no alternative of ruleModifier matches",
         p.peek_span(),
-        [token_kind_name(TK_PUBLIC), token_kind_name(TK_PRIVATE), token_kind_name(TK_PROTECTED), token_kind_name(TK_FRAGMENT)],
+        &SYNC_16,
     );
     return;
 }
@@ -7293,7 +7332,6 @@ fn _parse_rule_modifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_rule_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let rule_alt_list = _parse_rule_alt_list(p, follow);
     return;
 }
@@ -7310,7 +7348,6 @@ fn _parse_rule_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let labeled_alt = _parse_labeled_alt(p, follow);
     loop {
         if p.recovering { break; }
@@ -7333,7 +7370,7 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &SYNC_12);
+        let or = p.expect(TK_OR, &SYNC_17);
         let labeled_alt = _parse_labeled_alt(p, follow);
     }
     return;
@@ -7351,10 +7388,9 @@ fn _parse_rule_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let alternative = _parse_alternative(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_POUND) {
-        let pound = p.expect(TK_POUND, &SYNC_3);
+        let pound = p.expect(TK_POUND, &SYNC_5);
         let identifier = _parse_identifier(p, follow);
     }
     return;
@@ -7372,15 +7408,14 @@ fn _parse_labeled_alt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     if p.peek_kind() == TK_FRAGMENT {
         let fragment = p.expect(TK_FRAGMENT, &EMPTY_SYNC);
     }
-    let token_ref = p.expect(TK_TOKEN_REF, &SYNC_13);
+    let token_ref = p.expect(TK_TOKEN_REF, &SYNC_18);
     if p.peek_kind() == TK_OPTIONS {
         let options_spec = _parse_options_spec(p, &EMPTY_FOLLOW);
     }
-    let colon = p.expect(TK_COLON, &SYNC_14);
+    let colon = p.expect(TK_COLON, &SYNC_19);
     let lexer_rule_block = _parse_lexer_rule_block(p, &FOLLOW_MASK_1);
     let semi = p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
@@ -7398,7 +7433,6 @@ fn _parse_lexer_rule_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_lexer_rule_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lexer_alt_list = _parse_lexer_alt_list(p, follow);
     return;
 }
@@ -7415,7 +7449,6 @@ fn _parse_lexer_rule_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lexer_alt = _parse_lexer_alt(p, follow);
     loop {
         if p.recovering { break; }
@@ -7438,7 +7471,7 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &SYNC_15);
+        let or = p.expect(TK_OR, &SYNC_20);
         let lexer_alt = _parse_lexer_alt(p, follow);
     }
     return;
@@ -7456,7 +7489,6 @@ fn _parse_lexer_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_lexer_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     scope: {
         let lexer_elements = _parse_lexer_elements(p, follow);
@@ -7471,7 +7503,7 @@ fn _parse_lexer_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     p.no_viable(
         "no alternative of lexerAlt matches",
         p.peek_span(),
-        [token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_NOT), token_kind_name(TK_LEXER_CHAR_SET), token_kind_name(TK_DOT), token_kind_name(TK_LPAREN), token_kind_name(TK_ACTION), token_kind_name(TK_RARROW)],
+        &SYNC_20,
     );
     return;
 }
@@ -7488,7 +7520,6 @@ fn _parse_lexer_alt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         let mut _plus_first = true;
@@ -7532,7 +7563,7 @@ fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     p.no_viable(
         "no alternative of lexerElements matches",
         p.peek_span(),
-        [token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_NOT), token_kind_name(TK_LEXER_CHAR_SET), token_kind_name(TK_DOT), token_kind_name(TK_LPAREN), token_kind_name(TK_ACTION)],
+        &SYNC_21,
     );
     return;
 }
@@ -7549,7 +7580,6 @@ fn _parse_lexer_elements(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         let lexer_atom = _parse_lexer_atom(p, follow);
@@ -7575,7 +7605,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     p.no_viable(
         "no alternative of lexerElement matches",
         p.peek_span(),
-        [token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_NOT), token_kind_name(TK_LEXER_CHAR_SET), token_kind_name(TK_DOT), token_kind_name(TK_LPAREN), token_kind_name(TK_ACTION)],
+        &SYNC_21,
     );
     return;
 }
@@ -7592,8 +7622,7 @@ fn _parse_lexer_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_lexer_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN, &SYNC_16);
+    let lparen = p.expect(TK_LPAREN, &SYNC_22);
     let lexer_alt_list = _parse_lexer_alt_list(p, &FOLLOW_MASK_6);
     let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
@@ -7611,8 +7640,7 @@ fn _parse_lexer_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let rarrow = p.expect(TK_RARROW, &SYNC_17);
+    let rarrow = p.expect(TK_RARROW, &SYNC_23);
     let lexer_command = _parse_lexer_command(p, follow);
     loop {
         if p.recovering { break; }
@@ -7635,7 +7663,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &SYNC_17);
+        let comma = p.expect(TK_COMMA, &SYNC_23);
         let lexer_command = _parse_lexer_command(p, follow);
     }
     return;
@@ -7653,7 +7681,6 @@ fn _parse_lexer_commands(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_lexer_command__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lexer_command_name = _parse_lexer_command_name(p, follow);
     return;
 }
@@ -7666,9 +7693,8 @@ fn _parse_lexer_command__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Li
 }
 
 fn _parse_lexer_command__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lexer_command_name = _parse_lexer_command_name(p, &FOLLOW_MASK_7);
-    let lparen = p.expect(TK_LPAREN, &SYNC_18);
+    let lparen = p.expect(TK_LPAREN, &SYNC_24);
     let lexer_command_expr = _parse_lexer_command_expr(p, &FOLLOW_MASK_6);
     let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
@@ -7708,16 +7734,13 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if _sd_best_i == 1 {
                 return _parse_lexer_command__inner_alt_1(p, follow);
             }
-            if _sd_best_i == 0 {
-                return _parse_lexer_command__inner_alt_0(p, follow);
-            }
             return _parse_lexer_command__inner_alt_0(p, follow);
         }
     }
     p.no_viable(
         "no alternative of lexerCommand matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_MODE)],
+        &SYNC_23,
     );
     return;
 }
@@ -7734,7 +7757,6 @@ fn _parse_lexer_command(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_lexer_command_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         let identifier = _parse_identifier(p, follow);
@@ -7747,7 +7769,7 @@ fn _parse_lexer_command_name__inner(p: &mut Parser, follow: &List<List<i32>> = &
     p.no_viable(
         "no alternative of lexerCommandName matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_MODE)],
+        &SYNC_23,
     );
     return;
 }
@@ -7764,7 +7786,6 @@ fn _parse_lexer_command_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_lexer_command_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         let identifier = _parse_identifier(p, follow);
@@ -7777,7 +7798,7 @@ fn _parse_lexer_command_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &
     p.no_viable(
         "no alternative of lexerCommandExpr matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_INT)],
+        &SYNC_24,
     );
     return;
 }
@@ -7794,7 +7815,6 @@ fn _parse_lexer_command_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let alternative = _parse_alternative(p, follow);
     loop {
         if p.recovering { break; }
@@ -7817,7 +7837,7 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &SYNC_19);
+        let or = p.expect(TK_OR, &SYNC_25);
         let alternative = _parse_alternative(p, follow);
     }
     return;
@@ -7835,7 +7855,6 @@ fn _parse_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_11(kind) {
         if p.peek_kind() == TK_LT {
@@ -7882,7 +7901,7 @@ fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "no alternative of alternative matches",
         p.peek_span(),
-        [token_kind_name(TK_LT), token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_NOT), token_kind_name(TK_DOT), token_kind_name(TK_LPAREN), token_kind_name(TK_ACTION)],
+        &SYNC_25,
     );
     return;
 }
@@ -7899,7 +7918,6 @@ fn _parse_alternative(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_element__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let labeled_element = _parse_labeled_element(p, follow);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -7928,7 +7946,6 @@ fn _parse_element__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let atom = _parse_atom(p, follow);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -7957,7 +7974,6 @@ fn _parse_element__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_14(kind) {
         if _kind_set_1(p.peek_kind()) {
@@ -7977,9 +7993,6 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             }
             if _sd_best_i == 0 {
                 return _parse_element__inner_alt_0(p, follow);
-            }
-            if _sd_best_i == 1 {
-                return _parse_element__inner_alt_1(p, follow);
             }
             return _parse_element__inner_alt_1(p, follow);
         } else if _kind_set_22(p.peek_kind()) {
@@ -8003,7 +8016,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     p.no_viable(
         "no alternative of element matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_NOT), token_kind_name(TK_DOT), token_kind_name(TK_LPAREN), token_kind_name(TK_ACTION)],
+        &SYNC_26,
     );
     return;
 }
@@ -8020,8 +8033,7 @@ fn _parse_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let lt = p.expect(TK_LT, &SYNC_3);
+    let lt = p.expect(TK_LT, &SYNC_5);
     let predicate_option = _parse_predicate_option(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -8043,7 +8055,7 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &SYNC_3);
+        let comma = p.expect(TK_COMMA, &SYNC_5);
         let predicate_option = _parse_predicate_option(p, follow);
     }
     let gt = p.expect(TK_GT, &EMPTY_SYNC);
@@ -8062,7 +8074,6 @@ fn _parse_predicate_options(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_predicate_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let element_option = _parse_element_option(p, follow);
     return;
 }
@@ -8075,9 +8086,8 @@ fn _parse_predicate_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: 
 }
 
 fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_2);
-    let assign = p.expect(TK_ASSIGN, &SYNC_20);
+    let assign = p.expect(TK_ASSIGN, &SYNC_27);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ACTION {
         let action_block = _parse_action_block(p, follow);
@@ -8144,16 +8154,13 @@ fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if _sd_best_i == 0 {
                 return _parse_predicate_option__inner_alt_0(p, follow);
             }
-            if _sd_best_i == 1 {
-                return _parse_predicate_option__inner_alt_1(p, follow);
-            }
             return _parse_predicate_option__inner_alt_1(p, follow);
         }
     }
     p.no_viable(
         "no alternative of predicateOption matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF)],
+        &SYNC_5,
     );
     return;
 }
@@ -8170,7 +8177,6 @@ fn _parse_predicate_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_8);
     let assign_or_plus_assign = p.expect_set([TK_ASSIGN, TK_PLUS_ASSIGN]);
     let grp_kind = p.peek_kind();
@@ -8194,7 +8200,6 @@ fn _parse_labeled_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_ebnf__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let block = _parse_block(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_10(p.peek_kind())) {
         let block_suffix = _parse_block_suffix(p, &EMPTY_FOLLOW);
@@ -8214,7 +8219,6 @@ fn _parse_ebnf(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_block_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ebnf_suffix = _parse_ebnf_suffix(p, follow);
     return;
 }
@@ -8231,24 +8235,23 @@ fn _parse_block_suffix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
-        let question = p.expect(TK_QUESTION, &SYNC_21);
+        let question = p.expect(TK_QUESTION, &SYNC_28);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             let question = p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_STAR {
-        let star = p.expect(TK_STAR, &SYNC_21);
+        let star = p.expect(TK_STAR, &SYNC_28);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             let question = p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_PLUS {
-        let plus = p.expect(TK_PLUS, &SYNC_21);
+        let plus = p.expect(TK_PLUS, &SYNC_28);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             let question = p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
@@ -8257,7 +8260,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "no alternative of ebnfSuffix matches",
         p.peek_span(),
-        [token_kind_name(TK_QUESTION), token_kind_name(TK_STAR), token_kind_name(TK_PLUS)],
+        &SYNC_29,
     );
     return;
 }
@@ -8274,7 +8277,6 @@ fn _parse_ebnf_suffix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_lexer_atom__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let character_range = _parse_character_range(p, follow);
     return;
 }
@@ -8287,7 +8289,6 @@ fn _parse_lexer_atom__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_lexer_atom__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let terminal_def = _parse_terminal_def(p, follow);
     return;
 }
@@ -8300,7 +8301,6 @@ fn _parse_lexer_atom__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_17(kind) {
         if p.peek_kind() == TK_STRING_LITERAL {
@@ -8327,9 +8327,6 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     if _sd_best_i == 0 {
                         return _parse_lexer_atom__inner_alt_0(p, follow);
                     }
-                    if _sd_best_i == 1 {
-                        return _parse_lexer_atom__inner_alt_1(p, follow);
-                    }
                     return _parse_lexer_atom__inner_alt_1(p, follow);
                 }
             }
@@ -8352,7 +8349,7 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     p.no_viable(
         "no alternative of lexerAtom matches",
         p.peek_span(),
-        [token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_TOKEN_REF), token_kind_name(TK_NOT), token_kind_name(TK_LEXER_CHAR_SET), token_kind_name(TK_DOT)],
+        &SYNC_30,
     );
     return;
 }
@@ -8369,7 +8366,6 @@ fn _parse_lexer_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_17(kind) {
         let terminal_def = _parse_terminal_def(p, follow);
@@ -8390,7 +8386,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     p.no_viable(
         "no alternative of atom matches",
         p.peek_span(),
-        [token_kind_name(TK_TOKEN_REF), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_RULE_REF), token_kind_name(TK_NOT), token_kind_name(TK_DOT)],
+        &SYNC_31,
     );
     return;
 }
@@ -8407,8 +8403,7 @@ fn _parse_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_wildcard__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let dot = p.expect(TK_DOT, &SYNC_22);
+    let dot = p.expect(TK_DOT, &SYNC_32);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
     }
@@ -8427,15 +8422,13 @@ fn _parse_wildcard(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let not = p.expect(TK_NOT, &SYNC_23);
+    let not = p.expect(TK_NOT, &SYNC_33);
     let set_element = _parse_set_element(p, follow);
     return;
 }
 
 fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let not = p.expect(TK_NOT, &SYNC_24);
+    let not = p.expect(TK_NOT, &SYNC_34);
     let block_set = _parse_block_set(p, follow);
     return;
 }
@@ -8455,7 +8448,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     p.no_viable(
         "no alternative of notSet matches",
         p.peek_span(),
-        [token_kind_name(TK_NOT)],
+        &SYNC_35,
     );
     return;
 }
@@ -8472,8 +8465,7 @@ fn _parse_not_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN, &SYNC_23);
+    let lparen = p.expect(TK_LPAREN, &SYNC_33);
     let set_element = _parse_set_element(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -8495,7 +8487,7 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &SYNC_23);
+        let or = p.expect(TK_OR, &SYNC_33);
         let set_element = _parse_set_element(p, follow);
     }
     let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
@@ -8514,8 +8506,7 @@ fn _parse_block_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let string_literal = p.expect(TK_STRING_LITERAL, &SYNC_22);
+    let string_literal = p.expect(TK_STRING_LITERAL, &SYNC_32);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
     }
@@ -8535,7 +8526,6 @@ fn _parse_set_element__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List
 }
 
 fn _parse_set_element__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let character_range = _parse_character_range(p, follow);
     return;
 }
@@ -8548,10 +8538,9 @@ fn _parse_set_element__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List
 }
 
 fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF, &SYNC_22);
+        let token_ref = p.expect(TK_TOKEN_REF, &SYNC_32);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
         }
@@ -8576,9 +8565,6 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             if _sd_best_i == 1 {
                 return _parse_set_element__inner_alt_1(p, follow);
             }
-            if _sd_best_i == 2 {
-                return _parse_set_element__inner_alt_2(p, follow);
-            }
             return _parse_set_element__inner_alt_2(p, follow);
         }
     }
@@ -8589,7 +8575,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "no alternative of setElement matches",
         p.peek_span(),
-        [token_kind_name(TK_TOKEN_REF), token_kind_name(TK_STRING_LITERAL), token_kind_name(TK_LEXER_CHAR_SET)],
+        &SYNC_33,
     );
     return;
 }
@@ -8606,8 +8592,7 @@ fn _parse_set_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN, &SYNC_25);
+    let lparen = p.expect(TK_LPAREN, &SYNC_36);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -8678,8 +8663,7 @@ fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let rule_ref = p.expect(TK_RULE_REF, &SYNC_26);
+    let rule_ref = p.expect(TK_RULE_REF, &SYNC_37);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_BEGIN_ARGUMENT) {
         let arg_action_block = _parse_arg_action_block(p, &EMPTY_FOLLOW);
     }
@@ -8701,9 +8685,8 @@ fn _parse_ruleref(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_character_range__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let string_literal = p.expect(TK_STRING_LITERAL, &SYNC_27);
-    let range = p.expect(TK_RANGE, &SYNC_28);
+    let string_literal = p.expect(TK_STRING_LITERAL, &SYNC_38);
+    let range = p.expect(TK_RANGE, &SYNC_39);
     let string_literal_2 = p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
     return;
 }
@@ -8720,17 +8703,16 @@ fn _parse_character_range(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF, &SYNC_22);
+        let token_ref = p.expect(TK_TOKEN_REF, &SYNC_32);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
         }
         return;
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL, &SYNC_22);
+        let string_literal = p.expect(TK_STRING_LITERAL, &SYNC_32);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
         }
@@ -8739,7 +8721,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     p.no_viable(
         "no alternative of terminalDef matches",
         p.peek_span(),
-        [token_kind_name(TK_TOKEN_REF), token_kind_name(TK_STRING_LITERAL)],
+        &SYNC_40,
     );
     return;
 }
@@ -8756,8 +8738,7 @@ fn _parse_terminal_def(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let lt = p.expect(TK_LT, &SYNC_3);
+    let lt = p.expect(TK_LT, &SYNC_5);
     let element_option = _parse_element_option(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -8779,7 +8760,7 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &SYNC_3);
+        let comma = p.expect(TK_COMMA, &SYNC_5);
         let element_option = _parse_element_option(p, follow);
     }
     let gt = p.expect(TK_GT, &EMPTY_SYNC);
@@ -8798,7 +8779,6 @@ fn _parse_element_options(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_element_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let qualified_identifier = _parse_qualified_identifier(p, follow);
     return;
 }
@@ -8811,9 +8791,8 @@ fn _parse_element_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &L
 }
 
 fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_2);
-    let assign = p.expect(TK_ASSIGN, &SYNC_29);
+    let assign = p.expect(TK_ASSIGN, &SYNC_41);
     let grp_kind = p.peek_kind();
     if _kind_set_1(grp_kind) {
         let qualified_identifier = _parse_qualified_identifier(p, follow);
@@ -8880,16 +8859,13 @@ fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if _sd_best_i == 0 {
                 return _parse_element_option__inner_alt_0(p, follow);
             }
-            if _sd_best_i == 1 {
-                return _parse_element_option__inner_alt_1(p, follow);
-            }
             return _parse_element_option__inner_alt_1(p, follow);
         }
     }
     p.no_viable(
         "no alternative of elementOption matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF)],
+        &SYNC_5,
     );
     return;
 }
@@ -8906,7 +8882,6 @@ fn _parse_element_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -8915,7 +8890,7 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     p.no_viable(
         "no alternative of identifier matches",
         p.peek_span(),
-        [token_kind_name(TK_RULE_REF), token_kind_name(TK_TOKEN_REF)],
+        &SYNC_5,
     );
     return;
 }
@@ -8932,7 +8907,6 @@ fn _parse_identifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let identifier = _parse_identifier(p, follow);
     loop {
         if p.recovering { break; }
@@ -8955,7 +8929,7 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let dot = p.expect(TK_DOT, &SYNC_3);
+        let dot = p.expect(TK_DOT, &SYNC_5);
         let identifier = _parse_identifier(p, follow);
     }
     return;
@@ -9386,35 +9360,47 @@ fn _kind_set_23(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_GRAMMAR];
-global SYNC_1: List<i32> = [TK_RBRACE, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_2: List<i32> = [TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_3: List<i32> = [TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_4: List<i32> = [TK_LEXER, TK_PARSER, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_5: List<i32> = [TK_ARGUMENT_CONTENT, TK_END_ARGUMENT];
-global SYNC_6: List<i32> = [TK_FRAGMENT, TK_TOKEN_REF];
-global SYNC_7: List<i32> = [TK_AT, TK_BEGIN_ARGUMENT, TK_COLON, TK_LOCALS, TK_OPTIONS, TK_RETURNS, TK_THROWS];
-global SYNC_8: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OR, TK_POUND, TK_RULE_REF, TK_SEMI, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_9: List<i32> = [TK_CATCH, TK_FINALLY];
-global SYNC_10: List<i32> = [TK_BEGIN_ARGUMENT];
-global SYNC_11: List<i32> = [TK_ACTION];
-global SYNC_12: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_POUND, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_13: List<i32> = [TK_COLON, TK_OPTIONS];
-global SYNC_14: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_OR, TK_RARROW, TK_SEMI, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_15: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_RARROW, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_16: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_OR, TK_RARROW, TK_RPAREN, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_17: List<i32> = [TK_MODE, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_18: List<i32> = [TK_INT, TK_RULE_REF, TK_TOKEN_REF];
-global SYNC_19: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_20: List<i32> = [TK_ACTION, TK_INT, TK_STRING_LITERAL];
-global SYNC_21: List<i32> = [TK_QUESTION];
-global SYNC_22: List<i32> = [TK_LT];
-global SYNC_23: List<i32> = [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_24: List<i32> = [TK_LPAREN];
-global SYNC_25: List<i32> = [TK_ACTION, TK_AT, TK_COLON, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OPTIONS, TK_OR, TK_RPAREN, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
-global SYNC_26: List<i32> = [TK_BEGIN_ARGUMENT, TK_LT];
-global SYNC_27: List<i32> = [TK_RANGE];
-global SYNC_28: List<i32> = [TK_STRING_LITERAL];
-global SYNC_29: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_1: List<i32> = [TK_GRAMMAR, TK_LEXER, TK_PARSER];
+global SYNC_2: List<i32> = [TK_AT, TK_CHANNELS, TK_IMPORT, TK_OPTIONS, TK_TOKENS];
+global SYNC_3: List<i32> = [TK_RBRACE, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_4: List<i32> = [TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_5: List<i32> = [TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_6: List<i32> = [TK_LEXER, TK_PARSER, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_7: List<i32> = [TK_ARGUMENT_CONTENT, TK_END_ARGUMENT];
+global SYNC_8: List<i32> = [TK_FRAGMENT, TK_TOKEN_REF];
+global SYNC_9: List<i32> = [TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_10: List<i32> = [TK_AT, TK_BEGIN_ARGUMENT, TK_COLON, TK_LOCALS, TK_OPTIONS, TK_RETURNS, TK_THROWS];
+global SYNC_11: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OR, TK_POUND, TK_RULE_REF, TK_SEMI, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_12: List<i32> = [TK_CATCH, TK_FINALLY];
+global SYNC_13: List<i32> = [TK_BEGIN_ARGUMENT];
+global SYNC_14: List<i32> = [TK_ACTION];
+global SYNC_15: List<i32> = [TK_AT, TK_OPTIONS];
+global SYNC_16: List<i32> = [TK_FRAGMENT, TK_PRIVATE, TK_PROTECTED, TK_PUBLIC];
+global SYNC_17: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_POUND, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_18: List<i32> = [TK_COLON, TK_OPTIONS];
+global SYNC_19: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_OR, TK_RARROW, TK_SEMI, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_20: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_RARROW, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_21: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_22: List<i32> = [TK_ACTION, TK_DOT, TK_LEXER_CHAR_SET, TK_LPAREN, TK_NOT, TK_OR, TK_RARROW, TK_RPAREN, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_23: List<i32> = [TK_MODE, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_24: List<i32> = [TK_INT, TK_RULE_REF, TK_TOKEN_REF];
+global SYNC_25: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_26: List<i32> = [TK_ACTION, TK_DOT, TK_LPAREN, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_27: List<i32> = [TK_ACTION, TK_INT, TK_STRING_LITERAL];
+global SYNC_28: List<i32> = [TK_QUESTION];
+global SYNC_29: List<i32> = [TK_PLUS, TK_QUESTION, TK_STAR];
+global SYNC_30: List<i32> = [TK_DOT, TK_LEXER_CHAR_SET, TK_NOT, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_31: List<i32> = [TK_DOT, TK_NOT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_32: List<i32> = [TK_LT];
+global SYNC_33: List<i32> = [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_34: List<i32> = [TK_LPAREN];
+global SYNC_35: List<i32> = [TK_NOT];
+global SYNC_36: List<i32> = [TK_ACTION, TK_AT, TK_COLON, TK_DOT, TK_LPAREN, TK_LT, TK_NOT, TK_OPTIONS, TK_OR, TK_RPAREN, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_37: List<i32> = [TK_BEGIN_ARGUMENT, TK_LT];
+global SYNC_38: List<i32> = [TK_RANGE];
+global SYNC_39: List<i32> = [TK_STRING_LITERAL];
+global SYNC_40: List<i32> = [TK_STRING_LITERAL, TK_TOKEN_REF];
+global SYNC_41: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_RULE_REF, TK_TOKEN_REF]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_SEMI]];

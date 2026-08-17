@@ -3622,19 +3622,9 @@ fn compute_single_elem_first(
             return [false, false];
         },
         RuleRef(name) => {
-            // A reference to any lexer rule contributes that rule's own first
-            // chars — being a `fragment` changes nothing about which character
-            // can start it. Bailing to wildcard for a non-fragment reference
-            // put `BLOCK_COMMENT_OR_DOC`, `INTEGER_LITERAL` and `FLOAT_LITERAL`
-            // in all 56 branches of the Rust lexer's dispatch, so every input
-            // character paid for ~14 `try_` calls that could only match `/` or
-            // a digit.
-            //
-            // Two conservative outs, each falling back to today's wildcard:
-            // a reference already on the walk (a rule cycle, e.g.
-            // `BLOCK_COMMENT` <-> `BLOCK_COMMENT_OR_DOC`), and a callee whose
-            // own `caseInsensitive` differs from the caller's, whose folded
-            // set this walk would not reproduce.
+            // A reference contributes the referenced rule's first chars,
+            // `fragment` or not. Two cases fall back to wildcard: a rule
+            // already on the walk, and a callee this walk cannot fold for.
             for let rule of all_rules {
                 if rule.name == name {
                     if visiting.contains(&rule.name) || rule_declares_ci_other_than(rule, ci) {
@@ -3667,9 +3657,8 @@ fn compute_single_elem_first(
     }
 }
 
-/// Whether `rule` sets its own `caseInsensitive` to something other than the
-/// folding the current walk is doing. Its first chars would then need a
-/// different fold than `ci`, which this walk cannot express.
+/// Whether `rule` folds a different case than the walk's `ci`, so its first
+/// chars are not reproducible here.
 fn rule_declares_ci_other_than(rule: &LexerRule, ci: bool) -> bool {
     if let Some(b) = lookup_ci_option(&rule.options) {
         return b != ci;
@@ -3923,12 +3912,9 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     return groups;
 }
 
-/// The `try_` candidates a lexer mode dispatches over: the parser literals
-/// (default mode only) followed by that mode's own rules. Both the moded and
-/// the modeless tokenizer build their candidate list here, so the first-char
-/// dispatch is the same machinery in either — a `mode` grammar used to skip
-/// dispatch entirely and call every rule in the mode on every character
-/// (TypeScript: 116 calls per character in mode 0).
+/// The `try_` candidates one lexer mode dispatches over: parser literals
+/// (default mode only), then that mode's rules. Shared by the moded and the
+/// modeless tokenizer so both dispatch on the first character.
 fn build_mode_try_calls(
     mode: i32,
     lexer_rules: &List<LexerRule>,

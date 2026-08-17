@@ -1282,22 +1282,21 @@ impl Parser {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -1377,7 +1376,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1428,7 +1427,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1442,9 +1441,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1470,7 +1469,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1493,7 +1492,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1521,7 +1520,6 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn _parse_s__inner(p: &mut Parser) -> () {
-    let start = p.peek_start();
     let e = _parse_e(p, 1);
     return;
 }
@@ -1538,7 +1536,6 @@ fn _parse_s(p: &mut Parser) -> () {
 }
 
 fn _parse_e__inner(p: &mut Parser, mode: i32 = 0) -> EVals {
-    let start = p.peek_start();
     let mut vals = EVals {};
     vals.mode = mode;
     let kind = p.peek_kind();
@@ -1559,7 +1556,7 @@ fn _parse_e__inner(p: &mut Parser, mode: i32 = 0) -> EVals {
     p.no_viable(
         "no alternative of e matches",
         p.peek_span(),
-        [token_kind_name(TK_A), token_kind_name(TK_B)],
+        &SYNC_0,
     );
     return vals;
 }
@@ -1648,4 +1645,5 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_A, TK_B];
 

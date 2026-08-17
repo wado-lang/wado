@@ -1044,7 +1044,10 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
+    if follow.is_empty() {
+        return *prefix;
+    }
+    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
     for let depth of prefix {
         combined.push(*depth);
     }
@@ -1286,22 +1289,21 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -1381,7 +1383,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -1432,7 +1434,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1446,9 +1448,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1474,7 +1476,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1497,7 +1499,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -1537,9 +1539,7 @@ fn scan_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 break sg_0_done;
             }
@@ -1613,9 +1613,7 @@ fn scan_braced(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-                    let sp = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
-                    if pos < 0 { pos = sp; }
+                    pos += 1;
                 }
                 break sg_2_done;
             }
@@ -1636,7 +1634,6 @@ fn scan_arm(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let list = _parse_list(p, &FOLLOW_MASK_0);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1654,7 +1651,6 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -1677,9 +1673,7 @@ fn _parse_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if pos == sp { break; }
         }
         if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-            let sp = pos;
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
-            if pos < 0 { pos = sp; }
+            pos += 1;
         }
         opt_scan_pos = pos;
     }
@@ -1728,7 +1722,6 @@ fn _parse_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let wrapped = _parse_wrapped(p, &FOLLOW_MASK_0);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1746,7 +1739,6 @@ fn _parse_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_wrapped__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
         let braced = _parse_braced(p, follow);
@@ -1759,7 +1751,7 @@ fn _parse_wrapped__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     p.no_viable(
         "no alternative of wrapped matches",
         p.peek_span(),
-        [token_kind_name(TK_LIT_LBRACE), token_kind_name(TK_IDENT)],
+        &SYNC_1,
     );
     return;
 }
@@ -1776,8 +1768,7 @@ fn _parse_wrapped(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_1);
+    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_2);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -1800,9 +1791,7 @@ fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             if pos == sp { break; }
         }
         if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-            let sp = pos;
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { pos = -1; } else { pos += 1; }
-            if pos < 0 { pos = sp; }
+            pos += 1;
         }
         opt_scan_pos = pos;
     }
@@ -1851,7 +1840,6 @@ fn _parse_braced(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 }
 
 fn _parse_arm__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ident = p.expect(TK_IDENT, &EMPTY_SYNC);
     return;
 }
@@ -1941,7 +1929,8 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_IDENT];
-global SYNC_1: List<i32> = [TK_IDENT, TK_LIT_RBRACE];
+global SYNC_1: List<i32> = [TK_IDENT, TK_LIT_LBRACE];
+global SYNC_2: List<i32> = [TK_IDENT, TK_LIT_RBRACE];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 

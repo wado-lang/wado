@@ -1012,9 +1012,7 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
 }
 
 /// Structural equality of two sub-dispatches. Branch order is compared
-/// positionally: both trees are built by the same loop over the same token
-/// order, so equal trees are equal in order — and treating a permutation as
-/// unequal only forgoes a merge, never makes a wrong one.
+/// positionally, which only ever forgoes a merge — never makes a wrong one.
 fn dispatch_eq(a: &PredictionDispatch, b: &PredictionDispatch) -> bool {
     if a.depth != b.depth || a.branches.len() != b.branches.len() {
         return false;

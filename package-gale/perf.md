@@ -98,6 +98,18 @@ one right-sized `array.new_default` instead of `log2(rows)` doubling reallocs, a
 2.52 → 2.36 ms/iter (~6%, build-heavy), `syntax_highlight` ~2% (build is a smaller
 share); no over-fill regression.
 
+### Dispatch reaches every lexer rule (landed, 2026-08)
+
+Two emit-site defects had the tokenizer call rules that could not match: a
+reference to a non-fragment lexer rule counted as an unbounded first set
+(Rust ran `BLOCK_COMMENT_OR_DOC` / `INTEGER_LITERAL` / `FLOAT_LITERAL` on
+every character — 325 `try_` call sites → 161), and a `mode` grammar skipped
+first-char dispatch outright (TypeScript 0 → 57 branches, 116 calls per
+character → 10 worst case; ANTLRv4 0 → 43).
+
+Unmeasured here: both benchmarks run a modeless grammar whose first sets were
+already exact, so size this on a keyword-dense or mode-bearing grammar.
+
 ### Standing rules (measured)
 
 - **Live-set is the cost, not allocation count.** Under the copying collector,
@@ -179,7 +191,7 @@ re-measure before committing. Candidates read off the profile above:
 - **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
   `if / else if` chain over the first-char sets, so a rule opening on a large set costs
   a comparison per range — a `[\p{L}]` rule is ~700. Coalescing branches with identical
-  call lists keeps the emitted code small (Rust: 56 branches, 325 `try_` calls) but
+  call lists keeps the emitted code small (Rust: 56 branches, 161 `try_` calls) but
   leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
   branches are sorted and come first), so this is a worst case rather than a
   benchmark-visible cost. A sorted interval table with a binary search would bound it.

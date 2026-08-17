@@ -35,11 +35,11 @@ Empty right now.
 
 ### Generated-code smells — recorded, not queued
 
-Rollback shapes in the emitted parser. Each contradicts the "No backtracking, ever" standing rule in [`AGENTS.md`](./AGENTS.md), so they are written down rather than left to be rediscovered. None is known to mis-parse anything today.
+Rollback shapes in the emitted parser, each against the "No backtracking, ever" standing rule in [`AGENTS.md`](./AGENTS.md). None is known to mis-parse anything today.
 
-- [ ] The repeat-exit recovery probe re-parses the loop body under `speculating` and then restores the cursor, the builder, `recovering` and `speculating` — so its only surviving effect is a better `pending` message. It is an unbounded recursive parse bought for a diagnostic, on a path the scan has already walked. 51 sites in the Rust parser, 70 files corpus-wide (`let _rec_pos = p.pos;`).
-- [ ] The partial-scan / no-scan alternative dispatch is a literal try-fail-retry: parse an alt, and on `recovering` rewind cursor, tree and pending before trying the next. It is emitted by `emit_spec_alt_try`, and **no grammar in the committed corpus reaches it** (`_spec_cp` matches nothing under `tests/generated/`). Either delete the path or add a fixture that exercises it — an untested backtracker is worse than either.
-- [ ] `TreeBuilder::checkpoint` / `truncate` exist only to serve those two, yet are emitted into all 649 generated files; `cst_json` never calls `truncate`. Gate them on the feature the way `follow` / `atn` are gated.
+- [ ] The repeat-exit recovery probe (`let _rec_pos = p.pos;`, 51 sites in the Rust parser, 70 files corpus-wide) re-parses the loop body under `speculating` and restores cursor, builder and flags, so its only surviving effect is a better `pending` message — an unbounded recursive parse bought for a diagnostic, over input the scan already walked.
+- [ ] `emit_spec_alt_try` is a literal try-fail-retry: parse an alt, rewind cursor / tree / pending on `recovering`, try the next. **No grammar in the committed corpus reaches it** (`_spec_cp` matches nothing under `tests/generated/`). Delete the path or add a fixture — an untested backtracker is worse than either.
+- [ ] `TreeBuilder::checkpoint` / `truncate` serve only those two yet are emitted into every generated file; `cst_json` never calls `truncate`. Gate them the way `follow` / `atn` are gated.
 
 ## Stage C — action / predicate execution
 

@@ -1044,7 +1044,10 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
+    if follow.is_empty() {
+        return *prefix;
+    }
+    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
     for let depth of prefix {
         combined.push(*depth);
     }
@@ -2858,22 +2861,21 @@ impl Parser {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -2953,7 +2955,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -3004,7 +3006,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -3018,9 +3020,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -3046,7 +3048,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -3069,7 +3071,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -3106,6 +3108,17 @@ fn scan_expression_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
+    return pos;
+}
+
+fn scan_e_atom_alt_5(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_CLASS { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -3166,16 +3179,8 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             return -1;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
-            try_5: {
-                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
-                if pos < 0 { break try_5; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break try_5; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_CLASS { break try_5; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            let try_5_end = scan_e_atom_alt_5(tokens, start, follow);
+            if try_5_end > best { best = try_5_end; }
             pos = start;
             try_4: {
                 if pos >= tokens.len() || tokens[pos] != TK_ID { break try_4; }
@@ -3185,16 +3190,8 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_INT {
-            pos = start;
-            try_5: {
-                pos = scan_typespec(tokens, pos, &FOLLOW_MASK_2, 0);
-                if pos < 0 { break try_5; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break try_5; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_CLASS { break try_5; }
-                pos += 1;
-                break scan_alts;
-            }
+            pos = scan_e_atom_alt_5(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_NEW {
             pos = start;
@@ -3996,7 +3993,6 @@ fn scan_typespec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 12;
     let e = _parse_e(p, &FOLLOW_MASK_0);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
@@ -4022,7 +4018,6 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_expression_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 19;
     let e = _parse_e(p, follow);
     loop {
@@ -4069,7 +4064,6 @@ fn _parse_expression_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_e__inner_alt_12(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
     p.atn_ret_pending = 90;
     let typespec = _parse_typespec(p, &FOLLOW_MASK_1);
@@ -4093,7 +4087,6 @@ fn _parse_e__inner_scan_12(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
 }
 
 fn _parse_e__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
     p.atn_ret_pending = 36;
     let e = _parse_e(p, &FOLLOW_MASK_1);
@@ -4113,7 +4106,6 @@ fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 }
 
 fn _parse_e__inner_alt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 53;
     let typespec = _parse_typespec(p, &FOLLOW_MASK_2);
     let dot = p.expect(TK_LIT_DOT, &SYNC_2);
@@ -4133,7 +4125,6 @@ fn _parse_e__inner_scan_5(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 }
 
 fn _parse_e__inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
@@ -4146,7 +4137,6 @@ fn _parse_e__inner_scan_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 }
 
 fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
         let _sd_tokens = &p.kinds;
@@ -4165,9 +4155,6 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
         if _sd_best_i == 12 {
             return _parse_e__inner_alt_12(p, follow);
-        }
-        if _sd_best_i == 0 {
-            return _parse_e__inner_alt_0(p, follow);
         }
         return _parse_e__inner_alt_0(p, follow);
     }
@@ -4201,9 +4188,6 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             }
             if _sd_best_i == 5 {
                 return _parse_e__inner_alt_5(p, follow);
-            }
-            if _sd_best_i == 4 {
-                return _parse_e__inner_alt_4(p, follow);
             }
             return _parse_e__inner_alt_4(p, follow);
         } else if p.peek_kind() == TK_LIT_INT {
@@ -4273,7 +4257,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     p.no_viable(
         "no alternative of e matches",
         p.peek_span(),
-        [token_kind_name(TK_LIT_LPAREN), token_kind_name(TK_LIT_THIS), token_kind_name(TK_LIT_SUPER), token_kind_name(TK_INT), token_kind_name(TK_ID), token_kind_name(TK_LIT_INT), token_kind_name(TK_LIT_NEW), token_kind_name(TK_LIT_PLUS), token_kind_name(TK_LIT_MINUS), token_kind_name(TK_LIT_PLUSPLUS), token_kind_name(TK_LIT_MINUSMINUS), token_kind_name(TK_LIT_TILDE), token_kind_name(TK_LIT_BANG)],
+        &SYNC_0,
     );
     return;
 }
@@ -4609,7 +4593,6 @@ fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: 
 }
 
 fn _parse_typespec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let id = p.expect(TK_ID, &SYNC_4);
     let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_5);
     let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
@@ -4628,7 +4611,6 @@ fn _parse_typespec__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn _parse_typespec__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
@@ -4641,7 +4623,6 @@ fn _parse_typespec__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn _parse_typespec__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lit_int = p.expect(TK_LIT_INT, &SYNC_4);
     let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_5);
     let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
@@ -4660,7 +4641,6 @@ fn _parse_typespec__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<Li
 }
 
 fn _parse_typespec__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let lit_int = p.expect(TK_LIT_INT, &EMPTY_SYNC);
     return;
 }
@@ -4679,9 +4659,6 @@ fn _parse_typespec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         if _atn_alt == 1 {
             return _parse_typespec__inner_alt_1(p, follow);
         }
-        if _atn_alt == 0 {
-            return _parse_typespec__inner_alt_0(p, follow);
-        }
         return _parse_typespec__inner_alt_0(p, follow);
     }
     if kind == TK_LIT_INT {
@@ -4689,15 +4666,12 @@ fn _parse_typespec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         if _atn_alt == 3 {
             return _parse_typespec__inner_alt_3(p, follow);
         }
-        if _atn_alt == 2 {
-            return _parse_typespec__inner_alt_2(p, follow);
-        }
         return _parse_typespec__inner_alt_2(p, follow);
     }
     p.no_viable(
         "no alternative of typespec matches",
         p.peek_span(),
-        [token_kind_name(TK_ID), token_kind_name(TK_LIT_INT)],
+        &SYNC_1,
     );
     return;
 }

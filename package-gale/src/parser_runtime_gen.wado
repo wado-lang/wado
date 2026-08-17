@@ -307,8 +307,6 @@ pub fn gen_parser_struct(
     s.emit(w);
     w.blank();
 
-    // Every failure path carries its wanted set as kind ids and resolves the
-    // names here, once, and only for the error that is actually kept.
     let mut kn = FnSpec::new("kind_names");
     kn.add_param(&"kinds", &"&List<i32>");
     kn.set_return_type(&"List<String>");
@@ -551,10 +549,8 @@ pub fn gen_parser_struct(
     ff.add_param(&"expected", &"&List<i32>");
     ff.add_param(&"code", &"DiagnosticCode");
     ff.emit_begin(w);
-    // Only the deepest failure is kept, so decide that from the span before
-    // building anything: a discarded error would otherwise have paid for one
-    // `token_kind_name` String per expected kind (130 of them for SQLite's
-    // `any_name`).
+    // Decide from the span before building: a discarded error would otherwise
+    // pay for one `token_kind_name` String per expected kind.
     w.line(&"let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };");
     w.begin(&"if take");
     w.line(&"self.pending = Option::Some(self.error(message, span, expected));");

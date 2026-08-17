@@ -1044,7 +1044,10 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
+    if follow.is_empty() {
+        return *prefix;
+    }
+    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
     for let depth of prefix {
         combined.push(*depth);
     }
@@ -2211,22 +2214,21 @@ impl Parser {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -2306,7 +2308,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -2357,7 +2359,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2371,9 +2373,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2399,7 +2401,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2422,7 +2424,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -2540,7 +2542,6 @@ fn scan_expr_primary(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
 }
 
 fn _parse_prog__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -2591,7 +2592,6 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_expr_or_assign__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut _span_lo_expr = 0;
     let mut _span_hi_expr = -1;
     _span_lo_expr = p.pos;
@@ -2612,7 +2612,6 @@ fn _parse_expr_or_assign__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &L
 }
 
 fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 20;
     let expr = _parse_expr(p, &FOLLOW_MASK_0);
     let lit_plusplus = p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC);
@@ -2652,16 +2651,13 @@ fn _parse_expr_or_assign__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if _sd_best_i == 1 {
                 return _parse_expr_or_assign__inner_alt_1(p, follow);
             }
-            if _sd_best_i == 0 {
-                return _parse_expr_or_assign__inner_alt_0(p, follow);
-            }
             return _parse_expr_or_assign__inner_alt_0(p, follow);
         }
     }
     p.no_viable(
         "no alternative of expr_or_assign matches",
         p.peek_span(),
-        [token_kind_name(TK_LIT_LPAREN), token_kind_name(TK_ID)],
+        &SYNC_0,
     );
     return;
 }
@@ -2682,11 +2678,10 @@ fn _parse_expr_or_assign(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.atn_ret_pending = 30;
     let expr_primary = _parse_expr_primary(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LTMINUS && p.peek_at(1) == TK_ID) {
-        let lit_ltminus = p.expect(TK_LIT_LTMINUS, &SYNC_0);
+        let lit_ltminus = p.expect(TK_LIT_LTMINUS, &SYNC_1);
         let id = p.expect(TK_ID, &EMPTY_SYNC);
     }
     return;
@@ -2708,10 +2703,9 @@ fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_expr_primary__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let id = p.expect(TK_ID, &SYNC_1);
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
-    let id_2 = p.expect(TK_ID, &SYNC_2);
+    let id = p.expect(TK_ID, &SYNC_2);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
+    let id_2 = p.expect(TK_ID, &SYNC_3);
     let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
     return;
 }
@@ -2730,7 +2724,6 @@ fn _parse_expr_primary__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Lis
 }
 
 fn _parse_expr_primary__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
@@ -2743,11 +2736,10 @@ fn _parse_expr_primary__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &Lis
 }
 
 fn _parse_expr_primary__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
-        let id = p.expect(TK_ID, &SYNC_2);
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
+        let id = p.expect(TK_ID, &SYNC_3);
         let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
@@ -2756,15 +2748,12 @@ fn _parse_expr_primary__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if _atn_alt == 1 {
             return _parse_expr_primary__inner_alt_1(p, follow);
         }
-        if _atn_alt == 2 {
-            return _parse_expr_primary__inner_alt_2(p, follow);
-        }
         return _parse_expr_primary__inner_alt_2(p, follow);
     }
     p.no_viable(
         "no alternative of expr_primary matches",
         p.peek_span(),
-        [token_kind_name(TK_LIT_LPAREN), token_kind_name(TK_ID)],
+        &SYNC_0,
     );
     return;
 }
@@ -2864,9 +2853,10 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID];
-global SYNC_1: List<i32> = [TK_LIT_LPAREN];
-global SYNC_2: List<i32> = [TK_LIT_RPAREN];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_LPAREN];
+global SYNC_1: List<i32> = [TK_ID];
+global SYNC_2: List<i32> = [TK_LIT_LPAREN];
+global SYNC_3: List<i32> = [TK_LIT_RPAREN];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_PLUSPLUS]];
 

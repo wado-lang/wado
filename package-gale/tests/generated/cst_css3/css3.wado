@@ -1047,7 +1047,10 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    let mut combined: List<List<i32>> = [];
+    if follow.is_empty() {
+        return *prefix;
+    }
+    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
     for let depth of prefix {
         combined.push(*depth);
     }
@@ -26938,12 +26941,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char matches { '\t' | '\n' | '\u{c}' | '\r' | ' ' } {
             end = try_Space(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Space; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -26953,12 +26950,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '!' } {
             end = try_Important(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Important; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -26966,12 +26957,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '"' | '\'' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_String_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_String_; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -26983,12 +26968,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '#' } {
             end = try_Hash(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Hash; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -26996,12 +26975,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '$' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_SuffixMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SuffixMatch; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27013,12 +26986,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '(' } {
             end = try_OpenParen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OpenParen; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27028,12 +26995,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { ')' } {
             end = try_CloseParen(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CloseParen; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27043,12 +27004,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '*' } {
             end = try_Multiply(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Multiply; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_SubstringMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SubstringMatch; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27058,12 +27013,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '+' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Plus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Plus; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27073,12 +27022,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { ',' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Comma(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Comma; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27090,12 +27033,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '-' } {
             end = try_Cdc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdc; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Minus(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Minus; best_channel = 0; }
             end = try_Variable(&lexer.chars, start);
@@ -27128,12 +27065,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Divide; best_channel = 0; }
             end = try_Comment(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Comment; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27143,12 +27074,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { ':' } {
             end = try_Colon(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Colon; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_PseudoNot(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PseudoNot; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27160,12 +27085,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { ';' } {
             end = try_SemiColon(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SemiColon; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27175,12 +27094,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '<' } {
             end = try_Cdo(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Cdo; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27190,12 +27103,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '=' } {
             end = try_Equal(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Equal; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27203,12 +27110,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '>' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Greater(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Greater; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27228,12 +27129,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Namespace; best_channel = 0; }
             end = try_Charset(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Charset; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_FontFace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_FontFace; best_channel = 0; }
             end = try_Supports(&lexer.chars, start);
@@ -27255,14 +27150,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'A' | 'a' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_And(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_And; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27270,12 +27159,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'F' | 'f' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_From(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27285,14 +27168,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'N' | 'n' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Not(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Not; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27300,14 +27177,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'O' | 'o' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_MediaOnly(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MediaOnly; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Or(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27317,12 +27188,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'T' | 't' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_To(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27334,14 +27199,8 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { 'U' } {
             end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_UnicodeRange(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27351,12 +27210,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '[' } {
             end = try_OpenBracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27366,18 +27219,12 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '\\' } {
             end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_MediaOnly(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_MediaOnly; best_channel = 0; }
             end = try_Not(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Not; best_channel = 0; }
             end = try_And(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_And; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Or(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
             end = try_From(&lexer.chars, start);
@@ -27393,12 +27240,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { ']' } {
             end = try_CloseBracket(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27406,12 +27247,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { '^' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_PrefixMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_PrefixMatch; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27421,12 +27256,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'c' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Calc(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Calc; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27436,12 +27265,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'p' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_DxImageTransform(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DxImageTransform; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27453,16 +27276,10 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { 'u' } {
             end = try_Url(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_Url_(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Url_; best_channel = 0; }
             end = try_UnicodeRange(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27470,12 +27287,6 @@ pub fn tokenize(input: &String) -> TokenStream {
             end = try_UnexpectedCharacter(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         } else if first_char matches { 'v' } {
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Var(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Var; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27487,12 +27298,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '{' } {
             end = try_OpenBrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27504,14 +27309,8 @@ pub fn tokenize(input: &String) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_Pipe; best_channel = 0; }
             end = try_DashMatch(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_DashMatch; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
             end = try_UnicodeRange(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27521,12 +27320,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '}' } {
             end = try_CloseBrace(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
             end = try_Function_(&lexer.chars, start);
@@ -27536,12 +27329,6 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char matches { '~' } {
             end = try_Includes(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Includes; best_channel = 0; }
-            end = try_Percentage(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
-            end = try_Dimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-            end = try_UnknownDimension(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
             end = try_Tilde(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_Tilde; best_channel = 0; }
             end = try_Ident(&lexer.chars, start);
@@ -27971,22 +27758,21 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [] };
     }
 
-    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+    fn error(&self, message: String, span: Span, expected: &List<i32>) -> ParseError {
         let lc = line_col(self.tokens.chars, span.start);
-        return ParseError::at(message, span, expected, lc.0, lc.1);
+        return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);
     }
 
-    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
-        let e = self.error(message, span, expected);
-        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+    fn fail(&mut self, message: String, span: Span, expected: &List<i32>, code: DiagnosticCode) {
+        let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };
         if take {
-            self.pending = Option::Some(e);
+            self.pending = Option::Some(self.error(message, span, expected));
             self.pending_code = code;
         }
         self.recovering = true;
     }
 
-    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+    fn no_viable(&mut self, message: String, span: Span, expected: &List<i32>) {
         self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
     }
 
@@ -28066,7 +27852,7 @@ impl Parser {
             return _i;
         }
         if self.speculating {
-            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);
+            self.fail(`got "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);
             return self.pos;
         }
         if self.peek_at(1) == kind {
@@ -28117,7 +27903,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [token_kind_name(kind)],
+            &([kind] as List<i32>),
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -28131,9 +27917,9 @@ impl Parser {
             return _i;
         }
         self.fail(
-            `got "${self.tokens.token_text(self.pos)}"`,
+            `expected any token; got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            ["any token"],
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -28159,7 +27945,7 @@ impl Parser {
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            [] as List<String>,
+            &EMPTY_SYNC,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -28182,7 +27968,7 @@ impl Parser {
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            kind_names(&included),
+            &included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
@@ -29529,9 +29315,7 @@ fn scan_pseudo(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_Colon {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_Colon { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; }
+        pos += 1;
     }
     let gp_36 = pos;
     let sgk_36 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -29873,6 +29657,50 @@ fn scan_property_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
+fn scan_ruleset_alt_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_4, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, &EMPTY_FOLLOW, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && _kind_set_19(tokens[pos]) {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_ruleset_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    while pos < tokens.len() && _kind_set_20(tokens[pos]) {
+        let sp = pos;
+        pos = scan_any_(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; break; }
+        if pos == sp { break; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, &EMPTY_FOLLOW, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && _kind_set_19(tokens[pos]) {
+        let sp = pos;
+        pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
+        if pos < 0 { pos = sp; }
+    }
+    if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -29880,95 +29708,19 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     scan_alts: {
         if _kind_set_38(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
-            try_1: {
-                while pos < tokens.len() && _kind_set_20(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_any_(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_1; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break try_1; }
-                if pos < tokens.len() && _kind_set_19(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_1; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_0: {
-                pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_4, 0);
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_0; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break try_0; }
-                if pos < tokens.len() && _kind_set_19(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_0; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                if pos > best { best = pos; }
-            }
+            let try_1_end = scan_ruleset_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_0_end = scan_ruleset_alt_0(tokens, start, follow);
+            if try_0_end > best { best = try_0_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if _kind_set_39(alt_kind) {
-            pos = start;
-            try_0: {
-                pos = scan_selector_group(tokens, pos, &FOLLOW_MASK_4, 0);
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_0; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break try_0; }
-                if pos < tokens.len() && _kind_set_19(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_0; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
+            pos = scan_ruleset_alt_0(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if _kind_set_40(alt_kind) {
-            pos = start;
-            try_1: {
-                while pos < tokens.len() && _kind_set_20(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_any_(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; break; }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { break try_1; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, &EMPTY_FOLLOW, 0);
-                if pos < 0 { break try_1; }
-                if pos < tokens.len() && _kind_set_19(tokens[pos]) {
-                    let sp = pos;
-                    pos = scan_declaration_list(tokens, pos, &EMPTY_FOLLOW, 0);
-                    if pos < 0 { pos = sp; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break try_1; }
-                pos += 1;
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
+            pos = scan_ruleset_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -30172,6 +29924,42 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
+fn scan_term_alt_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_number(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_term_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_percentage(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_term_alt_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_dimension(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_term_alt_11(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_unknown_dimension(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -30179,69 +29967,27 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     scan_alts: {
         if _kind_set_24(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                pos = scan_number(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                pos = scan_percentage(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_2: {
-                pos = scan_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_11: {
-                pos = scan_unknown_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_11; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_11; }
-                if pos > best { best = pos; }
-            }
+            let try_0_end = scan_term_alt_0(tokens, start, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_term_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_2_end = scan_term_alt_2(tokens, start, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_11_end = scan_term_alt_11(tokens, start, follow);
+            if try_11_end > best { best = try_11_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Number {
-            pos = start;
-            try_0: {
-                pos = scan_number(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
+            pos = scan_term_alt_0(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_Percentage {
-            pos = start;
-            try_1: {
-                pos = scan_percentage(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
+            pos = scan_term_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_Dimension {
-            pos = start;
-            try_2: {
-                pos = scan_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
+            pos = scan_term_alt_2(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_String_ {
             pos = start;
@@ -30316,14 +30062,8 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             }
             return -1;
         } else if alt_kind == TK_UnknownDimension {
-            pos = start;
-            try_11: {
-                pos = scan_unknown_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_11; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_11; }
-                break scan_alts;
-            }
+            pos = scan_term_alt_11(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_DxImageTransform {
             pos = start;
@@ -30507,6 +30247,42 @@ fn scan_unknown_dimension(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
+fn scan_any__alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_number(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_any__alt_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_percentage(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_any__alt_3(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_dimension(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_any__alt_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_unknown_dimension(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -30524,79 +30300,31 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             return -1;
         } else if _kind_set_24(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
-            try_1: {
-                pos = scan_number(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_2: {
-                pos = scan_percentage(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_3: {
-                pos = scan_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_4: {
-                pos = scan_unknown_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_4; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_4; }
-                if pos > best { best = pos; }
-            }
+            let try_1_end = scan_any__alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_2_end = scan_any__alt_2(tokens, start, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_3_end = scan_any__alt_3(tokens, start, follow);
+            if try_3_end > best { best = try_3_end; }
+            let try_4_end = scan_any__alt_4(tokens, start, follow);
+            if try_4_end > best { best = try_4_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Number {
-            pos = start;
-            try_1: {
-                pos = scan_number(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
+            pos = scan_any__alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_Percentage {
-            pos = start;
-            try_2: {
-                pos = scan_percentage(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
+            pos = scan_any__alt_2(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_Dimension {
-            pos = start;
-            try_3: {
-                pos = scan_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                break scan_alts;
-            }
+            pos = scan_any__alt_3(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_UnknownDimension {
-            pos = start;
-            try_4: {
-                pos = scan_unknown_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_4; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_4; }
-                break scan_alts;
-            }
+            pos = scan_any__alt_4(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_String_ {
             pos = start;
@@ -31128,6 +30856,13 @@ fn scan_supports_condition(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
     return pos;
 }
 
+fn scan_supports_condition_in_parens_alt_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_general_enclosed(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -31155,21 +30890,13 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, follow: &Lis
                 if pos < 0 { break try_1; }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_2: {
-                pos = scan_general_enclosed(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                if pos > best { best = pos; }
-            }
+            let try_2_end = scan_supports_condition_in_parens_alt_2(tokens, start, follow);
+            if try_2_end > best { best = try_2_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Function_ {
-            pos = start;
-            try_2: {
-                pos = scan_general_enclosed(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
+            pos = scan_supports_condition_in_parens_alt_2(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else {
             return -1;
@@ -31538,6 +31265,42 @@ fn scan_calc_product(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
+fn scan_calc_value_alt_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_number(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_calc_value_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_dimension(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_calc_value_alt_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_unknown_dimension(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_calc_value_alt_3(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+    let mut pos = pos;
+    pos = scan_percentage(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    pos = scan_ws(tokens, pos, follow, 0);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_calc_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -31545,79 +31308,31 @@ fn scan_calc_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     scan_alts: {
         if _kind_set_24(alt_kind) {
             let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                pos = scan_number(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_1: {
-                pos = scan_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_2: {
-                pos = scan_unknown_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                if pos > best { best = pos; }
-            }
-            pos = start;
-            try_3: {
-                pos = scan_percentage(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                if pos > best { best = pos; }
-            }
+            let try_0_end = scan_calc_value_alt_0(tokens, start, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_calc_value_alt_1(tokens, start, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_2_end = scan_calc_value_alt_2(tokens, start, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_3_end = scan_calc_value_alt_3(tokens, start, follow);
+            if try_3_end > best { best = try_3_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Number {
-            pos = start;
-            try_0: {
-                pos = scan_number(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
+            pos = scan_calc_value_alt_0(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_Dimension {
-            pos = start;
-            try_1: {
-                pos = scan_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_1; }
-                break scan_alts;
-            }
+            pos = scan_calc_value_alt_1(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_UnknownDimension {
-            pos = start;
-            try_2: {
-                pos = scan_unknown_dimension(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_2; }
-                break scan_alts;
-            }
+            pos = scan_calc_value_alt_2(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_Percentage {
-            pos = start;
-            try_3: {
-                pos = scan_percentage(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                pos = scan_ws(tokens, pos, follow, 0);
-                if pos < 0 { break try_3; }
-                break scan_alts;
-            }
+            pos = scan_calc_value_alt_3(tokens, start, follow);
+            if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_OpenParen {
             pos = start;
@@ -32125,7 +31840,6 @@ fn scan_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -32555,7 +32269,6 @@ fn _parse_stylesheet(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
     let charset = p.expect(TK_Charset, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_1);
@@ -32584,7 +32297,6 @@ fn _parse_charset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_charset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
     let charset = p.expect(TK_Charset, &SYNC_0);
     let ws = _parse_ws(p, &FOLLOW_MASK_1);
@@ -32626,15 +32338,12 @@ fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         if _sd_best_i == 0 {
             return _parse_charset__inner_alt_0(p, follow);
         }
-        if _sd_best_i == 1 {
-            return _parse_charset__inner_alt_1(p, follow);
-        }
         return _parse_charset__inner_alt_1(p, follow);
     }
     p.no_viable(
         "no alternative of charset matches",
         p.peek_span(),
-        [token_kind_name(TK_Charset)],
+        &SYNC_3,
     );
     return;
 }
@@ -32651,9 +32360,8 @@ fn _parse_charset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
-    let import_ = p.expect(TK_Import, &SYNC_3);
+    let import_ = p.expect(TK_Import, &SYNC_4);
     let ws = _parse_ws(p, &FOLLOW_MASK_3);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -32705,9 +32413,8 @@ fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
-    let import_ = p.expect(TK_Import, &SYNC_3);
+    let import_ = p.expect(TK_Import, &SYNC_4);
     let ws = _parse_ws(p, &FOLLOW_MASK_3);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -32756,9 +32463,8 @@ fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(2);
-    let import_ = p.expect(TK_Import, &SYNC_3);
+    let import_ = p.expect(TK_Import, &SYNC_4);
     let ws = _parse_ws(p, &FOLLOW_MASK_3);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -32804,9 +32510,8 @@ fn _parse_imports__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(3);
-    let import_ = p.expect(TK_Import, &SYNC_3);
+    let import_ = p.expect(TK_Import, &SYNC_4);
     let ws = _parse_ws(p, &FOLLOW_MASK_3);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
@@ -32884,15 +32589,12 @@ fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         if _sd_best_i == 2 {
             return _parse_imports__inner_alt_2(p, follow);
         }
-        if _sd_best_i == 3 {
-            return _parse_imports__inner_alt_3(p, follow);
-        }
         return _parse_imports__inner_alt_3(p, follow);
     }
     p.no_viable(
         "no alternative of imports matches",
         p.peek_span(),
-        [token_kind_name(TK_Import)],
+        &SYNC_5,
     );
     return;
 }
@@ -32909,9 +32611,8 @@ fn _parse_imports(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
-    let namespace = p.expect(TK_Namespace, &SYNC_4);
+    let namespace = p.expect(TK_Namespace, &SYNC_6);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -32988,9 +32689,8 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
-    let namespace = p.expect(TK_Namespace, &SYNC_4);
+    let namespace = p.expect(TK_Namespace, &SYNC_6);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -33080,15 +32780,12 @@ fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         if _sd_best_i == 0 {
             return _parse_namespace___inner_alt_0(p, follow);
         }
-        if _sd_best_i == 1 {
-            return _parse_namespace___inner_alt_1(p, follow);
-        }
         return _parse_namespace___inner_alt_1(p, follow);
     }
     p.no_viable(
         "no alternative of namespace_ matches",
         p.peek_span(),
-        [token_kind_name(TK_Namespace)],
+        &SYNC_7,
     );
     return;
 }
@@ -33105,7 +32802,6 @@ fn _parse_namespace_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ident = _parse_ident(p, follow);
     return;
 }
@@ -33122,8 +32818,7 @@ fn _parse_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_media__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let media = p.expect(TK_Media, &SYNC_5);
+    let media = p.expect(TK_Media, &SYNC_8);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_4);
     let group_rule_body = _parse_group_rule_body(p, follow);
@@ -33143,7 +32838,6 @@ fn _parse_media(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -33194,7 +32888,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_Comma, &SYNC_6);
+            let comma = p.expect(TK_Comma, &SYNC_9);
             let ws = _parse_ws(p, &FOLLOW_MASK_5);
             let media_query = _parse_media_query(p, follow);
         }
@@ -33215,7 +32909,6 @@ fn _parse_media_query_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_6(kind) {
         let mut opt_scan_pos: i32 = -1;
@@ -33274,7 +32967,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let and = p.expect(TK_And, &SYNC_7);
+            let and = p.expect(TK_And, &SYNC_10);
             let ws = _parse_ws(p, &FOLLOW_MASK_7);
             let media_expression = _parse_media_expression(p, follow);
         }
@@ -33305,7 +32998,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let and = p.expect(TK_And, &SYNC_7);
+            let and = p.expect(TK_And, &SYNC_10);
             let ws = _parse_ws(p, &FOLLOW_MASK_7);
             let media_expression = _parse_media_expression(p, follow);
         }
@@ -33314,7 +33007,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.no_viable(
         "no alternative of mediaQuery matches",
         p.peek_span(),
-        [token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_Comment), token_kind_name(TK_Space), token_kind_name(TK_Ident), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_OpenParen)],
+        &SYNC_9,
     );
     return;
 }
@@ -33331,7 +33024,6 @@ fn _parse_media_query(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_media_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ident = _parse_ident(p, follow);
     return;
 }
@@ -33348,12 +33040,11 @@ fn _parse_media_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_media_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let openparen = p.expect(TK_OpenParen, &SYNC_8);
+    let openparen = p.expect(TK_OpenParen, &SYNC_11);
     let ws = _parse_ws(p, &FOLLOW_MASK_6);
     let media_feature = _parse_media_feature(p, &EMPTY_FOLLOW);
     if p.peek_kind() == TK_Colon {
-        let colon = p.expect(TK_Colon, &SYNC_9);
+        let colon = p.expect(TK_Colon, &SYNC_12);
         let ws = _parse_ws(p, &FOLLOW_MASK_8);
         let expr = _parse_expr(p, follow);
     }
@@ -33374,7 +33065,6 @@ fn _parse_media_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_media_feature__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ident = _parse_ident(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -33392,13 +33082,12 @@ fn _parse_media_feature(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let page = p.expect(TK_Page, &SYNC_10);
+    let page = p.expect(TK_Page, &SYNC_13);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     if p.peek_kind() == TK_Colon {
         let pseudo_page = _parse_pseudo_page(p, &EMPTY_FOLLOW);
     }
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws_2 = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_8(p.peek_kind()) {
         let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -33428,7 +33117,7 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_SemiColon, &SYNC_12);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_15);
         let ws = _parse_ws(p, follow);
         if _kind_set_8(p.peek_kind()) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -33451,8 +33140,7 @@ fn _parse_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_pseudo_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let colon = p.expect(TK_Colon, &SYNC_13);
+    let colon = p.expect(TK_Colon, &SYNC_16);
     let ident = _parse_ident(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -33470,7 +33158,6 @@ fn _parse_pseudo_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let selector = _parse_selector(p, follow);
     loop {
         if p.recovering { break; }
@@ -33495,7 +33182,7 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_Comma, &SYNC_14);
+        let comma = p.expect(TK_Comma, &SYNC_17);
         let ws = _parse_ws(p, &FOLLOW_MASK_9);
         let selector = _parse_selector(p, follow);
     }
@@ -33514,7 +33201,6 @@ fn _parse_selector_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let simple_selector_sequence = _parse_simple_selector_sequence(p, follow);
     let ws = _parse_ws(p, follow);
     loop {
@@ -33559,7 +33245,6 @@ fn _parse_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Plus {
         let plus = p.expect(TK_Plus, &SYNC_2);
@@ -33584,7 +33269,7 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     p.no_viable(
         "no alternative of combinator matches",
         p.peek_span(),
-        [token_kind_name(TK_Plus), token_kind_name(TK_Greater), token_kind_name(TK_Tilde), token_kind_name(TK_Space)],
+        &SYNC_18,
     );
     return;
 }
@@ -33601,7 +33286,6 @@ fn _parse_combinator(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_10(kind) {
         let grp_kind = p.peek_kind();
@@ -33778,7 +33462,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
     p.no_viable(
         "no alternative of simpleSelectorSequence matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon), token_kind_name(TK_PseudoNot)],
+        &SYNC_19,
     );
     return;
 }
@@ -33795,7 +33479,6 @@ fn _parse_simple_selector_sequence(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_type_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_enter: bool = false;
     if _kind_set_10(p.peek_kind()) {
         opt_enter_scan: {
@@ -33828,7 +33511,6 @@ fn _parse_type_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -33879,7 +33561,6 @@ fn _parse_type_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_element_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ident = _parse_ident(p, follow);
     return;
 }
@@ -33896,7 +33577,6 @@ fn _parse_element_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_enter: bool = false;
     if _kind_set_10(p.peek_kind()) {
         opt_enter_scan: {
@@ -33929,8 +33609,7 @@ fn _parse_universal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_class_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let dot = p.expect(TK_Dot, &SYNC_13);
+    let dot = p.expect(TK_Dot, &SYNC_16);
     let ident = _parse_ident(p, follow);
     return;
 }
@@ -33947,8 +33626,7 @@ fn _parse_class_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let openbracket = p.expect(TK_OpenBracket, &SYNC_15);
+    let openbracket = p.expect(TK_OpenBracket, &SYNC_20);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     let mut opt_enter: bool = false;
     if _kind_set_10(p.peek_kind()) {
@@ -34151,8 +33829,7 @@ fn _parse_attrib(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 }
 
 fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let colon = p.expect(TK_Colon, &SYNC_16);
+    let colon = p.expect(TK_Colon, &SYNC_21);
     if p.peek_kind() == TK_Colon {
         let colon = p.expect(TK_Colon, &EMPTY_SYNC);
     }
@@ -34177,8 +33854,7 @@ fn _parse_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 }
 
 fn _parse_functional_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let function_ = p.expect(TK_Function_, &SYNC_17);
+    let function_ = p.expect(TK_Function_, &SYNC_22);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expression = _parse_expression(p, &FOLLOW_MASK_12);
     let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
@@ -34197,7 +33873,6 @@ fn _parse_functional_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -34303,8 +33978,7 @@ fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let pseudonot = p.expect(TK_PseudoNot, &SYNC_18);
+    let pseudonot = p.expect(TK_PseudoNot, &SYNC_23);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     let negation_arg = _parse_negation_arg(p, &EMPTY_FOLLOW);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_12);
@@ -34324,7 +33998,6 @@ fn _parse_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_negation_arg__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let type_selector = _parse_type_selector(p, follow);
     return;
 }
@@ -34337,7 +34010,6 @@ fn _parse_negation_arg__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &Lis
 }
 
 fn _parse_negation_arg__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let universal = _parse_universal(p, follow);
     return;
 }
@@ -34350,7 +34022,6 @@ fn _parse_negation_arg__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Lis
 }
 
 fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_10(kind) {
         if _kind_set_13(p.peek_kind()) {
@@ -34370,9 +34041,6 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }
             if _sd_best_i == 0 {
                 return _parse_negation_arg__inner_alt_0(p, follow);
-            }
-            if _sd_best_i == 1 {
-                return _parse_negation_arg__inner_alt_1(p, follow);
             }
             return _parse_negation_arg__inner_alt_1(p, follow);
         } else if p.peek_kind() == TK_Pipe {
@@ -34399,9 +34067,6 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     if _sd_best_i == 0 {
                         return _parse_negation_arg__inner_alt_0(p, follow);
                     }
-                    if _sd_best_i == 1 {
-                        return _parse_negation_arg__inner_alt_1(p, follow);
-                    }
                     return _parse_negation_arg__inner_alt_1(p, follow);
                 }
             }
@@ -34426,7 +34091,7 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     p.no_viable(
         "no alternative of negationArg matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon)],
+        &SYNC_24,
     );
     return;
 }
@@ -34443,7 +34108,6 @@ fn _parse_negation_arg(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Divide {
         p.b.set_alt(0);
@@ -34472,7 +34136,7 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     p.no_viable(
         "no alternative of operator_ matches",
         p.peek_span(),
-        [token_kind_name(TK_Divide), token_kind_name(TK_Comma), token_kind_name(TK_Space), token_kind_name(TK_Equal)],
+        &SYNC_25,
     );
     return;
 }
@@ -34489,7 +34153,6 @@ fn _parse_operator_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.b.set_alt(0);
@@ -34505,20 +34168,20 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     }
     if kind == TK_Multiply {
         p.b.set_alt(2);
-        let multiply = p.expect(TK_Multiply, &SYNC_13);
+        let multiply = p.expect(TK_Multiply, &SYNC_16);
         let ident = _parse_ident(p, follow);
         return;
     }
     if kind == TK_Underscore {
         p.b.set_alt(3);
-        let underscore = p.expect(TK_Underscore, &SYNC_13);
+        let underscore = p.expect(TK_Underscore, &SYNC_16);
         let ident = _parse_ident(p, follow);
         return;
     }
     p.no_viable(
         "no alternative of property_ matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Variable), token_kind_name(TK_Multiply), token_kind_name(TK_Underscore)],
+        &SYNC_26,
     );
     return;
 }
@@ -34535,7 +34198,6 @@ fn _parse_property_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
     loop {
         if p.recovering { break; }
@@ -34565,7 +34227,7 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
         let any_ = _parse_any_(p, &EMPTY_FOLLOW);
     }
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
@@ -34600,10 +34262,9 @@ fn _parse_ruleset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 }
 
 fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
     let selector_group = _parse_selector_group(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
@@ -34654,9 +34315,6 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             if _sd_best_i == 1 {
                 return _parse_ruleset__inner_alt_1(p, follow);
             }
-            if _sd_best_i == 0 {
-                return _parse_ruleset__inner_alt_0(p, follow);
-            }
             return _parse_ruleset__inner_alt_0(p, follow);
         } else if _kind_set_39(p.peek_kind()) {
             return _parse_ruleset__inner_alt_0(p, follow);
@@ -34667,7 +34325,7 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     p.no_viable(
         "no alternative of ruleset matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon), token_kind_name(TK_PseudoNot), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_String_), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Includes), token_kind_name(TK_DashMatch), token_kind_name(TK_Function_), token_kind_name(TK_OpenParen), token_kind_name(TK_OpenBrace)],
+        &SYNC_27,
     );
     return;
 }
@@ -34684,7 +34342,6 @@ fn _parse_ruleset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -34736,7 +34393,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let semicolon = p.expect(TK_SemiColon, &SYNC_12);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_15);
         let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -34757,10 +34414,9 @@ fn _parse_declaration_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_14);
-    let colon = p.expect(TK_Colon, &SYNC_9);
+    let colon = p.expect(TK_Colon, &SYNC_12);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let expr = _parse_expr(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Important) {
@@ -34788,10 +34444,9 @@ fn _parse_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List
 }
 
 fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_14);
-    let colon = p.expect(TK_Colon, &SYNC_19);
+    let colon = p.expect(TK_Colon, &SYNC_28);
     let ws = _parse_ws(p, &FOLLOW_MASK_15);
     let value = _parse_value(p, follow);
     return;
@@ -34831,16 +34486,13 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             if _sd_best_i == 0 {
                 return _parse_declaration__inner_alt_0(p, follow);
             }
-            if _sd_best_i == 1 {
-                return _parse_declaration__inner_alt_1(p, follow);
-            }
             return _parse_declaration__inner_alt_1(p, follow);
         }
     }
     p.no_viable(
         "no alternative of declaration matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Variable), token_kind_name(TK_Multiply), token_kind_name(TK_Underscore)],
+        &SYNC_26,
     );
     return;
 }
@@ -34857,7 +34509,6 @@ fn _parse_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 }
 
 fn _parse_prio__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let important = p.expect(TK_Important, &SYNC_2);
     let ws = _parse_ws(p, follow);
     return;
@@ -34875,7 +34526,6 @@ fn _parse_prio(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -34942,7 +34592,6 @@ fn _parse_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let term = _parse_term(p, follow);
     loop {
         if p.recovering { break; }
@@ -34988,7 +34637,6 @@ fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_term__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
     let number = _parse_number(p, follow);
     let ws = _parse_ws(p, follow);
@@ -35005,7 +34653,6 @@ fn _parse_term__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_term__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
     let percentage = _parse_percentage(p, follow);
     let ws = _parse_ws(p, follow);
@@ -35022,7 +34669,6 @@ fn _parse_term__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_term__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(2);
     let dimension = _parse_dimension(p, follow);
     let ws = _parse_ws(p, follow);
@@ -35039,7 +34685,6 @@ fn _parse_term__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_term__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(11);
     let unknown_dimension = _parse_unknown_dimension(p, follow);
     let ws = _parse_ws(p, follow);
@@ -35056,10 +34701,9 @@ fn _parse_term__inner_scan_11(tokens: &Array<i32>, pos: i32, follow: &List<List<
 }
 
 fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_41(kind) {
-        if p.peek_kind() == TK_Plus {
+        if _kind_set_24(p.peek_kind()) {
             if p.peek_at(1) == TK_Number {
                 return _parse_term__inner_alt_0(p, follow);
             } else if p.peek_at(1) == TK_Percentage {
@@ -35102,59 +34746,6 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     }
                     if _sd_best_i == 2 {
                         return _parse_term__inner_alt_2(p, follow);
-                    }
-                    if _sd_best_i == 11 {
-                        return _parse_term__inner_alt_11(p, follow);
-                    }
-                    return _parse_term__inner_alt_11(p, follow);
-                }
-            }
-        } else if p.peek_kind() == TK_Minus {
-            if p.peek_at(1) == TK_Number {
-                return _parse_term__inner_alt_0(p, follow);
-            } else if p.peek_at(1) == TK_Percentage {
-                return _parse_term__inner_alt_1(p, follow);
-            } else if p.peek_at(1) == TK_Dimension {
-                return _parse_term__inner_alt_2(p, follow);
-            } else if p.peek_at(1) == TK_UnknownDimension {
-                return _parse_term__inner_alt_11(p, follow);
-            } else {
-                let _sd_tokens = &p.kinds;
-                let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_term__inner_scan_0(_sd_tokens, _sd_pos, follow);
-                let _sd_p_1 = _parse_term__inner_scan_1(_sd_tokens, _sd_pos, follow);
-                let _sd_p_2 = _parse_term__inner_scan_2(_sd_tokens, _sd_pos, follow);
-                let _sd_p_11 = _parse_term__inner_scan_11(_sd_tokens, _sd_pos, follow);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_11 > _sd_best_p {
-                    _sd_best_p = _sd_p_11;
-                    _sd_best_i = 11;
-                }
-                if _sd_best_i >= 0 {
-                    if _sd_best_i == 0 {
-                        return _parse_term__inner_alt_0(p, follow);
-                    }
-                    if _sd_best_i == 1 {
-                        return _parse_term__inner_alt_1(p, follow);
-                    }
-                    if _sd_best_i == 2 {
-                        return _parse_term__inner_alt_2(p, follow);
-                    }
-                    if _sd_best_i == 11 {
-                        return _parse_term__inner_alt_11(p, follow);
                     }
                     return _parse_term__inner_alt_11(p, follow);
                 }
@@ -35221,7 +34812,7 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     p.no_viable(
         "no alternative of term matches",
         p.peek_span(),
-        [token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_String_), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Var), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_Hash), token_kind_name(TK_Calc), token_kind_name(TK_Function_), token_kind_name(TK_UnknownDimension), token_kind_name(TK_DxImageTransform)],
+        &SYNC_29,
     );
     return;
 }
@@ -35238,8 +34829,7 @@ fn _parse_term(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let function_ = p.expect(TK_Function_, &SYNC_9);
+    let function_ = p.expect(TK_Function_, &SYNC_12);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let expr = _parse_expr(p, &FOLLOW_MASK_12);
     let closeparen = p.expect(TK_CloseParen, &SYNC_2);
@@ -35259,8 +34849,7 @@ fn _parse_function_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_dx_image_transform__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let dximagetransform = p.expect(TK_DxImageTransform, &SYNC_9);
+    let dximagetransform = p.expect(TK_DxImageTransform, &SYNC_12);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let expr = _parse_expr(p, &FOLLOW_MASK_12);
     let closeparen = p.expect(TK_CloseParen, &SYNC_2);
@@ -35280,7 +34869,6 @@ fn _parse_dx_image_transform(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_hexcolor__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let hash = p.expect(TK_Hash, &SYNC_2);
     let ws = _parse_ws(p, follow);
     return;
@@ -35298,7 +34886,6 @@ fn _parse_hexcolor(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -35345,7 +34932,6 @@ fn _parse_number(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 }
 
 fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -35392,7 +34978,6 @@ fn _parse_percentage(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -35439,7 +35024,6 @@ fn _parse_dimension(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -35486,7 +35070,6 @@ fn _parse_unknown_dimension(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_any___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let number = _parse_number(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -35502,7 +35085,6 @@ fn _parse_any___inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_any___inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let percentage = _parse_percentage(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -35518,7 +35100,6 @@ fn _parse_any___inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_any___inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let dimension = _parse_dimension(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -35534,7 +35115,6 @@ fn _parse_any___inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_any___inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let unknown_dimension = _parse_unknown_dimension(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -35550,7 +35130,6 @@ fn _parse_any___inner_scan_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 }
 
 fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         let ident = _parse_ident(p, follow);
@@ -35558,7 +35137,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     if _kind_set_41(kind) {
-        if p.peek_kind() == TK_Plus {
+        if _kind_set_24(p.peek_kind()) {
             if p.peek_at(1) == TK_Number {
                 return _parse_any___inner_alt_1(p, follow);
             } else if p.peek_at(1) == TK_Percentage {
@@ -35601,59 +35180,6 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                     }
                     if _sd_best_i == 3 {
                         return _parse_any___inner_alt_3(p, follow);
-                    }
-                    if _sd_best_i == 4 {
-                        return _parse_any___inner_alt_4(p, follow);
-                    }
-                    return _parse_any___inner_alt_4(p, follow);
-                }
-            }
-        } else if p.peek_kind() == TK_Minus {
-            if p.peek_at(1) == TK_Number {
-                return _parse_any___inner_alt_1(p, follow);
-            } else if p.peek_at(1) == TK_Percentage {
-                return _parse_any___inner_alt_2(p, follow);
-            } else if p.peek_at(1) == TK_Dimension {
-                return _parse_any___inner_alt_3(p, follow);
-            } else if p.peek_at(1) == TK_UnknownDimension {
-                return _parse_any___inner_alt_4(p, follow);
-            } else {
-                let _sd_tokens = &p.kinds;
-                let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_any___inner_scan_1(_sd_tokens, _sd_pos, follow);
-                let _sd_p_2 = _parse_any___inner_scan_2(_sd_tokens, _sd_pos, follow);
-                let _sd_p_3 = _parse_any___inner_scan_3(_sd_tokens, _sd_pos, follow);
-                let _sd_p_4 = _parse_any___inner_scan_4(_sd_tokens, _sd_pos, follow);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_3 > _sd_best_p {
-                    _sd_best_p = _sd_p_3;
-                    _sd_best_i = 3;
-                }
-                if _sd_p_4 > _sd_best_p {
-                    _sd_best_p = _sd_p_4;
-                    _sd_best_i = 4;
-                }
-                if _sd_best_i >= 0 {
-                    if _sd_best_i == 1 {
-                        return _parse_any___inner_alt_1(p, follow);
-                    }
-                    if _sd_best_i == 2 {
-                        return _parse_any___inner_alt_2(p, follow);
-                    }
-                    if _sd_best_i == 3 {
-                        return _parse_any___inner_alt_3(p, follow);
-                    }
-                    if _sd_best_i == 4 {
-                        return _parse_any___inner_alt_4(p, follow);
                     }
                     return _parse_any___inner_alt_4(p, follow);
                 }
@@ -35704,7 +35230,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     if kind == TK_Function_ {
-        let function_ = p.expect(TK_Function_, &SYNC_20);
+        let function_ = p.expect(TK_Function_, &SYNC_30);
         let ws = _parse_ws(p, &EMPTY_FOLLOW);
         loop {
             if p.recovering { break; }
@@ -35746,7 +35272,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     if kind == TK_OpenParen {
-        let openparen = p.expect(TK_OpenParen, &SYNC_20);
+        let openparen = p.expect(TK_OpenParen, &SYNC_30);
         let ws = _parse_ws(p, &EMPTY_FOLLOW);
         loop {
             if p.recovering { break; }
@@ -35788,7 +35314,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     if kind == TK_OpenBracket {
-        let openbracket = p.expect(TK_OpenBracket, &SYNC_21);
+        let openbracket = p.expect(TK_OpenBracket, &SYNC_31);
         let ws = _parse_ws(p, &EMPTY_FOLLOW);
         loop {
             if p.recovering { break; }
@@ -35832,7 +35358,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     p.no_viable(
         "no alternative of any_ matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_String_), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_Hash), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Includes), token_kind_name(TK_DashMatch), token_kind_name(TK_Colon), token_kind_name(TK_Function_), token_kind_name(TK_OpenParen), token_kind_name(TK_OpenBracket)],
+        &SYNC_32,
     );
     return;
 }
@@ -35849,9 +35375,8 @@ fn _parse_any_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
-    let atkeyword = p.expect(TK_AtKeyword, &SYNC_22);
+    let atkeyword = p.expect(TK_AtKeyword, &SYNC_33);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -35903,7 +35428,6 @@ fn _parse_at_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 }
 
 fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_OpenBrace {
         let block = _parse_block(p, follow);
@@ -35932,7 +35456,7 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     p.no_viable(
         "no alternative of unused matches",
         p.peek_span(),
-        [token_kind_name(TK_OpenBrace), token_kind_name(TK_AtKeyword), token_kind_name(TK_SemiColon), token_kind_name(TK_Cdo), token_kind_name(TK_Cdc)],
+        &SYNC_34,
     );
     return;
 }
@@ -35949,8 +35473,7 @@ fn _parse_unused(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 }
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_23);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_35);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -36145,7 +35668,6 @@ fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
         let ruleset = _parse_ruleset(p, follow);
@@ -36190,7 +35712,7 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     p.no_viable(
         "no alternative of nestedStatement matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Multiply), token_kind_name(TK_Pipe), token_kind_name(TK_Hash), token_kind_name(TK_Dot), token_kind_name(TK_OpenBracket), token_kind_name(TK_Colon), token_kind_name(TK_PseudoNot), token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Percentage), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_String_), token_kind_name(TK_Url_), token_kind_name(TK_Url), token_kind_name(TK_UnicodeRange), token_kind_name(TK_Includes), token_kind_name(TK_DashMatch), token_kind_name(TK_Function_), token_kind_name(TK_OpenParen), token_kind_name(TK_OpenBrace), token_kind_name(TK_Media), token_kind_name(TK_Page), token_kind_name(TK_FontFace), token_kind_name(TK_Keyframes), token_kind_name(TK_Supports), token_kind_name(TK_Viewport), token_kind_name(TK_CounterStyle), token_kind_name(TK_FontFeatureValues), token_kind_name(TK_AtKeyword)],
+        &SYNC_36,
     );
     return;
 }
@@ -36207,8 +35729,7 @@ fn _parse_nested_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_24);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_37);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -36255,8 +35776,7 @@ fn _parse_group_rule_body(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 }
 
 fn _parse_supports_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let supports = p.expect(TK_Supports, &SYNC_25);
+    let supports = p.expect(TK_Supports, &SYNC_38);
     let ws = _parse_ws(p, &FOLLOW_MASK_16);
     let supports_condition = _parse_supports_condition(p, &EMPTY_FOLLOW);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_4);
@@ -36276,7 +35796,6 @@ fn _parse_supports_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_supports_condition__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let supports_conjunction = _parse_supports_conjunction(p, follow);
     return;
 }
@@ -36289,7 +35808,6 @@ fn _parse_supports_condition__inner_scan_1(tokens: &Array<i32>, pos: i32, follow
 }
 
 fn _parse_supports_condition__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let supports_disjunction = _parse_supports_disjunction(p, follow);
     return;
 }
@@ -36302,7 +35820,6 @@ fn _parse_supports_condition__inner_scan_2(tokens: &Array<i32>, pos: i32, follow
 }
 
 fn _parse_supports_condition__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     return;
 }
@@ -36315,7 +35832,6 @@ fn _parse_supports_condition__inner_scan_3(tokens: &Array<i32>, pos: i32, follow
 }
 
 fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Not {
         let supports_negation = _parse_supports_negation(p, follow);
@@ -36348,16 +35864,13 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
             if _sd_best_i == 2 {
                 return _parse_supports_condition__inner_alt_2(p, follow);
             }
-            if _sd_best_i == 3 {
-                return _parse_supports_condition__inner_alt_3(p, follow);
-            }
             return _parse_supports_condition__inner_alt_3(p, follow);
         }
     }
     p.no_viable(
         "no alternative of supportsCondition matches",
         p.peek_span(),
-        [token_kind_name(TK_Not), token_kind_name(TK_OpenParen), token_kind_name(TK_Function_)],
+        &SYNC_39,
     );
     return;
 }
@@ -36374,8 +35887,7 @@ fn _parse_supports_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let openparen = p.expect(TK_OpenParen, &SYNC_25);
+    let openparen = p.expect(TK_OpenParen, &SYNC_38);
     let ws = _parse_ws(p, &FOLLOW_MASK_16);
     let supports_condition = _parse_supports_condition(p, &EMPTY_FOLLOW);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_12);
@@ -36399,7 +35911,6 @@ fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i
 }
 
 fn _parse_supports_condition_in_parens__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let supports_declaration_condition = _parse_supports_declaration_condition(p, follow);
     return;
 }
@@ -36412,7 +35923,6 @@ fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &Array<i32>, pos: i
 }
 
 fn _parse_supports_condition_in_parens__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let general_enclosed = _parse_general_enclosed(p, follow);
     return;
 }
@@ -36453,9 +35963,6 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
             if _sd_best_i == 1 {
                 return _parse_supports_condition_in_parens__inner_alt_1(p, follow);
             }
-            if _sd_best_i == 2 {
-                return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
-            }
             return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_Function_ {
             return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
@@ -36464,7 +35971,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
     p.no_viable(
         "no alternative of supportsConditionInParens matches",
         p.peek_span(),
-        [token_kind_name(TK_OpenParen), token_kind_name(TK_Function_)],
+        &SYNC_40,
     );
     return;
 }
@@ -36481,10 +35988,9 @@ fn _parse_supports_condition_in_parens(p: &mut Parser, follow: &List<List<i32>> 
 }
 
 fn _parse_supports_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let not = p.expect(TK_Not, &SYNC_2);
     let ws = _parse_ws(p, &FOLLOW_MASK_17);
-    let space = p.expect(TK_Space, &SYNC_26);
+    let space = p.expect(TK_Space, &SYNC_41);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_18);
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     return;
@@ -36502,7 +36008,6 @@ fn _parse_supports_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, &FOLLOW_MASK_19);
     let mut _plus_first = true;
     loop {
@@ -36542,11 +36047,11 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
         _plus_first = false;
         let ws = _parse_ws(p, &FOLLOW_MASK_17);
-        let space = p.expect(TK_Space, &SYNC_27);
+        let space = p.expect(TK_Space, &SYNC_42);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
         let and = p.expect(TK_And, &SYNC_2);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_17);
-        let space_2 = p.expect(TK_Space, &SYNC_26);
+        let space_2 = p.expect(TK_Space, &SYNC_41);
         let ws_4 = _parse_ws(p, &FOLLOW_MASK_18);
         let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     }
@@ -36565,7 +36070,6 @@ fn _parse_supports_conjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, &FOLLOW_MASK_19);
     let mut _plus_first = true;
     loop {
@@ -36605,11 +36109,11 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
         _plus_first = false;
         let ws = _parse_ws(p, &FOLLOW_MASK_17);
-        let space = p.expect(TK_Space, &SYNC_28);
+        let space = p.expect(TK_Space, &SYNC_43);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_21);
         let or = p.expect(TK_Or, &SYNC_2);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_17);
-        let space_2 = p.expect(TK_Space, &SYNC_26);
+        let space_2 = p.expect(TK_Space, &SYNC_41);
         let ws_4 = _parse_ws(p, &FOLLOW_MASK_18);
         let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     }
@@ -36628,8 +36132,7 @@ fn _parse_supports_disjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let openparen = p.expect(TK_OpenParen, &SYNC_12);
+    let openparen = p.expect(TK_OpenParen, &SYNC_15);
     let ws = _parse_ws(p, &FOLLOW_MASK_22);
     let declaration = _parse_declaration(p, &FOLLOW_MASK_12);
     let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
@@ -36648,7 +36151,6 @@ fn _parse_supports_declaration_condition(p: &mut Parser, follow: &List<List<i32>
 }
 
 fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let function__or_openparen = p.expect_set([TK_Function_, TK_OpenParen]);
     loop {
         if p.recovering { break; }
@@ -36701,12 +36203,11 @@ fn _parse_general_enclosed(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Url_ {
         let url_ = p.expect(TK_Url_, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_1);
-        let string_ = p.expect(TK_String_, &SYNC_29);
+        let string_ = p.expect(TK_String_, &SYNC_44);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_12);
         let closeparen = p.expect(TK_CloseParen, &EMPTY_SYNC);
         return;
@@ -36718,7 +36219,7 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
     p.no_viable(
         "no alternative of url matches",
         p.peek_span(),
-        [token_kind_name(TK_Url_), token_kind_name(TK_Url)],
+        &SYNC_45,
     );
     return;
 }
@@ -36735,10 +36236,9 @@ fn _parse_url(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_var___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let var = p.expect(TK_Var, &SYNC_30);
+    let var = p.expect(TK_Var, &SYNC_46);
     let ws = _parse_ws(p, &FOLLOW_MASK_23);
-    let variable = p.expect(TK_Variable, &SYNC_29);
+    let variable = p.expect(TK_Variable, &SYNC_44);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_12);
     let closeparen = p.expect(TK_CloseParen, &SYNC_2);
     let ws_3 = _parse_ws(p, follow);
@@ -36757,8 +36257,7 @@ fn _parse_var_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_calc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let calc = p.expect(TK_Calc, &SYNC_31);
+    let calc = p.expect(TK_Calc, &SYNC_47);
     let ws = _parse_ws(p, &FOLLOW_MASK_24);
     let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_12);
     let closeparen = p.expect(TK_CloseParen, &SYNC_2);
@@ -36778,7 +36277,6 @@ fn _parse_calc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let calc_product = _parse_calc_product(p, follow);
     loop {
         if p.recovering { break; }
@@ -36830,11 +36328,11 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let space = p.expect(TK_Space, &SYNC_32);
+        let space = p.expect(TK_Space, &SYNC_48);
         let ws = _parse_ws(p, &FOLLOW_MASK_25);
         let plus_or_minus = p.expect_set([TK_Plus, TK_Minus]);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_17);
-        let space_2 = p.expect(TK_Space, &SYNC_31);
+        let space_2 = p.expect(TK_Space, &SYNC_47);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_24);
         let calc_product = _parse_calc_product(p, follow);
     }
@@ -36853,7 +36351,6 @@ fn _parse_calc_sum(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let calc_value = _parse_calc_value(p, follow);
     loop {
         if p.recovering { break; }
@@ -36896,11 +36393,11 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if rep_scan_pos < 0 { break; }
         if p.peek_kind() == TK_Multiply {
-            let multiply = p.expect(TK_Multiply, &SYNC_31);
+            let multiply = p.expect(TK_Multiply, &SYNC_47);
             let ws = _parse_ws(p, &FOLLOW_MASK_24);
             let calc_value = _parse_calc_value(p, follow);
         } else {
-            let divide = p.expect(TK_Divide, &SYNC_33);
+            let divide = p.expect(TK_Divide, &SYNC_49);
             let ws = _parse_ws(p, &FOLLOW_MASK_26);
             let number = _parse_number(p, follow);
             let ws_2 = _parse_ws(p, follow);
@@ -36921,7 +36418,6 @@ fn _parse_calc_product(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_calc_value__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let number = _parse_number(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -36937,7 +36433,6 @@ fn _parse_calc_value__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_calc_value__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let dimension = _parse_dimension(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -36953,7 +36448,6 @@ fn _parse_calc_value__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_calc_value__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let unknown_dimension = _parse_unknown_dimension(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -36969,7 +36463,6 @@ fn _parse_calc_value__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let percentage = _parse_percentage(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -36985,10 +36478,9 @@ fn _parse_calc_value__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<
 }
 
 fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_41(kind) {
-        if p.peek_kind() == TK_Plus {
+        if _kind_set_24(p.peek_kind()) {
             if p.peek_at(1) == TK_Number {
                 return _parse_calc_value__inner_alt_0(p, follow);
             } else if p.peek_at(1) == TK_Dimension {
@@ -37031,59 +36523,6 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                     if _sd_best_i == 2 {
                         return _parse_calc_value__inner_alt_2(p, follow);
-                    }
-                    if _sd_best_i == 3 {
-                        return _parse_calc_value__inner_alt_3(p, follow);
-                    }
-                    return _parse_calc_value__inner_alt_3(p, follow);
-                }
-            }
-        } else if p.peek_kind() == TK_Minus {
-            if p.peek_at(1) == TK_Number {
-                return _parse_calc_value__inner_alt_0(p, follow);
-            } else if p.peek_at(1) == TK_Dimension {
-                return _parse_calc_value__inner_alt_1(p, follow);
-            } else if p.peek_at(1) == TK_UnknownDimension {
-                return _parse_calc_value__inner_alt_2(p, follow);
-            } else if p.peek_at(1) == TK_Percentage {
-                return _parse_calc_value__inner_alt_3(p, follow);
-            } else {
-                let _sd_tokens = &p.kinds;
-                let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_calc_value__inner_scan_0(_sd_tokens, _sd_pos, follow);
-                let _sd_p_1 = _parse_calc_value__inner_scan_1(_sd_tokens, _sd_pos, follow);
-                let _sd_p_2 = _parse_calc_value__inner_scan_2(_sd_tokens, _sd_pos, follow);
-                let _sd_p_3 = _parse_calc_value__inner_scan_3(_sd_tokens, _sd_pos, follow);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_p_2 > _sd_best_p {
-                    _sd_best_p = _sd_p_2;
-                    _sd_best_i = 2;
-                }
-                if _sd_p_3 > _sd_best_p {
-                    _sd_best_p = _sd_p_3;
-                    _sd_best_i = 3;
-                }
-                if _sd_best_i >= 0 {
-                    if _sd_best_i == 0 {
-                        return _parse_calc_value__inner_alt_0(p, follow);
-                    }
-                    if _sd_best_i == 1 {
-                        return _parse_calc_value__inner_alt_1(p, follow);
-                    }
-                    if _sd_best_i == 2 {
-                        return _parse_calc_value__inner_alt_2(p, follow);
-                    }
-                    if _sd_best_i == 3 {
-                        return _parse_calc_value__inner_alt_3(p, follow);
                     }
                     return _parse_calc_value__inner_alt_3(p, follow);
                 }
@@ -37099,7 +36538,7 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
     }
     if kind == TK_OpenParen {
-        let openparen = p.expect(TK_OpenParen, &SYNC_31);
+        let openparen = p.expect(TK_OpenParen, &SYNC_47);
         let ws = _parse_ws(p, &FOLLOW_MASK_24);
         let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_12);
         let closeparen = p.expect(TK_CloseParen, &SYNC_2);
@@ -37109,7 +36548,7 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     p.no_viable(
         "no alternative of calcValue matches",
         p.peek_span(),
-        [token_kind_name(TK_Plus), token_kind_name(TK_Minus), token_kind_name(TK_Number), token_kind_name(TK_Dimension), token_kind_name(TK_UnknownDimension), token_kind_name(TK_Percentage), token_kind_name(TK_OpenParen)],
+        &SYNC_50,
     );
     return;
 }
@@ -37126,10 +36565,9 @@ fn _parse_calc_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let fontface = p.expect(TK_FontFace, &SYNC_34);
+    let fontface = p.expect(TK_FontFace, &SYNC_51);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws_2 = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_8(p.peek_kind()) {
         let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
@@ -37159,7 +36597,7 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_SemiColon, &SYNC_12);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_15);
         let ws = _parse_ws(p, follow);
         if _kind_set_8(p.peek_kind()) {
             let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
@@ -37182,10 +36620,9 @@ fn _parse_font_face_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_14);
-    let colon = p.expect(TK_Colon, &SYNC_9);
+    let colon = p.expect(TK_Colon, &SYNC_12);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let expr = _parse_expr(p, follow);
     return;
@@ -37205,10 +36642,9 @@ fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, fol
 }
 
 fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_14);
-    let colon = p.expect(TK_Colon, &SYNC_19);
+    let colon = p.expect(TK_Colon, &SYNC_28);
     let ws = _parse_ws(p, &FOLLOW_MASK_15);
     let value = _parse_value(p, follow);
     return;
@@ -37248,16 +36684,13 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
             if _sd_best_i == 0 {
                 return _parse_font_face_declaration__inner_alt_0(p, follow);
             }
-            if _sd_best_i == 1 {
-                return _parse_font_face_declaration__inner_alt_1(p, follow);
-            }
             return _parse_font_face_declaration__inner_alt_1(p, follow);
         }
     }
     p.no_viable(
         "no alternative of fontFaceDeclaration matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To), token_kind_name(TK_Variable), token_kind_name(TK_Multiply), token_kind_name(TK_Underscore)],
+        &SYNC_26,
     );
     return;
 }
@@ -37274,14 +36707,13 @@ fn _parse_font_face_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let keyframes = p.expect(TK_Keyframes, &SYNC_2);
     let ws = _parse_ws(p, &FOLLOW_MASK_17);
-    let space = p.expect(TK_Space, &SYNC_8);
+    let space = p.expect(TK_Space, &SYNC_11);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_6);
     let ident = _parse_ident(p, &EMPTY_FOLLOW);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_35);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_52);
     let ws_4 = _parse_ws(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -37328,9 +36760,8 @@ fn _parse_keyframes_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let keyframe_selector = _parse_keyframe_selector(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
@@ -37352,7 +36783,6 @@ fn _parse_keyframe_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let from__or_to_or_percentage = p.expect_set([TK_From, TK_To, TK_Percentage]);
     let ws = _parse_ws(p, follow);
     loop {
@@ -37405,7 +36835,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_Comma, &SYNC_36);
+        let comma = p.expect(TK_Comma, &SYNC_53);
         let ws = _parse_ws(p, &FOLLOW_MASK_27);
         let from__or_to_or_percentage = p.expect_set([TK_From, TK_To, TK_Percentage]);
         let ws_2 = _parse_ws(p, follow);
@@ -37425,10 +36855,9 @@ fn _parse_keyframe_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_viewport__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let viewport = p.expect(TK_Viewport, &SYNC_34);
+    let viewport = p.expect(TK_Viewport, &SYNC_51);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws_2 = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
@@ -37450,12 +36879,11 @@ fn _parse_viewport(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_counter_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let counterstyle = p.expect(TK_CounterStyle, &SYNC_8);
+    let counterstyle = p.expect(TK_CounterStyle, &SYNC_11);
     let ws = _parse_ws(p, &FOLLOW_MASK_6);
     let ident = _parse_ident(p, &EMPTY_FOLLOW);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_11);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_14);
     let ws_3 = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
@@ -37477,12 +36905,11 @@ fn _parse_counter_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
-    let fontfeaturevalues = p.expect(TK_FontFeatureValues, &SYNC_37);
+    let fontfeaturevalues = p.expect(TK_FontFeatureValues, &SYNC_54);
     let ws = _parse_ws(p, &FOLLOW_MASK_10);
     let font_family_name_list = _parse_font_family_name_list(p, &EMPTY_FOLLOW);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_38);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_55);
     let ws_3 = _parse_ws(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
@@ -37529,7 +36956,6 @@ fn _parse_font_feature_values_rule(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let font_family_name = _parse_font_family_name(p, follow);
     loop {
         if p.recovering { break; }
@@ -37557,7 +36983,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> 
         }
         if rep_scan_pos < 0 { break; }
         let ws = _parse_ws(p, &FOLLOW_MASK_28);
-        let comma = p.expect(TK_Comma, &SYNC_37);
+        let comma = p.expect(TK_Comma, &SYNC_54);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_10);
         let font_family_name = _parse_font_family_name(p, follow);
     }
@@ -37576,7 +37002,6 @@ fn _parse_font_family_name_list(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 }
 
 fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_String_ {
         let string_ = p.expect(TK_String_, &EMPTY_SYNC);
@@ -37613,7 +37038,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     p.no_viable(
         "no alternative of fontFamilyName matches",
         p.peek_span(),
-        [token_kind_name(TK_String_), token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To)],
+        &SYNC_56,
     );
     return;
 }
@@ -37630,10 +37055,9 @@ fn _parse_font_family_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let feature_type = _parse_feature_type(p, &EMPTY_FOLLOW);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
-    let openbrace = p.expect(TK_OpenBrace, &SYNC_39);
+    let openbrace = p.expect(TK_OpenBrace, &SYNC_57);
     let ws_2 = _parse_ws(p, &EMPTY_FOLLOW);
     if _kind_set_4(p.peek_kind()) {
         let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
@@ -37666,7 +37090,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
         if rep_scan_pos < 0 { break; }
         let ws = _parse_ws(p, &FOLLOW_MASK_2);
-        let semicolon = p.expect(TK_SemiColon, &SYNC_8);
+        let semicolon = p.expect(TK_SemiColon, &SYNC_11);
         let ws_2 = _parse_ws(p, follow);
         if _kind_set_4(p.peek_kind()) {
             let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
@@ -37689,7 +37113,6 @@ fn _parse_feature_value_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_feature_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let atkeyword = p.expect(TK_AtKeyword, &EMPTY_SYNC);
     return;
 }
@@ -37706,10 +37129,9 @@ fn _parse_feature_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let ident = _parse_ident(p, &EMPTY_FOLLOW);
     let ws = _parse_ws(p, &FOLLOW_MASK_14);
-    let colon = p.expect(TK_Colon, &SYNC_33);
+    let colon = p.expect(TK_Colon, &SYNC_49);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_26);
     let number = _parse_number(p, follow);
     loop {
@@ -37751,7 +37173,6 @@ fn _parse_feature_value_definition(p: &mut Parser, follow: &List<List<i32>> = &E
 }
 
 fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -37760,7 +37181,7 @@ fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     p.no_viable(
         "no alternative of ident matches",
         p.peek_span(),
-        [token_kind_name(TK_Ident), token_kind_name(TK_MediaOnly), token_kind_name(TK_Not), token_kind_name(TK_And), token_kind_name(TK_Or), token_kind_name(TK_From), token_kind_name(TK_To)],
+        &SYNC_16,
     );
     return;
 }
@@ -37777,7 +37198,6 @@ fn _parse_ident(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let start = p.peek_start();
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -38362,43 +37782,61 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_Comment, TK_Space, TK_String_];
 global SYNC_1: List<i32> = [TK_Comment, TK_SemiColon, TK_Space];
 global SYNC_2: List<i32> = [TK_Comment, TK_Space];
-global SYNC_3: List<i32> = [TK_Comment, TK_Space, TK_String_, TK_Url, TK_Url_];
-global SYNC_4: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To, TK_Url, TK_Url_];
-global SYNC_5: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenBrace, TK_OpenParen, TK_Or, TK_Space, TK_To];
-global SYNC_6: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenParen, TK_Or, TK_Space, TK_To];
-global SYNC_7: List<i32> = [TK_Comment, TK_OpenParen, TK_Space];
-global SYNC_8: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To];
-global SYNC_9: List<i32> = [TK_And, TK_Calc, TK_Comment, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
-global SYNC_10: List<i32> = [TK_Colon, TK_Comment, TK_OpenBrace, TK_Space];
-global SYNC_11: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To, TK_Underscore, TK_Variable];
-global SYNC_12: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Space, TK_To, TK_Underscore, TK_Variable];
-global SYNC_13: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_14: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_Space, TK_To];
-global SYNC_15: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_Space, TK_To];
-global SYNC_16: List<i32> = [TK_And, TK_Colon, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
-global SYNC_17: List<i32> = [TK_And, TK_Comment, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnknownDimension];
-global SYNC_18: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_Space, TK_To];
-global SYNC_19: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_20: List<i32> = [TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_CloseParen, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_21: List<i32> = [TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_CloseBracket, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_22: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
-global SYNC_23: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_SemiColon, TK_Space, TK_String_, TK_Supports, TK_To, TK_Underscore, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport];
-global SYNC_24: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_Space, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
-global SYNC_25: List<i32> = [TK_Comment, TK_Function_, TK_Not, TK_OpenParen, TK_Space];
-global SYNC_26: List<i32> = [TK_Comment, TK_Function_, TK_OpenParen, TK_Space];
-global SYNC_27: List<i32> = [TK_And, TK_Comment, TK_Space];
-global SYNC_28: List<i32> = [TK_Comment, TK_Or, TK_Space];
-global SYNC_29: List<i32> = [TK_CloseParen, TK_Comment, TK_Space];
-global SYNC_30: List<i32> = [TK_Comment, TK_Space, TK_Variable];
-global SYNC_31: List<i32> = [TK_Comment, TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_Space, TK_UnknownDimension];
-global SYNC_32: List<i32> = [TK_Comment, TK_Minus, TK_Plus, TK_Space];
-global SYNC_33: List<i32> = [TK_Comment, TK_Minus, TK_Number, TK_Plus, TK_Space];
-global SYNC_34: List<i32> = [TK_Comment, TK_OpenBrace, TK_Space];
-global SYNC_35: List<i32> = [TK_CloseBrace, TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
-global SYNC_36: List<i32> = [TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
-global SYNC_37: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To];
-global SYNC_38: List<i32> = [TK_AtKeyword, TK_CloseBrace, TK_Comment, TK_Space];
-global SYNC_39: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To];
+global SYNC_3: List<i32> = [TK_Charset];
+global SYNC_4: List<i32> = [TK_Comment, TK_Space, TK_String_, TK_Url, TK_Url_];
+global SYNC_5: List<i32> = [TK_Import];
+global SYNC_6: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To, TK_Url, TK_Url_];
+global SYNC_7: List<i32> = [TK_Namespace];
+global SYNC_8: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenBrace, TK_OpenParen, TK_Or, TK_Space, TK_To];
+global SYNC_9: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_OpenParen, TK_Or, TK_Space, TK_To];
+global SYNC_10: List<i32> = [TK_Comment, TK_OpenParen, TK_Space];
+global SYNC_11: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_To];
+global SYNC_12: List<i32> = [TK_And, TK_Calc, TK_Comment, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
+global SYNC_13: List<i32> = [TK_Colon, TK_Comment, TK_OpenBrace, TK_Space];
+global SYNC_14: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To, TK_Underscore, TK_Variable];
+global SYNC_15: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Space, TK_To, TK_Underscore, TK_Variable];
+global SYNC_16: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_17: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_Space, TK_To];
+global SYNC_18: List<i32> = [TK_Greater, TK_Plus, TK_Space, TK_Tilde];
+global SYNC_19: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_PseudoNot, TK_To];
+global SYNC_20: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_Pipe, TK_Space, TK_To];
+global SYNC_21: List<i32> = [TK_And, TK_Colon, TK_From, TK_Function_, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_To];
+global SYNC_22: List<i32> = [TK_And, TK_Comment, TK_Dimension, TK_From, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnknownDimension];
+global SYNC_23: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_Space, TK_To];
+global SYNC_24: List<i32> = [TK_And, TK_Colon, TK_Dot, TK_From, TK_Hash, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_OpenBracket, TK_Or, TK_Pipe, TK_To];
+global SYNC_25: List<i32> = [TK_Comma, TK_Divide, TK_Equal, TK_Space];
+global SYNC_26: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Multiply, TK_Not, TK_Or, TK_To, TK_Underscore, TK_Variable];
+global SYNC_27: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_Dot, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_28: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_29: List<i32> = [TK_And, TK_Calc, TK_Dimension, TK_DxImageTransform, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Var];
+global SYNC_30: List<i32> = [TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_CloseParen, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_31: List<i32> = [TK_And, TK_AtKeyword, TK_Cdc, TK_Cdo, TK_CloseBracket, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_32: List<i32> = [TK_And, TK_Colon, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_33: List<i32> = [TK_And, TK_Colon, TK_Comment, TK_DashMatch, TK_Dimension, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_MediaOnly, TK_Minus, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Percentage, TK_Plus, TK_SemiColon, TK_Space, TK_String_, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_];
+global SYNC_34: List<i32> = [TK_AtKeyword, TK_Cdc, TK_Cdo, TK_OpenBrace, TK_SemiColon];
+global SYNC_35: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_SemiColon, TK_Space, TK_String_, TK_Supports, TK_To, TK_Underscore, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Variable, TK_Viewport];
+global SYNC_36: List<i32> = [TK_And, TK_AtKeyword, TK_Colon, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
+global SYNC_37: List<i32> = [TK_And, TK_AtKeyword, TK_CloseBrace, TK_Colon, TK_Comment, TK_CounterStyle, TK_DashMatch, TK_Dimension, TK_Dot, TK_FontFace, TK_FontFeatureValues, TK_From, TK_Function_, TK_Hash, TK_Ident, TK_Includes, TK_Keyframes, TK_Media, TK_MediaOnly, TK_Minus, TK_Multiply, TK_Not, TK_Number, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Or, TK_Page, TK_Percentage, TK_Pipe, TK_Plus, TK_PseudoNot, TK_Space, TK_String_, TK_Supports, TK_To, TK_UnicodeRange, TK_UnknownDimension, TK_Url, TK_Url_, TK_Viewport];
+global SYNC_38: List<i32> = [TK_Comment, TK_Function_, TK_Not, TK_OpenParen, TK_Space];
+global SYNC_39: List<i32> = [TK_Function_, TK_Not, TK_OpenParen];
+global SYNC_40: List<i32> = [TK_Function_, TK_OpenParen];
+global SYNC_41: List<i32> = [TK_Comment, TK_Function_, TK_OpenParen, TK_Space];
+global SYNC_42: List<i32> = [TK_And, TK_Comment, TK_Space];
+global SYNC_43: List<i32> = [TK_Comment, TK_Or, TK_Space];
+global SYNC_44: List<i32> = [TK_CloseParen, TK_Comment, TK_Space];
+global SYNC_45: List<i32> = [TK_Url, TK_Url_];
+global SYNC_46: List<i32> = [TK_Comment, TK_Space, TK_Variable];
+global SYNC_47: List<i32> = [TK_Comment, TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_Space, TK_UnknownDimension];
+global SYNC_48: List<i32> = [TK_Comment, TK_Minus, TK_Plus, TK_Space];
+global SYNC_49: List<i32> = [TK_Comment, TK_Minus, TK_Number, TK_Plus, TK_Space];
+global SYNC_50: List<i32> = [TK_Dimension, TK_Minus, TK_Number, TK_OpenParen, TK_Percentage, TK_Plus, TK_UnknownDimension];
+global SYNC_51: List<i32> = [TK_Comment, TK_OpenBrace, TK_Space];
+global SYNC_52: List<i32> = [TK_CloseBrace, TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
+global SYNC_53: List<i32> = [TK_Comment, TK_From, TK_Percentage, TK_Space, TK_To];
+global SYNC_54: List<i32> = [TK_And, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_Space, TK_String_, TK_To];
+global SYNC_55: List<i32> = [TK_AtKeyword, TK_CloseBrace, TK_Comment, TK_Space];
+global SYNC_56: List<i32> = [TK_And, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_String_, TK_To];
+global SYNC_57: List<i32> = [TK_And, TK_CloseBrace, TK_Comment, TK_From, TK_Ident, TK_MediaOnly, TK_Not, TK_Or, TK_SemiColon, TK_Space, TK_To];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_Cdc, TK_Cdo, TK_Comment, TK_Space]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_String_]];

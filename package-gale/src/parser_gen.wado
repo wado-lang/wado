@@ -403,8 +403,6 @@ fn gen_scan_function_named(
         return;
     }
 
-    // A multi-alt body may hoist repeated alt scans into sibling helpers,
-    // which have to be written before this function opens.
     let multi_alt_plan = if rule.alternatives.len() > 1 && !all_alts_are_single_token(&rule.alternatives) {
         if let MultiAlt(m) = lowered_rule {
             let plan = plan_scan_multi_alt(&rule.alternatives, ctx);
@@ -543,7 +541,6 @@ fn gen_scan_lr_functions(
     for let idx of non_lr_indices {
         non_lr_alts.push(rule.alternatives[*idx]);
     }
-    // Hoisted alt scans are siblings of `scan_X_atom`, so they precede it.
     let atom_plan = if non_lr_alts.len() > 1 {
         let plan = plan_scan_multi_alt(&non_lr_alts, ctx);
         gen_scan_alt_helpers(w, &plan, atom_scan_alts, ctx, &atom_name);
@@ -1037,11 +1034,9 @@ fn gen_lr_overlap_dispatch(
 /// try block fails, return -1. Alts with empty FIRST (e.g. starting with
 /// Wildcard or a rule whose FIRST is unenumerable) are attempted
 /// unconditionally as fallbacks.
-/// The token partitioning of a multi-alt rule, plus the alt bodies that
-/// more than one partition emits. Computed once by `plan_scan_multi_alt`
-/// and consumed by `gen_scan_alt_helpers` (which must run before the
-/// enclosing function opens) and `gen_scan_multi_alt` — recomputing it in
-/// each would let the helper set drift from the calls that reference it.
+/// The token partitioning of a multi-alt rule, plus the alt bodies more than
+/// one partition emits. Computed once so `gen_scan_alt_helpers` and
+/// `gen_scan_multi_alt` cannot disagree on which alts are hoisted.
 pub struct ScanAltPlan {
     groups_alts: List<List<i32>>,
     groups_tokens: List<List<String>>,
@@ -1153,12 +1148,8 @@ fn plan_scan_multi_alt(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanAl
     }
     sort_group_by_element_count(&mut unguarded_idx, alts);
 
-    // An unguarded alt rides along in every partition, and a guarded alt
-    // claimed by several first tokens rides along in each of theirs, so a
-    // body can be emitted many times over (SQLite's `expr` atom emits its
-    // function-call alt eight times). Count the emission sites and hoist
-    // whatever more than one would copy; a body reached once stays inline,
-    // which keeps every grammar without the duplication byte-identical.
+    // Hoist an alt more than one partition would emit; one reached once stays
+    // inline, so a grammar without the duplication keeps byte-identical output.
     let mut emits: List<[i32, i32]> = [];
     for let mut g = 0; g < groups_alts.len(); g += 1 {
         for let i of &groups_alts[g] {
@@ -1194,8 +1185,8 @@ fn bump_emit_count(emits: &mut List<[i32, i32]>, alt: i32) {
     emits.push([alt, 1]);
 }
 
-/// Emit one `<base>_alt_<i>` scan helper per hoisted alt. Must be called
-/// with `w` at top level, before the enclosing scan function opens.
+/// Emit one `<base>_alt_<i>` scan helper per hoisted alt. `w` must be at top
+/// level: these are siblings of the scan function that calls them.
 fn gen_scan_alt_helpers(
     w: &mut CodeWriter,
     plan: &ScanAltPlan,
@@ -1620,10 +1611,8 @@ fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> 
     );
 }
 
-/// Whether the guard `gen_scan_op_repeat` just emitted already proves the
-/// body matches: a single-token body whose kind is the guard's only first
-/// token. The re-test the generic body emit would add is dead, and so is the
-/// `sp` save/restore built around it — all that is left is the advance.
+/// Whether the repeat guard already proves the body matches, leaving the
+/// generic emit's re-test and `sp` save/restore dead.
 fn repeat_body_implied_by_guard(body: &ScanElement, first: &List<String>) -> bool {
     if first.len() != 1 {
         return false;
@@ -6355,9 +6344,7 @@ fn emit_index_pick_dispatch(
     if ctx.is_trace() {
         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${*var});`);
     }
-    // The last index needs no test: its arm and the unconditional tail below
-    // it are the same call, so emitting both leaves a branch that can only
-    // fall through to an identical statement.
+    // The last index needs no test: the tail below is the same call.
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(&`if ${*var} == ${idx}`);
@@ -6928,12 +6915,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = str_lit(`no alternative of ${rule.name} matches`);
-    // The wanted set rides as an interned `&SYNC_<id>` global of kind ids;
-    // `fail` resolves the names through `token_kind_name` only for the error
-    // it keeps. Spelling the names out here built a `List<String>` of every
-    // alternative's FIRST token on a path that usually discards it — 130
-    // allocations per call for SQLite's `any_name`, and ~3% of the generated
-    // source across the corpus.
+    // Kind ids, not names: `fail` resolves names only for the error it keeps.
     let expected_ref = sync_set_ref(ctx, &expected);
     w.line(&`p.no_viable(`);
     w.indent();

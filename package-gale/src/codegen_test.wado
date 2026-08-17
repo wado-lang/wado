@@ -1188,9 +1188,7 @@ C : 'c' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&out, &"p.no_viable("), out;
-    // The wanted set rides as interned kind ids; `fail` resolves them through
-    // `token_kind_name` for the error it keeps, so `kind_names` is the single
-    // vocabulary both paths read.
+    // Both paths read one vocabulary: `kind_names` over the interned kind ids.
     assert str_contains(&out, &"kind_names(expected)"), out;
     assert !str_contains(&out, &"\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
 }
@@ -1382,11 +1380,8 @@ fn count_substr(haystack: &String, needle: &String) -> i32 {
 }
 
 // The TypeScript `typeParameter` shape: every first token of `id` leads to
-// the same depth-1 sub-dispatch, so the cascade is one branch repeated once
-// per token. `prediction_node_eq` must fold those into a single branch over
-// the union of the tokens — it used to compare only Leaf / Ambiguous /
-// Consume children, so a `Dispatch` child never merged and TypeScript's
-// `_parse_type_parameter__inner` came out as 20 identical copies.
+// the same depth-1 sub-dispatch, so the branches must fold into one over the
+// union of the tokens.
 global SHARED_SUBDISPATCH_G4: String = "
 grammar T;
 tp : id c? | id '=' t | '<' tp '>' ;
@@ -1410,10 +1405,8 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
     assert count_substr(&body, &"if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
 }
 
-// An alt claimed by more than one first-token partition used to have its
-// whole scan body copied into each one — SQLite's `expr` atom carried eight
-// copies of the function-call alt. Here alt 1 (`n`) is reachable from the
-// {A,B} partition it shares with alt 0 and from its own {C} partition.
+// Alt 1 (`n`) is reachable from the {A,B} partition it shares with alt 0 and
+// from its own {C} partition, so its body must be hoisted, not copied twice.
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
 s : e EOF ;
@@ -1437,8 +1430,7 @@ test "a scan alt reached from several partitions is emitted once" {
     assert count_substr(&scan_e, &"scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
 }
 
-// The companion: an alt only one partition reaches stays inline, so a
-// grammar with no repeated alt keeps its previous output byte for byte.
+// The companion: one partition reaches alt 2, so it stays inline.
 test "a scan alt reached once stays inline" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
