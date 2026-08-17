@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786890650523,
+  "lastUpdate": 1786963122138,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48897,6 +48897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7529ba7e9cf2ca67d62bd6045248ce4f3a80c1b9"
         },
         "date": 1786890650016,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283799,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d81fdd418b746a6619ae671429cab41bee037f5",
+          "message": "Merge pull request #1837 from wado-lang/claude/wado-lsp-smell-detection-ro5o19\n\nrefactor(lsp): walk the AST through AstVisitor, and move filesystem access into the filesystem host",
+          "timestamp": "2026-08-17T19:23:41+09:00",
+          "tree_id": "521cc8ebdda84727da7505e5e3a660284346acf6",
+          "url": "https://github.com/wado-lang/wado/commit/5d81fdd418b746a6619ae671429cab41bee037f5"
+        },
+        "date": 1786963121530,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
