@@ -1,0 +1,41 @@
+// An inherited method returns the receiver's newtype (`&Tag`), not the base its
+// `impl` names (`&Base<i32>`). Argument-class synthesis reads the declaration,
+// so it must substitute the same way or its class excludes the real type.
+
+use { println, Stdout } from "core:cli";
+
+struct Base<T> {
+    value: T,
+}
+
+impl<T> Base<T> {
+    fn same(&self) -> Base<T> {
+        return Base { value: self.value };
+    }
+}
+
+type Tag = Base<i32>;
+
+struct Sink {
+    total: i32,
+}
+
+impl Sink {
+    fn add(&mut self, item: &Tag) {
+        self.total += item.value;
+    }
+}
+
+export fn run() with Stdout {
+    let t = Base { value: 7 } as Tag;
+    let mut sink = Sink { total: 1 };
+
+    sink.add(&t);
+    sink.add(&t.same());
+
+    let echoed: Tag = t.same();
+    println(`${sink.total} ${echoed.value}`);
+}
+
+__DATA__
+{"stdout": "15 7\n"}

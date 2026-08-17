@@ -1011,9 +1011,16 @@ impl LocalMethodName {
 
 /// A unified function identifier that can be either a free function or a method.
 ///
+<<<<<<< HEAD
 /// The method payload is boxed: a `MethodName` carries the receiver and the
 /// trait with their type arguments and is several times a free function's name,
 /// and this is a map key held by the thousand in the call graph.
+||||||| cb77f99cc
+=======
+/// Not boxed despite the size gap: `optimize/dce.rs` builds these per call-graph
+/// edge, where an allocation costs more than the stack bytes it saves.
+#[allow(clippy::large_enum_variant)]
+>>>>>>> origin/main
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FunctionId {
     Free(FreeFunctionName),

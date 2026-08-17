@@ -414,10 +414,12 @@ in CI as `#[TODO]`. The generated parser is shared with Stage A
 
 ## Prediction & codegen design
 
-Gale generates recursive-descent parsers with no backtracking — parser
-or lexer. Alternatives are disambiguated by static k-token lookahead; a
-decision static prediction cannot resolve routes to the runtime ATN
-simulator (next section), never a try-fail-retry loop.
+Gale generates recursive-descent parsers with no backtracking on the accept
+path — parser or lexer. Alternatives are disambiguated by static k-token
+lookahead; a decision static prediction cannot resolve routes to the runtime
+ATN simulator (next section), never a try-fail-retry loop. Only the repeat-exit
+probe rewinds, and it decides nothing — it re-parses a failed element to
+record where the error is.
 
 ### Multi-alt dispatch — a longest-match tournament
 

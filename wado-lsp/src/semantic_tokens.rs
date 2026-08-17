@@ -1,5 +1,5 @@
 use indexmap::{IndexMap, IndexSet};
-use wado_compiler::ast::{self, AstId, Expr, Item, Stmt, Type};
+use wado_compiler::ast::{self, AstId, AstVisitor, Expr, Item, Type};
 use wado_compiler::lexer::lex;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
@@ -94,44 +94,33 @@ pub struct SemanticToken {
 /// count. [`delta_encode`] later converts both into the negotiated LSP
 /// position encoding.
 pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
-    // 1. Lex (resilient — always succeeds; malformed input simply yields
-    // recovery tokens which classify_token treats as plain).
+    // Resilient: malformed input yields recovery tokens, which classify as plain.
     let lex_result = lex(source);
     let tokens = lex_result.tokens;
     let comments = lex_result.comments;
 
-    // 2. Obtain the AST that drives the heuristic fallback (type-position
-    // spans) and the parameter-id set. Reuse the snapshot's already-parsed
-    // entry module when available; only parse ourselves when there is no
-    // snapshot (loader failure), so the common path does not re-parse.
+    // Reuse the snapshot's parse when there is one, so the common path does not
+    // lex and parse the entry source twice.
     let snapshot_ast = sem.and_then(|s| s.modules.get(&s.entry_module_source));
     let owned_parse = snapshot_ast.is_none().then(|| wado_compiler::parse(source));
     let ast = snapshot_ast
         .or_else(|| owned_parse.as_ref().map(|p| &p.ast))
         .expect("snapshot AST or freshly parsed AST is present");
-    let ast_types = collect_type_spans(ast);
+    let ast_spans = collect_ast_spans(ast);
 
-    // 3. Precompute the resolved-symbol classification map (byte start →
-    // (token type, modifiers)) in one linear pass over the semantics. This
-    // makes per-token identifier classification an O(1) lookup instead of a
-    // positional AST search (`cursor_at`/`ast_id_at`) per token.
-    let sem_classes = sem.map(|s| build_semantic_classes(s, &ast_types));
+    // One linear pass, so per-token classification is a lookup rather than a
+    // positional AST search.
+    let sem_classes = sem.map(|s| build_semantic_classes(s, &ast_spans));
 
-    // 4. Classify lexer tokens
     let mut result = Vec::new();
     for i in 0..tokens.len() {
-        if let Some(st) = classify_token(source, &tokens, i, &ast_types, sem_classes.as_ref()) {
+        if let Some(st) = classify_token(source, &tokens, i, &ast_spans, sem_classes.as_ref()) {
             result.push(st);
         }
     }
 
-    // 5. Add comments
-    //
-    // LSP semantic tokens MUST NOT span lines. Block comments / doc
-    // comments that cross a newline are skipped here — the editor's
-    // TextMate grammar (or the language's syntactic highlighter)
-    // already covers them and a half-encoded LSP token would render
-    // worse than no token at all.
+    // LSP semantic tokens MUST NOT span lines, so a multi-line comment is left
+    // to the editor's syntactic highlighter rather than half-encoded.
     for comment in &comments {
         if comment.span.line != comment.span.end_line {
             continue;
@@ -151,7 +140,6 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
         });
     }
 
-    // 6. Sort by position
     result.sort_by(|a, b| a.line.cmp(&b.line).then(a.start_char.cmp(&b.start_char)));
     result
 }
@@ -197,12 +185,14 @@ pub fn delta_encode(
     data
 }
 
-// --- AST-based type span collection ---
+// --- AST-based span collection ---
 
-/// Spans collected from the AST for identifier refinement.
+/// Per-identifier classification the lexer alone cannot produce, collected in
+/// one [`AstVisitor`] pass over the entry module.
 #[derive(Default)]
-struct TypeSpans {
-    /// byte start → token type for identifiers that are types/params/etc.
+struct AstSpans {
+    /// byte start -> token type for identifiers the AST classifies: type
+    /// names, type parameters, and the contextual keywords.
     map: IndexMap<usize, u32>,
     /// `AstId` of every function / closure parameter binding. A resolved
     /// `Variable` symbol whose definition id is in this set is a parameter
@@ -212,7 +202,7 @@ struct TypeSpans {
     param_ids: IndexSet<AstId>,
 }
 
-impl TypeSpans {
+impl AstSpans {
     fn insert(&mut self, start: usize, token_type: u32) {
         self.map.insert(start, token_type);
     }
@@ -230,351 +220,87 @@ impl TypeSpans {
     }
 }
 
-/// Walk the AST and collect spans for type names, type parameters, etc.,
-/// plus the id of every parameter binding (see [`TypeSpans::param_ids`]).
-fn collect_type_spans(module: &ast::Module) -> TypeSpans {
-    let mut spans = TypeSpans::default();
+/// Collect the AST-derived classifications for `module`.
+///
+/// Traversal is [`AstVisitor`]'s, so a node a later AST change adds is reached
+/// by construction rather than silently skipped.
+fn collect_ast_spans(module: &ast::Module) -> AstSpans {
+    let mut collector = SpanCollector::default();
     for item in &module.items {
-        visit_item(&mut spans, item);
+        collector.visit_item(item);
     }
-    spans
+    collector.spans
 }
 
-fn visit_item(spans: &mut TypeSpans, item: &Item) {
-    match item {
-        Item::Function(f) => visit_function(spans, f),
-        Item::Struct(s) => {
-            visit_generic_params(spans, &s.type_params);
-            for field in &s.fields {
-                visit_type(spans, &field.ty);
-            }
-        }
-        Item::Enum(e) => {
-            visit_generic_params(spans, &e.type_params);
-        }
-        Item::Variant(v) => {
-            visit_generic_params(spans, &v.type_params);
-            for case in &v.cases {
-                if let Some(ty) = &case.payload {
-                    visit_type(spans, ty);
-                }
-            }
-        }
-        Item::Flags(_) => {}
-        Item::Newtype(n) => {
-            visit_generic_params(spans, &n.type_params);
-            visit_type(spans, &n.ty);
-        }
-        Item::Impl(imp) => {
-            visit_generic_params(spans, &imp.type_params);
-            if let Some(trait_ty) = &imp.trait_type {
-                visit_type(spans, trait_ty);
-            }
-            visit_type(spans, &imp.ty);
-            for method in &imp.methods {
-                visit_function(spans, method);
-            }
-        }
-        Item::Trait(t) => {
-            visit_generic_params(spans, &t.type_params);
-            for method in &t.methods {
-                visit_function(spans, method);
-            }
-        }
-        Item::Interface(e) => {
-            // An operation is a `Function` like a trait's, default body and
-            // all, so it takes the same walk.
-            for method in &e.methods {
-                visit_function(spans, method);
-            }
-        }
-        Item::Global(g) => {
-            visit_type(spans, &g.ty);
-            visit_expr(spans, &g.initializer);
-        }
-        Item::BuiltinTypeDecl(d) => {
-            visit_generic_params(spans, &d.type_params);
-        }
-        Item::Use(_)
-        | Item::Resource(_)
-        | Item::World(_)
-        | Item::Test(_)
-        | Item::TupleTypeDecl(_) => {}
-        // Error-recovery placeholder; lexer-level highlighting covers it.
-        Item::Error(_) => {}
-    }
+#[derive(Default)]
+struct SpanCollector {
+    spans: AstSpans,
 }
 
-fn visit_function(spans: &mut TypeSpans, f: &ast::Function) {
-    visit_generic_params(spans, &f.type_params);
-    for param in &f.params {
-        spans.mark_param(param.id);
-        visit_type(spans, &param.ty);
+impl AstVisitor for SpanCollector {
+    fn visit_item(&mut self, item: &Item) {
+        // `test` is a contextual keyword: it lexes as an identifier, so the
+        // declaration's own span is the only place it can be recognised.
+        if let Item::Test(t) = item {
+            self.spans.insert(t.span.start, token_type::KEYWORD);
+        }
+        ast::walk_item(self, item);
     }
-    if let Some(ret) = &f.return_type {
-        visit_type(spans, ret);
-    }
-    if let Some(body) = &f.body {
-        visit_block(spans, body);
-    }
-}
 
-fn visit_generic_params(spans: &mut TypeSpans, params: &[ast::GenericParam]) {
-    for param in params {
-        spans.insert(param.span.start, token_type::TYPE_PARAMETER);
-        for bound in &param.bounds {
-            spans.insert(bound.span.start, token_type::TYPE);
+    fn visit_function(&mut self, func: &ast::Function) {
+        for param in &func.params {
+            self.spans.mark_param(param.id);
         }
+        ast::walk_function(self, func);
     }
-}
 
-fn visit_type(spans: &mut TypeSpans, ty: &Type) {
-    match ty {
-        Type::Named(n) => {
-            spans.insert(n.span.start, token_type::TYPE);
-        }
-        Type::Generic(g) => {
-            spans.insert(g.span.start, token_type::TYPE);
-            for arg in &g.args {
-                visit_type(spans, arg);
-            }
-        }
-        Type::NamespacedGeneric(ng) => {
-            // The span covers the whole `ns::name<args>`, but the namespace part is useful
-            for arg in &ng.args {
-                visit_type(spans, arg);
-            }
-        }
-        Type::Function(ft) => {
-            for param in &ft.params {
-                visit_type(spans, param);
-            }
-            visit_type(spans, &ft.return_type);
-        }
-        Type::Tuple(types) => {
-            for t in types {
-                visit_type(spans, t);
-            }
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            visit_type(spans, inner);
-        }
-        Type::TypePackSpread(_, _) => {}
-        Type::Infer(_) => {}
-        Type::Error(_) => {}
-    }
-}
-
-fn visit_block(spans: &mut TypeSpans, block: &ast::Block) {
-    for stmt in &block.stmts {
-        visit_stmt(spans, stmt);
-    }
-}
-
-fn visit_stmt(spans: &mut TypeSpans, stmt: &Stmt) {
-    match stmt {
-        Stmt::Let(l) => {
-            if let Some(ty) = &l.ty {
-                visit_type(spans, ty);
-            }
-            if let Some(val) = &l.value {
-                visit_expr(spans, val);
-            }
-            if let Some(else_block) = &l.else_block {
-                visit_block(spans, else_block);
-            }
-        }
-        Stmt::Expr(e) => visit_expr(spans, &e.expr),
-        Stmt::Return(r) => {
-            if let Some(val) = &r.value {
-                visit_expr(spans, val);
-            }
-        }
-        Stmt::TaskReturn(tr) => visit_expr(spans, &tr.value),
-        Stmt::If(i) => {
-            visit_condition(spans, &i.condition);
-            visit_block(spans, &i.then_block);
-            if let Some(else_block) = &i.else_block {
-                visit_block(spans, else_block);
-            }
-        }
-        Stmt::While(w) => {
-            visit_condition(spans, &w.condition);
-            visit_block(spans, &w.body);
-        }
-        Stmt::For(f) => {
-            if let Some(init) = &f.init {
-                visit_stmt(spans, init);
-            }
-            if let Some(cond) = &f.condition {
-                visit_condition(spans, cond);
-            }
-            if let Some(update) = &f.update {
-                visit_expr(spans, update);
-            }
-            visit_block(spans, &f.body);
-        }
-        Stmt::ForOf(fo) => {
-            visit_expr(spans, &fo.iterable);
-            visit_block(spans, &fo.body);
-        }
-        Stmt::Loop(l) => visit_block(spans, &l.body),
-        Stmt::Match(m) => visit_match(spans, m),
-        Stmt::Break(b) => {
-            if let Some(val) = &b.value {
-                visit_expr(spans, val);
-            }
-        }
-        Stmt::Continue(_) => {}
-        Stmt::Assert(a) => {
-            visit_expr(spans, &a.condition);
-            if let Some(msg) = &a.message {
-                visit_expr(spans, msg);
-            }
-        }
-        Stmt::LabeledBlock(lb) => visit_block(spans, &lb.block),
-        Stmt::Item(item) => visit_item(spans, item),
-        Stmt::Error(_) => {}
-    }
-}
-
-fn visit_condition(spans: &mut TypeSpans, cond: &ast::Condition) {
-    match cond {
-        ast::Condition::Expr(e) => visit_expr(spans, e),
-        ast::Condition::LetChain { elements, .. } => {
-            for elem in elements {
-                match elem {
-                    ast::ConditionElement::Let { expr, .. } => visit_expr(spans, expr),
-                    ast::ConditionElement::Expr(e) => visit_expr(spans, e),
-                }
-            }
-        }
-    }
-}
-
-fn visit_match(spans: &mut TypeSpans, m: &ast::MatchExpr) {
-    visit_expr(spans, &m.expr);
-    for arm in &m.arms {
-        if let Some(guard) = &arm.guard {
-            visit_expr(spans, guard);
-        }
-        visit_expr(spans, &arm.body);
-    }
-}
-
-fn visit_expr(spans: &mut TypeSpans, expr: &Expr) {
-    match expr {
-        Expr::Ident(_) | Expr::Literal(_) => {}
-        Expr::Binary(b) => {
-            visit_expr(spans, &b.left);
-            visit_expr(spans, &b.right);
-        }
-        Expr::Unary(u) => visit_expr(spans, &u.expr),
-        Expr::Assign(a) => {
-            visit_expr(spans, &a.target);
-            visit_expr(spans, &a.value);
-        }
-        Expr::CompoundAssign(ca) => {
-            visit_expr(spans, &ca.target);
-            visit_expr(spans, &ca.value);
-        }
-        Expr::ComparisonChain(cc) => {
-            visit_expr(spans, &cc.first);
-            for cmp in &cc.comparisons {
-                visit_expr(spans, &cmp.right);
-            }
-        }
-        Expr::Call(c) => {
-            visit_expr(spans, &c.callee);
-            for ty in &c.type_args {
-                visit_type(spans, ty);
-            }
-            for arg in &c.args {
-                visit_expr(spans, arg);
-            }
-        }
-        Expr::MethodCall(mc) => {
-            visit_expr(spans, &mc.receiver);
-            for ty in &mc.type_args {
-                visit_type(spans, ty);
-            }
-            for arg in &mc.args {
-                visit_expr(spans, arg);
-            }
-        }
-        Expr::StaticMethodCall(smc) => {
-            visit_type(spans, &smc.target_type);
-            for ty in &smc.type_args {
-                visit_type(spans, ty);
-            }
-            for arg in &smc.args {
-                visit_expr(spans, arg);
-            }
-        }
-        Expr::FieldAccess(fa) => visit_expr(spans, &fa.expr),
-        Expr::Index(idx) => {
-            visit_expr(spans, &idx.expr);
-            visit_expr(spans, &idx.index);
-        }
-        Expr::Block(b) => visit_block(spans, b),
-        Expr::If(i) => {
-            visit_condition(spans, &i.condition);
-            visit_block(spans, &i.then_block);
-            if let Some(else_block) = &i.else_block {
-                visit_block(spans, else_block);
-            }
-        }
-        Expr::Match(m) => visit_match(spans, m),
-        Expr::Matches(m) => visit_expr(spans, &m.expr),
-        Expr::Closure(c) => {
+    fn visit_expr(&mut self, expr: &Expr) {
+        if let Expr::Closure(c) = expr {
             for param in &c.params {
-                spans.mark_param(param.id);
-                if let Some(ty) = &param.ty {
-                    visit_type(spans, ty);
-                }
-            }
-            visit_expr(spans, &c.body);
-        }
-        Expr::TemplateString(ts) => {
-            for part in &ts.parts {
-                if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                    visit_expr(spans, expr);
-                }
+                self.spans.mark_param(param.id);
             }
         }
-        Expr::Cast(c) => {
-            visit_expr(spans, &c.expr);
-            visit_type(spans, &c.target_type);
+        // `resume` and `do`, the other two contextual keywords.
+        if let Expr::Resume(r) = expr {
+            self.spans.insert(r.span.start, token_type::KEYWORD);
         }
-        Expr::StructLiteral(sl) => {
-            for field in &sl.fields {
-                visit_expr(spans, &field.value);
-            }
+        if let Expr::WithHandler(w) = expr {
+            self.spans.insert(w.do_span.start, token_type::KEYWORD);
         }
-        Expr::TupleLiteral(tl) => {
-            for elem in &tl.elements {
-                visit_expr(spans, elem);
-            }
+        ast::walk_expr(self, expr);
+    }
+
+    fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
+        for param in params {
+            self.spans
+                .insert(param.span.start, token_type::TYPE_PARAMETER);
         }
-        Expr::TupleComprehension(c) => {
-            visit_expr(spans, &c.iterable);
-            visit_expr(spans, &c.body);
+        ast::walk_generic_params(self, params);
+    }
+
+    fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+        for bound in bounds {
+            self.spans.insert(bound.span.start, token_type::TYPE);
         }
-        Expr::LabeledBlock(lb) => visit_block(spans, &lb.block),
-        Expr::TryOp(t) => visit_expr(spans, &t.expr),
-        Expr::Spread(inner, _) => visit_expr(spans, inner),
-        Expr::Range(r) => {
-            visit_expr(spans, &r.start);
-            visit_expr(spans, &r.end);
+        ast::walk_trait_bounds(self, bounds);
+    }
+
+    fn visit_type(&mut self, ty: &Type) {
+        match ty {
+            Type::Named(t) => self.spans.insert(t.span.start, token_type::TYPE),
+            Type::Generic(t) => self.spans.insert(t.span.start, token_type::TYPE),
+            // `ns::Value` and `Self::Item` parse to the same node, so the head
+            // is not knowably a namespace; leave it to the symbol map.
+            Type::NamespacedGeneric(_)
+            | Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::TypePackSpread(_, _)
+            | Type::Infer(_)
+            | Type::Error(_) => {}
         }
-        Expr::WithHandler(w) => {
-            for binding in &w.handlers {
-                visit_expr(spans, &binding.handler);
-            }
-            visit_block(spans, &w.body);
-        }
-        Expr::Resume(r) => visit_expr(spans, &r.value),
-        Expr::Error(_) => {}
+        ast::walk_type(self, ty);
     }
 }
 
@@ -584,7 +310,7 @@ fn classify_token(
     source: &str,
     tokens: &[Token],
     index: usize,
-    ast_types: &TypeSpans,
+    ast_spans: &AstSpans,
     sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
 ) -> Option<SemanticToken> {
     let token = &tokens[index];
@@ -618,7 +344,7 @@ fn classify_token(
         // fall back to the lexer/AST heuristics.
         TokenKind::Ident(_) => sem_classes
             .and_then(|classes| classes.get(&token.span.start).copied())
-            .unwrap_or_else(|| classify_ident(tokens, index, ast_types)),
+            .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
 
         // Literals
         TokenKind::NumberLit(_) => (token_type::NUMBER, 0),
@@ -654,7 +380,7 @@ fn classify_token(
 /// token's `span.start`, so [`classify_token`] resolves identifiers with a
 /// single map lookup. Tokens absent from the map (field access, unresolved
 /// method receivers, …) fall back to the heuristic classifier.
-fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<usize, (u32, u32)> {
+fn build_semantic_classes(sem: &Semantics, ast_spans: &AstSpans) -> IndexMap<usize, (u32, u32)> {
     let entry = &sem.entry_module_source;
     let mut classes: IndexMap<usize, (u32, u32)> = IndexMap::default();
 
@@ -666,7 +392,7 @@ fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<us
         let Some(span) = sem.name_span_of(id) else {
             continue;
         };
-        let (token_type, mut modifiers) = classify_symbol(symbol, id, ast_types, sem, entry);
+        let (token_type, mut modifiers) = classify_symbol(symbol, id, ast_spans, sem, entry);
         modifiers |= token_modifier::DECLARATION | token_modifier::DEFINITION;
         classes.insert(span.start, (token_type, modifiers));
     }
@@ -681,7 +407,7 @@ fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<us
         };
         classes.insert(
             span.start,
-            classify_symbol(symbol, def_id, ast_types, sem, entry),
+            classify_symbol(symbol, def_id, ast_spans, sem, entry),
         );
     }
 
@@ -694,7 +420,7 @@ fn build_semantic_classes(sem: &Semantics, ast_types: &TypeSpans) -> IndexMap<us
 fn classify_symbol(
     symbol: &Symbol,
     def_id: AstId,
-    ast_types: &TypeSpans,
+    ast_spans: &AstSpans,
     sem: &Semantics,
     entry: &ModuleSource,
 ) -> (u32, u32) {
@@ -712,7 +438,7 @@ fn classify_symbol(
             }
             // The symbol table records no parameter/local distinction, so a
             // same-module definition id in the parameter set marks parameters.
-            if sem.module_of_id(def_id) == Some(entry) && ast_types.is_param(def_id) {
+            if sem.module_of_id(def_id) == Some(entry) && ast_spans.is_param(def_id) {
                 token_type::PARAMETER
             } else {
                 token_type::VARIABLE
@@ -729,11 +455,11 @@ fn classify_symbol(
 }
 
 /// Classify an identifier using AST type spans + lexer context heuristics.
-fn classify_ident(tokens: &[Token], index: usize, ast_types: &TypeSpans) -> (u32, u32) {
+fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32, u32) {
     let token = &tokens[index];
 
     // 1. Check AST classification (types, type parameters)
-    if let Some(tt) = ast_types.get(token.span.start) {
+    if let Some(tt) = ast_spans.get(token.span.start) {
         return (tt, 0);
     }
 
@@ -1020,6 +746,82 @@ mod tests {
             tokens.iter().any(|t| t.token_type == token_type::KEYWORD),
             "non-comment tokens around the multi-line comment must still appear",
         );
+    }
+
+    /// Classification of the token whose text is `needle` on line `line`.
+    fn kind_of(tokens: &[SemanticToken], src: &str, line: u32, needle: &str) -> u32 {
+        let text = src.split_inclusive('\n').nth(line as usize).expect("line");
+        let col = text.find(needle).expect("needle on line") as u32;
+        tokens
+            .iter()
+            .find(|t| t.line == line && t.start_char == col)
+            .unwrap_or_else(|| panic!("no token for {needle:?} at {line}:{col}"))
+            .token_type
+    }
+
+    #[test]
+    fn resource_method_signature_types_are_types() {
+        // Asserted without semantics: only the AST walk can classify these, so
+        // the symbol map cannot mask a regression.
+        let src = "resource R {\n    fn m(&self, count: Wide) -> Tall;\n}\nfn run() {}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "Wide"), token_type::TYPE);
+        assert_eq!(kind_of(&tokens, src, 1, "Tall"), token_type::TYPE);
+    }
+
+    #[test]
+    fn test_block_closure_parameter_is_a_parameter() {
+        let src =
+            "fn run() {}\ntest \"t\" {\n    let g = |count: i32| count;\n    let _ = g(1);\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "count"), token_type::PARAMETER);
+    }
+
+    #[test]
+    fn struct_field_default_expression_is_walked() {
+        let src = "struct S { n: i32 = C }\nglobal C: i32 = 1;\nfn run() {}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 0, "i32"), token_type::TYPE);
+    }
+
+    #[test]
+    fn contextual_keyword_test_is_a_keyword() {
+        // `test` / `do` / `resume` lex as identifiers (they are contextual),
+        // so only the AST can say they are keywords.
+        let src = "fn run() {}\ntest \"t\" {\n    let _ = 1;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "test"), token_type::KEYWORD);
+    }
+
+    #[test]
+    fn contextual_keywords_do_and_resume_are_keywords() {
+        let src = concat!(
+            "effect E {\n",
+            "    fn ask() -> i32;\n",
+            "}\n",
+            "struct H {}\n",
+            "impl E for H {\n",
+            "    fn ask() -> i32 { resume 1; }\n",
+            "}\n",
+            "fn run() -> i32 {\n",
+            "    let h = H {};\n",
+            "    return with E => h do { E::ask() };\n",
+            "}\n",
+        );
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 5, "resume"), token_type::KEYWORD);
+        assert_eq!(kind_of(&tokens, src, 9, "do"), token_type::KEYWORD);
+    }
+
+    #[test]
+    fn associated_type_qualifier_is_not_a_namespace() {
+        // `Self::Item` and `json::Value` parse to the same node, so the AST
+        // cannot call the head a namespace — `Self` is a type.
+        let src = "trait T {\n    type Item;\n    fn get(&self) -> Self::Item<i32>;\n}\n";
+        let tokens = compute(src, None);
+        assert_ne!(kind_of(&tokens, src, 2, "Self"), token_type::NAMESPACE);
     }
 
     #[test]

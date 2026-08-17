@@ -13,6 +13,7 @@ use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKind};
 use wado_compiler::unparse;
 
+use crate::ast_search::{self, FirstMatch};
 use crate::diagnostics::{Position, Range};
 use crate::query::QueryContext;
 
@@ -152,18 +153,14 @@ fn render_item_signature(sem: &Semantics, symbol: &Symbol, public_only: bool) ->
 /// Render a hover line for a local binding (`let x: T` / `fn f(x: T)`).
 fn render_local_binding(sem: &Semantics, def_id: AstId, name: &str) -> Option<String> {
     let module = sem.modules.get(sem.module_of_id(def_id)?)?;
-    let mut renderer = LocalRenderer {
-        target: def_id,
-        name,
-        result: None,
-    };
-    for item in &module.items {
-        renderer.visit_item(item);
-        if renderer.result.is_some() {
-            break;
-        }
-    }
-    renderer.result
+    ast_search::find_in_module(
+        module,
+        LocalRenderer {
+            target: def_id,
+            name,
+            result: None,
+        },
+    )
 }
 
 /// Locates the AST node that binds `target` and renders its declaration.
@@ -223,6 +220,18 @@ impl LocalRenderer<'_> {
         }
         out.push('|');
         Some(out)
+    }
+}
+
+impl FirstMatch for LocalRenderer<'_> {
+    type Output = String;
+
+    fn found(&self) -> bool {
+        self.result.is_some()
+    }
+
+    fn take(self) -> Option<String> {
+        self.result
     }
 }
 
@@ -360,7 +369,7 @@ fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::MapHost;
+    use crate::query::test_ctx::with_ctx;
     use crate::text::PositionEncoding;
 
     async fn hover_at(source: &str, line: u32, character: u32) -> Option<HoverResult> {
@@ -529,12 +538,10 @@ mod tests {
         character: u32,
         encoding: PositionEncoding,
     ) -> Option<HoverResult> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
-        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext::new(&sem, source, &uri, encoding);
-        find_hover_opts(&ctx, Position { line, character }, true)
+        with_ctx(source, encoding, |ctx| {
+            find_hover_opts(ctx, Position { line, character }, true)
+        })
+        .await
     }
 
     #[test]

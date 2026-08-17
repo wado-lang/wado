@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::types::FunctionContext;
+use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
 
 /// What a call site knows about one argument's type. Each variant denotes a
@@ -689,13 +689,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             && !found.is_blanket_ref_impl
         {
-            return Some(found.method_info.return_type);
+            let info = found.method_info;
+            return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
         }
         if let Some(info) = self.lookup_method_info(receiver, method) {
-            return Some(info.return_type);
+            return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
         }
         let target = self.impl_target_of(base, &crate::name::DeclName::new(&name));
-        self.find_trait_method_for_type(
+        let found = self.find_trait_method_for_type(
             &target,
             method,
             type_args.as_deref(),
@@ -703,8 +704,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             None,
             None,
-        )
-        .map(|m| m.method_info.return_type)
+        )?;
+        let info = found.method_info;
+        Some(self.return_type_for_receiver(info.return_type, info.owner, receiver))
+    }
+
+    /// A method inherited through a newtype returns the newtype, not the base
+    /// its `impl` was written against. Elaboration substitutes the same way, so
+    /// reading the declaration alone would under-approximate the class.
+    fn return_type_for_receiver(
+        &mut self,
+        return_type: TypeId,
+        owner: MethodOwner,
+        receiver: TypeId,
+    ) -> TypeId {
+        let Some(base_type_id) = owner.inherited() else {
+            return return_type;
+        };
+        let newtype_id = self.tysys.get_base_type(receiver);
+        self.tysys
+            .substitute_newtype_in_type(return_type, base_type_id, newtype_id)
     }
 
     fn synth_field_access(

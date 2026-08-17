@@ -365,6 +365,14 @@ pub trait CompilerHost: Send + Sync {
     /// remote URL; stdlib paths never arrive here.
     fn load_source(&self, path: &str) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send;
 
+    /// Whether `path` names something this host can load, without loading it.
+    ///
+    /// The default *does* load; a filesystem host overrides it with a stat so a
+    /// presence check does not pay for the bytes.
+    fn source_exists(&self, path: &str) -> impl Future<Output = bool> + Send {
+        async move { self.load_source(path).await.is_ok() }
+    }
+
     /// Emit a diagnostic (error, warning, etc.)
     ///
     /// This method is called synchronously by the compiler whenever a diagnostic

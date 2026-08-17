@@ -612,12 +612,14 @@ impl ClosureLowerer {
                 name: "self".to_string(),
                 type_id: self_ref_type,
                 is_mut: false,
+                span: crate::token::Span::default(),
             });
             for (name, ty) in &collected.params {
                 locals.push(TirLocal {
                     name: name.clone(),
                     type_id: *ty,
                     is_mut: false,
+                    span: crate::token::Span::default(),
                 });
             }
 
@@ -1000,11 +1002,13 @@ impl ClosureLowerer {
                     name: "self".to_string(),
                     type_id: self_ref_type,
                     is_mut: false,
+                    span: crate::token::Span::default(),
                 },
                 TirLocal {
                     name: "f".to_string(),
                     type_id: formatter_mut_ref,
                     is_mut: false,
+                    span: crate::token::Span::default(),
                 },
             ],
             address_taken_locals: IndexSet::default(),

@@ -271,6 +271,11 @@ impl CompilerHost for FilesystemCompilerHost {
         Ok(bytes)
     }
 
+    // Not observed: a presence check reads nothing, so it describes no input.
+    async fn source_exists(&self, path: &str) -> bool {
+        self.inner.source_exists(path).await
+    }
+
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         if self.print_diagnostics && self.should_log(diagnostic.severity) {
             let formatted = self.format_diagnostic(&diagnostic);

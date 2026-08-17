@@ -1,0 +1,14 @@
+// `as` between aggregates is only ever a newtype step, which shares a base.
+// Anything else left codegen a `StructNew` typed as the target — a non-literal
+// source reaches this too, not just a sequence literal.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let pair = [1, 2];
+    let widened = pair as [i64, i64];
+    println(`${widened.0}`);
+}
+
+__DATA__
+{"compile_error": "cannot cast '[i32, i32]' to '[i64, i64]'"}

@@ -6205,6 +6205,7 @@ fn build_struct_ord_body(
             name: "c".to_string(),
             type_id: ordering_type,
             is_mut: false,
+            span: crate::token::Span::default(),
         });
 
         stmts.push(TirStmt::new(

@@ -1188,7 +1188,8 @@ C : 'c' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&out, &"p.no_viable("), out;
-    assert str_contains(&out, &"token_kind_name(TK_A)"), out;
+    // Both paths read one vocabulary: `kind_names` over the interned kind ids.
+    assert str_contains(&out, &"kind_names(expected)"), out;
     assert !str_contains(&out, &"\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
 }
 
@@ -1366,4 +1367,69 @@ test "ATN-class LR grammar keeps the decoder's LR tables" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
     assert str_contains(&output, &"\", true);");
+}
+
+fn count_substr(haystack: &String, needle: &String) -> i32 {
+    let mut n = 0;
+    let mut at = find_substr(haystack, needle);
+    while at >= 0 {
+        n += 1;
+        at = find_substr_from(haystack, needle, at + needle.len());
+    }
+    return n;
+}
+
+// The TypeScript `typeParameter` shape: every first token of `id` leads to
+// the same depth-1 sub-dispatch, so the branches must fold into one over the
+// union of the tokens.
+global SHARED_SUBDISPATCH_G4: String = "
+grammar T;
+tp : id c? | id '=' t | '<' tp '>' ;
+id : A | B | C ;
+c : 'extends' t ;
+t : A ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+";
+
+test "dispatch branches sharing a sub-dispatch are emitted once" {
+    let mut g = parse(SHARED_SUBDISPATCH_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, &"fn _parse_tp__inner(");
+    let copies = count_substr(&body, &"p.peek_at(1)");
+    assert copies > 0, `expected a depth-1 sub-dispatch in tp: ${body}`;
+    assert copies <= 2, `sub-dispatch duplicated once per first token (${copies} copies): ${body}`;
+    assert count_substr(&body, &"if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
+}
+
+// Alt 1 (`n`) is reachable from the {A,B} partition it shares with alt 0 and
+// from its own {C} partition, so its body must be hoisted, not copied twice.
+global REPEATED_SCAN_ALT_G4: String = "
+grammar T;
+s : e EOF ;
+e : f '(' ')' | n | K ;
+f : A | B ;
+n : A | B | C ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+K : 'k' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+";
+
+test "a scan alt reached from several partitions is emitted once" {
+    let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"fn scan_e_alt_1("), `alt 1 was not hoisted into a helper: ${output}`;
+    let scan_e = extract_fn_body(&output, &"fn scan_e(");
+    assert count_substr(&scan_e, &"scan_e_alt_1(tokens, start") == 2, `both partitions must call the hoisted helper: ${scan_e}`;
+    assert count_substr(&scan_e, &"scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
+}
+
+test "a scan alt reached once stays inline" {
+    let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert !str_contains(&output, &"fn scan_e_alt_2("), `single-use alt 2 was hoisted: ${output}`;
 }

@@ -61,10 +61,7 @@ pub(crate) fn highlights_for_def(
     let mut out = Vec::new();
 
     if ctx.sem.module_of_id(def_key) == Some(target_module)
-        && let Some(span) = ctx
-            .sem
-            .name_span_of(def_key)
-            .or_else(|| ctx.sem.symbol_at(def_key).and_then(|s| s.span))
+        && let Some(span) = ctx.declaration_span(def_key)
     {
         out.push(DocumentHighlight {
             range: ctx.range_of(&span, def_key),
@@ -98,16 +95,14 @@ pub(crate) fn highlights_for_def(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::MapHost;
+    use crate::query::test_ctx::with_ctx;
     use crate::text::PositionEncoding;
 
     async fn highlights_at(source: &str, line: u32, character: u32) -> Vec<DocumentHighlight> {
-        let path = "/test.wado";
-        let uri = format!("file://{path}");
-        let host = MapHost::single(path, source);
-        let sem = wado_compiler::semantics(source, &host, Some(path)).await;
-        let ctx = QueryContext::new(&sem, source, &uri, PositionEncoding::Utf16);
-        document_highlight(&ctx, Position { line, character })
+        with_ctx(source, PositionEncoding::Utf16, |ctx| {
+            document_highlight(ctx, Position { line, character })
+        })
+        .await
     }
 
     fn summarize(refs: &[DocumentHighlight]) -> Vec<(u32, u32, HighlightKind)> {

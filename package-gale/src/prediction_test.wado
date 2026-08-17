@@ -1,0 +1,114 @@
+//! White-box tests for `prediction_node_eq`, the predicate `find_merge_branch`
+//! folds two dispatch branches on. It must cover every field the emit reads.
+
+use {
+    PredictionNode,
+    PredictionDispatch,
+    PredictionBranch,
+    AmbiguousNode,
+    AmbiguityReason,
+    prediction_node_eq,
+} from "./prediction.wado";
+
+fn ambiguous(alts: List<i32>, reason: AmbiguityReason, branch_tokens: List<String>) -> PredictionNode {
+    return PredictionNode::Ambiguous(AmbiguousNode { alts, reason, branch_tokens });
+}
+
+fn dispatch(child: PredictionNode) -> PredictionNode {
+    return PredictionNode::Dispatch(PredictionDispatch {
+        depth: 1,
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child,
+            },
+        ],
+    });
+}
+
+test "prediction_node_eq: identical Ambiguous leaves are equal" {
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
+    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
+    assert prediction_node_eq(&a, &b);
+}
+
+test "prediction_node_eq: only AtEndConflict can route to the simulator, so it does not fold with another reason" {
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
+    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]);
+    assert !prediction_node_eq(&a, &b);
+}
+
+test "prediction_node_eq: two non-AtEndConflict reasons fold" {
+    // Both lower to the same longest-match tournament, so splitting the
+    // branch on the label alone would duplicate identical code.
+    let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, []);
+    let b = ambiguous([0, 1], AmbiguityReason::ConfigExplosion, []);
+    assert prediction_node_eq(&a, &b);
+}
+
+test "prediction_node_eq: branch tokens do not split a non-AtEndConflict node" {
+    let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]);
+    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_B"]);
+    assert prediction_node_eq(&a, &b);
+}
+
+test "prediction_node_eq: differing at-end branch tokens are not equal" {
+    // The other half of the ATN routing decision
+    // (`at_end_conflict_routes` overlaps these against the rule's FOLLOW).
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
+    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_B"]);
+    assert !prediction_node_eq(&a, &b);
+}
+
+test "prediction_node_eq: a nested Ambiguous is compared through the Dispatch" {
+    // A leaf difference must survive one level of nesting.
+    let a = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]));
+    let b = dispatch(ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]));
+    assert !prediction_node_eq(&a, &b);
+    let c = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]));
+    assert prediction_node_eq(&a, &c);
+}
+
+test "prediction_node_eq: sub-dispatches differing in guard tokens are not equal" {
+    let a = PredictionNode::Dispatch(PredictionDispatch {
+        depth: 1,
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
+    });
+    let b = PredictionNode::Dispatch(PredictionDispatch {
+        depth: 1,
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_Y"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
+    });
+    assert !prediction_node_eq(&a, &b);
+}
+
+test "prediction_node_eq: sub-dispatches differing in depth are not equal" {
+    let a = PredictionNode::Dispatch(PredictionDispatch {
+        depth: 1,
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
+    });
+    let b = PredictionNode::Dispatch(PredictionDispatch {
+        depth: 2,
+        branches: [
+            PredictionBranch {
+                tokens: ["TK_X"],
+                child: PredictionNode::Leaf(0),
+            },
+        ],
+    });
+    assert !prediction_node_eq(&a, &b);
+}

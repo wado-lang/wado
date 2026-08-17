@@ -1766,6 +1766,7 @@ impl Monomorphizer {
                 name: local.name.clone(),
                 type_id: self.substitute_type(local.type_id, &substitution, type_table),
                 is_mut: local.is_mut,
+                span: local.span,
             })
             .collect();
 
@@ -3551,6 +3552,7 @@ impl Monomorphizer {
             name: temp_name.clone(),
             type_id: iterable_type,
             is_mut: false,
+            span: crate::token::Span::default(),
         });
 
         let destruct_count = Self::destructure_prefix_len(body, binding_local_idx);
@@ -3627,6 +3629,7 @@ impl Monomorphizer {
                 name: b_name.clone(),
                 type_id: bind_type,
                 is_mut: b_mut,
+                span: crate::token::Span::default(),
             });
 
             if !inline_enumerate_pair {
@@ -4065,6 +4068,7 @@ impl Monomorphizer {
             name: temp_name.clone(),
             type_id: source_type,
             is_mut: false,
+            span: crate::token::Span::default(),
         });
 
         let mut result_elements = Vec::with_capacity(elements.len());
@@ -4108,6 +4112,7 @@ impl Monomorphizer {
                 name: b_name.clone(),
                 type_id: bind_type,
                 is_mut: false,
+                span: crate::token::Span::default(),
             });
             if !inline_enumerate_pair {
                 let bind_value = if is_enumerate {
@@ -4173,6 +4178,7 @@ impl Monomorphizer {
                     name: name.clone(),
                     type_id: field_type,
                     is_mut: false,
+                    span: crate::token::Span::default(),
                 });
                 sub_locals.push((*local_index, sub_local));
                 pinned.push((*local_index, field_type));

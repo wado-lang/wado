@@ -753,7 +753,7 @@ pub fn gen_predicate_gated_dispatch(
         emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
     }
     w.else_begin(&"else");
-    w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+    w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
     emit_no_viable_return(w, ctx);
     w.end();
 }
@@ -914,7 +914,7 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
     };
     w.begin(&"if !p.speculating");
     w.begin(&`if !(${cond})`);
-    w.line(&`p.no_viable("failed semantic predicate", p.peek_span(), []);`);
+    w.line(&`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
     if current_rule_emits_vals(ctx) {
         w.line(&"return vals;");
     } else {

@@ -5,26 +5,25 @@
 //! validate the public `Engine` surface (`Engine::open_document` →
 //! `Engine::inlay_hints`) and the LSP-shaped wire types.
 
-use wado_lsp::test_support::MapHost;
+use wado_lsp::test_support::{self, MapHost};
 use wado_lsp::{Engine, InlayHint, InlayHintKind, Position, Range};
 
+const WHOLE_DOCUMENT: Range = Range {
+    start: Position {
+        line: 0,
+        character: 0,
+    },
+    end: Position {
+        line: u32::MAX,
+        character: u32::MAX,
+    },
+};
+
 async fn hints(source: &str) -> Vec<InlayHint> {
-    let path = "/test.wado";
-    let uri = format!("file://{path}");
-    let host = MapHost::single(path, source);
-    let mut engine = Engine::new();
-    engine.open_document(&uri, source.to_string());
-    let range = Range {
-        start: Position {
-            line: 0,
-            character: 0,
-        },
-        end: Position {
-            line: u32::MAX,
-            character: u32::MAX,
-        },
-    };
-    engine.inlay_hints(&uri, range, &host).await
+    let doc = test_support::open(source);
+    doc.engine
+        .inlay_hints(&doc.uri, WHOLE_DOCUMENT, &doc.host)
+        .await
 }
 
 #[test]

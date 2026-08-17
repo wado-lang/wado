@@ -63,6 +63,7 @@ impl Cx<'_> {
             name: name.clone(),
             type_id,
             is_mut: false,
+            span: crate::token::Span::default(),
         });
         *self.local_count = self.locals.len() as u32;
         (idx, name)

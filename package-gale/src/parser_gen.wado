@@ -403,6 +403,18 @@ fn gen_scan_function_named(
         return;
     }
 
+    let multi_alt_plan = if rule.alternatives.len() > 1 && !all_alts_are_single_token(&rule.alternatives) {
+        if let MultiAlt(m) = lowered_rule {
+            let plan = plan_scan_multi_alt(&rule.alternatives, ctx);
+            gen_scan_alt_helpers(w, &plan, &m.scan_alts, ctx, fn_name);
+            Option::Some(plan);
+        } else {
+            Option::<ScanAltPlan>::None;
+        }
+    } else {
+        Option::<ScanAltPlan>::None;
+    };
+
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
@@ -488,7 +500,12 @@ fn gen_scan_function_named(
                 "gen_scan_function_named: multi-alt rule but lowered_rule is not MultiAlt — lower_rule invariant violated",
             );
         };
-        gen_scan_multi_alt(w, &rule.alternatives, scan_alts, ctx);
+        let plan = if let Some(p) = multi_alt_plan {
+            p;
+        } else {
+            panic("gen_scan_function_named: multi-alt rule without a scan plan — the two shape tests disagree");
+        };
+        gen_scan_multi_alt(w, &plan, scan_alts, ctx, fn_name);
     }
 
     w.end();
@@ -520,6 +537,18 @@ fn gen_scan_lr_functions(
 ) {
     let atom_name = `${*fn_name}_atom`;
 
+    let mut non_lr_alts: List<Alternative> = [];
+    for let idx of non_lr_indices {
+        non_lr_alts.push(rule.alternatives[*idx]);
+    }
+    let atom_plan = if non_lr_alts.len() > 1 {
+        let plan = plan_scan_multi_alt(&non_lr_alts, ctx);
+        gen_scan_alt_helpers(w, &plan, atom_scan_alts, ctx, &atom_name);
+        Option::Some(plan);
+    } else {
+        Option::<ScanAltPlan>::None;
+    };
+
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
     fa.add_param(&"tokens", &"&Array<i32>");
@@ -529,10 +558,6 @@ fn gen_scan_lr_functions(
     }
     fa.set_return_type(&"i32");
     fa.emit_begin(w);
-    let mut non_lr_alts: List<Alternative> = [];
-    for let idx of non_lr_indices {
-        non_lr_alts.push(rule.alternatives[*idx]);
-    }
     if non_lr_alts.len() == 0 {
         w.line(&"return -1;");
     } else if non_lr_alts.len() == 1 {
@@ -541,7 +566,12 @@ fn gen_scan_lr_functions(
         gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
         w.line(&"return pos;");
     } else {
-        gen_scan_multi_alt(w, &non_lr_alts, atom_scan_alts, ctx);
+        let plan = if let Some(p) = atom_plan {
+            p;
+        } else {
+            panic("gen_scan_lr_functions: multi-alt atom without a scan plan");
+        };
+        gen_scan_multi_alt(w, &plan, atom_scan_alts, ctx, &atom_name);
     }
     w.end();
     w.blank();
@@ -568,11 +598,10 @@ fn gen_scan_lr_functions(
     f2.emit_begin(w);
     w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.emit_follow())});`);
     w.line(&"if pos < 0 { return -1; }");
-    let side = LrDispatchSide { scan: true, fn_name: *fn_name, scan_fn_name: "", use_prec: false };
     if atn_loop_dec >= 0 {
-        gen_lr_suffix_dispatch_atn(w, &side, lr_alts, lr_dispatch, ctx, atn_loop_dec);
+        gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
-        gen_lr_suffix_dispatch(w, &side, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
+        gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
     w.line(&"return pos;");
     w.end();
@@ -632,44 +661,32 @@ fn gen_scan_lr_suffix_helpers(
 // No static scan gate is emitted: the simulator's decision is the commit.
 fn gen_lr_suffix_dispatch_atn(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     ctx: &mut GenContext,
     decision: i32,
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
-    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin(&"loop");
-    if side.scan {
-        w.line(
-            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
-        );
-        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.fn_name, &"tokens", &"pos", ctx);
-    } else {
-        w.line(
-            &`${decl} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
-        );
-        emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &side.scan_fn_name, &"&p.kinds", &"p.pos", ctx);
-    }
-    w.line(&`let _lr_pos0 = ${pos_expr};`);
+    w.line(
+        &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+    );
+    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, &"tokens", &"pos", ctx);
+    w.line(&"let _lr_pos0 = pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr_idx = lr_alts[valid[i]].alt_index;
-        let suffix_fn = `${side.fn_name}_lr_${lr_idx}`;
+        let suffix_fn = `${*fn_name}_lr_${lr_idx}`;
         if is_first {
             w.begin(&`if _atn_alt == ${i}`);
             is_first = false;
         } else {
             w.else_begin(&`else if _atn_alt == ${i}`);
         }
-        if side.scan {
-            w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.emit_follow())});`);
-            w.line(&"if pos < 0 { return -1; }");
-        } else {
-            w.line(&`result = ${suffix_fn}(p, result, start${follow_sep(ctx.emit_follow())});`);
-        }
+        w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.emit_follow())});`);
+        w.line(&"if pos < 0 { return -1; }");
     }
     if !is_first {
         w.else_begin(&"else");
@@ -678,17 +695,10 @@ fn gen_lr_suffix_dispatch_atn(
     } else {
         w.line(&"break;");
     }
-    w.begin(&`if ${pos_expr} == _lr_pos0`);
+    w.begin(&"if pos == _lr_pos0");
     w.line(&"break;");
     w.end();
     w.end();  // loop
-}
-
-struct LrDispatchSide {
-    scan: bool,
-    fn_name: String,
-    scan_fn_name: String,  // parse side only
-    use_prec: bool,  // parse side only
 }
 
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
@@ -751,24 +761,18 @@ fn emit_lr_atn_group_repick(
 
 fn gen_lr_branch_call(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     lr_idx: i32,
     prec: i32,
     emit_follow: bool,
     mid_operand_gated: bool = false,
 ) {
-    let suffix_fn = `${side.fn_name}_lr_${lr_idx}`;
-    if side.scan {
-        gen_scan_lr_call_with_prec(w, &suffix_fn, prec, emit_follow, mid_operand_gated);
-    } else {
-        let scan_suffix_fn = `${side.scan_fn_name}_lr_${lr_idx}`;
-        gen_lr_call_with_prec(w, &suffix_fn, &scan_suffix_fn, prec, side.use_prec, emit_follow);
-    }
+    gen_scan_lr_call_with_prec(w, &`${*fn_name}_lr_${lr_idx}`, prec, emit_follow, mid_operand_gated);
 }
 
 fn gen_lr_suffix_dispatch(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
@@ -780,13 +784,8 @@ fn gen_lr_suffix_dispatch(
     let lr_precs = projected.1;
     let suffix_first_sets = projected.2;
 
-    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     w.begin(&"loop");
-    if side.scan {
-        w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    } else {
-        w.line(&"let suffix_kind = p.peek_kind();");
-    }
+    w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     // No-progress guard, mirroring the ATN twins
     // (`gen_lr_suffix_dispatch_atn` / `gen_lr_fn_atn`): every valid LR
     // suffix begins with a mandatory operator token, so a committed
@@ -794,7 +793,7 @@ fn gen_lr_suffix_dispatch(
     // structural rather than relying on each suffix consuming input — a
     // suffix that yielded an empty `valid_lr_alts` member would otherwise
     // spin here.
-    w.line(&`let _lr_pos0 = ${pos_expr};`);
+    w.line(&"let _lr_pos0 = pos;");
 
     let mut is_first = true;
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
@@ -816,11 +815,11 @@ fn gen_lr_suffix_dispatch(
         if group.len() == 1 {
             let lr_idx = valid_lr_indices[group[0]];
             let prec = lr_precs[group[0]];
-            gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+            gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
         } else {
             gen_lr_overlap_dispatch(
                 w,
-                side,
+                fn_name,
                 rule,
                 group,
                 &valid_lr_indices,
@@ -839,7 +838,7 @@ fn gen_lr_suffix_dispatch(
     } else {
         w.line(&"break;");
     }
-    w.begin(&`if ${pos_expr} == _lr_pos0`);
+    w.begin(&"if pos == _lr_pos0");
     w.line(&"break;");
     w.end();
     w.end();  // loop
@@ -878,7 +877,7 @@ fn gen_scan_lr_call_with_prec(
 
 fn gen_lr_overlap_dispatch(
     w: &mut CodeWriter,
-    side: &LrDispatchSide,
+    fn_name: &String,
     rule: &ParserRule,
     group: &List<i32>,
     valid_lr_indices: &List<i32>,
@@ -916,7 +915,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if suffix_kind == ${*tk}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 emitted.insert(*tk);
             }
         }
@@ -946,12 +945,8 @@ fn gen_lr_overlap_dispatch(
         } else {
             w.else_begin(&`else if suffix_kind == ${*shared_tk}`);
         }
-        let second_accessor = if side.scan {
-            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
-            "second_kind";
-        } else {
-            "p.peek_at(1)";
-        };
+        w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
+        let second_accessor = "second_kind";
         let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
@@ -968,10 +963,10 @@ fn gen_lr_overlap_dispatch(
             let alt = &rule.alternatives[lr_idx];
             if k == last_k {
                 if sub_first {
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                    gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                    gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -983,7 +978,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if ${sub_cond}`);
                 }
-                gen_lr_branch_call(w, side, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
             }
         }
         emitted.insert(*shared_tk);
@@ -1004,7 +999,27 @@ fn gen_lr_overlap_dispatch(
 /// try block fails, return -1. Alts with empty FIRST (e.g. starting with
 /// Wildcard or a rule whose FIRST is unenumerable) are attempted
 /// unconditionally as fallbacks.
-fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &List<ScanBody>, ctx: &mut GenContext) {
+/// The token partitioning of a multi-alt rule, plus the alt bodies more than
+/// one partition emits. Computed once so the helper emit and the dispatch
+/// cannot disagree on which alts are hoisted.
+pub struct ScanAltPlan {
+    groups_alts: List<List<i32>>,
+    groups_tokens: List<List<String>>,
+    unguarded_idx: List<i32>,
+    hoisted: List<i32>,
+}
+
+impl ScanAltPlan {
+    fn is_hoisted(&self, alt: i32) -> bool {
+        return self.hoisted.contains(&alt);
+    }
+}
+
+fn scan_alt_helper_name(base: &String, alt: i32) -> String {
+    return `${*base}_alt_${alt}`;
+}
+
+fn plan_scan_multi_alt(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanAltPlan {
     let n = alts.len();
     let max_k = MAX_LOOKAHEAD_DEPTH;
     let mut all_pos_sets: List<List<List<String>>> = [];
@@ -1098,6 +1113,81 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
     }
     sort_group_by_element_count(&mut unguarded_idx, alts);
 
+    // Hoist an alt more than one partition would emit; one reached once stays
+    // inline, so a grammar without the duplication keeps byte-identical output.
+    let mut emits: List<[i32, i32]> = [];
+    for let mut g = 0; g < groups_alts.len(); g += 1 {
+        for let i of &groups_alts[g] {
+            bump_emit_count(&mut emits, *i);
+        }
+        for let i of &unguarded_idx {
+            bump_emit_count(&mut emits, *i);
+        }
+    }
+    if !unguarded_idx.is_empty() {
+        for let i of &unguarded_idx {
+            bump_emit_count(&mut emits, *i);
+        }
+    }
+    let mut hoisted: List<i32> = [];
+    for let e of &emits {
+        if e[1] > 1 {
+            hoisted.push(e[0]);
+        }
+    }
+    hoisted.sort();
+
+    return ScanAltPlan { groups_alts, groups_tokens, unguarded_idx, hoisted };
+}
+
+fn bump_emit_count(emits: &mut List<[i32, i32]>, alt: i32) {
+    for let mut i = 0; i < emits.len(); i += 1 {
+        if emits[i][0] == alt {
+            emits[i] = [alt, emits[i][1] + 1];
+            return;
+        }
+    }
+    emits.push([alt, 1]);
+}
+
+/// Emit one `<base>_alt_<i>` scan helper per hoisted alt. `w` must be at top
+/// level: these are siblings of the scan function that calls them.
+fn gen_scan_alt_helpers(
+    w: &mut CodeWriter,
+    plan: &ScanAltPlan,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    base_name: &String,
+) {
+    for let i of &plan.hoisted {
+        let mut f = FnSpec::new(&scan_alt_helper_name(base_name, *i));
+        f.add_param(&"tokens", &"&Array<i32>");
+        f.add_param(&"pos", &"i32");
+        if ctx.emit_follow() {
+            add_follow_param(&mut f);
+        }
+        f.set_return_type(&"i32");
+        f.emit_begin(w);
+        w.line(&"let mut pos = pos;");
+        let body = &scan_alts[*i];
+        gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
+        w.line(&"return pos;");
+        w.end();
+        w.blank();
+    }
+}
+
+fn gen_scan_multi_alt(
+    w: &mut CodeWriter,
+    plan: &ScanAltPlan,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    base_name: &String,
+) {
+    let groups_alts = &plan.groups_alts;
+    let groups_tokens = &plan.groups_tokens;
+    let unguarded_idx = &plan.unguarded_idx;
+
     w.line(&"let start = pos;");
     w.line(&"let mut pos = pos;");
     w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
@@ -1113,16 +1203,16 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
         } else {
             w.else_begin(&`else if ${cond}`);
         }
-        gen_scan_partition_body(w, &groups_alts[g], &unguarded_idx, scan_alts, ctx);
+        gen_scan_partition_body(w, &groups_alts[g], unguarded_idx, scan_alts, ctx, plan, base_name);
     }
 
     if unguarded_idx.len() > 0 {
         let empty_alts: List<i32> = [];
         if first_branch {
-            gen_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
+            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name);
         } else {
             w.else_begin(&"else");
-            gen_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
+            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name);
             w.end();
         }
     } else if !first_branch {
@@ -1161,10 +1251,18 @@ fn gen_scan_partition_body(
     unguarded_alts: &List<i32>,
     scan_alts: &List<ScanBody>,
     ctx: &mut GenContext,
+    plan: &ScanAltPlan,
+    base_name: &String,
 ) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
         let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
+        if plan.is_hoisted(i) {
+            w.line(&`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(ctx.emit_follow())});`);
+            w.line(&"if pos >= 0 { break scan_alts; }");
+            w.line(&"return -1;");
+            return;
+        }
         let label = `try_${i}`;
         w.line(&"pos = start;");
         w.begin(&`${label}:`);
@@ -1186,6 +1284,15 @@ fn gen_scan_partition_body(
         all_idx.push(*i);
     }
     for let i of &all_idx {
+        if plan.is_hoisted(*i) {
+            w.line(
+                &`let try_${*i}_end = ${scan_alt_helper_name(base_name, *i)}(tokens, start${follow_sep(
+                    ctx.emit_follow(),
+                )});`,
+            );
+            w.line(&`if try_${*i}_end > best \{ best = try_${*i}_end; \}`);
+            continue;
+        }
         let label = `try_${*i}`;
         w.line(&"pos = start;");
         w.begin(&`${label}:`);
@@ -1469,6 +1576,19 @@ fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> 
     );
 }
 
+/// Whether the repeat guard already proves the body matches, leaving the
+/// generic emit's re-test and `sp` save/restore dead.
+fn repeat_body_implied_by_guard(body: &ScanElement, first: &List<String>) -> bool {
+    if first.len() != 1 {
+        return false;
+    }
+    return if let Token(t) = body {
+        t.kind == first[0];
+    } else {
+        false;
+    };
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_first = re.inner_first;
 
@@ -1518,9 +1638,13 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
         };
         w.begin(&`if ${guard}`);
-        w.line(&"let sp = pos;");
-        gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line(&"if pos < 0 { pos = sp; }");
+        if repeat_body_implied_by_guard(&re.body, &effective_first) {
+            w.line(&"pos += 1;");
+        } else {
+            w.line(&"let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line(&"if pos < 0 { pos = sp; }");
+        }
         w.end();
         return;
     }
@@ -1546,10 +1670,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
         };
         w.begin(&`while ${guard}`);
-        w.line(&"let sp = pos;");
-        gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line(&"if pos < 0 { pos = sp; break; }");
-        w.line(&"if pos == sp { break; }");
+        if repeat_body_implied_by_guard(&re.body, &loop_first) {
+            w.line(&"pos += 1;");
+        } else {
+            w.line(&"let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line(&"if pos < 0 { pos = sp; break; }");
+            w.line(&"if pos == sp { break; }");
+        }
         w.end();
         return;
     }
@@ -1577,10 +1705,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
         };
         w.begin(&`while ${guard}`);
-        w.line(&"let sp = pos;");
-        gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line(&"if pos < 0 { pos = sp; break; }");
-        w.line(&"if pos == sp { break; }");
+        if repeat_body_implied_by_guard(&re.body, &loop_first) {
+            w.line(&"pos += 1;");
+        } else {
+            w.line(&"let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line(&"if pos < 0 { pos = sp; break; }");
+            w.line(&"if pos == sp { break; }");
+        }
         w.end();
         return;
     }
@@ -2064,7 +2196,6 @@ fn gen_parse_fn_simple_named(
     add_arg_params(&mut f, rule, ctx);
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
-    w.line(&"let start = p.peek_start();");
     if rule_emits_vals(ctx, rule) {
         w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
     }
@@ -2116,7 +2247,6 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
-    w.line(&"let start = p.peek_start();");
     w.line(&"let kind = p.peek_kind();");
 
     let mut firsts: List<String> = [];
@@ -2168,17 +2298,6 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
-/// Whether a multi-alt rule body references `start`: only an inlined alt body
-/// uses it — the non-overlap dispatch (`gen_multi_alt_body`) and a singleton
-/// overlap group (`gen_multi_alt_body_alt`, `group.len() == 1`). A pure
-/// prediction dispatch only calls `_alt_<n>` helpers (which capture their own).
-fn rule_body_needs_start(has_overlaps: bool, groups: &List<List<i32>>) -> bool {
-    if !has_overlaps {
-        return true;
-    }
-    return groups.iter().any(|g| g.len() == 1);
-}
-
 fn gen_parse_fn_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -2274,7 +2393,6 @@ fn gen_parse_fn_named(
                     }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
-                    w.line(&"let start = p.peek_start();");
                     if rule_emits_vals(ctx, rule) {
                         w.line(&"let mut vals = vals;");
                     }
@@ -2306,8 +2424,6 @@ fn gen_parse_fn_named(
         }
     }
 
-    let needs_start = rule_body_needs_start(has_overlaps, &groups);
-
     let has_lr = lowered_rule matches { LeftRecursive(_) };
 
     if has_lr {
@@ -2335,9 +2451,6 @@ fn gen_parse_fn_named(
         });
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
-        if needs_start {
-            w.line(&"let start = p.peek_start();");
-        }
         if rule_emits_vals(ctx, rule) {
             w.line(&"let mut vals = vals;");
         }
@@ -2386,9 +2499,6 @@ fn gen_parse_fn_named(
         add_arg_params(&mut f, rule, ctx);
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
-        if needs_start {
-            w.line(&"let start = p.peek_start();");
-        }
         if rule_emits_vals(ctx, rule) {
             w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
         }
@@ -3220,7 +3330,7 @@ fn gen_lr_fn_atn(
 /// suffix begins to match then fails on a later element, corrupting the tree.
 /// So consult the side-effect-free scan twin (`scan_<rule>_lr_<idx>`) and only
 /// commit to the (mutating) suffix parse when the scan confirms it matches —
-/// mirroring the typed `gen_lr_call_with_prec`.
+/// mirroring the parse side of `gen_lr_fn`.
 fn emit_lr_branch(
     w: &mut CodeWriter,
     lr: &LrAlt,
@@ -5111,13 +5221,8 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
     return null;
 }
 
-/// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented with
-/// error-path recovery for RuleRef inners: when the lookahead is in the
-/// inner's FIRST set (so an element plausibly starts here) but the scan
-/// failed, re-parse the inner for real. The result is kept only if it actually
-/// recovered (a diagnostic was recorded or `recovering` was set), so a broken
-/// element lands in the tree; a clean re-parse is undone and the loop breaks,
-/// preserving valid-input behaviour where the scan merely under-approximated.
+/// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented on the error
+/// path with a diagnostic-only re-parse of a RuleRef inner.
 fn gen_rep_break_with_recovery(
     w: &mut CodeWriter,
     scan_pos: &String,
@@ -5139,25 +5244,12 @@ fn gen_rep_break_with_recovery(
             return;
         }
         w.begin(&`if ${scan_pos} < 0`);
-        // The scan failed but the lookahead is in the body's FIRST set, so a
-        // malformed element *plausibly* starts here. Parse it for real and keep
-        // the result only if it actually recovered (recorded a diagnostic or set
-        // `recovering`): then its repair edits stay in the tree and the cursor
-        // advances past the broken element. If instead it parsed cleanly, the
-        // scan merely under-approximated a valid element that belongs to the
-        // caller's continuation — undo the speculative parse and break, the
-        // behaviour-preserving loop exit. (Without this guard, stealing such an
-        // element from the caller mis-parses valid input.)
+        // Gate on the body's FIRST set, so the probe has something to report.
         w.begin(&`if ${ctx.first_check_str(loop_first)}`);
-        // Speculative, diagnostic-only re-parse: the lookahead is in the body's
-        // FIRST set, so an element *plausibly* starts here, but the scan failed.
-        // Static scan cannot tell a malformed element (recover, keep) from a
-        // valid one that belongs to the caller's continuation (yield, drop) — a
-        // trailing `expression?` after `statement*` looks identical to a
-        // malformed statement. Committing edits would steal the caller's tokens,
-        // so run the probe under `speculating` (no edits), keep only the deepest
-        // error it records in `pending` (surfaced if the overall parse fails),
-        // restore the cursor / tree / flags, and exit the loop.
+        // Backtracking, and the exception the standing rule names: it decides
+        // nothing, and only `pending` survives. That message is what points
+        // the diagnostic at the offending token rather than the start of input
+        // (`driver_cst_error_recovery_test`).
         w.line(&"let _rec_pos = p.pos;");
         w.line(&"let _rec_cp = p.b.checkpoint();");
         w.line(&"let _rec_sav = p.recovering;");
@@ -6107,37 +6199,6 @@ fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx:
     return [];
 }
 
-fn gen_lr_call_with_prec(
-    w: &mut CodeWriter,
-    suffix_fn: &String,
-    scan_suffix_fn: &String,
-    prec: i32,
-    use_prec: bool,
-    emit_follow: bool,
-) {
-    // First-token dispatch alone can mis-predict an LR continuation when the
-    // suffix's first token is shared with the atom (e.g.
-    // `statement: letterA | statement letterA 'b'`). In that case the suffix
-    // can begin to match and then fail on a later element, leaving `p.pos`
-    // mid-suffix and corrupting any enclosing repetition driver. Consult the
-    // scan twin first — it has no side effects — and only commit to the
-    // (mutating) parse when the scan confirms the suffix would succeed.
-    if use_prec {
-        w.begin(&`if ${prec} >= min_prec`);
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
-        w.line(&"break;");
-        w.end();
-        w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
-    } else {
-        w.begin(&`if ${*scan_suffix_fn}(&p.kinds, p.pos${follow_sep(emit_follow)}) < 0`);
-        w.line(&"break;");
-        w.end();
-        w.line(&`result = ${*suffix_fn}(p, result, start${follow_sep(emit_follow)});`);
-    }
-}
 
 /// Project lower's `LrDispatchData` (which indexes into `lr_alts`)
 /// into emit's per-alt arrays — alt indices in `rule.alternatives`,
@@ -6173,15 +6234,6 @@ fn gen_prediction_code(
     gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display);
 }
 
-/// Emit the per-decision preamble for a save-and-rewind speculative alt
-/// dispatch: snapshot the cursor, the builder, and the pending error so a
-/// rejected alt can be rolled back completely.
-fn emit_spec_alt_preamble(w: &mut CodeWriter) {
-    w.line(&"let saved = p.pos;");
-    w.line(&"let _spec_cp = p.b.checkpoint();");
-    w.line(&"let _spec_pend = p.pending;");
-    w.line(&"let _spec_code = p.pending_code;");
-}
 
 /// Emit the per-alt index dispatch shared by the longest-match tournament
 /// (`var` = `_sd_best_i`) and the AtEndConflict ATN route (`var` = `_atn_alt`):
@@ -6199,7 +6251,8 @@ fn emit_index_pick_dispatch(
     if ctx.is_trace() {
         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${*var});`);
     }
-    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+    // The last index needs no test: the tail below is the same call.
+    for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(&`if ${*var} == ${idx}`);
         w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
@@ -6209,32 +6262,6 @@ fn emit_index_pick_dispatch(
     w.line(&`return ${*fn_name}_alt_${last_idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
 }
 
-/// Emit one speculative alt attempt. The alt runs under `speculating` so a
-/// deeper mismatch records no recovery edits and only sets `recovering`; on
-/// failure the cursor, builder, and pending error are rolled back to the
-/// `emit_spec_alt_preamble` snapshot and the next alt is tried, on success the
-/// rule returns. Mirrors the repeat probe in `gen_rep_break_with_recovery`.
-fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenContext, rule_display: &String) {
-    w.line(&"let _ss = p.speculating;");
-    w.line(&"p.speculating = true;");
-    w.line(&`${*call};`);
-    w.line(&"p.speculating = _ss;");
-    w.begin(&"if p.recovering");
-    if ctx.is_trace() {
-        w.line(&`trace_try(p, &${str_lit(*rule_display)}, ${idx}, false);`);
-    }
-    w.line(&"p.pos = saved;");
-    w.line(&"p.b.truncate(_spec_cp);");
-    w.line(&"p.pending = _spec_pend;");
-    w.line(&"p.pending_code = _spec_code;");
-    w.line(&"p.recovering = false;");
-    w.else_begin(&"else");
-    if ctx.is_trace() {
-        w.line(&`trace_try(p, &${str_lit(*rule_display)}, ${idx}, true);`);
-    }
-    emit_no_viable_return(w, ctx);
-    w.end();
-}
 
 /// Whether a `Consume` node's terminal really is every reachable alt's element
 /// at `skip`, and so whether emit advances the cursor past it. Read by both
@@ -6447,114 +6474,22 @@ fn gen_prediction_code_inner(
                     // index dispatch would otherwise route to its last alt.
                     if !disabled_arg.is_empty() {
                         w.begin(&"if _atn_alt < 0");
-                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
                         emit_no_viable_return(w, ctx);
                         w.end();
                     }
                     emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
                     return;
                 }
-                // Check if any alternatives have scan functions available.
-                // If ALL non-last alternatives have scans, we run a longest-match
-                // scan tournament: scan each, parse the winner. If some have
-                // scans and some don't, use a hybrid approach.
-                let mut all_have_scans = true;
-                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                    let idx = sorted_indices[i];
-                    if !alt_has_scan(&alts[idx].elements, ctx) {
-                        all_have_scans = false;
-                        break;
-                    }
-                }
-
-                if all_have_scans && sorted_indices.len() >= 2 {
-                    // All non-last alternatives have scan functions.
-                    // Check if ALL scans are full (cover entire alternative) —
-                    // including the last alt, which we need to scan for
-                    // longest-match dispatch.
-                    if alts_all_scan_full(&sorted_indices, alts, ctx) {
-                        emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
-                    } else {
-                        // Some scans are partial — scan success is a hint,
-                        // not a guarantee. Use save/restore with scan guards.
-                        emit_spec_alt_preamble(w);
-                        for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                            let idx = sorted_indices[i];
-                            let is_last = i == sorted_indices.len() - 1;
-                            if is_last {
-                                if ctx.is_trace() {
-                                    w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                                }
-                                w.line(
-                                    &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
-                                );
-                            } else {
-                                let has_scan = alt_has_scan(&alts[idx].elements, ctx);
-                                let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
-                                if is_full {
-                                    // Full scan: success guarantees parse success.
-                                    w.begin(
-                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
-                                    );
-                                    if ctx.is_trace() {
-                                        w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                                    }
-                                    w.line(
-                                        &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(
-                                            ctx,
-                                        )});`,
-                                    );
-                                    w.end();
-                                } else if has_scan {
-                                    // Partial scan: try parse, fall through on failure.
-                                    w.begin(
-                                        &`if ${*fn_name}_scan_${idx}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())}) >= 0`,
-                                    );
-                                    emit_spec_alt_try(
-                                        w,
-                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                        idx,
-                                        ctx,
-                                        rule_display,
-                                    );
-                                    w.end();
-                                } else {
-                                    // No scan: save-and-rewind speculative parse.
-                                    emit_spec_alt_try(
-                                        w,
-                                        &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                        idx,
-                                        ctx,
-                                        rule_display,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Fallback: save-and-rewind speculative parse pattern.
-                    emit_spec_alt_preamble(w);
-                    for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                        let idx = sorted_indices[i];
-                        let is_last = i == sorted_indices.len() - 1;
-                        if is_last {
-                            if ctx.is_trace() {
-                                w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
-                            }
-                            w.line(
-                                &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`,
-                            );
-                        } else {
-                            emit_spec_alt_try(
-                                w,
-                                &`${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)})`,
-                                idx,
-                                ctx,
-                                rule_display,
-                            );
-                        }
-                    }
-                }
+                // Every alternative reaching codegen scans in full:
+                // non-scannability's only source is a `RuleRef` to a name that
+                // is not a parser rule, which `ir.wado` rejects first. Assert
+                // that rather than keep the try-fail-retry lowerings only
+                // breaking it could reach.
+                assert sorted_indices.len() >= 2, `Ambiguous node for ${*rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
+                let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
+                assert all_scan_full, `an alternative of ${*rule_display} is not fully scannable`;
+                emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
             } else {
                 // Prefix already consumed — should not happen.
                 // Consume nodes that lead to Ambiguous are stripped at build time.
@@ -6643,40 +6578,12 @@ fn collect_referenced_scan_alts(
             if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
                 return;
             }
+            // The emit's tournament scans every alt, in this order.
             let mut sorted_indices = a.alts.sorted();
             sort_group_by_element_count(&mut sorted_indices, alts);
-            let mut all_have_scans = true;
-            for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                if !alt_has_scan(&alts[sorted_indices[i]].elements, ctx) {
-                    all_have_scans = false;
-                    break;
-                }
-            }
-            if !(all_have_scans && sorted_indices.len() >= 2) {
-                return;
-            }
-            // `all_full` ⇒ longest-match tournament scans every alt; otherwise
-            // the hybrid path scans only the non-last alts that have a scan.
-            let mut all_full = true;
-            for let mut i = 0; i < sorted_indices.len(); i += 1 {
-                let idx = sorted_indices[i];
-                if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
-                    all_full = false;
-                    break;
-                }
-            }
-            if all_full {
-                for let idx of &sorted_indices {
-                    if !out.contains(idx) {
-                        out.push(*idx);
-                    }
-                }
-            } else {
-                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
-                    let idx = sorted_indices[i];
-                    if alt_has_scan(&alts[idx].elements, ctx) && !out.contains(&idx) {
-                        out.push(idx);
-                    }
+            for let idx of &sorted_indices {
+                if !out.contains(idx) {
+                    out.push(*idx);
                 }
             }
         },
@@ -6769,21 +6676,13 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = str_lit(`no alternative of ${rule.name} matches`);
+    // Kind ids, not names: `fail` resolves names only for the error it keeps.
+    let expected_ref = sync_set_ref(ctx, &expected);
     w.line(&`p.no_viable(`);
     w.indent();
     w.line(&`${msg},`);
     w.line(&"p.peek_span(),");
-    // Resolve the wanted set through `token_kind_name`, the vocabulary
-    // `expect` reports with — naming the kind constants here would put
-    // internal names in front of a grammar author on this path alone.
-    w.write(&"[");
-    for let mut i = 0; i < expected.len(); i += 1 {
-        if i > 0 {
-            w.write(&", ");
-        }
-        w.write(&`token_kind_name(${expected[i]})`);
-    }
-    w.write(&"],\n");
+    w.line(&`${expected_ref},`);
     w.dedent();
     w.line(&");");
     if current_rule_emits_vals(ctx) {

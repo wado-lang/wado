@@ -8,5 +8,7 @@ specification.
 ## Rules
 
 - This crate must compile for `wasm32-unknown-unknown`. CI enforces it.
-- It performs no I/O. Network, git, and filesystem fetching are injected by
-  `wado-cli` through the `DependencyProvider` seam — keep that boundary.
+- It performs no I/O — no filesystem, no network, no env. Fetching is injected
+  by `wado-cli` through the `DependencyProvider` seam; reading the disk belongs
+  to the filesystem `CompilerHost` (`wado_lsp::host::discovery`). Keep both
+  boundaries: this crate says where a dependency _belongs_, never what is there.

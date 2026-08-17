@@ -17,9 +17,9 @@ use wado_compiler::hashmap::IndexSet;
 
 use glob::{Pattern, PatternError};
 
-/// The walker's glob match options. Defined once in `wado-lsp` so
+/// The walker's glob match options. Defined once in `wado-manifest` so
 /// workspace-member matching and file discovery interpret patterns identically.
-pub use wado_lsp::workspace::WALK_MATCH_OPTIONS;
+pub use wado_manifest::WALK_MATCH_OPTIONS;
 
 /// Which filter layer a [`GlobSet`] is, selecting only its error variant.
 pub trait GlobRole {

@@ -4249,6 +4249,7 @@ impl Parser {
                 ),
             ));
         }
+        let do_span = self.peek().span;
         self.advance();
 
         let body = self.parse_block()?;
@@ -4258,6 +4259,7 @@ impl Parser {
             id,
             handlers,
             body,
+            do_span,
             span,
         })))
     }

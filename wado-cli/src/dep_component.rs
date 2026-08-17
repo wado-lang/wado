@@ -8,8 +8,8 @@
 //! Two source forms feed the same index:
 //!
 //! - A `[dependencies]` table entry ([`fetch_component_dependencies`]) —
-//!   lock-pinned via [`wado_lsp::host::registry_component_needs`], keyed by the
-//!   manifest specifier.
+//!   lock-pinned via [`wado_lsp::host::discovery::registry_component_needs`],
+//!   keyed by the manifest specifier.
 //! - A single-file inline `use … from "ns:pkg@ver" with { registry }` clause
 //!   ([`fetch_inline_component_dependencies`]) — no lock, an exact pin, keyed by
 //!   the verbatim specifier.
@@ -36,7 +36,7 @@ pub async fn fetch_component_dependencies(
     manifest: &Manifest,
     manifest_dir: &std::path::Path,
 ) -> Result<Vec<(String, String)>, String> {
-    let needs = wado_lsp::host::registry_component_needs(manifest, manifest_dir);
+    let needs = wado_lsp::host::discovery::registry_component_needs(manifest, manifest_dir);
     if !needs.iter().all(Result::is_ok) {
         return fetch_via_resolve(manifest, manifest_dir).await;
     }

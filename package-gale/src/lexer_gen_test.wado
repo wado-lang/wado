@@ -13,6 +13,7 @@ use {
     lexer_try_fn_name,
     LitToken,
     compute_elem_first_chars,
+    resolve_ci,
 } from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
@@ -264,7 +265,21 @@ fn rule_first_chars(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
     for let rule of &g.lexer_rules {
         if rule.name == *name {
             let mut out: List<[char, char]> = [];
-            let r = compute_elem_first_chars(&rule.body, &g.lexer_rules, &mut out, false);
+            let r = compute_elem_first_chars(&rule.body, &g.lexer_rules, &mut out, false, &g.options);
+            return [r.0, out];
+        }
+    }
+    panic(`lexer rule ${*name} not found`);
+}
+
+/// `rule_first_chars` with the rule's real folding, as `build_rule_try_call`
+/// resolves it. Needed to exercise a per-rule `caseInsensitive`.
+fn rule_first_chars_resolved(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
+    for let rule of &g.lexer_rules {
+        if rule.name == *name {
+            let mut out: List<[char, char]> = [];
+            let ci = resolve_ci(&g.options, &rule.options);
+            let r = compute_elem_first_chars(&rule.body, &g.lexer_rules, &mut out, ci, &g.options);
             return [r.0, out];
         }
     }
@@ -289,4 +304,53 @@ test "compute_elem_first_chars: negated class is genuinely wildcard" {
     let g = parse_grammar("grammar T; x : TILDE ; TILDE : ~[a] ;");
     let [is_wildcard, _first] = rule_first_chars(&g, &"TILDE");
     assert is_wildcard, "negated class must remain wildcard";
+}
+
+test "compute_elem_first_chars: a non-fragment rule reference narrows the set" {
+    // RustLexer's shape: an alternation of three plain (non-fragment) rules,
+    // each opening on `/`.
+    let g = parse_grammar(
+        "grammar T; x : ANY_COMMENT ; ANY_COMMENT : (LINE | BLOCK) ; LINE : '//' ~[\\r\\n]* ; BLOCK : '/*' .*? '*/' ;",
+    );
+    let [is_wildcard, first] = rule_first_chars(&g, &"ANY_COMMENT");
+    assert !is_wildcard, "an alternation of plain rules is not wildcard";
+    assert ranges_contain(&first, '/'), "first set must include '/'";
+    assert !ranges_contain(&first, 'a'), "first set must not include unrelated 'a'";
+}
+
+test "compute_elem_first_chars: a rule cycle stays wildcard" {
+    // `BLOCK` <-> `INNER` recurses, so the walk cannot enumerate the set.
+    let g = parse_grammar("grammar T; x : BLOCK ; BLOCK : (INNER | 'b') ; INNER : (BLOCK | 'i') ;");
+    let [is_wildcard, _first] = rule_first_chars(&g, &"BLOCK");
+    assert is_wildcard, "a reference cycle must fall back to wildcard";
+}
+
+test "compute_elem_first_chars: a callee inheriting the grammar's case stays wildcard" {
+    // `INNER` inherits the grammar's `caseInsensitive` and `OUTER` overrides
+    // it, so walking `INNER` with the caller's folding loses `K`.
+    let g = parse_grammar(
+        "grammar T; options { caseInsensitive = true; } x : OUTER ; OUTER options { caseInsensitive = false; } : INNER '!' ; INNER : 'k' '#' ;",
+    );
+    let [is_wildcard, _first] = rule_first_chars_resolved(&g, &"OUTER");
+    assert is_wildcard, "a callee folding the grammar-level case must fall back to wildcard";
+}
+
+test "compute_elem_first_chars: an inlined fragment folds with its caller" {
+    // A non-recursive fragment is inlined with the caller's `ci`, so the walk
+    // reproduces it exactly and the case gate must not fire.
+    let g = parse_grammar(
+        "grammar T; options { caseInsensitive = true; } x : OUTER ; OUTER options { caseInsensitive = false; } : F '!' ; fragment F : 'k' ;",
+    );
+    let [is_wildcard, first] = rule_first_chars_resolved(&g, &"OUTER");
+    assert !is_wildcard, "an inlined fragment is reproducible, not wildcard";
+    assert ranges_contain(&first, 'k'), "first set must include 'k'";
+    assert !ranges_contain(&first, 'K'), "the caller folds no case, so 'K' is not in its set";
+}
+
+test "compute_elem_first_chars: a callee folding a different case stays wildcard" {
+    let g = parse_grammar(
+        "grammar T; x : OUTER ; OUTER : INNER ; INNER options { caseInsensitive = true; } : 'k' ;",
+    );
+    let [is_wildcard, _first] = rule_first_chars(&g, &"OUTER");
+    assert is_wildcard, "a case-insensitive callee must fall back to wildcard";
 }

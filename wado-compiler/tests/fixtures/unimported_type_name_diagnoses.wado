@@ -1,0 +1,25 @@
+// A type declared in a loaded module but never imported here must be
+// diagnosed: the module-wide name pre-check passes it, so only the
+// site-scoped answer decides.
+
+use { from_bytes } from "core:json";
+
+struct Rec {
+    a: String,
+}
+
+export fn run() {
+    let bytes: ByteList = [0x7b, 0x7d];
+    // `DeserializeError` is declared in `core:serde`, which this module does
+    // not import. Left unresolved it reached WIR build as a local with no type.
+    let parsed: Result<Rec, DeserializeError> = from_bytes(bytes);
+    match parsed {
+        Ok(value) => {
+        },
+        Err(error) => {
+        },
+    }
+}
+
+__DATA__
+{"compile_error": "unknown type 'DeserializeError'"}

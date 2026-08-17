@@ -1,0 +1,14 @@
+// The head of a generic annotation is a name too. Builtin heads (`Option`,
+// `List`, …) name no declaration and must stay silent.
+
+export fn run() {
+    let missing: TreeSet<i32> = fresh();
+    let borrowed = &missing;
+}
+
+fn fresh() -> TreeSet<i32> {
+    return panic("unreachable");
+}
+
+__DATA__
+{"compile_error": "unknown type 'TreeSet'"}

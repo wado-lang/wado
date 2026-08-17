@@ -59,6 +59,7 @@ pub mod tir_visitor;
 pub mod token;
 pub mod trace;
 pub mod unparse;
+pub mod unresolved_types;
 pub mod wir;
 pub mod wir_build;
 pub mod wir_optimize;
@@ -1494,6 +1495,11 @@ fn compile_after_load<H: CompilerHost>(
     synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
     #[cfg(debug_assertions)]
     link::assert_no_stub_shadowing(&flat.functions, "reflect bridges");
+
+    // === Phase 9c: the declared-type invariant (`unresolved_types`) ===
+    if unresolved_types::report_unresolved_declared_types(&flat, logger) > 0 {
+        return Err(Bail);
+    }
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
