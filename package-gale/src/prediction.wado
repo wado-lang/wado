@@ -1006,8 +1006,28 @@ fn prediction_node_eq(a: &PredictionNode, b: &PredictionNode) -> bool {
         // edge produced them, or the tree shape would change.
         [Ambiguous(aa), Ambiguous(ba)] => aa.alts == ba.alts,
         [Consume(ca), Consume(cb)] => element_eq(&ca.element, &cb.element) && prediction_node_eq(&ca.child, &cb.child),
+        [Dispatch(da), Dispatch(db)] => dispatch_eq(&da, &db),
         _ => false,
     };
+}
+
+/// Structural equality of two sub-dispatches. Branch order is compared
+/// positionally: both trees are built by the same loop over the same token
+/// order, so equal trees are equal in order — and treating a permutation as
+/// unequal only forgoes a merge, never makes a wrong one.
+fn dispatch_eq(a: &PredictionDispatch, b: &PredictionDispatch) -> bool {
+    if a.depth != b.depth || a.branches.len() != b.branches.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.branches.len(); i += 1 {
+        if a.branches[i].tokens != b.branches[i].tokens {
+            return false;
+        }
+        if !prediction_node_eq(&a.branches[i].child, &b.branches[i].child) {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn element_eq(a: &Element, b: &Element) -> bool {

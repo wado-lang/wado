@@ -33,6 +33,14 @@ Empty right now.
 
 - [ ] A rule-argument action whose host type contains `[]` (`r[int[] arr]`) ends early and its remainder leaks into the grammar text: the action stripper ends a `[...]` at the first unescaped `]`, which is right for the char sets the corpus does exercise. No corpus grammar hits this.
 
+### Generated-code smells — recorded, not queued
+
+Rollback shapes in the emitted parser. Each contradicts the "No backtracking, ever" standing rule in [`AGENTS.md`](./AGENTS.md), so they are written down rather than left to be rediscovered. None is known to mis-parse anything today.
+
+- [ ] The repeat-exit recovery probe re-parses the loop body under `speculating` and then restores the cursor, the builder, `recovering` and `speculating` — so its only surviving effect is a better `pending` message. It is an unbounded recursive parse bought for a diagnostic, on a path the scan has already walked. 51 sites in the Rust parser, 70 files corpus-wide (`let _rec_pos = p.pos;`).
+- [ ] The partial-scan / no-scan alternative dispatch is a literal try-fail-retry: parse an alt, and on `recovering` rewind cursor, tree and pending before trying the next. It is emitted by `emit_spec_alt_try`, and **no grammar in the committed corpus reaches it** (`_spec_cp` matches nothing under `tests/generated/`). Either delete the path or add a fixture that exercises it — an untested backtracker is worse than either.
+- [ ] `TreeBuilder::checkpoint` / `truncate` exist only to serve those two, yet are emitted into all 649 generated files; `cst_json` never calls `truncate`. Gate them on the feature the way `follow` / `atn` are gated.
+
 ## Stage C — action / predicate execution
 
 Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.

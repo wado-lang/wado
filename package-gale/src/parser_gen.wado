@@ -403,6 +403,20 @@ fn gen_scan_function_named(
         return;
     }
 
+    // A multi-alt body may hoist repeated alt scans into sibling helpers,
+    // which have to be written before this function opens.
+    let multi_alt_plan = if rule.alternatives.len() > 1 && !all_alts_are_single_token(&rule.alternatives) {
+        if let MultiAlt(m) = lowered_rule {
+            let plan = plan_scan_multi_alt(&rule.alternatives, ctx);
+            gen_scan_alt_helpers(w, &plan, &m.scan_alts, ctx, fn_name);
+            Option::Some(plan);
+        } else {
+            Option::<ScanAltPlan>::None;
+        }
+    } else {
+        Option::<ScanAltPlan>::None;
+    };
+
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
@@ -488,7 +502,12 @@ fn gen_scan_function_named(
                 "gen_scan_function_named: multi-alt rule but lowered_rule is not MultiAlt — lower_rule invariant violated",
             );
         };
-        gen_scan_multi_alt(w, &rule.alternatives, scan_alts, ctx);
+        let plan = if let Some(p) = multi_alt_plan {
+            p;
+        } else {
+            panic("gen_scan_function_named: multi-alt rule without a scan plan — the two shape tests disagree");
+        };
+        gen_scan_multi_alt(w, &plan, scan_alts, ctx, fn_name);
     }
 
     w.end();
@@ -520,6 +539,19 @@ fn gen_scan_lr_functions(
 ) {
     let atom_name = `${*fn_name}_atom`;
 
+    let mut non_lr_alts: List<Alternative> = [];
+    for let idx of non_lr_indices {
+        non_lr_alts.push(rule.alternatives[*idx]);
+    }
+    // Hoisted alt scans are siblings of `scan_X_atom`, so they precede it.
+    let atom_plan = if non_lr_alts.len() > 1 {
+        let plan = plan_scan_multi_alt(&non_lr_alts, ctx);
+        gen_scan_alt_helpers(w, &plan, atom_scan_alts, ctx, &atom_name);
+        Option::Some(plan);
+    } else {
+        Option::<ScanAltPlan>::None;
+    };
+
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
     fa.add_param(&"tokens", &"&Array<i32>");
@@ -529,10 +561,6 @@ fn gen_scan_lr_functions(
     }
     fa.set_return_type(&"i32");
     fa.emit_begin(w);
-    let mut non_lr_alts: List<Alternative> = [];
-    for let idx of non_lr_indices {
-        non_lr_alts.push(rule.alternatives[*idx]);
-    }
     if non_lr_alts.len() == 0 {
         w.line(&"return -1;");
     } else if non_lr_alts.len() == 1 {
@@ -541,7 +569,12 @@ fn gen_scan_lr_functions(
         gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
         w.line(&"return pos;");
     } else {
-        gen_scan_multi_alt(w, &non_lr_alts, atom_scan_alts, ctx);
+        let plan = if let Some(p) = atom_plan {
+            p;
+        } else {
+            panic("gen_scan_lr_functions: multi-alt atom without a scan plan");
+        };
+        gen_scan_multi_alt(w, &plan, atom_scan_alts, ctx, &atom_name);
     }
     w.end();
     w.blank();
@@ -1004,7 +1037,29 @@ fn gen_lr_overlap_dispatch(
 /// try block fails, return -1. Alts with empty FIRST (e.g. starting with
 /// Wildcard or a rule whose FIRST is unenumerable) are attempted
 /// unconditionally as fallbacks.
-fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &List<ScanBody>, ctx: &mut GenContext) {
+/// The token partitioning of a multi-alt rule, plus the alt bodies that
+/// more than one partition emits. Computed once by `plan_scan_multi_alt`
+/// and consumed by `gen_scan_alt_helpers` (which must run before the
+/// enclosing function opens) and `gen_scan_multi_alt` — recomputing it in
+/// each would let the helper set drift from the calls that reference it.
+pub struct ScanAltPlan {
+    groups_alts: List<List<i32>>,
+    groups_tokens: List<List<String>>,
+    unguarded_idx: List<i32>,
+    hoisted: List<i32>,
+}
+
+impl ScanAltPlan {
+    fn is_hoisted(&self, alt: i32) -> bool {
+        return self.hoisted.contains(&alt);
+    }
+}
+
+fn scan_alt_helper_name(base: &String, alt: i32) -> String {
+    return `${*base}_alt_${alt}`;
+}
+
+fn plan_scan_multi_alt(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanAltPlan {
     let n = alts.len();
     let max_k = MAX_LOOKAHEAD_DEPTH;
     let mut all_pos_sets: List<List<List<String>>> = [];
@@ -1098,6 +1153,85 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
     }
     sort_group_by_element_count(&mut unguarded_idx, alts);
 
+    // An unguarded alt rides along in every partition, and a guarded alt
+    // claimed by several first tokens rides along in each of theirs, so a
+    // body can be emitted many times over (SQLite's `expr` atom emits its
+    // function-call alt eight times). Count the emission sites and hoist
+    // whatever more than one would copy; a body reached once stays inline,
+    // which keeps every grammar without the duplication byte-identical.
+    let mut emits: List<[i32, i32]> = [];
+    for let mut g = 0; g < groups_alts.len(); g += 1 {
+        for let i of &groups_alts[g] {
+            bump_emit_count(&mut emits, *i);
+        }
+        for let i of &unguarded_idx {
+            bump_emit_count(&mut emits, *i);
+        }
+    }
+    if !unguarded_idx.is_empty() {
+        for let i of &unguarded_idx {
+            bump_emit_count(&mut emits, *i);
+        }
+    }
+    let mut hoisted: List<i32> = [];
+    for let e of &emits {
+        if e[1] > 1 {
+            hoisted.push(e[0]);
+        }
+    }
+    hoisted.sort();
+
+    return ScanAltPlan { groups_alts, groups_tokens, unguarded_idx, hoisted };
+}
+
+fn bump_emit_count(emits: &mut List<[i32, i32]>, alt: i32) {
+    for let mut i = 0; i < emits.len(); i += 1 {
+        if emits[i][0] == alt {
+            emits[i] = [alt, emits[i][1] + 1];
+            return;
+        }
+    }
+    emits.push([alt, 1]);
+}
+
+/// Emit one `<base>_alt_<i>` scan helper per hoisted alt. Must be called
+/// with `w` at top level, before the enclosing scan function opens.
+fn gen_scan_alt_helpers(
+    w: &mut CodeWriter,
+    plan: &ScanAltPlan,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    base_name: &String,
+) {
+    for let i of &plan.hoisted {
+        let mut f = FnSpec::new(&scan_alt_helper_name(base_name, *i));
+        f.add_param(&"tokens", &"&Array<i32>");
+        f.add_param(&"pos", &"i32");
+        if ctx.emit_follow() {
+            add_follow_param(&mut f);
+        }
+        f.set_return_type(&"i32");
+        f.emit_begin(w);
+        w.line(&"let mut pos = pos;");
+        let body = &scan_alts[*i];
+        gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
+        w.line(&"return pos;");
+        w.end();
+        w.blank();
+    }
+}
+
+fn gen_scan_multi_alt(
+    w: &mut CodeWriter,
+    plan: &ScanAltPlan,
+    scan_alts: &List<ScanBody>,
+    ctx: &mut GenContext,
+    base_name: &String,
+) {
+    let groups_alts = &plan.groups_alts;
+    let groups_tokens = &plan.groups_tokens;
+    let unguarded_idx = &plan.unguarded_idx;
+
     w.line(&"let start = pos;");
     w.line(&"let mut pos = pos;");
     w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
@@ -1113,16 +1247,16 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
         } else {
             w.else_begin(&`else if ${cond}`);
         }
-        gen_scan_partition_body(w, &groups_alts[g], &unguarded_idx, scan_alts, ctx);
+        gen_scan_partition_body(w, &groups_alts[g], unguarded_idx, scan_alts, ctx, plan, base_name);
     }
 
     if unguarded_idx.len() > 0 {
         let empty_alts: List<i32> = [];
         if first_branch {
-            gen_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
+            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name);
         } else {
             w.else_begin(&"else");
-            gen_scan_partition_body(w, &empty_alts, &unguarded_idx, scan_alts, ctx);
+            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name);
             w.end();
         }
     } else if !first_branch {
@@ -1161,10 +1295,18 @@ fn gen_scan_partition_body(
     unguarded_alts: &List<i32>,
     scan_alts: &List<ScanBody>,
     ctx: &mut GenContext,
+    plan: &ScanAltPlan,
+    base_name: &String,
 ) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
         let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
+        if plan.is_hoisted(i) {
+            w.line(&`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(ctx.emit_follow())});`);
+            w.line(&"if pos >= 0 { break scan_alts; }");
+            w.line(&"return -1;");
+            return;
+        }
         let label = `try_${i}`;
         w.line(&"pos = start;");
         w.begin(&`${label}:`);
@@ -1186,6 +1328,15 @@ fn gen_scan_partition_body(
         all_idx.push(*i);
     }
     for let i of &all_idx {
+        if plan.is_hoisted(*i) {
+            w.line(
+                &`let try_${*i}_end = ${scan_alt_helper_name(base_name, *i)}(tokens, start${follow_sep(
+                    ctx.emit_follow(),
+                )});`,
+            );
+            w.line(&`if try_${*i}_end > best \{ best = try_${*i}_end; \}`);
+            continue;
+        }
         let label = `try_${*i}`;
         w.line(&"pos = start;");
         w.begin(&`${label}:`);
