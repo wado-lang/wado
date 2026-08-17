@@ -2582,16 +2582,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of
         // that here is what the digest exists to avoid.
-        let indexed_return = static_keys.iter().find_map(|key| {
-            self.tysys
-                .trait_env
-                .static_method_index
-                .get(key)?
-                .iter()
-                .find(|e| e.name == method_name)
-                .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
-                .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-        });
+        let indexed_return = static_keys
+            .iter()
+            .find_map(|key| self.agreed_static_method_return(key, method_name));
         if let Some(return_type) = indexed_return {
             return return_type;
         }
@@ -2693,12 +2686,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Static methods take no receiver, so the digest's canonical form —
         // impl type params left abstract — is already the answer.
         let indexed = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(&static_key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
+            .unique_static_method_sig(&static_key, method_name)
             .map(|sig| sig.decl.param_types[sig.first_value_param()..].to_vec());
         if let Some(param_types) = indexed {
             return param_types;
@@ -2767,12 +2755,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Names and defaults come out of the same record, so their order
         // matches the parameter types by construction.
         let indexed = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(&static_key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
+            .unique_static_method_sig(&static_key, method_name)
             .map(|sig| crate::elaborator::sig::Param::named_defaults(&sig.params));
         if let Some(defaults) = indexed {
             return defaults;
@@ -2859,6 +2842,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.lookup_static_method_param_is_mut_keyed(struct_name, method_name, None)
     }
 
+    /// The return type every static method the bucket declares under this name
+    /// agrees on, or `None` when they disagree.
+    ///
+    /// Unlike a parameter type, a return type can survive an overload set:
+    /// conversion impls all return the receiver, so `From<i16>` beside
+    /// `From<i32>` answers `i8` either way and the choice does not matter. Only a
+    /// genuine disagreement declines, where answering would type the call as
+    /// another impl's result.
+    fn agreed_static_method_return(
+        &self,
+        static_key: &crate::elaborator::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<TypeId> {
+        let mut returns = self
+            .tysys
+            .trait_env
+            .static_method_index
+            .get(static_key)?
+            .iter()
+            .filter(|e| e.name == method_name)
+            .filter_map(|e| self.tysys.signatures.method_sig(e.method_id))
+            .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
+        let first = returns.next()?;
+        returns.all(|r| r == first).then_some(first)
+    }
+
+    /// The static method the receiver's bucket declares under this name, or
+    /// `None` when the name does not determine one.
+    ///
+    /// Several entries share a name whenever several impls declare it — two
+    /// `From` impls both declare `from` — and the index holds nothing to choose
+    /// between them. It declines rather than picking the first, which would hand
+    /// the caller another impl's signature; a conversion that must choose goes
+    /// through [`Self::conversion_preselect`], which decides by the argument.
+    fn unique_static_method_sig(
+        &self,
+        static_key: &crate::elaborator::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<&super::sig::MethodSig> {
+        let mut declared = self
+            .tysys
+            .trait_env
+            .static_method_index
+            .get(static_key)?
+            .iter()
+            .filter(|e| e.name == method_name);
+        let only = declared.next()?;
+        if declared.next().is_some() {
+            return None;
+        }
+        self.tysys.signatures.method_sig(only.method_id)
+    }
+
     /// The declared type-param slots of a static method, keyed like
     /// [`Self::lookup_static_method_param_types_keyed`].
     pub(super) fn lookup_static_method_slots_keyed(
@@ -2866,12 +2902,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         static_key: &crate::elaborator::trait_env::ImplTargetKey,
     ) -> Vec<TypeId> {
-        self.tysys
-            .trait_env
-            .static_method_index
-            .get(static_key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-            .and_then(|e| self.tysys.signatures.method_sig(e.method_id))
+        self.unique_static_method_sig(static_key, method_name)
             .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
             .unwrap_or_default()
     }

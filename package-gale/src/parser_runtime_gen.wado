@@ -61,7 +61,7 @@ pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEnt
         w.blank();
     }
 
-    let mut d = FnSpec::new("_recover_fragment");
+    let mut d = FnSpec::new(&"_recover_fragment");
     d.add_param(&"p", &"&mut Parser");
     d.set_return_type(&"bool");
     d.emit_begin(w);
@@ -80,7 +80,7 @@ pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEnt
     w.end();
     w.blank();
 
-    let mut s = FnSpec::new("_recover_try_descend");
+    let mut s = FnSpec::new(&"_recover_try_descend");
     s.add_param(&"p", &"&mut Parser");
     s.emit_begin(w);
     w.line(&"let _before = p.pos;");
@@ -237,7 +237,7 @@ pub fn gen_parser_struct(
     fragment_recovery: bool,
     members: &MemberDecls,
 ) {
-    let mut s = StructSpec::new("Parser");
+    let mut s = StructSpec::new(&"Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
     // array (not the `List<i32>` wrapper) so reading `kinds[pos]` is a single
@@ -309,7 +309,7 @@ pub fn gen_parser_struct(
 
     // `expect_set`'s wanted set is a runtime kind list, so it resolves its
     // names through the same `token_kind_name` every other failure path uses.
-    let mut kn = FnSpec::new("kind_names");
+    let mut kn = FnSpec::new(&"kind_names");
     kn.add_param(&"kinds", &"&List<i32>");
     kn.set_return_type(&"List<String>");
     kn.emit_begin(w);
@@ -321,9 +321,9 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    ImplSpec::new("Parser").emit_begin(w);
+    ImplSpec::new(&"Parser").emit_begin(w);
 
-    let mut f = FnSpec::new("new");
+    let mut f = FnSpec::new(&"new");
     f.add_param(&"tokens", &"TokenStream");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
@@ -346,7 +346,7 @@ pub fn gen_parser_struct(
     w.blank();
 
     if emit_actions {
-        let mut fem = FnSpec::new("emit");
+        let mut fem = FnSpec::new(&"emit");
         fem.set_receiver(&"&mut self");
         fem.add_param(&"s", &"String");
         fem.emit_begin(w);
@@ -354,7 +354,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut ftt = FnSpec::new("token_text");
+        let mut ftt = FnSpec::new(&"token_text");
         ftt.set_receiver(&"&self");
         ftt.add_param(&"i", &"i32");
         ftt.set_return_type(&"String");
@@ -363,7 +363,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut fk = FnSpec::new("token_kind");
+        let mut fk = FnSpec::new(&"token_kind");
         fk.set_receiver(&"&self");
         fk.add_param(&"i", &"i32");
         fk.set_return_type(&"i32");
@@ -375,7 +375,7 @@ pub fn gen_parser_struct(
         // `$X.int` mirrors ANTLR's `Integer.parseInt`: a 32-bit value, so
         // `token_int` returns `i32` (matching a `returns [int v]` field, which
         // java2wado maps to `i32`).
-        let mut fint = FnSpec::new("token_int");
+        let mut fint = FnSpec::new(&"token_int");
         fint.set_receiver(&"&self");
         fint.add_param(&"i", &"i32");
         fint.set_return_type(&"i32");
@@ -399,7 +399,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut fln = FnSpec::new("token_line");
+        let mut fln = FnSpec::new(&"token_line");
         fln.set_receiver(&"&self");
         fln.add_param(&"i", &"i32");
         fln.set_return_type(&"i32");
@@ -408,7 +408,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut fcol = FnSpec::new("token_col");
+        let mut fcol = FnSpec::new(&"token_col");
         fcol.set_receiver(&"&self");
         fcol.add_param(&"i", &"i32");
         fcol.set_return_type(&"i32");
@@ -419,7 +419,7 @@ pub fn gen_parser_struct(
 
         // Byte offset where token `i` begins — backs `$text` (span from the
         // rule's first token) and `$start`-derived spans.
-        let mut fts0 = FnSpec::new("token_start");
+        let mut fts0 = FnSpec::new(&"token_start");
         fts0.set_receiver(&"&self");
         fts0.add_param(&"i", &"i32");
         fts0.set_return_type(&"i32");
@@ -429,7 +429,7 @@ pub fn gen_parser_struct(
         w.blank();
 
         // `_input.LA(k)` — the token kind k positions ahead (k=1 is current).
-        let mut fla = FnSpec::new("la");
+        let mut fla = FnSpec::new(&"la");
         fla.set_receiver(&"&self");
         fla.add_param(&"k", &"i32");
         fla.set_return_type(&"i32");
@@ -440,7 +440,7 @@ pub fn gen_parser_struct(
 
         // `_input.LT(k)` — the stream index k positions ahead, clamped to the
         // final (EOF) token so a lookahead past end stays in bounds.
-        let mut flt = FnSpec::new("lt");
+        let mut flt = FnSpec::new(&"lt");
         flt.set_receiver(&"&self");
         flt.add_param(&"k", &"i32");
         flt.set_return_type(&"i32");
@@ -454,7 +454,7 @@ pub fn gen_parser_struct(
 
         // Source text of the half-open byte range `[start, end)` — backs `$text`
         // (the current rule's consumed input) and `_input.getText()`.
-        let mut fts = FnSpec::new("text_span");
+        let mut fts = FnSpec::new(&"text_span");
         fts.set_receiver(&"&self");
         fts.add_param(&"start", &"i32");
         fts.add_param(&"end", &"i32");
@@ -476,7 +476,7 @@ pub fn gen_parser_struct(
         // range is the rule's first token (`start_tok`) through the last
         // consumed token (`self.pos - 1`).
         // `$<label>.text` — the text of one labeled rule call's own token range.
-        let mut ftb = FnSpec::new("text_between");
+        let mut ftb = FnSpec::new(&"text_between");
         ftb.set_receiver(&"&self");
         ftb.add_param(&"lo", &"i32");
         ftb.add_param(&"hi", &"i32");
@@ -486,7 +486,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut frt = FnSpec::new("rule_text");
+        let mut frt = FnSpec::new(&"rule_text");
         frt.set_receiver(&"&self");
         frt.add_param(&"start_tok", &"i32");
         frt.set_return_type(&"String");
@@ -496,7 +496,7 @@ pub fn gen_parser_struct(
         w.blank();
 
         // `_input.getText()` — the entire input.
-        let mut fit = FnSpec::new("input_text");
+        let mut fit = FnSpec::new(&"input_text");
         fit.set_receiver(&"&self");
         fit.set_return_type(&"String");
         fit.emit_begin(w);
@@ -509,7 +509,7 @@ pub fn gen_parser_struct(
         // (`render_open`); a left-recursive rule's level is already folded shut
         // by then, so its `@after` reads the just-finished node
         // (`rule_string_tree_final` / `render_last_finished`).
-        let mut frst = FnSpec::new("rule_string_tree");
+        let mut frst = FnSpec::new(&"rule_string_tree");
         frst.set_receiver(&"&self");
         frst.set_return_type(&"String");
         frst.emit_begin(w);
@@ -517,7 +517,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut frstf = FnSpec::new("rule_string_tree_final");
+        let mut frstf = FnSpec::new(&"rule_string_tree_final");
         frstf.set_receiver(&"&self");
         frstf.set_return_type(&"String");
         frstf.emit_begin(w);
@@ -528,7 +528,7 @@ pub fn gen_parser_struct(
 
     // Build a ParseError at the current position, resolving `line:col` from the
     // source. `rule_stack` is filled by the rule-entry wrappers as it propagates.
-    let mut fe = FnSpec::new("error");
+    let mut fe = FnSpec::new(&"error");
     fe.set_receiver(&"&self");
     fe.add_param(&"message", &"String");
     fe.add_param(&"span", &"Span");
@@ -544,7 +544,7 @@ pub fn gen_parser_struct(
     // replacement for the old `return Result::Err(...)`: the deepest failure is
     // kept in `pending` (with its `code`) and `recovering` short-circuits the
     // rest of the descent until the entry surfaces it.
-    let mut ff = FnSpec::new("fail");
+    let mut ff = FnSpec::new(&"fail");
     ff.set_receiver(&"&mut self");
     ff.add_param(&"message", &"String");
     ff.add_param(&"span", &"Span");
@@ -564,7 +564,7 @@ pub fn gen_parser_struct(
     // Alternative dispatch found no viable alternative: record the failure with
     // the `NoViableAlternative` code and enter recovery (thin wrapper over
     // `fail`).
-    let mut nv = FnSpec::new("no_viable");
+    let mut nv = FnSpec::new(&"no_viable");
     nv.set_receiver(&"&mut self");
     nv.add_param(&"message", &"String");
     nv.add_param(&"span", &"Span");
@@ -577,7 +577,7 @@ pub fn gen_parser_struct(
     // Append a rule name to the pending error's rule stack as the descent
     // unwinds (each rule wrapper calls this on the way out when recovering),
     // so tooling can report the context that failed.
-    let mut prs = FnSpec::new("push_rule_stack");
+    let mut prs = FnSpec::new(&"push_rule_stack");
     prs.set_receiver(&"&mut self");
     prs.add_param(&"name", &"String");
     prs.emit_begin(w);
@@ -589,7 +589,7 @@ pub fn gen_parser_struct(
 
     // Message of the deepest pending failure (for trace output); empty when
     // none has been recorded yet.
-    let mut pm = FnSpec::new("pending_message");
+    let mut pm = FnSpec::new(&"pending_message");
     pm.set_receiver(&"&self");
     pm.set_return_type(&"String");
     pm.emit_begin(w);
@@ -599,7 +599,7 @@ pub fn gen_parser_struct(
     w.blank();
 
     // Membership test for a recovery sync set (the rule's FIRST-of-rest).
-    let mut iset = FnSpec::new("in_set");
+    let mut iset = FnSpec::new(&"in_set");
     iset.set_receiver(&"&self");
     iset.add_param(&"k", &"i32");
     iset.add_param(&"set", &"&List<i32>");
@@ -613,7 +613,7 @@ pub fn gen_parser_struct(
     // Record a local recovery edit as a diagnostic and keep parsing (no
     // `recovering`): a deleted spurious terminal (`ExtraToken`) or an inserted
     // required terminal (`MissingToken`).
-    let mut rex = FnSpec::new("report_extra");
+    let mut rex = FnSpec::new(&"report_extra");
     rex.set_receiver(&"&mut self");
     rex.add_param(&"span", &"Span");
     rex.emit_begin(w);
@@ -624,7 +624,7 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    let mut rmi = FnSpec::new("report_missing");
+    let mut rmi = FnSpec::new(&"report_missing");
     rmi.set_receiver(&"&mut self");
     rmi.add_param(&"kind", &"i32");
     rmi.add_param(&"span", &"Span");
@@ -638,7 +638,7 @@ pub fn gen_parser_struct(
     w.blank();
 
     // Record an unexpected-token error opening an `<error>` recovery region.
-    let mut run = FnSpec::new("report_unexpected");
+    let mut run = FnSpec::new(&"report_unexpected");
     run.set_receiver(&"&mut self");
     run.add_param(&"span", &"Span");
     run.emit_begin(w);
@@ -651,7 +651,7 @@ pub fn gen_parser_struct(
 
     // A "token" handed to the rest of the parser is its `i32` index into the
     // stream; node fields store that index, not a Token aggregate.
-    let mut f2 = FnSpec::new("peek_start");
+    let mut f2 = FnSpec::new(&"peek_start");
     f2.set_receiver(&"&self");
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
@@ -659,7 +659,7 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    let mut f2b = FnSpec::new("peek_span");
+    let mut f2b = FnSpec::new(&"peek_span");
     f2b.set_receiver(&"&self");
     f2b.set_return_type(&"Span");
     f2b.emit_begin(w);
@@ -667,7 +667,7 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    let mut f3 = FnSpec::new("peek_kind");
+    let mut f3 = FnSpec::new(&"peek_kind");
     f3.set_receiver(&"&self");
     f3.set_return_type(&"i32");
     f3.emit_begin(w);
@@ -675,7 +675,7 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    let mut f4 = FnSpec::new("peek_at");
+    let mut f4 = FnSpec::new(&"peek_at");
     f4.set_receiver(&"&self");
     f4.add_param(&"offset", &"i32");
     f4.set_return_type(&"i32");
@@ -686,7 +686,7 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    let mut f5 = FnSpec::new("advance");
+    let mut f5 = FnSpec::new(&"advance");
     f5.set_receiver(&"&mut self");
     f5.set_return_type(&"i32");
     f5.emit_begin(w);
@@ -696,7 +696,7 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    let mut f6 = FnSpec::new("last_end");
+    let mut f6 = FnSpec::new(&"last_end");
     f6.set_receiver(&"&self");
     f6.set_return_type(&"i32");
     f6.emit_begin(w);
@@ -717,7 +717,7 @@ pub fn gen_parser_struct(
     // anything else is unrecoverable here, so it sets `recovering` and unwinds.
     // Delete and insert are local edits — they record a diagnostic but keep
     // parsing, so a clean tail still parses.
-    let mut f7 = FnSpec::new("expect");
+    let mut f7 = FnSpec::new(&"expect");
     f7.set_receiver(&"&mut self");
     f7.add_param(&"kind", &"i32");
     f7.add_param(&"sync", &"&List<i32>");
@@ -806,7 +806,7 @@ pub fn gen_parser_struct(
 
     // `p.any()` — consumes one token of any kind (for `.` wildcard).
     // Fails at EOF.
-    let mut f9 = FnSpec::new("any");
+    let mut f9 = FnSpec::new(&"any");
     f9.set_receiver(&"&mut self");
     f9.set_return_type(&"i32");
     f9.emit_begin(w);
@@ -828,7 +828,7 @@ pub fn gen_parser_struct(
 
     // `p.expect_not([...])` — consumes one token whose kind is not in the
     // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
-    let mut f10 = FnSpec::new("expect_not");
+    let mut f10 = FnSpec::new(&"expect_not");
     f10.set_receiver(&"&mut self");
     f10.add_param(&"excluded", &"List<i32>");
     f10.set_return_type(&"i32");
@@ -862,7 +862,7 @@ pub fn gen_parser_struct(
     // `p.expect_set([...])` — consumes one token whose kind is in the included
     // set (parser-side token-only groups like `('b' | 'c')`). Fails outside the
     // set (EOF included unless listed); a listed EOF matches without advancing.
-    let mut f11 = FnSpec::new("expect_set");
+    let mut f11 = FnSpec::new(&"expect_set");
     f11.set_receiver(&"&mut self");
     f11.add_param(&"included", &"List<i32>");
     f11.set_return_type(&"i32");

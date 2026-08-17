@@ -128,7 +128,7 @@ test "manual indent/dedent" {
 
 
 test "StructSpec basic" {
-    let mut s = StructSpec::new("Point");
+    let mut s = StructSpec::new(&"Point");
     s.add_field(&"x", &"i32");
     s.add_field(&"y", &"i32");
 
@@ -139,7 +139,7 @@ test "StructSpec basic" {
 }
 
 test "StructSpec pub with pub fields" {
-    let mut s = StructSpec::new("Token", Vis::Pub);
+    let mut s = StructSpec::new(&"Token", Vis::Pub);
     s.add_pub_field(&"kind", &"i32");
     s.add_pub_field(&"text", &"String");
 
@@ -150,7 +150,7 @@ test "StructSpec pub with pub fields" {
 }
 
 test "StructSpec mixed visibility fields" {
-    let mut s = StructSpec::new("Config", Vis::Pub);
+    let mut s = StructSpec::new(&"Config", Vis::Pub);
     s.add_pub_field(&"name", &"String");
     s.add_field(&"secret", &"i32");
 
@@ -161,8 +161,8 @@ test "StructSpec mixed visibility fields" {
 }
 
 test "StructSpec with FieldSpec" {
-    let mut s = StructSpec::new("Foo");
-    s.add_field_spec(FieldSpec::new_pub("x", "f64"));
+    let mut s = StructSpec::new(&"Foo");
+    s.add_field_spec(FieldSpec::new_pub(&"x", &"f64"));
 
     let mut w = CodeWriter::new();
     s.emit(&mut w);
@@ -171,7 +171,7 @@ test "StructSpec with FieldSpec" {
 
 
 test "VariantSpec unit cases" {
-    let mut v = VariantSpec::new("TokenKind", Vis::Pub);
+    let mut v = VariantSpec::new(&"TokenKind", Vis::Pub);
     v.add_case(&"Number");
     v.add_case(&"String");
     v.add_case(&"Eof");
@@ -183,7 +183,7 @@ test "VariantSpec unit cases" {
 }
 
 test "VariantSpec with payloads" {
-    let mut v = VariantSpec::new("Shape");
+    let mut v = VariantSpec::new(&"Shape");
     v.add_case_with_payload(&"Circle", &"f64");
     v.add_case_with_payload(&"Rect", &"[f64, f64]");
     v.add_case(&"Point");
@@ -196,7 +196,7 @@ test "VariantSpec with payloads" {
 
 
 test "EnumSpec basic" {
-    let mut e = EnumSpec::new("Color", Vis::Pub);
+    let mut e = EnumSpec::new(&"Color", Vis::Pub);
     e.add_member(&"Red");
     e.add_member(&"Green");
     e.add_member(&"Blue");
@@ -209,7 +209,7 @@ test "EnumSpec basic" {
 
 
 test "FnSpec simple" {
-    let mut f = FnSpec::new("add");
+    let mut f = FnSpec::new(&"add");
     f.add_param(&"a", &"i32");
     f.add_param(&"b", &"i32");
     f.set_return_type(&"i32");
@@ -223,7 +223,7 @@ test "FnSpec simple" {
 }
 
 test "FnSpec with receiver" {
-    let mut f = FnSpec::new("len", Vis::Pub);
+    let mut f = FnSpec::new(&"len", Vis::Pub);
     f.set_receiver(&"&self");
     f.set_return_type(&"i32");
 
@@ -231,7 +231,7 @@ test "FnSpec with receiver" {
 }
 
 test "FnSpec with default-valued param" {
-    let mut f = FnSpec::new("parse_expr");
+    let mut f = FnSpec::new(&"parse_expr");
     f.add_param(&"p", &"&mut Parser");
     f.add_param_spec(ParamSpec {
         name: "min_prec",
@@ -244,7 +244,7 @@ test "FnSpec with default-valued param" {
 }
 
 test "FnSpec no return type" {
-    let mut f = FnSpec::new("reset");
+    let mut f = FnSpec::new(&"reset");
     f.set_receiver(&"&mut self");
 
     let mut w = CodeWriter::new();
@@ -256,7 +256,7 @@ test "FnSpec no return type" {
 }
 
 test "FnSpec signature string" {
-    let mut f = FnSpec::new("transform", Vis::Pub);
+    let mut f = FnSpec::new(&"transform", Vis::Pub);
     f.set_receiver(&"&self");
     f.add_param(&"input", &"&String");
     f.add_param(&"scale", &"f64");
@@ -267,7 +267,7 @@ test "FnSpec signature string" {
 }
 
 test "FnSpec export with effects" {
-    let mut f = FnSpec::new("run");
+    let mut f = FnSpec::new(&"run");
     f.set_export();
     f.add_effect(&"Stdout");
     f.add_effect(&"Stderr");
@@ -279,7 +279,7 @@ test "FnSpec export with effects" {
 
 // A row of one goes bare; only a row of more than one takes parentheses.
 test "FnSpec with a single effect" {
-    let mut f = FnSpec::new("run");
+    let mut f = FnSpec::new(&"run");
     f.set_export();
     f.add_effect(&"Stdout");
 
@@ -288,7 +288,7 @@ test "FnSpec with a single effect" {
 }
 
 test "FnSpec with one effect and stores" {
-    let mut f = FnSpec::new("keep", Vis::Pub);
+    let mut f = FnSpec::new(&"keep", Vis::Pub);
     f.add_effect(&"Stdout");
     f.add_stores(&"self");
 
@@ -297,7 +297,7 @@ test "FnSpec with one effect and stores" {
 }
 
 test "FnSpec generic type parameter" {
-    let mut f = FnSpec::new("walk_stmt", Vis::Pub);
+    let mut f = FnSpec::new(&"walk_stmt", Vis::Pub);
     f.add_generic(&"V: Visitor");
     f.add_param(&"v", &"&mut V");
     f.add_param(&"node", &"&StmtNode");
@@ -307,7 +307,7 @@ test "FnSpec generic type parameter" {
 }
 
 test "FnSpec multiple generics" {
-    let mut f = FnSpec::new("zip");
+    let mut f = FnSpec::new(&"zip");
     f.add_generic(&"A");
     f.add_generic(&"B");
     f.add_param(&"a", &"A");
@@ -320,7 +320,7 @@ test "FnSpec multiple generics" {
 
 
 test "GlobalSpec basic" {
-    let g = GlobalSpec::new("TK_EOF", "i32", "0");
+    let g = GlobalSpec::new(&"TK_EOF", &"i32", &"0");
 
     let mut w = CodeWriter::new();
     g.emit(&mut w);
@@ -328,7 +328,7 @@ test "GlobalSpec basic" {
 }
 
 test "GlobalSpec pub" {
-    let mut g = GlobalSpec::new("COUNTER", "i32", "0", Vis::Pub);
+    let mut g = GlobalSpec::new(&"COUNTER", &"i32", &"0", Vis::Pub);
 
     let mut w = CodeWriter::new();
     g.emit(&mut w);
@@ -341,7 +341,7 @@ test "struct + impl + fn composition" {
     let mut w = CodeWriter::new();
 
     // struct Lexer { chars: List<char>, pos: i32, }
-    let mut s = StructSpec::new("Lexer");
+    let mut s = StructSpec::new(&"Lexer");
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
     s.emit(&mut w);
@@ -350,7 +350,7 @@ test "struct + impl + fn composition" {
     // impl Lexer { fn new(...) -> Lexer { ... } }
     w.begin(&"impl Lexer");
 
-    let mut f = FnSpec::new("new");
+    let mut f = FnSpec::new(&"new");
     f.add_param(&"input", &"&String");
     f.set_return_type(&"Lexer");
     f.emit_begin(&mut w);
@@ -358,7 +358,7 @@ test "struct + impl + fn composition" {
     w.end();
     w.blank();
 
-    let mut f2 = FnSpec::new("at_end");
+    let mut f2 = FnSpec::new(&"at_end");
     f2.set_receiver(&"&self");
     f2.set_return_type(&"bool");
     f2.emit_begin(&mut w);
@@ -374,23 +374,23 @@ test "struct + impl + fn composition" {
 test "variant + global composition" {
     let mut w = CodeWriter::new();
 
-    let mut v = VariantSpec::new("TokenKind", Vis::Pub);
+    let mut v = VariantSpec::new(&"TokenKind", Vis::Pub);
     v.add_case(&"Number");
     v.add_case(&"Eof");
     v.add_case(&"Error");
     v.emit(&mut w);
     w.blank();
 
-    GlobalSpec::new("TK_Number", "i32", "0").emit(&mut w);
-    GlobalSpec::new("TK_EOF", "i32", "1").emit(&mut w);
-    GlobalSpec::new("TK_ERROR", "i32", "2").emit(&mut w);
+    GlobalSpec::new(&"TK_Number", &"i32", &"0").emit(&mut w);
+    GlobalSpec::new(&"TK_EOF", &"i32", &"1").emit(&mut w);
+    GlobalSpec::new(&"TK_ERROR", &"i32", &"2").emit(&mut w);
 
     let expected = "pub variant TokenKind {\n    Number,\n    Eof,\n    Error,\n}\n\nglobal TK_Number: i32 = 0;\nglobal TK_EOF: i32 = 1;\nglobal TK_ERROR: i32 = 2;\n";
     assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
 test "chaining builder methods" {
-    let mut s = StructSpec::new("Pair", Vis::Pub);
+    let mut s = StructSpec::new(&"Pair", Vis::Pub);
     s.add_pub_field(&"first", &"i32").add_pub_field(&"second", &"i32");
 
     let mut w = CodeWriter::new();
@@ -496,9 +496,9 @@ test "char_range_pat escapes both endpoints" {
 
 test "ImplSpec basic" {
     let mut w = CodeWriter::new();
-    let i = ImplSpec::new("Point");
+    let i = ImplSpec::new(&"Point");
     i.emit_begin(&mut w);
-    let mut f = FnSpec::new("origin");
+    let mut f = FnSpec::new(&"origin");
     f.set_return_type(&"Point");
     f.emit_begin(&mut w);
     w.line(&"return Point { x: 0, y: 0 };");
@@ -510,9 +510,9 @@ test "ImplSpec basic" {
 
 test "ImplSpec trait impl" {
     let mut w = CodeWriter::new();
-    let i = ImplSpec::new_trait("Eq", "Point");
+    let i = ImplSpec::new_trait(&"Eq", &"Point");
     i.emit_begin(&mut w);
-    let mut f = FnSpec::new("eq");
+    let mut f = FnSpec::new(&"eq");
     f.set_receiver(&"&self");
     f.add_param(&"other", &"&Self");
     f.set_return_type(&"bool");
@@ -528,15 +528,15 @@ test "struct + impl trait composition" {
     let mut w = CodeWriter::new();
 
     // struct
-    let mut s = StructSpec::new("Article", Vis::Pub);
+    let mut s = StructSpec::new(&"Article", Vis::Pub);
     s.add_pub_field(&"name", &"String");
     s.emit(&mut w);
     w.blank();
 
     // impl trait for struct
-    let i = ImplSpec::new_trait("Summary", "Article");
+    let i = ImplSpec::new_trait(&"Summary", &"Article");
     i.emit_begin(&mut w);
-    let mut f = FnSpec::new("title");
+    let mut f = FnSpec::new(&"title");
     f.set_receiver(&"&self");
     f.set_return_type(&"String");
     f.emit_begin(&mut w);

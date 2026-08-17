@@ -824,23 +824,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // coercion and verify the inferred type-arg binding is consistent
                 // with every arg (e.g. `two_static<T>(1 as u8, 2 as u32)` must
                 // fail because `T` cannot be both `u8` and `u32`).
-                if !method_type_args.is_empty() || !impl_type_args_inferred.is_empty() {
-                    let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
-                    let mut combined_type_args = impl_type_args_inferred.clone();
-                    combined_type_args.extend_from_slice(&method_type_args);
-                    let substituted: Vec<TypeId> = raw_param_types
-                        .iter()
-                        .map(|&t| self.substitute_type_params(t, &combined_type_args))
-                        .collect();
-                    self.recoerce_literal_args(&call.args, &mut args, &substituted);
-                    for (i, arg) in args.iter().enumerate() {
-                        if let Some(&expected) = substituted.get(i) {
-                            self.typecheck(
-                                arg.type_id,
-                                expected,
-                                call.args.get(i).map_or(call.span, ast::Expr::span),
-                            );
-                        }
+                // A non-generic static method has nothing to substitute, but its
+                // arguments are checked just the same: left unchecked, a
+                // mismatched argument reaches codegen and fails there as an
+                // invalid module instead of at its own span.
+                let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let substituted: Vec<TypeId> =
+                    if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
+                        raw_param_types
+                    } else {
+                        let mut combined_type_args = impl_type_args_inferred.clone();
+                        combined_type_args.extend_from_slice(&method_type_args);
+                        raw_param_types
+                            .iter()
+                            .map(|&t| self.substitute_type_params(t, &combined_type_args))
+                            .collect()
+                    };
+                // `substituted` is empty when the name reaches several impls, so
+                // the check applies exactly where the parameter types are known.
+                self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                for (i, arg) in args.iter().enumerate() {
+                    if let Some(&expected) = substituted.get(i) {
+                        self.typecheck(
+                            arg.type_id,
+                            expected,
+                            call.args.get(i).map_or(call.span, ast::Expr::span),
+                        );
                     }
                 }
 
@@ -1236,6 +1245,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         ns_key.as_ref(),
                     );
+                    // The same argument check the unqualified `Type::method`
+                    // arm performs.
+                    let checked: Vec<TypeId> = if method_type_args.is_empty() {
+                        param_types.clone()
+                    } else {
+                        param_types
+                            .iter()
+                            .map(|&t| self.substitute_type_params(t, &method_type_args))
+                            .collect()
+                    };
+                    self.recoerce_literal_args(&call.args, &mut args, &checked);
+                    for (i, arg) in args.iter().enumerate() {
+                        if let Some(&expected) = checked.get(i) {
+                            self.typecheck(
+                                arg.type_id,
+                                expected,
+                                call.args.get(i).map_or(call.span, ast::Expr::span),
+                            );
+                        }
+                    }
+
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,

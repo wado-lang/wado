@@ -238,15 +238,15 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
             Rule(ri) => {
                 let rule = &lexer_rules[ri];
                 let name = `TK_${rule.name}`;
-                let mut g = GlobalSpec::new(&name, "i32", &init, Vis::Pub);
+                let mut g = GlobalSpec::new(&name, &"i32", &init, Vis::Pub);
                 if rule.is_virtual {
                     g.set_trailing_comment(&"virtual");
                 }
                 g.emit(w);
             },
-            Eof => GlobalSpec::new("TK_EOF", "i32", &init, Vis::Pub).emit(w),
-            Error => GlobalSpec::new("TK_ERROR", "i32", &init, Vis::Pub).emit(w),
-            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, "i32", &init, Vis::Pub).emit(w),
+            Eof => GlobalSpec::new(&"TK_EOF", &"i32", &init, Vis::Pub).emit(w),
+            Error => GlobalSpec::new(&"TK_ERROR", &"i32", &init, Vis::Pub).emit(w),
+            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, &"i32", &init, Vis::Pub).emit(w),
         }
         idx += 1;
     }
@@ -272,7 +272,7 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
                 if emitted_numeric.contains(&n) {
                     continue;
                 }
-                GlobalSpec::new(&`TK_${n}`, "i32", &`${n - 1}`, Vis::Pub).emit(w);
+                GlobalSpec::new(&`TK_${n}`, &"i32", &`${n - 1}`, Vis::Pub).emit(w);
                 emitted_numeric.push(n);
             }
         }
@@ -361,7 +361,7 @@ pub fn gen_lexer(
 }
 
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool, uses_modes: bool) {
-    let mut s = StructSpec::new("Lexer");
+    let mut s = StructSpec::new(&"Lexer");
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
     for let mf of &members.fields {
@@ -382,9 +382,9 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     s.emit(w);
     w.blank();
 
-    ImplSpec::new("Lexer").emit_begin(w);
+    ImplSpec::new(&"Lexer").emit_begin(w);
 
-    let mut f = FnSpec::new("new");
+    let mut f = FnSpec::new(&"new");
     f.add_param(&"input", &"&String");
     f.set_return_type(&"Lexer");
     f.emit_begin(w);
@@ -392,7 +392,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     w.end();
     w.blank();
 
-    let mut f2 = FnSpec::new("at_end");
+    let mut f2 = FnSpec::new(&"at_end");
     f2.set_receiver(&"&self");
     f2.set_return_type(&"bool");
     f2.emit_begin(w);
@@ -400,7 +400,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     w.end();
     w.blank();
 
-    let mut f3 = FnSpec::new("slice");
+    let mut f3 = FnSpec::new(&"slice");
     f3.set_receiver(&"&self");
     f3.add_param(&"start", &"i32");
     f3.add_param(&"end", &"i32");
@@ -427,7 +427,7 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
     w.blank();
     // Deliberately outside `reset_actions`: the sink is the whole run's output,
     // not one token's.
-    let mut fe = FnSpec::new("emit");
+    let mut fe = FnSpec::new(&"emit");
     fe.set_receiver(&"&mut self");
     fe.add_param(&"s", &"String");
     fe.emit_begin(w);
@@ -435,7 +435,7 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
     w.end();
     w.blank();
 
-    let mut fr = FnSpec::new("reset_actions");
+    let mut fr = FnSpec::new(&"reset_actions");
     fr.set_receiver(&"&mut self");
     fr.emit_begin(w);
     w.line(&"self.act_type = -1;");
@@ -1029,7 +1029,7 @@ pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
 /// Only emitted for a `mode` grammar that runs actions.
 fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
     for let mut i = 0; i < mode_names.len(); i += 1 {
-        GlobalSpec::new(&`MODE_${mode_names[i]}`, "i32", &`${i}`, Vis::Pub).emit(w);
+        GlobalSpec::new(&`MODE_${mode_names[i]}`, &"i32", &`${i}`, Vis::Pub).emit(w);
     }
     w.blank();
 }
@@ -3139,7 +3139,7 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         return;
     }
 
-    let mut f = FnSpec::new("classify_keyword");
+    let mut f = FnSpec::new(&"classify_keyword");
     f.add_param(&"chars", &"&List<char>");
     f.add_param(&"start", &"i32");
     f.add_param(&"end", &"i32");
@@ -3988,7 +3988,7 @@ fn gen_tokenize_fn(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
 
-    let mut f = FnSpec::new("tokenize", Vis::Pub);
+    let mut f = FnSpec::new(&"tokenize", Vis::Pub);
     f.add_param(&"input", &"&String");
     f.set_return_type(&"TokenStream");
     // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the effect.
@@ -4324,7 +4324,7 @@ fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &St
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
-    let mut f = FnSpec::new("token_kind_name", Vis::Pub);
+    let mut f = FnSpec::new(&"token_kind_name", Vis::Pub);
     f.add_param(&"kind", &"i32");
     f.set_return_type(&"String");
     f.emit_begin(w);
