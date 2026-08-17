@@ -282,24 +282,24 @@ gets the same worker count and the same pinned cores.
 
 One worker — a 1-core container scaled out horizontally:
 
-| Request                         | Rust (Axum) | JavaScript (Hono on Bun) | JavaScript (Hono on Node) | **Wado** (wado serve) |
-| ------------------------------- | ----------: | -----------------------: | ------------------------: | --------------------: |
-| `GET /user`                     |      40,794 |                   43,160 |                    17,345 |                13,926 |
-| `GET /user/lookup/username/hey` |      38,655 |                   35,139 |                    17,001 |                13,371 |
-| `POST /event/abcd1234/comment`  |      39,073 |                   34,829 |                    16,038 |                12,607 |
-| `GET /static/index.html`        |      40,318 |                   28,922 |                    16,789 |                13,202 |
+| Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
+| ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
+| `GET /user`                     |      39,173 |                   36,092 |                16,534 |                    16,519 |
+| `GET /user/lookup/username/hey` |      39,806 |                   42,354 |                16,269 |                    15,994 |
+| `POST /event/abcd1234/comment`  |      39,815 |                   37,128 |                16,218 |                    14,594 |
+| `GET /static/index.html`        |      41,438 |                   44,343 |                15,989 |                    15,954 |
 
 Four workers — a small VM running one instance:
 
-| Request                         | Rust (Axum) | JavaScript (Hono on Bun) | JavaScript (Hono on Node) | **Wado** (wado serve) |
-| ------------------------------- | ----------: | -----------------------: | ------------------------: | --------------------: |
-| `GET /user`                     |     175,858 |                  135,246 |                    74,512 |                51,086 |
-| `GET /user/lookup/username/hey` |     165,198 |                  124,424 |                    72,921 |                47,110 |
-| `POST /event/abcd1234/comment`  |     166,878 |                  123,569 |                    67,045 |                47,577 |
-| `GET /static/index.html`        |     165,837 |                  131,001 |                    71,801 |                47,465 |
+| Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
+| ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
+| `GET /user`                     |     364,684 |                  265,320 |                96,138 |                    79,074 |
+| `GET /user/lookup/username/hey` |     356,587 |                  226,319 |                92,124 |                    76,617 |
+| `POST /event/abcd1234/comment`  |     356,704 |                  227,098 |                91,553 |                    65,678 |
+| `GET /static/index.html`        |     359,716 |                  229,296 |                90,491 |                    72,973 |
 
-`wado serve` is the slowest of the four in both shapes, and stops gaining past
-roughly eight workers.
+`wado serve` edges out Hono on Node and trails Bun by ~2.5x and Axum by ~3.8x.
+It also stops gaining past roughly eight workers.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).

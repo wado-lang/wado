@@ -39,13 +39,17 @@ Axum with `TOKIO_WORKER_THREADS`.
 
 A saturated `oha` caps the fastest servers and compresses every ratio, which
 reads as "the servers are closer than they are". Servers take cores
-`0..workers-1` and `oha` the rest, offered concurrency scales with
-`CONNECTIONS_PER_WORKER`, and each shape ends by re-running its fastest result
-at twice the connections — a gain there means `oha` set that number, and the
-run says so.
+`0..workers-1` and `oha` a fixed `OHA_CORE_COUNT` at the top — spreading the
+same connections over more generator threads thins each one's batch and the
+server pays for the extra wakeups, so "the rest" is the wrong share. Every
+server ends with its own re-run at twice the connections; a gain there means
+`oha` set that number, and the run says so.
 
-Each server is warmed over every route, then each request is measured for
-`ROUNDS` slices and the fastest kept.
+Only the server under measurement runs, and its port is asserted free before
+the next one starts: a survivor keeps serving under `SO_REUSEPORT` alongside
+its replacement, which inflates the row by however many are left. Each server
+is warmed over every route, then each request is measured for `ROUNDS` slices
+and the fastest kept.
 
 The four servers span four runtimes:
 
@@ -98,7 +102,8 @@ Tunables (env vars):
 # SLICE: seconds per measurement slice (default 10)
 # ROUNDS: slices per request; the max is kept (default 3)
 # SHAPES: worker counts to measure (default "1 4")
-# CONNECTIONS_PER_WORKER: offered concurrency per worker (default 100)
+# CONNECTIONS_PER_WORKER: offered concurrency per worker (default 200)
+# OHA_CORE_COUNT: cores for the load generator (default 4)
 SLICE=10 ROUNDS=3 SHAPES="1 4" mise run -C benchmark http-routing
 ```
 
