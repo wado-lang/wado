@@ -1547,7 +1547,10 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: scrutinee_type,
                             value: hoisted,
-                            skip_value_copy: false,
+                            // A hoist, not a binding: the temp holds the very
+                            // expression that stood inline and nothing else
+                            // reaches it, so there is nothing to defend against.
+                            skip_value_copy: true,
                         },
                         stmt.span,
                     ));
