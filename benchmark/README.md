@@ -180,8 +180,9 @@ CBOR deserialize:
 
 zlib compression and decompression of `twitter.json` (631514 bytes). The C row
 is compiled to Wasm with wasi-sdk's clang `-O3` and run on wasmtime; the Rust
-and JavaScript rows are native. Every row compresses at deflate level 6; the
-compressed sizes still differ marginally between implementations.
+and JavaScript rows are native. Every row compresses at deflate level 6, but
+each library's level table trades ratio for speed a little differently: output
+runs 51278 to 56927 bytes, and each row decompresses the stream it produced.
 
 Compress:
 
