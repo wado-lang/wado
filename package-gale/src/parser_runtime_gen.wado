@@ -307,8 +307,8 @@ pub fn gen_parser_struct(
     s.emit(w);
     w.blank();
 
-    // `expect_set`'s wanted set is a runtime kind list, so it resolves its
-    // names through the same `token_kind_name` every other failure path uses.
+    // Every failure path carries its wanted set as kind ids and resolves the
+    // names here, once, and only for the error that is actually kept.
     let mut kn = FnSpec::new("kind_names");
     kn.add_param(&"kinds", &"&List<i32>");
     kn.set_return_type(&"List<String>");
@@ -532,11 +532,11 @@ pub fn gen_parser_struct(
     fe.set_receiver(&"&self");
     fe.add_param(&"message", &"String");
     fe.add_param(&"span", &"Span");
-    fe.add_param(&"expected", &"List<String>");
+    fe.add_param(&"expected", &"&List<i32>");
     fe.set_return_type(&"ParseError");
     fe.emit_begin(w);
     w.line(&"let lc = line_col(self.tokens.chars, span.start);");
-    w.line(&"return ParseError::at(message, span, expected, lc.0, lc.1);");
+    w.line(&"return ParseError::at(message, span, kind_names(expected), lc.0, lc.1);");
     w.end();
     w.blank();
 
@@ -548,13 +548,16 @@ pub fn gen_parser_struct(
     ff.set_receiver(&"&mut self");
     ff.add_param(&"message", &"String");
     ff.add_param(&"span", &"Span");
-    ff.add_param(&"expected", &"List<String>");
+    ff.add_param(&"expected", &"&List<i32>");
     ff.add_param(&"code", &"DiagnosticCode");
     ff.emit_begin(w);
-    w.line(&"let e = self.error(message, span, expected);");
-    w.line(&"let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };");
+    // Only the deepest failure is kept, so decide that from the span before
+    // building anything: a discarded error would otherwise have paid for one
+    // `token_kind_name` String per expected kind (130 of them for SQLite's
+    // `any_name`).
+    w.line(&"let take = if let Some(cur) = &self.pending { span.start > cur.span.start } else { true };");
     w.begin(&"if take");
-    w.line(&"self.pending = Option::Some(e);");
+    w.line(&"self.pending = Option::Some(self.error(message, span, expected));");
     w.line(&"self.pending_code = code;");
     w.end();
     w.line(&"self.recovering = true;");
@@ -568,7 +571,7 @@ pub fn gen_parser_struct(
     nv.set_receiver(&"&mut self");
     nv.add_param(&"message", &"String");
     nv.add_param(&"span", &"Span");
-    nv.add_param(&"expected", &"List<String>");
+    nv.add_param(&"expected", &"&List<i32>");
     nv.emit_begin(w);
     w.line(&"self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);");
     w.end();
@@ -732,7 +735,7 @@ pub fn gen_parser_struct(
     // caller's continuation, which static scan cannot rule out).
     w.begin(&"if self.speculating");
     w.line(
-        &"self.fail(`got \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [token_kind_name(kind)], DiagnosticCode::UnexpectedToken);",
+        &"self.fail(`got \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), &([kind] as List<i32>), DiagnosticCode::UnexpectedToken);",
     );
     w.line(&"return self.pos;");
     w.end();
@@ -796,7 +799,7 @@ pub fn gen_parser_struct(
     w.indent();
     w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"[token_kind_name(kind)],");
+    w.line(&"&([kind] as List<i32>),");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
@@ -816,9 +819,11 @@ pub fn gen_parser_struct(
     w.end();
     w.line(&"self.fail(");
     w.indent();
-    w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
+    // `any` wants no particular kind, so it carries the wanted set in the
+    // message instead of the (kind-id) `expected` list.
+    w.line(&"`expected any token; got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"[\"any token\"],");
+    w.line(&"&EMPTY_SYNC,");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
@@ -851,7 +856,7 @@ pub fn gen_parser_struct(
     w.indent();
     w.line(&"`unexpected token \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"[] as List<String>,");
+    w.line(&"&EMPTY_SYNC,");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
@@ -882,7 +887,7 @@ pub fn gen_parser_struct(
     w.indent();
     w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"kind_names(&included),");
+    w.line(&"&included,");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");

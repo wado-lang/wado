@@ -1620,6 +1620,21 @@ fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> 
     );
 }
 
+/// Whether the guard `gen_scan_op_repeat` just emitted already proves the
+/// body matches: a single-token body whose kind is the guard's only first
+/// token. The re-test the generic body emit would add is dead, and so is the
+/// `sp` save/restore built around it — all that is left is the advance.
+fn repeat_body_implied_by_guard(body: &ScanElement, first: &List<String>) -> bool {
+    if first.len() != 1 {
+        return false;
+    }
+    return if let Token(t) = body {
+        t.kind == first[0];
+    } else {
+        false;
+    };
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_first = re.inner_first;
 
@@ -1669,9 +1684,13 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
         };
         w.begin(&`if ${guard}`);
-        w.line(&"let sp = pos;");
-        gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line(&"if pos < 0 { pos = sp; }");
+        if repeat_body_implied_by_guard(&re.body, &effective_first) {
+            w.line(&"pos += 1;");
+        } else {
+            w.line(&"let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line(&"if pos < 0 { pos = sp; }");
+        }
         w.end();
         return;
     }
@@ -1697,10 +1716,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
         };
         w.begin(&`while ${guard}`);
-        w.line(&"let sp = pos;");
-        gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line(&"if pos < 0 { pos = sp; break; }");
-        w.line(&"if pos == sp { break; }");
+        if repeat_body_implied_by_guard(&re.body, &loop_first) {
+            w.line(&"pos += 1;");
+        } else {
+            w.line(&"let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line(&"if pos < 0 { pos = sp; break; }");
+            w.line(&"if pos == sp { break; }");
+        }
         w.end();
         return;
     }
@@ -1728,10 +1751,14 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
             `pos < tokens.len() && ${check} && !(${caller_follow_gate})`;
         };
         w.begin(&`while ${guard}`);
-        w.line(&"let sp = pos;");
-        gen_scan_op_element_assign(w, &re.body, ctx);
-        w.line(&"if pos < 0 { pos = sp; break; }");
-        w.line(&"if pos == sp { break; }");
+        if repeat_body_implied_by_guard(&re.body, &loop_first) {
+            w.line(&"pos += 1;");
+        } else {
+            w.line(&"let sp = pos;");
+            gen_scan_op_element_assign(w, &re.body, ctx);
+            w.line(&"if pos < 0 { pos = sp; break; }");
+            w.line(&"if pos == sp { break; }");
+        }
         w.end();
         return;
     }
@@ -2215,7 +2242,6 @@ fn gen_parse_fn_simple_named(
     add_arg_params(&mut f, rule, ctx);
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
-    w.line(&"let start = p.peek_start();");
     if rule_emits_vals(ctx, rule) {
         w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
     }
@@ -2267,7 +2293,6 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
-    w.line(&"let start = p.peek_start();");
     w.line(&"let kind = p.peek_kind();");
 
     let mut firsts: List<String> = [];
@@ -2319,17 +2344,6 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
 /// Repeat a `RepeatOp.gate_caller_follow` flag, so the regular emit
 /// path needs no per-(rule, mask) specialisation.
-/// Whether a multi-alt rule body references `start`: only an inlined alt body
-/// uses it — the non-overlap dispatch (`gen_multi_alt_body`) and a singleton
-/// overlap group (`gen_multi_alt_body_alt`, `group.len() == 1`). A pure
-/// prediction dispatch only calls `_alt_<n>` helpers (which capture their own).
-fn rule_body_needs_start(has_overlaps: bool, groups: &List<List<i32>>) -> bool {
-    if !has_overlaps {
-        return true;
-    }
-    return groups.iter().any(|g| g.len() == 1);
-}
-
 fn gen_parse_fn_named(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -2425,7 +2439,6 @@ fn gen_parse_fn_named(
                     }
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
-                    w.line(&"let start = p.peek_start();");
                     if rule_emits_vals(ctx, rule) {
                         w.line(&"let mut vals = vals;");
                     }
@@ -2457,8 +2470,6 @@ fn gen_parse_fn_named(
         }
     }
 
-    let needs_start = rule_body_needs_start(has_overlaps, &groups);
-
     let has_lr = lowered_rule matches { LeftRecursive(_) };
 
     if has_lr {
@@ -2486,9 +2497,6 @@ fn gen_parse_fn_named(
         });
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
-        if needs_start {
-            w.line(&"let start = p.peek_start();");
-        }
         if rule_emits_vals(ctx, rule) {
             w.line(&"let mut vals = vals;");
         }
@@ -2537,9 +2545,6 @@ fn gen_parse_fn_named(
         add_arg_params(&mut f, rule, ctx);
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
-        if needs_start {
-            w.line(&"let start = p.peek_start();");
-        }
         if rule_emits_vals(ctx, rule) {
             w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
         }
@@ -6350,7 +6355,10 @@ fn emit_index_pick_dispatch(
     if ctx.is_trace() {
         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${*var});`);
     }
-    for let mut i = 0; i < sorted_indices.len(); i += 1 {
+    // The last index needs no test: its arm and the unconditional tail below
+    // it are the same call, so emitting both leaves a branch that can only
+    // fall through to an identical statement.
+    for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(&`if ${*var} == ${idx}`);
         w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
@@ -6598,7 +6606,7 @@ fn gen_prediction_code_inner(
                     // index dispatch would otherwise route to its last alt.
                     if !disabled_arg.is_empty() {
                         w.begin(&"if _atn_alt < 0");
-                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), []);`);
+                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
                         emit_no_viable_return(w, ctx);
                         w.end();
                     }
@@ -6920,21 +6928,18 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = str_lit(`no alternative of ${rule.name} matches`);
+    // The wanted set rides as an interned `&SYNC_<id>` global of kind ids;
+    // `fail` resolves the names through `token_kind_name` only for the error
+    // it keeps. Spelling the names out here built a `List<String>` of every
+    // alternative's FIRST token on a path that usually discards it — 130
+    // allocations per call for SQLite's `any_name`, and ~3% of the generated
+    // source across the corpus.
+    let expected_ref = sync_set_ref(ctx, &expected);
     w.line(&`p.no_viable(`);
     w.indent();
     w.line(&`${msg},`);
     w.line(&"p.peek_span(),");
-    // Resolve the wanted set through `token_kind_name`, the vocabulary
-    // `expect` reports with — naming the kind constants here would put
-    // internal names in front of a grammar author on this path alone.
-    w.write(&"[");
-    for let mut i = 0; i < expected.len(); i += 1 {
-        if i > 0 {
-            w.write(&", ");
-        }
-        w.write(&`token_kind_name(${expected[i]})`);
-    }
-    w.write(&"],\n");
+    w.line(&`${expected_ref},`);
     w.dedent();
     w.line(&");");
     if current_rule_emits_vals(ctx) {

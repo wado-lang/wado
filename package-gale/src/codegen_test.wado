@@ -1188,7 +1188,10 @@ C : 'c' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&out, &"p.no_viable("), out;
-    assert str_contains(&out, &"token_kind_name(TK_A)"), out;
+    // The wanted set rides as interned kind ids; `fail` resolves them through
+    // `token_kind_name` for the error it keeps, so `kind_names` is the single
+    // vocabulary both paths read.
+    assert str_contains(&out, &"kind_names(expected)"), out;
     assert !str_contains(&out, &"\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
 }
 

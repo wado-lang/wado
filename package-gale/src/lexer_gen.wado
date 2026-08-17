@@ -3545,7 +3545,8 @@ pub fn compute_elem_first_chars(
     ci: bool,
 ) -> [bool, bool] {
     let mut seen = TreeSet::<i64>::new();
-    return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci);
+    let mut visiting: List<String> = [];
+    return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci, &mut visiting);
 }
 
 fn elem_first_chars_dedup(
@@ -3554,6 +3555,7 @@ fn elem_first_chars_dedup(
     out: &mut List<[char, char]>,
     seen: &mut TreeSet<i64>,
     ci: bool,
+    visiting: &mut List<String>,
 ) -> [bool, bool] {
     let mut any_nullable = false;
     for let alt of body {
@@ -3562,7 +3564,7 @@ fn elem_first_chars_dedup(
         }
         let mut alt_nullable = true;
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, seen, ci);
+            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, seen, ci, visiting);
             if r.0 {
                 return [true, false];
             }
@@ -3598,6 +3600,7 @@ fn compute_single_elem_first(
     out: &mut List<[char, char]>,
     seen: &mut TreeSet<i64>,
     ci: bool,
+    visiting: &mut List<String>,
 ) -> [bool, bool] {
     match *elem {
         Literal(text) => {
@@ -3619,15 +3622,34 @@ fn compute_single_elem_first(
             return [false, false];
         },
         RuleRef(name) => {
+            // A reference to any lexer rule contributes that rule's own first
+            // chars — being a `fragment` changes nothing about which character
+            // can start it. Bailing to wildcard for a non-fragment reference
+            // put `BLOCK_COMMENT_OR_DOC`, `INTEGER_LITERAL` and `FLOAT_LITERAL`
+            // in all 56 branches of the Rust lexer's dispatch, so every input
+            // character paid for ~14 `try_` calls that could only match `/` or
+            // a digit.
+            //
+            // Two conservative outs, each falling back to today's wildcard:
+            // a reference already on the walk (a rule cycle, e.g.
+            // `BLOCK_COMMENT` <-> `BLOCK_COMMENT_OR_DOC`), and a callee whose
+            // own `caseInsensitive` differs from the caller's, whose folded
+            // set this walk would not reproduce.
             for let rule of all_rules {
-                if rule.name == name && rule.is_fragment {
-                    return elem_first_chars_dedup(&rule.body, all_rules, out, seen, ci);
+                if rule.name == name {
+                    if visiting.contains(&rule.name) || rule_declares_ci_other_than(rule, ci) {
+                        return [true, false];
+                    }
+                    visiting.push(rule.name);
+                    let r = elem_first_chars_dedup(&rule.body, all_rules, out, seen, ci, visiting);
+                    visiting.pop();
+                    return r;
                 }
             }
             return [true, false];
         },
         Repeat(rep) => {
-            let inner = compute_single_elem_first(&rep.element, all_rules, out, seen, ci);
+            let inner = compute_single_elem_first(&rep.element, all_rules, out, seen, ci, visiting);
             if inner.0 {
                 return [true, false];
             }
@@ -3637,12 +3659,22 @@ fn compute_single_elem_first(
             return [false, nullable];
         },
         Group(alts) => {
-            return elem_first_chars_dedup(&alts, all_rules, out, seen, ci);
+            return elem_first_chars_dedup(&alts, all_rules, out, seen, ci, visiting);
         },
         _ => {
             return [true, false];
         },
     }
+}
+
+/// Whether `rule` sets its own `caseInsensitive` to something other than the
+/// folding the current walk is doing. Its first chars would then need a
+/// different fold than `ci`, which this walk cannot express.
+fn rule_declares_ci_other_than(rule: &LexerRule, ci: bool) -> bool {
+    if let Some(b) = lookup_ci_option(&rule.options) {
+        return b != ci;
+    }
+    return false;
 }
 
 fn range_key(start: char, end: char) -> i64 {
@@ -3891,6 +3923,78 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     return groups;
 }
 
+/// The `try_` candidates a lexer mode dispatches over: the parser literals
+/// (default mode only) followed by that mode's own rules. Both the moded and
+/// the modeless tokenizer build their candidate list here, so the first-char
+/// dispatch is the same machinery in either — a `mode` grammar used to skip
+/// dispatch entirely and call every rule in the mode on every character
+/// (TypeScript: 116 calls per character in mode 0).
+fn build_mode_try_calls(
+    mode: i32,
+    lexer_rules: &List<LexerRule>,
+    lit_tokens: &List<LitToken>,
+    keywords: &List<KeywordInfo>,
+    grammar_opts: &List<GrammarOption>,
+    grammar_ci: bool,
+    act_rule_names: &List<String>,
+    use_modes: bool,
+    has_set_mode_rules: bool,
+    has_more_rules: bool,
+    has_channel_rules: bool,
+) -> List<TryCall> {
+    let mut calls: List<TryCall> = [];
+    if mode == 0 {
+        for let lit of lit_tokens {
+            let fn_name = lit_try_fn_name(&lit.const_name);
+            let c = lit.text.chars().next().unwrap();
+            let mut fc: List<[char, char]> = [];
+            let mut fc_seen = TreeSet::<i64>::new();
+            // Parser literals inherit grammar-level caseInsensitive. Under CI,
+            // the literal's first char may appear in either case.
+            add_folded_range(&mut fc, &mut fc_seen, c, c, grammar_ci);
+            let lit_extras = literal_command_extras(
+                lit,
+                lexer_rules,
+                grammar_opts,
+                grammar_ci,
+                use_modes,
+                has_set_mode_rules,
+                has_more_rules,
+                has_channel_rules,
+            );
+            calls.push(TryCall {
+                fn_name,
+                token_kind: lit.const_name,
+                extra: lit_extras,
+                first_chars: fc,
+                is_wildcard: false,
+                is_catch_all: false,
+                total_on_first_char: lit.text.chars().count() == 1,
+            });
+        }
+    }
+    for let rule of lexer_rules {
+        if !rule.is_fragment
+            && !rule.is_virtual
+            && rule.mode == mode
+            && !is_keyword_rule_name(&rule.name, keywords)
+            && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
+            let mut call = build_rule_try_call(
+                rule,
+                lexer_rules,
+                use_modes,
+                has_set_mode_rules,
+                has_more_rules,
+                has_channel_rules,
+                grammar_opts,
+            );
+            call.act_index = index_of_name(act_rule_names, &rule.name);
+            calls.push(call);
+        }
+    }
+    return calls;
+}
+
 fn gen_dispatch_groups(
     w: &mut CodeWriter,
     calls: &List<TryCall>,
@@ -4045,133 +4149,49 @@ fn gen_tokenize_fn(
         w.line(&"let mut best_channel: i32 = 0;");
     }
 
+    // Under `use_modes` every winner block assigns `best_push_mode` /
+    // `best_pop_mode`, so the extras are never empty.
+    let needs_extras = use_modes || has_set_mode_rules || has_more_rules || has_channel_rules;
     if use_modes {
-        let mode_ctx = if has_members { "&lexer" } else { "&lexer.chars" };
-        // Generate mode dispatch
         for let mut mi = 0; mi < mode_names.len(); mi += 1 {
             if mi == 0 {
                 w.begin(&`if current_mode == ${mi}`);
             } else {
                 w.else_begin(&`else if current_mode == ${mi}`);
             }
-            // Literal tokens only in default mode
-            if mi == 0 {
-                for let lit of lit_tokens {
-                    let fn_name = lit_try_fn_name(&lit.const_name);
-                    w.line(&`end = ${fn_name}(${mode_ctx}, start);`);
-                    let lit_reset = literal_command_extras(
-                        lit,
-                        lexer_rules,
-                        grammar_opts,
-                        grammar_ci,
-                        true,
-                        has_set_mode_rules,
-                        has_more_rules,
-                        has_channel_rules,
-                    );
-                    // A literal never runs an action; under `has_actions` its
-                    // winner block still resets `best_act` to -1 so it cannot
-                    // inherit an earlier action rule's index.
-                    let lit_act = if has_actions { " best_act = -1;" } else { "" };
-                    w.line(
-                        &`if end > best_end \{ best_end = end; best_kind = ${lit.const_name};${lit_reset}${lit_act} \}`,
-                    );
-                }
-            }
-            for let rule of lexer_rules {
-                if !rule.is_fragment
-                    && !rule.is_virtual
-                    && rule.mode == mi
-                    && !is_keyword_rule_name(&rule.name, keywords)
-                    && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                    let fn_name = lexer_try_fn_name(&rule.name);
-                    w.line(&`end = ${fn_name}(${mode_ctx}, start);`);
-                    let extra = best_state_extras(
-                        rule.push_mode,
-                        rule.pop_mode,
-                        rule.set_mode,
-                        rule.more,
-                        rule.channel,
-                        true,
-                        has_set_mode_rules,
-                        has_more_rules,
-                        has_channel_rules,
-                    );
-                    // `type(X)` rewrites the emitted kind. The rule still has
-                    // its own TK_<name> constant; the override only affects
-                    // the emitted token.
-                    let emit_kind = if let Some(override_name) = rule.type_override {
-                        `TK_${override_name}`;
-                    } else {
-                        `TK_${rule.name}`;
-                    };
-                    // Under `has_actions` every winner block reassigns
-                    // `best_act` (the replay index, or -1) so a longer non-action
-                    // match cannot inherit an earlier action rule's index — see
-                    // the modeless dispatch (`gen_group_calls`).
-                    let act = if has_actions {
-                        ` best_act = ${index_of_name(act_rule_names, &rule.name)};`;
-                    } else {
-                        String::new();
-                    };
-                    w.line(&`if end > best_end \{ best_end = end; best_kind = ${emit_kind};${extra}${act} \}`);
-                }
-            }
-        }
-        w.end();  // mode dispatch
-    } else {
-        // No modes — first-character dispatch
-        let needs_extras = has_set_mode_rules || has_more_rules || has_channel_rules;
-        let mut all_calls: List<TryCall> = [];
-        for let lit of lit_tokens {
-            let fn_name = lit_try_fn_name(&lit.const_name);
-            let c = lit.text.chars().next().unwrap();
-            let mut fc: List<[char, char]> = [];
-            let mut fc_seen = TreeSet::<i64>::new();
-            // Parser literals inherit grammar-level caseInsensitive. Under CI,
-            // the literal's first char may appear in either case.
-            add_folded_range(&mut fc, &mut fc_seen, c, c, grammar_ci);
-            let tk = lit.const_name;
-            let lit_extras = literal_command_extras(
-                lit,
+            let calls = build_mode_try_calls(
+                mi,
                 lexer_rules,
+                lit_tokens,
+                keywords,
                 grammar_opts,
                 grammar_ci,
-                false,
+                act_rule_names,
+                true,
                 has_set_mode_rules,
                 has_more_rules,
                 has_channel_rules,
             );
-            all_calls.push(TryCall {
-                fn_name,
-                token_kind: tk,
-                extra: lit_extras,
-                first_chars: fc,
-                is_wildcard: false,
-                is_catch_all: false,
-                total_on_first_char: lit.text.chars().count() == 1,
-            });
+            let groups = build_dispatch_groups(&calls);
+            gen_dispatch_groups(w, &calls, &groups, needs_extras, has_actions, has_members);
         }
-        for let rule of lexer_rules {
-            if !rule.is_fragment
-                && !rule.is_virtual
-                && !is_keyword_rule_name(&rule.name, keywords)
-                && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                let mut call = build_rule_try_call(
-                    rule,
-                    lexer_rules,
-                    false,
-                    has_set_mode_rules,
-                    has_more_rules,
-                    has_channel_rules,
-                    grammar_opts,
-                );
-                call.act_index = index_of_name(act_rule_names, &rule.name);
-                all_calls.push(call);
-            }
-        }
-        let groups = build_dispatch_groups(&all_calls);
-        gen_dispatch_groups(w, &all_calls, &groups, needs_extras, has_actions, has_members);
+        w.end();  // mode dispatch
+    } else {
+        let calls = build_mode_try_calls(
+            0,
+            lexer_rules,
+            lit_tokens,
+            keywords,
+            grammar_opts,
+            grammar_ci,
+            act_rule_names,
+            false,
+            has_set_mode_rules,
+            has_more_rules,
+            has_channel_rules,
+        );
+        let groups = build_dispatch_groups(&calls);
+        gen_dispatch_groups(w, &calls, &groups, needs_extras, has_actions, has_members);
     }
 
     // Keyword reclassification: check if the matched text is actually a keyword.

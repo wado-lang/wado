@@ -290,3 +290,35 @@ test "compute_elem_first_chars: negated class is genuinely wildcard" {
     let [is_wildcard, _first] = rule_first_chars(&g, &"TILDE");
     assert is_wildcard, "negated class must remain wildcard";
 }
+
+test "compute_elem_first_chars: a non-fragment rule reference narrows the set" {
+    // RustLexer's shape: `BLOCK_COMMENT_OR_DOC` is an alternation of three
+    // plain (non-fragment) lexer rules, each opening on `/`. Treating a
+    // non-fragment reference as opaque made it wildcard, so `try_` for it ran
+    // on every input character.
+    let g = parse_grammar(
+        "grammar T; x : ANY_COMMENT ; ANY_COMMENT : (LINE | BLOCK) ; LINE : '//' ~[\\r\\n]* ; BLOCK : '/*' .*? '*/' ;",
+    );
+    let [is_wildcard, first] = rule_first_chars(&g, &"ANY_COMMENT");
+    assert !is_wildcard, "an alternation of plain rules is not wildcard";
+    assert ranges_contain(&first, '/'), "first set must include '/'";
+    assert !ranges_contain(&first, 'a'), "first set must not include unrelated 'a'";
+}
+
+test "compute_elem_first_chars: a rule cycle stays wildcard" {
+    // `BLOCK` <-> `INNER` recurses, so the walk cannot enumerate the set and
+    // must fall back to the conservative answer rather than loop.
+    let g = parse_grammar("grammar T; x : BLOCK ; BLOCK : (INNER | 'b') ; INNER : (BLOCK | 'i') ;");
+    let [is_wildcard, _first] = rule_first_chars(&g, &"BLOCK");
+    assert is_wildcard, "a reference cycle must fall back to wildcard";
+}
+
+test "compute_elem_first_chars: a callee folding a different case stays wildcard" {
+    // The callee's own `caseInsensitive` would fold its first chars
+    // differently than this walk does, so its set is not reproducible here.
+    let g = parse_grammar(
+        "grammar T; x : OUTER ; OUTER : INNER ; INNER options { caseInsensitive = true; } : 'k' ;",
+    );
+    let [is_wildcard, _first] = rule_first_chars(&g, &"OUTER");
+    assert is_wildcard, "a case-insensitive callee must fall back to wildcard";
+}
