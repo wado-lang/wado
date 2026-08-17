@@ -271,8 +271,7 @@ impl CompilerHost for FilesystemCompilerHost {
         Ok(bytes)
     }
 
-    // Not observed as an input: a presence check reads no bytes, so it cannot
-    // describe the tree the run compiled.
+    // Not observed: a presence check reads nothing, so it describes no input.
     async fn source_exists(&self, path: &str) -> bool {
         self.inner.source_exists(path).await
     }

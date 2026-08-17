@@ -103,13 +103,8 @@ impl CompilerHost for FilesystemCompilerHost {
 
 /// Build the compiler's dependency index from a manifest's `[dependencies]`.
 ///
-/// The bridge between what [`discovery::resolve_all`] found on
-/// disk and what the loader consults: source entries are re-expressed relative
-/// to `base` — the same base `load_source` joins against — so `use { … } from
-/// "<name>"` resolves to them, prebuilt components keep their absolute cache
-/// path, and an unplaceable dependency carries its reason to the `use` site
-/// instead of a generic "invalid module path". `manifest_dir` contains the
-/// manifest (path deps and the lock resolve against it).
+/// Source entries are re-expressed relative to `base` — the base `load_source`
+/// joins against — so `use { … } from "<name>"` resolves to them.
 #[must_use]
 pub fn dependency_index_from(
     manifest: &wado_manifest::Manifest,
@@ -184,9 +179,7 @@ mod tests {
 
     #[test]
     fn source_exists_answers_without_reading() {
-        // The kiln presence check calls this per recorded output on every
-        // snapshot; a `load_source` in its place would read each file in full
-        // only to drop the bytes.
+        // Called per recorded kiln output on every snapshot build.
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("a.wado"), "fn f() {}").unwrap();
         std::fs::create_dir(tmp.path().join("sub")).unwrap();
@@ -195,7 +188,6 @@ mod tests {
         futures::executor::block_on(async {
             assert!(host.source_exists("a.wado").await);
             assert!(!host.source_exists("missing.wado").await);
-            // A directory is not loadable, so it must not read as present.
             assert!(!host.source_exists("sub").await);
         });
     }

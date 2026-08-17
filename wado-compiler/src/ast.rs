@@ -2109,9 +2109,8 @@ pub struct WithHandlerExpr {
     pub id: AstId,
     pub handlers: Vec<EffectHandlerBinding>,
     pub body: Block,
-    /// Span of the contextual `do` keyword. It lexes as an identifier, so a
-    /// consumer that has to tell it apart from a variable (semantic
-    /// highlighting) can only do so from here.
+    /// Span of the contextual `do` keyword. It lexes as an identifier, so this
+    /// is the only way to tell it from a variable.
     pub do_span: Span,
     pub span: Span,
 }

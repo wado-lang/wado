@@ -103,8 +103,8 @@ passthrough) → UTF-8 → UTF-16 (LSP default; only chosen when the
 client offers nothing else). The codepoint semantics come from
 `lexer.rs::Lexer::advance`, which increments `column` per Unicode
 scalar value, not per byte and not per UTF-16 code unit. Every
-conversion lives in `text.rs` and routes through
-`codepoint_offset_to_character` / `character_to_codepoint_offset`.
+conversion lives in `text.rs`: `character_to_codepoint_offset` inbound,
+`range_from_codepoints` / `codepoints_to_code_units` outbound.
 
 ### Diagnostics
 
@@ -149,7 +149,10 @@ the un-normalised form opened a duplicate tab for an already-open file.
 
 ### DiagnosticCollector
 
-`DiagnosticCollector` in `lib.rs` wraps any `CompilerHost`, delegating `load_source` while silently collecting all emitted diagnostics. This avoids modifying or depending on a specific host implementation.
+`DiagnosticCollector` in `lib.rs` wraps any `CompilerHost`, delegating every
+capability while also collecting the diagnostics that pass through. Falling back
+to a trait default instead of delegating would silently drop the wrapped host's
+dependency index — and, for `source_exists`, turn a stat back into a full read.
 
 ### Stdio server
 

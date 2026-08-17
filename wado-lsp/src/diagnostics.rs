@@ -73,10 +73,8 @@ fn span_to_range(
     lines: Option<&LineIndex>,
     encoding: PositionEncoding,
 ) -> Range {
-    // A `DiagnosticSpan`'s end is optional, unlike a lexer `Span`'s: default it
-    // to a one-column range on the start line. `max(1)` keeps that width for a
-    // span whose column is 0 — kiln generator diagnostics report one — because
-    // the conversion subtracts 1 from both ends.
+    // Default to one column wide. `max(1)` holds that width at column 0 — kiln
+    // generator diagnostics report one — since both ends lose 1 below.
     let end_line = span.end_line.unwrap_or(span.line);
     let end_column = span
         .end_column
@@ -322,9 +320,6 @@ mod tests {
 
     #[test]
     fn zero_column_span_without_an_end_stays_one_column_wide() {
-        // Kiln generator diagnostics report `column: 0`. Deriving the default
-        // end in 1-based space and decrementing it afterwards would collapse
-        // those to a zero-width range the editor draws nothing for.
         let compiler_diag = CompilerDiagnostic {
             severity: CompilerSeverity::Error,
             code: Code::TypeMismatch,

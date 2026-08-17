@@ -30,8 +30,6 @@ pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
     }
 }
 
-/// `p` against the current directory when relative, or `p` itself when the
-/// process has no readable current directory.
 #[must_use]
 pub fn absolutize(p: &Path) -> PathBuf {
     if p.is_absolute() {
@@ -99,9 +97,8 @@ pub enum DependencyEntry {
 
 /// Resolve every `[dependencies]` entry of `manifest` against the disk, offline.
 ///
-/// `Err` carries a reason phrased for the `use` site. `workspace` dependencies
-/// resolve through the workspace itself and are absent. `manifest_dir` holds the
-/// manifest, which `path` entries and `wado.lock` both resolve against.
+/// `Err` carries a reason phrased for the `use` site. `workspace` entries resolve
+/// through the workspace itself and are absent.
 #[must_use]
 pub fn resolve_all(
     manifest: &Manifest,
@@ -150,11 +147,8 @@ pub fn resolve_all(
     out
 }
 
-/// Resolve every registry `[dependencies]` entry to its lock-pinned cache need.
-/// `Ok(need)` carries the exact version + cache path (whether or not the file is
-/// present); `Err((name, reason))` explains why it cannot be placed offline (no
-/// registry in scope, no lock pin, or no cache root). Shared so the LSP index
-/// and the CLI fetch derive identical coordinates, versions, and paths.
+/// Every registry `[dependencies]` entry with its lock-pinned version and cache
+/// path, present or not. Shared so the LSP index and the CLI fetch agree.
 #[must_use]
 pub fn registry_component_needs(
     manifest: &Manifest,
@@ -167,10 +161,8 @@ pub fn registry_component_needs(
     registry_component_needs_locked(manifest, &locked, cache_root().as_deref())
 }
 
-/// The entry module of a git dependency, resolved offline from `wado.lock` + the
-/// warm worktree cache. `Ok(entry)` is the checked-out `[package].lib` (honoring
-/// `directory`); `Err(reason)` explains why it cannot be placed (no lock pin, no
-/// cache root, or a cold worktree pointing the user at `wado fetch`).
+/// The entry module of a git dependency, from `wado.lock` + the warm worktree
+/// cache: the checked-out `[package].lib`, honoring `directory`.
 fn git_dependency_entry(
     locked: &std::collections::BTreeMap<String, (String, String)>,
     name: &str,
@@ -210,9 +202,8 @@ fn read_lock(manifest_dir: &Path) -> Option<LockFile> {
         .ok()
 }
 
-/// `lock id -> (version, resolved-ref)` for every git `[[package]]` in
-/// `manifest_dir`'s `wado.lock`. Empty when no lock is present. Shared so the CLI
-/// can materialize the same worktrees the offline index resolves against.
+/// `lock id -> (version, resolved-ref)` for every git `[[package]]`, so the CLI
+/// materializes the same worktrees the offline index resolves against.
 #[must_use]
 pub fn locked_git_packages(
     manifest_dir: &Path,
@@ -223,16 +214,13 @@ pub fn locked_git_packages(
         .unwrap_or_default()
 }
 
-/// The Wado root (dependency cache): `$WADO_ROOT`, else `~/wado` (`$HOME/wado`).
-/// `None` when neither resolves — an honest "no cache" (registry deps then read
-/// as uncached) rather than a meaningless relative path.
+/// The Wado root (dependency cache): `$WADO_ROOT`, else `~/wado`. `None` when
+/// neither resolves, so registry deps read as uncached rather than landing at a
+/// meaningless relative path.
 ///
-/// This reads only the environment, so it stays dependency-light and works on
-/// every target (a no-fs wasm build simply sees no env and falls through to
-/// `None`). The `$XDG_CONFIG_HOME/wado/config.toml` `root` key is resolved once
-/// by the CLI (`wado-cli`), which exports it as `$WADO_ROOT` at startup, so both
-/// the CLI and the embedded LSP server observe one configured root here without
-/// this crate ever parsing a config file.
+/// Env only, no config parsing: `wado-cli` resolves
+/// `$XDG_CONFIG_HOME/wado/config.toml`'s `root` and exports `$WADO_ROOT` at
+/// startup, so the CLI and the embedded LSP server see one root.
 #[must_use]
 pub fn cache_root() -> Option<PathBuf> {
     if let Some(root) = std::env::var_os("WADO_ROOT").filter(|v| !v.is_empty()) {
@@ -242,11 +230,9 @@ pub fn cache_root() -> Option<PathBuf> {
         .filter(|v| !v.is_empty())
         .map(|home| PathBuf::from(home).join("wado"))
 }
-/// The entry module file of a source dependency: the file itself when the path
-/// points at a `.wado` file, otherwise the directory's `[package].lib`. The
-/// `Err` describes why a dependency has no usable entry. Shared by the path,
-/// git (worktree), and single-file inline-git resolution paths so all three
-/// agree on how a package's library entry is located.
+/// The entry module of a source dependency: the file itself for a `.wado` path,
+/// otherwise the directory's `[package].lib`. Shared by the path, git, and
+/// inline-git resolution paths so all three locate an entry the same way.
 pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
     if dep_path.extension().is_some_and(|e| e == "wado") {
         return Ok(dep_path.to_path_buf());
