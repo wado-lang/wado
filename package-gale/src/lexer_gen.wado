@@ -3509,7 +3509,7 @@ fn build_rule_try_call(
         has_channel_rules,
     );
     let mut chars: List<[char, char]> = [];
-    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci).0;
+    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci, grammar_opts).0;
     // A catch-all (`UNEXPECTED_CHAR : .`) matches any single character, so it
     // is redundant only in a branch whose rules all match on their first
     // character — see `branch_catch_all_calls`.
@@ -3543,10 +3543,11 @@ pub fn compute_elem_first_chars(
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
     ci: bool,
+    grammar_opts: &List<GrammarOption>,
 ) -> [bool, bool] {
     let mut seen = TreeSet::<i64>::new();
     let mut visiting: List<String> = [];
-    return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci, &mut visiting);
+    return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci, grammar_opts, &mut visiting);
 }
 
 fn elem_first_chars_dedup(
@@ -3555,6 +3556,7 @@ fn elem_first_chars_dedup(
     out: &mut List<[char, char]>,
     seen: &mut TreeSet<i64>,
     ci: bool,
+    grammar_opts: &List<GrammarOption>,
     visiting: &mut List<String>,
 ) -> [bool, bool] {
     let mut any_nullable = false;
@@ -3564,7 +3566,7 @@ fn elem_first_chars_dedup(
         }
         let mut alt_nullable = true;
         for let mut i = 0; i < alt.elements.len(); i += 1 {
-            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, seen, ci, visiting);
+            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, seen, ci, grammar_opts, visiting);
             if r.0 {
                 return [true, false];
             }
@@ -3600,6 +3602,7 @@ fn compute_single_elem_first(
     out: &mut List<[char, char]>,
     seen: &mut TreeSet<i64>,
     ci: bool,
+    grammar_opts: &List<GrammarOption>,
     visiting: &mut List<String>,
 ) -> [bool, bool] {
     match *elem {
@@ -3627,11 +3630,11 @@ fn compute_single_elem_first(
             // already on the walk, and a callee this walk cannot fold for.
             for let rule of all_rules {
                 if rule.name == name {
-                    if visiting.contains(&rule.name) || rule_declares_ci_other_than(rule, ci) {
+                    if visiting.contains(&rule.name) || callee_folds_other_case(rule, all_rules, grammar_opts, ci) {
                         return [true, false];
                     }
                     visiting.push(rule.name);
-                    let r = elem_first_chars_dedup(&rule.body, all_rules, out, seen, ci, visiting);
+                    let r = elem_first_chars_dedup(&rule.body, all_rules, out, seen, ci, grammar_opts, visiting);
                     visiting.pop();
                     return r;
                 }
@@ -3639,7 +3642,7 @@ fn compute_single_elem_first(
             return [true, false];
         },
         Repeat(rep) => {
-            let inner = compute_single_elem_first(&rep.element, all_rules, out, seen, ci, visiting);
+            let inner = compute_single_elem_first(&rep.element, all_rules, out, seen, ci, grammar_opts, visiting);
             if inner.0 {
                 return [true, false];
             }
@@ -3649,7 +3652,7 @@ fn compute_single_elem_first(
             return [false, nullable];
         },
         Group(alts) => {
-            return elem_first_chars_dedup(&alts, all_rules, out, seen, ci, visiting);
+            return elem_first_chars_dedup(&alts, all_rules, out, seen, ci, grammar_opts, visiting);
         },
         _ => {
             return [true, false];
@@ -3657,13 +3660,18 @@ fn compute_single_elem_first(
     }
 }
 
-/// Whether `rule` folds a different case than the walk's `ci`, so its first
-/// chars are not reproducible here.
-fn rule_declares_ci_other_than(rule: &LexerRule, ci: bool) -> bool {
-    if let Some(b) = lookup_ci_option(&rule.options) {
-        return b != ci;
+/// Whether `rule` has its own `try_` and folds a case the walk's `ci` does
+/// not. An inlined fragment carries the caller's folding, so it cannot.
+fn callee_folds_other_case(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    grammar_opts: &List<GrammarOption>,
+    ci: bool,
+) -> bool {
+    if rule.is_fragment && !fragment_is_recursive(rule, all_rules) {
+        return false;
     }
-    return false;
+    return resolve_ci(grammar_opts, &rule.options) != ci;
 }
 
 fn range_key(start: char, end: char) -> i64 {
