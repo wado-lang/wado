@@ -1,21 +1,22 @@
-// ANTLR4 `generate` timed over the same Rust grammar gale-gen uses — the
-// apples-to-apples reference (Gale is ANTLR4-compatible; identical `.g4`).
-// Throughput is over the shared `.g4` size. Needs `java`; the jar is cached
-// under ~/.cache/gale and fetched on first use, else the row skips.
+// Build and run the ANTLR4 generate benchmark: compile Antlr4GenBench against
+// the jar's bundled Tool and run it over the same RustLexer.g4 + RustParser.g4
+// the Gale row uses. The jar is cached under ~/.cache/gale and fetched on first
+// use; skips without java/javac.
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, copyFileSync, rmSync, statSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const GRAMMARS = join(here, '..', '..', 'package-gale', 'tests', 'grammars');
+const GRAMMARS = resolve(here, '..', '..', 'package-gale', 'tests', 'grammars');
 const G4 = ['RustLexer.g4', 'RustParser.g4'];
+const HARNESS = join(here, 'Antlr4GenBench.java');
 const ANTLR_VERSION = '4.13.2';
 const JAR = join(homedir(), '.cache', 'gale', `antlr-${ANTLR_VERSION}-complete.jar`);
 const JAR_URL = `https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar`;
-const ITERS = 3;
+const SEP = process.platform === 'win32' ? ';' : ':';
 
 function has(cmd, args) {
   try {
@@ -37,15 +38,8 @@ function ensureJar() {
   }
 }
 
-function formatRate(bytes, secs) {
-  const rate = bytes / secs;
-  if (rate >= 1e6) return `${(rate / 1e6).toFixed(2)} MB/s`;
-  if (rate >= 1e3) return `${(rate / 1e3).toFixed(2)} KB/s`;
-  return `${rate.toFixed(2)} B/s`;
-}
-
-if (!has('java', ['-version'])) {
-  console.log('SKIP: java not found (needed to run the ANTLR4 jar)');
+if (!has('java', ['-version']) || !has('javac', ['-version'])) {
+  console.log('SKIP: java/javac not found (needed to build the ANTLR4 generate benchmark)');
   process.exit(0);
 }
 if (!ensureJar()) {
@@ -53,21 +47,16 @@ if (!ensureJar()) {
   process.exit(0);
 }
 
-const g4Bytes = G4.reduce((n, f) => n + statSync(join(GRAMMARS, f)).size, 0);
 const work = mkdtempSync(join(tmpdir(), 'antlr-gen-'));
 try {
   for (const f of G4) copyFileSync(join(GRAMMARS, f), join(work, f));
-
-  let best = Infinity;
-  for (let i = 0; i < ITERS; i++) {
-    const start = process.hrtime.bigint();
-    execFileSync('java', ['-jar', JAR, '-Dlanguage=Java', ...G4], { cwd: work, stdio: 'ignore' });
-    const secs = Number(process.hrtime.bigint() - start) / 1e9;
-    if (secs < best) best = secs;
-  }
-
-  const ms = (best * 1000).toFixed(3);
-  console.log(`antlr4 (generate): ${formatRate(g4Bytes, best)}   (${ms} ms/iter, 1 iter)`);
+  copyFileSync(HARNESS, join(work, 'Antlr4GenBench.java'));
+  mkdirSync(join(work, 'out'), { recursive: true });
+  execFileSync('javac', ['-cp', JAR, 'Antlr4GenBench.java'], { cwd: work, stdio: 'inherit' });
+  execFileSync('java', ['-cp', `.${SEP}${JAR}`, 'Antlr4GenBench', 'out', ...G4], {
+    cwd: work,
+    stdio: 'inherit',
+  });
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

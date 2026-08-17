@@ -259,14 +259,15 @@ per second (higher is better).
 
 | Implementation  |  Throughput |    ms/iter | vs best |
 | --------------- | ----------: | ---------: | ------- |
-| **Wado** (Gale) | 236.58 KB/s | 145.362 ms | 1.00x   |
-| Java (ANTLR4)   |  38.68 KB/s | 888.985 ms | 6.12x   |
+| Java (ANTLR4)   | 611.67 KB/s |  56.223 ms | 1.00x   |
+| **Wado** (Gale) | 222.64 KB/s | 154.467 ms | 2.75x   |
 
-Gale is measured in-process (grammar assembly + code generation) and emits a
-Wado recursive-descent parser; ANTLR4 runs its reference jar
-(`java -jar antlr-4.13.2-complete.jar -Dlanguage=Java`, ~0.14 s of which is JVM
-startup) over the same two files and emits Java. The ANTLR4 row needs `java` and
-is skipped if it is absent.
+Both rows run in-process and warm: Gale does grammar assembly plus code
+generation and emits a Wado recursive-descent parser, ANTLR4 loops
+`org.antlr.v4.Tool` after a JIT warmup and emits Java. Neither generates
+listeners. ANTLR4 writes its output to disk and re-reads the grammars each
+iteration where Gale returns a `String` from memory; both terms are small next
+to generation. The ANTLR4 row needs `java`/`javac` and is skipped without them.
 
 ## Application Server
 
