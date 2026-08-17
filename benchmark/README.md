@@ -68,10 +68,10 @@ against `serde_json` (Rust) and `JSON.stringify` / `JSON.parse` (JS), CBOR puts
 JSON source size in both, so the CBOR figures stay readable next to the JSON
 ones; `vs best` ranks within one codec.
 
-Every serialize row produces UTF-8 bytes — the JS one encodes with
-`TextEncoder`, since `String.length` counts UTF-16 units. Deserialize is not
-symmetric: Rust and Wado build a typed struct tree, `JSON.parse` an untyped
-object graph with no field or type checking.
+Every row starts and ends at UTF-8 bytes: the JS ones go through `TextEncoder`
+and `TextDecoder`, since `String.length` counts UTF-16 units and `JSON.parse`
+wants a string. What the rows build still differs — Rust and Wado a typed struct
+tree, `JSON.parse` an untyped object graph with no field or type checking.
 
 ### twitter
 
@@ -81,17 +81,17 @@ JSON serialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)    |   2.01 GB/s | 0.314 ms | 1.00x   |
-| JavaScript (JSON)    |   1.50 GB/s | 0.421 ms | 1.34x   |
-| **Wado** (core:json) | 615.58 MB/s | 1.025 ms | 3.26x   |
+| Rust (serde_json)    |   2.05 GB/s | 0.307 ms | 1.00x   |
+| JavaScript (JSON)    |   1.44 GB/s | 0.438 ms | 1.43x   |
+| **Wado** (core:json) | 618.01 MB/s | 1.021 ms | 3.33x   |
 
 JSON deserialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)    | 856.10 MB/s | 0.738 ms | 1.00x   |
-| JavaScript (JSON)    | 663.19 MB/s | 0.952 ms | 1.29x   |
-| **Wado** (core:json) | 156.18 MB/s | 4.043 ms | 5.48x   |
+| JavaScript (JSON)    | 557.12 MB/s | 1.134 ms | 1.00x   |
+| Rust (serde_json)    | 544.87 MB/s | 1.159 ms | 1.02x   |
+| **Wado** (core:json) | 158.42 MB/s | 3.986 ms | 3.51x   |
 
 CBOR serialize:
 
@@ -116,17 +116,17 @@ JSON serialize:
 
 | Implementation       |  Throughput |   ms/iter | vs best |
 | -------------------- | ----------: | --------: | ------- |
-| Rust (serde_json)    | 920.59 MB/s |  2.445 ms | 1.00x   |
-| JavaScript (JSON)    | 577.79 MB/s |  3.896 ms | 1.59x   |
-| **Wado** (core:json) | 166.58 MB/s | 13.513 ms | 5.53x   |
+| Rust (serde_json)    | 915.57 MB/s |  2.459 ms | 1.00x   |
+| JavaScript (JSON)    | 556.16 MB/s |  4.048 ms | 1.65x   |
+| **Wado** (core:json) | 166.94 MB/s | 13.484 ms | 5.48x   |
 
 JSON deserialize:
 
 | Implementation       |  Throughput |   ms/iter | vs best |
 | -------------------- | ----------: | --------: | ------- |
-| JavaScript (JSON)    | 429.78 MB/s |  5.238 ms | 1.00x   |
-| Rust (serde_json)    | 343.80 MB/s |  6.548 ms | 1.25x   |
-| **Wado** (core:json) | 173.85 MB/s | 12.947 ms | 2.47x   |
+| JavaScript (JSON)    | 348.82 MB/s |  6.453 ms | 1.00x   |
+| Rust (serde_json)    | 332.99 MB/s |  6.760 ms | 1.05x   |
+| **Wado** (core:json) | 173.79 MB/s | 12.952 ms | 2.01x   |
 
 CBOR serialize:
 
@@ -151,18 +151,18 @@ JSON serialize:
 
 | Implementation       | Throughput |  ms/iter | vs best |
 | -------------------- | ---------: | -------: | ------- |
-| Rust (serde_json)    |  3.92 GB/s | 0.440 ms | 1.00x   |
-| JavaScript (JSON)    |  1.43 GB/s | 1.204 ms | 2.74x   |
-| **Wado** (core:json) |  1.03 GB/s | 1.678 ms | 3.81x   |
+| Rust (serde_json)    |  3.96 GB/s | 0.437 ms | 1.00x   |
+| JavaScript (JSON)    |  1.40 GB/s | 1.231 ms | 2.82x   |
+| **Wado** (core:json) |  1.02 GB/s | 1.685 ms | 3.86x   |
 
 JSON deserialize:
 
 | Implementation        |  Throughput |  ms/iter | vs best |
 | --------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)     |   1.14 GB/s | 1.514 ms | 1.00x   |
-| JavaScript (JSON)     | 873.77 MB/s | 1.977 ms | 1.31x   |
-| **Wado** (PoC parser) | 394.38 MB/s | 4.379 ms | 2.89x   |
-| **Wado** (core:json)  | 272.46 MB/s | 6.339 ms | 4.19x   |
+| Rust (serde_json)     |   1.00 GB/s | 1.726 ms | 1.00x   |
+| JavaScript (JSON)     | 735.33 MB/s | 2.349 ms | 1.36x   |
+| **Wado** (PoC parser) | 394.42 MB/s | 4.379 ms | 2.54x   |
+| **Wado** (core:json)  | 260.99 MB/s | 6.617 ms | 3.83x   |
 
 The PoC row (`json_catalog_v2.wado`) is a hand-written parser for this one
 schema, not a general decoder. It is the mark `core:json` should reach first.

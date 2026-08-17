@@ -120,12 +120,12 @@ fn count_points(fc: &FeatureCollection) -> usize {
 }
 
 fn main() {
-    let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/canada.json"))
+    let json_data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/canada.json"))
         .expect("Failed to read canada.json");
     let size = json_data.len();
 
     let fc: FeatureCollection =
-        serde_json::from_str(&json_data).expect("Failed to parse canada.json");
+        serde_json::from_slice(&json_data).expect("Failed to parse canada.json");
 
     println!("json-canada: {size} bytes");
 
@@ -134,7 +134,7 @@ fn main() {
     });
 
     let total_points = bench("De", size as f64, "B", || {
-        let fc: FeatureCollection = serde_json::from_str(&json_data).expect("decode");
+        let fc: FeatureCollection = serde_json::from_slice(&json_data).expect("decode");
         count_points(&fc)
     });
 

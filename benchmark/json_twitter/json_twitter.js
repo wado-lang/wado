@@ -65,9 +65,13 @@ function bench(label, workPerIter, unit, f) {
   return result;
 }
 
-const jsonData = fs.readFileSync(path.join(__dirname, "twitter.json"), "utf-8");
-const size = Buffer.byteLength(jsonData, "utf-8");
-const obj = JSON.parse(jsonData);
+// Raw bytes so the deserialize row starts where the Rust and Wado rows do.
+// The object under Ser is parsed from a plainly-read string: decoding through
+// TextDecoder instead leaves V8 a representation that halves stringify.
+const jsonBytes = fs.readFileSync(path.join(__dirname, "twitter.json"));
+const size = jsonBytes.length;
+const decoder = new TextDecoder();
+const obj = JSON.parse(fs.readFileSync(path.join(__dirname, "twitter.json"), "utf-8"));
 
 console.log(`json-twitter: ${size} bytes`);
 
@@ -77,7 +81,7 @@ const encoder = new TextEncoder();
 bench("Ser", size, "B", () => encoder.encode(JSON.stringify(obj)).length);
 
 const count = bench("De", size, "B", () => {
-  const resp = JSON.parse(jsonData);
+  const resp = JSON.parse(decoder.decode(jsonBytes));
   return resp.statuses.length;
 });
 
