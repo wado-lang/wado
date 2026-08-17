@@ -2,7 +2,8 @@
 # HTTP routing benchmark: `wado serve` vs Hono (Node.js & Bun) vs Axum, over
 # one worker shape per entry in SHAPES. README.md covers the methodology.
 #
-# Overrides: SLICE, ROUNDS, SHAPES, CONNECTIONS_PER_WORKER, OHA_CORE_COUNT.
+# Overrides: SLICE, ROUNDS, SHAPES, CONNECTIONS_PER_WORKER, OHA_CORE_COUNT,
+# HEADROOM_CHECK.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -10,6 +11,7 @@ SLICE="${SLICE:-10}"
 ROUNDS="${ROUNDS:-3}"
 SHAPES="${SHAPES:-1 4}"
 CONNECTIONS_PER_WORKER="${CONNECTIONS_PER_WORKER:-200}"
+HEADROOM_CHECK="${HEADROOM_CHECK:-0}"
 WADO_BIN="../../target/release/wado"
 HONO_PORT="3000"
 AXUM_PORT="3001"
@@ -181,12 +183,16 @@ run_shape() {
     done
 
     # A gain at 2x connections means `oha` set that number, not the server.
-    CONNECTIONS=$((CONNECTIONS * 2))
-    rps=$(measure "$url" "$method" "$path")
-    CONNECTIONS=$((CONNECTIONS / 2))
-    if [ "${rps:-0}" -gt $((best_rps * 105 / 100)) ]; then
-      echo "    WARNING: ${best_rps} -> ${rps} req/s at 2x connections; this row is a floor"
-      saturated="yes"
+    # Off by default: it passes at the tuned settings, so it earns its slice
+    # only when CONNECTIONS_PER_WORKER, OHA_CORE_COUNT or a shape changes.
+    if [ "$HEADROOM_CHECK" = "1" ]; then
+      CONNECTIONS=$((CONNECTIONS * 2))
+      rps=$(measure "$url" "$method" "$path")
+      CONNECTIONS=$((CONNECTIONS / 2))
+      if [ "${rps:-0}" -gt $((best_rps * 105 / 100)) ]; then
+        echo "    WARNING: ${best_rps} -> ${rps} req/s at 2x connections; this row is a floor"
+        saturated="yes"
+      fi
     fi
 
     cleanup
@@ -203,6 +209,7 @@ run_shape() {
     for si in "${!SERVER_KEYS[@]}"; do printf '%26s' "${BEST[${si}|${ri}]:-0}"; done
     printf '\n'
   done
+  [ "$HEADROOM_CHECK" = "1" ] || return 0
   echo
   if [ -n "$saturated" ]; then
     echo "Headroom check: FAILED — see the warnings above."

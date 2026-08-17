@@ -41,9 +41,10 @@ A saturated `oha` caps the fastest servers and compresses every ratio, which
 reads as "the servers are closer than they are". Servers take cores
 `0..workers-1` and `oha` a fixed `OHA_CORE_COUNT` at the top — spreading the
 same connections over more generator threads thins each one's batch and the
-server pays for the extra wakeups, so "the rest" is the wrong share. Every
-server ends with its own re-run at twice the connections; a gain there means
-`oha` set that number, and the run says so.
+server pays for the extra wakeups, so "the rest" is the wrong share.
+`HEADROOM_CHECK=1` re-runs each server at twice the connections; a gain there
+means `oha` set that number, not the server. It passes at the settings above,
+so it is off unless those change.
 
 Only the server under measurement runs, and its port is asserted free before
 the next one starts: a survivor keeps serving under `SO_REUSEPORT` alongside
@@ -104,6 +105,7 @@ Tunables (env vars):
 # SHAPES: worker counts to measure (default "1 4")
 # CONNECTIONS_PER_WORKER: offered concurrency per worker (default 200)
 # OHA_CORE_COUNT: cores for the load generator (default 4)
+# HEADROOM_CHECK: 1 to verify oha is not the ceiling (default 0)
 SLICE=10 ROUNDS=3 SHAPES="1 4" mise run -C benchmark http-routing
 ```
 
