@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786964554120,
+  "lastUpdate": 1786966253906,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -48985,6 +48985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1cf6a96b8a1fafa912f42af70e77597450bcd450"
         },
         "date": 1786964553493,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "40b7d5cedfcb7655c42aa9097f5fc8a88e958b87",
+          "message": "Merge pull request #1838 from wado-lang/claude/json-utf8-scan-and-newtype-synthesis\n\nfix: diagnose unresolved declared types, and validate every JSON string token",
+          "timestamp": "2026-08-17T20:17:37+09:00",
+          "tree_id": "4355ae49357254722c0ea78acef906170304de9f",
+          "url": "https://github.com/wado-lang/wado/commit/40b7d5cedfcb7655c42aa9097f5fc8a88e958b87"
+        },
+        "date": 1786966253020,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
