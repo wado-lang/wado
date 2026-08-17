@@ -1176,29 +1176,32 @@ test "remove_unchecked ASCII" {
     assert s == "ac";
 }
 
-// `utf8_sequence_len` carries the validity table that `decode_utf8_scalar`
-// also encodes. Pin them together so neither can drift unnoticed.
-test "utf8_sequence_len agrees with from_utf8_slice on every lead byte" {
+// `utf8_sequence_len` (behind `from_utf8_slice`) and `decode_utf8_scalar`
+// (behind `from_utf8_lossy`) each carry the UTF-8 validity table. Cross them so
+// neither can drift: a sequence one accepts is exactly one the other decodes
+// without substituting U+FFFD.
+test "the two UTF-8 validity tables agree" {
+    let mut cases: List<List<u8>> = [];
     for let mut b = 0; b < 256; b += 1 {
-        let one: List<u8> = [b as u8];
-        let lone = String::from_utf8_slice(one.as_slice()) matches { Ok(_) };
-        assert lone == (b < 0x80), `lone byte ${b}`;
-
-        // Every lead byte followed by one continuation byte.
-        let two: List<u8> = [b as u8, 0x80];
-        let pair = String::from_utf8_slice(two.as_slice()) matches { Ok(_) };
-        assert pair == (b >= 0xC2 && b < 0xE0), `lead ${b} + continuation`;
+        cases.push([b as u8]);
+        cases.push([b as u8, 0x80]);
+        cases.push([b as u8, 0xBF, 0xBF]);
+        cases.push([b as u8, 0xBF, 0xBF, 0xBF]);
     }
-
     // Boundary sequences the table singles out.
-    let overlong: List<u8> = [0xC0, 0x80];
-    assert String::from_utf8_slice(overlong.as_slice()) matches { Err(_) };
-    let surrogate: List<u8> = [0xED, 0xA0, 0x80];
-    assert String::from_utf8_slice(surrogate.as_slice()) matches { Err(_) };
-    let max: List<u8> = [0xF4, 0x8F, 0xBF, 0xBF];
-    assert String::from_utf8_slice(max.as_slice()) matches { Ok(_) };
-    let too_big: List<u8> = [0xF4, 0x90, 0x80, 0x80];
-    assert String::from_utf8_slice(too_big.as_slice()) matches { Err(_) };
+    cases.push([0xC0, 0x80]);  // overlong NUL
+    cases.push([0xE0, 0x9F, 0xBF]);  // overlong 3-byte
+    cases.push([0xED, 0xA0, 0x80]);  // UTF-16 surrogate half
+    cases.push([0xF0, 0x8F, 0xBF, 0xBF]);  // overlong 4-byte
+    cases.push([0xF4, 0x8F, 0xBF, 0xBF]);  // U+10FFFF, the last scalar
+    cases.push([0xF4, 0x90, 0x80, 0x80]);  // one past U+10FFFF
+    cases.push([0xF5, 0x80, 0x80, 0x80]);  // lead beyond the range
+
+    for let bytes of cases {
+        let accepted = String::from_utf8_slice(bytes.as_slice()) matches { Ok(_) };
+        let lossy = String::from_utf8_lossy(bytes);
+        assert accepted == !lossy.contains("\uFFFD"), `${bytes:?}`;
+    }
 }
 
 test "String::from_utf8_slice valid (ASCII, multi-byte, mixed)" {

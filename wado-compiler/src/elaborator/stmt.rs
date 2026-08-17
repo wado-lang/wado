@@ -817,12 +817,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// variable is assigned before any use.
     fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
         // Type annotation is guaranteed by the parser when there is no initializer.
-        let type_id = self.resolve_type(
-            let_stmt
-                .ty
-                .as_ref()
-                .expect("parser ensures type annotation for uninit let"),
-        );
+        let annotated_type = let_stmt
+            .ty
+            .as_ref()
+            .expect("parser ensures type annotation for uninit let");
+        let type_id = self.resolve_type(annotated_type);
+        self.reject_unresolved_annotation(annotated_type);
 
         // Reify rebuilds the pre-declared `Let` (with
         // its unit placeholder value) from the AST; this walk only binds the

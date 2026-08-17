@@ -1,0 +1,23 @@
+// The annotation check must cover an uninitialized `let` too: the parser
+// requires the annotation there, and it reached WIR build unresolved.
+
+use { from_bytes } from "core:json";
+
+struct Rec {
+    a: String,
+}
+
+export fn run() {
+    let bytes: ByteList = [0x7b, 0x7d];
+    let parsed: Result<Rec, DeserializeError>;
+    parsed = from_bytes(bytes);
+    match parsed {
+        Ok(value) => {
+        },
+        Err(error) => {
+        },
+    }
+}
+
+__DATA__
+{"compile_error": "unknown type 'DeserializeError'"}

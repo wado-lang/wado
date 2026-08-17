@@ -3024,6 +3024,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        // A tuple reaching here is a sequence literal whose target builds no
+        // sequence (`[1, 2] as Array<i32>`): the coercion above declined it and
+        // no representation relates the two, so reify would hand codegen a
+        // `StructNew` typed as the target. The annotation form of the same
+        // binding is a plain type mismatch, and so is this.
+        if !self.tysys.type_table.borrow().is_tuple(target_type)
+            && self.tysys.type_table.borrow().is_tuple(source_type)
+        {
+            let from_name = self.tysys.type_table.borrow().type_name(source_type);
+            let to_name = self.tysys.type_table.borrow().type_name(target_type);
+            let _ = self.emit(TypeError::InvalidCast {
+                from: from_name,
+                to: to_name,
+                hint: "the target builds no sequence from a literal".to_string(),
+                span: cast.span,
+            });
+            // The target type is the cast's answer, as the other invalid-cast
+            // arms leave it: the error already stands, and a cascade of
+            // method-not-found on `error` would bury it.
+            return target_type;
+        }
+
         // Casts *from* i128/u128 (including newtypes of them) support:
         // f64/f32 (correctly rounded), the integer widths (truncating),
         // and i128 ↔ u128 (bit reinterpret) — each modulo newtypes, which
