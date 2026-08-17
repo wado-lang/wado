@@ -71,8 +71,9 @@ Deserializes a value from UTF-8 JSON bytes — the primary entry point.
 
 Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
 `ByteSlice`, or a `String` (its UTF-8 bytes). The deserializer scans the
-input bytes in place; UTF-8 is validated where string content is
-materialized (RFC 8259 §8.1), reporting invalid bytes as `MalformedInput`.
+input bytes in place; every string token is validated as UTF-8 (RFC 8259
+§8.1) — skipped and key tokens included — reporting invalid bytes as
+`MalformedInput`.
 
 ### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
@@ -234,7 +235,9 @@ intermediate String allocation.
 
 #### `pub fn skip_string(&mut self) -> Result<(), DeserializeError>`
 
-Advances past a JSON string without allocating.
+Skips a string token without allocating. Shares `scan_string_run` with
+the reading path, so a skipped string is held to the same UTF-8 rule as
+a materialized one.
 
 #### `pub fn skip_value(&mut self) -> Result<(), DeserializeError>`
 

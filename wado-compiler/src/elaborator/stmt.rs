@@ -32,6 +32,16 @@ enum RefBinding {
 /// must surface is the binding set (used by or-pattern validation).
 type PatBindings = Vec<(String, u32, TypeId)>;
 
+/// Generic heads `resolve_generic_type` answers itself; none names a
+/// declaration a site could find.
+const BUILTIN_GENERIC_HEADS: &[&str] = &[
+    "Option",
+    "Stream",
+    "StreamWritable",
+    "Future",
+    "FutureWritable",
+];
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Walk a block for its fact-recording side effects. Reify rebuilds the
     /// `TirBlock` from the AST; this walk
@@ -386,9 +396,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
             }
             ast::Type::Generic(generic) => {
+                // The head answers first: with it unknown the arguments are
+                // noise, and a builtin head names no declaration at all.
+                if !BUILTIN_GENERIC_HEADS.contains(&generic.name.as_str())
+                    && generic.name != crate::tir::TypeTable::ARRAY_TYPE_NAME
+                    && !self
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&generic.name)
+                    && self.type_decl_at(Some(generic.id), &generic.name).is_none()
+                {
+                    let _ = self.emit(TypeError::UnknownType {
+                        name: generic.name.clone(),
+                        span: generic.span,
+                    });
+                    return;
+                }
                 for arg in &generic.args {
                     self.reject_unresolved_annotation(arg);
                 }
+            }
+            ast::Type::NamespacedGeneric(namespaced) => {
+                for arg in &namespaced.args {
+                    self.reject_unresolved_annotation(arg);
+                }
+            }
+            ast::Type::Function(func_ty) => {
+                for param in &func_ty.params {
+                    self.reject_unresolved_annotation(param);
+                }
+                self.reject_unresolved_annotation(&func_ty.return_type);
             }
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
                 self.reject_unresolved_annotation(inner);
@@ -398,11 +436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.reject_unresolved_annotation(elem);
                 }
             }
-            ast::Type::Function(_)
-            | ast::Type::NamespacedGeneric(_)
-            | ast::Type::TypePackSpread(_, _)
-            | ast::Type::Infer(_)
-            | ast::Type::Error(_) => {}
+            ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
         }
     }
 

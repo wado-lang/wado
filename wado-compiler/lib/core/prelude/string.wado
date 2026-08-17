@@ -1111,12 +1111,12 @@ impl String {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
-            let scalar = decode_utf8_scalar(bytes, i, len);
-            if !scalar.valid {
+            let advance = String::utf8_sequence_len(&bytes, i, len);
+            if advance == 0 {
                 builtin::cold_path();
                 return Result::Err(`invalid UTF-8 at byte ${i}`);
             }
-            i += scalar.advance;
+            i += advance;
         }
         return Result::Ok(String {
             repr: bytes.to_array() as ByteArray,

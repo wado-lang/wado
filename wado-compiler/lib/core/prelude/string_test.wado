@@ -1176,6 +1176,31 @@ test "remove_unchecked ASCII" {
     assert s == "ac";
 }
 
+// `utf8_sequence_len` carries the validity table that `decode_utf8_scalar`
+// also encodes. Pin them together so neither can drift unnoticed.
+test "utf8_sequence_len agrees with from_utf8_slice on every lead byte" {
+    for let mut b = 0; b < 256; b += 1 {
+        let one: List<u8> = [b as u8];
+        let lone = String::from_utf8_slice(one.as_slice()) matches { Ok(_) };
+        assert lone == (b < 0x80), `lone byte ${b}`;
+
+        // Every lead byte followed by one continuation byte.
+        let two: List<u8> = [b as u8, 0x80];
+        let pair = String::from_utf8_slice(two.as_slice()) matches { Ok(_) };
+        assert pair == (b >= 0xC2 && b < 0xE0), `lead ${b} + continuation`;
+    }
+
+    // Boundary sequences the table singles out.
+    let overlong: List<u8> = [0xC0, 0x80];
+    assert String::from_utf8_slice(overlong.as_slice()) matches { Err(_) };
+    let surrogate: List<u8> = [0xED, 0xA0, 0x80];
+    assert String::from_utf8_slice(surrogate.as_slice()) matches { Err(_) };
+    let max: List<u8> = [0xF4, 0x8F, 0xBF, 0xBF];
+    assert String::from_utf8_slice(max.as_slice()) matches { Ok(_) };
+    let too_big: List<u8> = [0xF4, 0x90, 0x80, 0x80];
+    assert String::from_utf8_slice(too_big.as_slice()) matches { Err(_) };
+}
+
 test "String::from_utf8_slice valid (ASCII, multi-byte, mixed)" {
     assert String::from_utf8_slice(([] as List<u8>).as_slice()) matches { Ok(s) && s == "" };
     assert String::from_utf8_slice(([72, 105] as List<u8>).as_slice()) matches { Ok(s) && s == "Hi" };
