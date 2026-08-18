@@ -236,6 +236,30 @@ struct PatternLowerer<'a> {
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
 }
 
+/// Whether `pattern` binds any part of the scrutinee by value in a way that
+/// could alias it — the only thing a scrutinee temp's defensive copy protects.
+///
+/// A wildcard, a literal, a discriminant test and a reference binding all read
+/// without taking ownership, so a `match` made only of those needs no temp.
+fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
+    match pattern {
+        TirPattern::Binding { type_id, .. } => {
+            crate::lower::plan::value_copy::needs_value_copy(*type_id, type_table)
+        }
+        TirPattern::Tuple(sub, _) | TirPattern::Variant { bindings: sub, .. } | TirPattern::Or(sub) => {
+            sub.iter().any(|p| binds_by_value(p, type_table))
+        }
+        TirPattern::Struct { fields, .. } => fields
+            .iter()
+            .any(|f| binds_by_value(&f.pattern, type_table)),
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => false,
+    }
+}
+
 /// The type a compound pattern's temp holds: the scrutinee's, with the
 /// match-ergonomic references peeled off.
 ///
@@ -1547,24 +1571,28 @@ impl<'a> PatternLowerer<'a> {
                 // calls (e.g. `Iterator::next` in `while let` loops); with the
                 // scrutinee inline the optimisation stops firing.
                 //
-                // And the temp is where a value-typed scrutinee's defensive
-                // copy lands — the arm bindings project out of it and take
-                // none of their own — so a bare local scrutinee of a copied
-                // type needs one too, or a binding aliases the local and a
-                // write through it is visible through the binding. The `Let`
-                // still goes through the fold's own decision, which elides the
-                // copy where the value is fresh or moved.
+                // And the temp is where a defensive copy lands when an arm
+                // binds part of the scrutinee *by value*: those bindings
+                // project out of the temp and take no copy of their own, so
+                // without one they alias the scrutinee and a write through it
+                // shows up through the binding. That is a fact about what the
+                // arms bind, not about the scrutinee's type — `if let Err(_) =
+                // r` binds nothing, and copying `r` there rebuilds a whole
+                // variant for no one. The `Let` still goes through the fold's
+                // own decision, which elides the copy where the value is fresh
+                // or moved.
                 //
                 // This runs after `resource_cleanup`, so the temp does not
                 // perturb resource-flow analysis.
                 if let TirExprKind::Match {
-                    expr: scrutinee, ..
+                    expr: scrutinee,
+                    arms,
+                    ..
                 } = &mut expr.kind
                     && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
-                        || crate::lower::plan::value_copy::needs_value_copy(
-                            scrutinee.type_id,
-                            type_table,
-                        ))
+                        || arms
+                            .iter()
+                            .any(|arm| binds_by_value(&arm.pattern, type_table)))
                 {
                     let placeholder =
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
