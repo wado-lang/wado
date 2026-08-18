@@ -76,6 +76,16 @@ assert_port_free() {
   exit 1
 }
 
+# Busy jiffies over a CPU list, from /proc/stat: per-CPU rather than per-PID, so
+# it covers Node's cluster children and Bun's SO_REUSEPORT processes.
+cpu_busy() {
+  awk -v want="$1" '
+    BEGIN { n = split(want, a, ","); for (i = 1; i <= n; i++) sel["cpu" a[i]] = 1 }
+    /^cpu[0-9]/ && ($1 in sel) { for (f = 2; f <= NF; f++) tot += $f; idle += $5 + $6 }
+    END { print tot, idle }
+  ' /proc/stat
+}
+
 # Whole req/s, so the callers can compare with -gt.
 measure() {
   "${OHA_PIN[@]}" "$OHA_BIN" -m "$2" -z "${SLICE}s" -c "$CONNECTIONS" \
@@ -141,7 +151,10 @@ start_server() {
 run_shape() {
   local workers="$1"
   local key si ri req method path rps url best_rps best_method best_path
-  local pinned="" saturated="" got differs=""
+  local pinned="" saturated="" got differs="" unsaturated=""
+  local cpu_tot0 cpu_idle0 cpu_tot1 cpu_idle1 cpu_tot_acc cpu_idle_acc busy
+  local oha_tot0 oha_idle0 oha_tot1 oha_idle1 oha_tot_acc oha_idle_acc oha_busy
+  local SERVER_CPUS="" OHA_CPUS=""
   CONNECTIONS=$((CONNECTIONS_PER_WORKER * workers))
 
   # `oha` gets a fixed core count, not "the rest": spreading the same
@@ -157,6 +170,8 @@ run_shape() {
   if [ -n "$pinned" ]; then
     SERVER_PIN=(taskset -c "0-$((workers - 1))")
     OHA_PIN=(taskset -c "$((NPROC - OHA_CORE_COUNT))-$((NPROC - 1))")
+    SERVER_CPUS=$(seq -s, 0 $((workers - 1)))
+    OHA_CPUS=$(seq -s, $((NPROC - OHA_CORE_COUNT)) $((NPROC - 1)))
     echo "CPU pinning: servers on cores 0-$((workers - 1)), oha on cores $((NPROC - OHA_CORE_COUNT))-$((NPROC - 1))"
   else
     SERVER_PIN=(env)
@@ -190,13 +205,31 @@ run_shape() {
     best_rps=0
     best_method=""
     best_path=""
+    cpu_tot_acc=0
+    cpu_idle_acc=0
+    oha_tot_acc=0
+    oha_idle_acc=0
     for ri in "${!REQUESTS[@]}"; do
       req="${REQUESTS[$ri]}"
       method="${req%% *}"
       path="${req#* }"
       BEST[${si}|${ri}]=0
       for _ in $(seq 1 "$ROUNDS"); do
+        # Sampled around each slice, not across the whole block: the gaps
+        # between oha invocations are idle and would read as unsaturated.
+        if [ -n "$pinned" ]; then
+          read -r cpu_tot0 cpu_idle0 <<<"$(cpu_busy "$SERVER_CPUS")"
+          read -r oha_tot0 oha_idle0 <<<"$(cpu_busy "$OHA_CPUS")"
+        fi
         rps=$(measure "$url" "$method" "$path")
+        if [ -n "$pinned" ]; then
+          read -r cpu_tot1 cpu_idle1 <<<"$(cpu_busy "$SERVER_CPUS")"
+          read -r oha_tot1 oha_idle1 <<<"$(cpu_busy "$OHA_CPUS")"
+          cpu_tot_acc=$((cpu_tot_acc + cpu_tot1 - cpu_tot0))
+          cpu_idle_acc=$((cpu_idle_acc + cpu_idle1 - cpu_idle0))
+          oha_tot_acc=$((oha_tot_acc + oha_tot1 - oha_tot0))
+          oha_idle_acc=$((oha_idle_acc + oha_idle1 - oha_idle0))
+        fi
         [ -z "$rps" ] && rps=0
         [ "$rps" -gt "${BEST[${si}|${ri}]}" ] && BEST[${si}|${ri}]="$rps"
       done
@@ -206,6 +239,23 @@ run_shape() {
         best_path="$path"
       fi
     done
+
+    # Against a fast enough server the generator runs out first, and more
+    # connections will not show it: `oha` is short of CPU, not of work.
+    if [ -n "$pinned" ]; then
+      busy=$(awk -v d="$cpu_tot_acc" -v i="$cpu_idle_acc" \
+        'BEGIN { printf "%.0f", (d > 0 ? (1 - i / d) * 100 : 0) }')
+      oha_busy=$(awk -v d="$oha_tot_acc" -v i="$oha_idle_acc" \
+        'BEGIN { printf "%.0f", (d > 0 ? (1 - i / d) * 100 : 0) }')
+      if [ "$busy" -lt 90 ]; then
+        if [ "$oha_busy" -ge 90 ]; then
+          echo "    WARNING: $(server_name "$key") ran at ${busy}% while oha ran at ${oha_busy}%; this row is a floor set by the generator"
+        else
+          echo "    WARNING: $(server_name "$key") ran at ${busy}% and oha at ${oha_busy}%; neither side ran out of CPU"
+        fi
+        unsaturated="yes"
+      fi
+    fi
 
     # A gain at 2x connections means `oha` set that number, not the server.
     # It passes at the tuned settings, so it costs a slice only when asked.
@@ -236,6 +286,11 @@ run_shape() {
   echo
   if [ -z "$pinned" ]; then
     echo "These rows are unpinned: the servers and the load generator shared cores."
+  fi
+  if [ -n "$unsaturated" ]; then
+    echo "Saturation check: FAILED — see the warnings above."
+  else
+    echo "Saturation check: ok — every server ran its pinned cores out of CPU."
   fi
   if [ -n "$differs" ]; then
     echo "Response check: FAILED — the servers do not answer alike; see above."

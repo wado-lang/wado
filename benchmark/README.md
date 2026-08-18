@@ -308,8 +308,15 @@ Four workers — a small VM running one instance:
 | `GET /static/index.html`        |     373,769 |                  228,782 |                86,381 |                    72,744 |
 
 `wado serve` places third: level with Hono on Node at one worker, clear of it at
-four. It stops gaining past roughly eight workers, and the allocation behind its
-`content-length` header value costs it a few percent of every request.
+four. The allocation behind its `content-length` header value costs it a few
+percent of every request.
+
+`SHAPES` names worker counts, not cores. Scaling past them is a question this
+harness cannot answer: the generator-to-server thread ratio moves the result
+more than the cores do, and it shifts with every point.
+
+The Axum row at four workers is a floor — `oha` runs out of CPU there before the
+server does, so the figure is the generator's limit rather than Axum's.
 
 HTTP routing needs `oha` and Bun, and is measured separately
 (`SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`).
