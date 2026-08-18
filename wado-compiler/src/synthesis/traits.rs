@@ -611,6 +611,7 @@ fn generate_struct_reflect_methods(
 
     let type_name_fn = generate_type_name_fn(
         receiver,
+        &type_table.borrow().struct_head_decl_name(*def),
         env.string_type,
         reflect_trait_name,
         &env.type_name_method,
@@ -1341,8 +1342,13 @@ fn generate_field_get_helper(
 
 /// Build `Type^ReflectKind::type_name() -> String { return "Type"; }` —
 /// shared by the struct `ReflectStruct` and variant `ReflectVariant` syntheses.
+///
+/// `display_name` is what the string says, and it is the caller's because it
+/// belongs to the declaration namespace: an anonymous shape's head *is* its
+/// mangle, module paths and all, and that is not what a reader should be shown.
 fn generate_type_name_fn(
     receiver: &FqTypeName,
+    display_name: &str,
     string_type: TypeId,
     reflect_trait_name: &crate::name::FqTraitName,
     type_name_method: &str,
@@ -1352,7 +1358,7 @@ fn generate_type_name_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let literal = TirExpr::new(
-        TirExprKind::StringLiteral(receiver.head().name().to_string()),
+        TirExprKind::StringLiteral(display_name.to_string()),
         string_type,
         span,
     );
@@ -1527,6 +1533,7 @@ fn generate_variant_reflect_methods(
 
     let type_name_fn = generate_type_name_fn(
         &target.receiver,
+        target.receiver.head().name(),
         env.string_type,
         variant_trait_name,
         &env.type_name_method,
@@ -2236,6 +2243,7 @@ fn generate_enum_reflect_methods(
 
     let type_name_fn = generate_type_name_fn(
         &target.receiver,
+        target.receiver.head().name(),
         env.string_type,
         enum_trait_name,
         &env.type_name_method,
@@ -2602,6 +2610,7 @@ fn generate_flags_reflect_methods(
 
     let type_name_fn = generate_type_name_fn(
         &target.receiver,
+        target.receiver.head().name(),
         env.string_type,
         flags_trait_name,
         &env.type_name_method,

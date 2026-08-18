@@ -110,13 +110,11 @@ impl TirRefVisitor for SeedWalker<'_> {
                     ),
                 );
             }
-            // A statement-position `Match` over a non-`Local` scrutinee is
-            // hoisted into a temp during lowering, and that temp takes the
-            // copy. Nothing here sees the temp, so seed its type.
+            // A statement-position `Match` scrutinee is hoisted into a temp
+            // during lowering, and that temp takes the copy. Nothing here sees
+            // the temp, so seed its type.
             TirStmtKind::Expr(expr) => {
-                if let TirExprKind::Match { expr: scrutinee, .. } = &expr.kind
-                    && !matches!(scrutinee.kind, TirExprKind::Local { .. })
-                {
+                if let TirExprKind::Match { expr: scrutinee, .. } = &expr.kind {
                     self.record_if_wrap(scrutinee);
                 }
             }

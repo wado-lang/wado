@@ -1539,18 +1539,32 @@ impl<'a> PatternLowerer<'a> {
                 ));
             }
             TirStmtKind::Expr(mut expr) => {
-                // Hoist a non-trivial statement-position `Match`
-                // scrutinee into a temp local. `labeled_block_fusion`
-                // keys on the `(Let, Match)` pair to eliminate GC
-                // allocations from inlined `Option<T>`-returning calls
-                // (e.g. `Iterator::next` in `while let` loops); with the
-                // scrutinee inline the optimisation stops firing. This
-                // runs after `resource_cleanup`, so the temp does not
+                // Hoist a statement-position `Match` scrutinee into a temp
+                // local. Two reasons, and either is enough:
+                //
+                // `labeled_block_fusion` keys on the `(Let, Match)` pair to
+                // eliminate GC allocations from inlined `Option<T>`-returning
+                // calls (e.g. `Iterator::next` in `while let` loops); with the
+                // scrutinee inline the optimisation stops firing.
+                //
+                // And the temp is where a value-typed scrutinee's defensive
+                // copy lands — the arm bindings project out of it and take
+                // none of their own — so a bare local scrutinee of a copied
+                // type needs one too, or a binding aliases the local and a
+                // write through it is visible through the binding. The `Let`
+                // still goes through the fold's own decision, which elides the
+                // copy where the value is fresh or moved.
+                //
+                // This runs after `resource_cleanup`, so the temp does not
                 // perturb resource-flow analysis.
                 if let TirExprKind::Match {
                     expr: scrutinee, ..
                 } = &mut expr.kind
-                    && !matches!(scrutinee.kind, TirExprKind::Local { .. })
+                    && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
+                        || crate::lower::plan::value_copy::needs_value_copy(
+                            scrutinee.type_id,
+                            type_table,
+                        ))
                 {
                     let placeholder =
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);

@@ -16,6 +16,11 @@ struct Holder {
     s: S,
 }
 
+variant V {
+    A(List<i32>),
+    B,
+}
+
 test "a let-destructure binding does not alias its source" {
     let mut src = S { items: [1] };
     let S { items } = src;
@@ -30,6 +35,29 @@ test "a match-arm binding does not alias its scrutinee" {
             h.s.items.push(3);
             assert items.len() == 1;
         }
+    }
+}
+
+// A bare local scrutinee is the shape the hoist used to skip, so it took no
+// copy at all and every arm binding aliased the local.
+test "a match-arm binding does not alias a local scrutinee" {
+    let mut s = S { items: [1] };
+    match s {
+        S { items } => {
+            s.items.push(2);
+            assert items.len() == 1;
+        }
+    }
+}
+
+test "a variant payload binding does not alias a local scrutinee" {
+    let mut v = V::A([1]);
+    match v {
+        V::A(xs) => {
+            v = V::A([9, 9]);
+            assert xs.len() == 1;
+        }
+        V::B => {}
     }
 }
 
