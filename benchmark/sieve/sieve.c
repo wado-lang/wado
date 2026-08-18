@@ -1,6 +1,6 @@
 // Sieve of Eratosthenes benchmark for C
 // Counts primes up to LIMIT using the sieve algorithm
-// Reference: π(10,000,000) = 664,579
+// Reference: π(2,000,000) = 148,933
 //
 // The sieve buffer is allocated once, outside the timed region, and reset to
 // `true` at the start of each iteration. This keeps allocation and first-touch

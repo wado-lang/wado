@@ -33,13 +33,17 @@ mise run on-task-started
    Which benchmarks run, and in what order, is `benchmark/mise.toml`'s `all`
    task.
 2. Run http-routing separately (needs `oha` + pinned cores):
-   `SLICE=4 ROUNDS=5 CONNECTIONS=50 mise run benchmark-http-routing`. It keeps
-   the per-(server, request) max internally, so one invocation suffices.
+   `SLICE=10 ROUNDS=3 SHAPES="1 4" mise run benchmark-http-routing`. It keeps
+   the per-(server, request) max internally, so one invocation suffices, and it
+   measures one worker shape per entry in `SHAPES`. Add `HEADROOM_CHECK=1` when
+   `CONNECTIONS_PER_WORKER`, `OHA_CORE_COUNT` or `SHAPES` changed, to confirm
+   `oha` was not the ceiling.
 3. Refresh the README Environment line versions: `mise exec -- node --version`,
    `mise exec -- bun --version`, `rustc --version`, `cc --version | head -1`
    (wasmtime version is the vendored `vendor/wasmtime` workspace version).
 4. Update the tables, following README.md's existing layout. http-routing is
-   req/s (higher is better) and lists a curated subset of the measured requests.
+   req/s (higher is better), one table per worker shape. Keep measured figures
+   inside tables — prose around them is not re-measured and drifts.
 5. wasm-size: `mise run report-wasm-size`, then update `wasm-size/README.md`.
 
 ## Reading output

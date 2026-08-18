@@ -13,9 +13,9 @@ benchmark** —
 
 - **12 routes** from `src/tool.mts` (static, single-parameter, and
   wildcard routes, including a `GET`/`POST` collision on `/event/:id`).
-- **7 request shapes** from `src/bench.mts` (short static, static
-  sharing a radix, dynamic, mixed static/dynamic, `POST`, long static,
-  wildcard).
+- **4 request shapes** from `src/bench.mts` — static, dynamic, `POST` over a
+  mixed static/dynamic path, and wildcard. The other three only vary depth or
+  a covered case's radix sibling.
 
 All four servers register the same 12 routes and return the same
 `{ "route": ..., "params": [...] }` JSON shape, so the comparison
@@ -26,24 +26,31 @@ Hono's original benchmark is an in-process router microbenchmark
 (`router.match()` under `mitata`). Here the same route/request set is
 driven end to end over HTTP, so the four are compared as whole servers.
 
-### Stable measurement on a noisy host
+### Equal core budgets
 
-Cloud VMs throttle and steal CPU, so a naive "measure each server for N
-seconds in turn" run yields ratios that drift with the host. `bench.sh`
-counters this:
+Throughput scales with worker count, so a table compares servers only when every
+server gets the same one. `SHAPES` names them: a 1-core container scaled out
+horizontally, and a small VM running one instance.
 
-- **CPU pinning** — servers run on one core set, the `oha` load
-  generator on a disjoint set (`taskset`), so the two never contend.
-- **Round-robin interleaving** — every server stays up for the whole
-  run; each request is measured in short slices that rotate across
-  servers, repeated for `ROUNDS` rounds. A throttling episode hits every
-  server within the same time window, so ratios survive it.
-- **Max aggregation** — contention and throttling only ever lower
-  throughput, so the fastest slice across rounds is the cleanest
-  estimate of true capacity. Round 1 also serves as a warmup.
+Node scales out with `node:cluster` (`SCHED_NONE`), Bun with one `SO_REUSEPORT`
+process per worker, `wado serve` with `--workers`, Axum with
+`TOKIO_WORKER_THREADS`.
 
-Absolute numbers are not comparable across machines or runs — only the
-ratios between servers within one run are.
+### Keeping the load generator off the critical path
+
+A saturated `oha` caps the fastest servers and compresses every ratio. It takes
+a fixed `OHA_CORE_COUNT`, not the cores left over: more generator threads thin
+each one's batch and the server pays for the extra wakeups.
+
+Every row is checked for which side ran out of CPU. Against a fast enough
+server the generator runs out first, and that row is a floor.
+
+`HEADROOM_CHECK=1` also re-runs each server at twice the connections, for a
+generator short of those rather than of CPU. Off, since it passes here.
+
+Only the measured server runs, and its port is asserted free first — a survivor
+keeps serving under `SO_REUSEPORT` and inflates the row. Each server is warmed
+over every route, then measured for `ROUNDS` slices with the fastest kept.
 
 The four servers span four runtimes:
 
@@ -93,10 +100,13 @@ gracefully if `bun` is not on `PATH`.
 Tunables (env vars):
 
 ```sh
-# SLICE: seconds per measurement slice (default 3)
-# ROUNDS: rotation rounds; the per-server max is kept (default 3)
-# CONNECTIONS: concurrent connections per slice (default 50)
-SLICE=5 ROUNDS=5 CONNECTIONS=100 mise run -C benchmark http-routing
+# SLICE: seconds per measurement slice (default 10)
+# ROUNDS: slices per request; the max is kept (default 3)
+# SHAPES: worker counts to measure (default "1 4")
+# CONNECTIONS_PER_WORKER: offered concurrency per worker (default 200)
+# OHA_CORE_COUNT: cores for the load generator (default 4)
+# HEADROOM_CHECK: 1 to verify oha is not the ceiling (default 0)
+SLICE=10 ROUNDS=3 SHAPES="1 4" mise run -C benchmark http-routing
 ```
 
 ## Results

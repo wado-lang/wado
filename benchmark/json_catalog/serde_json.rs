@@ -156,12 +156,12 @@ fn bench<T, F: FnMut() -> T>(label: &str, work_per_iter: f64, unit: &str, mut f:
 }
 
 fn main() {
-    let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/citm_catalog.json"))
+    let json_data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/citm_catalog.json"))
         .expect("Failed to read citm_catalog.json");
     let size = json_data.len();
 
     let catalog: CitmCatalog =
-        serde_json::from_str(&json_data).expect("Failed to parse citm_catalog.json");
+        serde_json::from_slice(&json_data).expect("Failed to parse citm_catalog.json");
     assert_eq!(catalog.performances.len(), 243);
 
     println!("json-catalog: {size} bytes");
@@ -171,7 +171,7 @@ fn main() {
     });
 
     let events = bench("De", size as f64, "B", || {
-        let catalog: CitmCatalog = serde_json::from_str(&json_data).expect("decode");
+        let catalog: CitmCatalog = serde_json::from_slice(&json_data).expect("decode");
         catalog.events.len()
     });
 

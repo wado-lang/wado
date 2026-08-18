@@ -78,7 +78,8 @@ impl CstStore {
             Open => ChildKind::Node,
             Miss => ChildKind::Missing,
             Skip => ChildKind::Skipped,
-            _ => ChildKind::Token,
+            Tok => ChildKind::Token,
+            Close => panic("CstStore::child_kind: Close is not a child row"),
         };
     }
 
@@ -166,7 +167,7 @@ fn cst_to_string_tree_impl(
                 out.push_str(&">");
                 c += 1;
             },
-            _ => c += 1,
+            Close => c += 1,
         }
     }
     out.push_str(&")");
