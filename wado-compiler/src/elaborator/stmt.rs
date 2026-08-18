@@ -996,13 +996,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
     }
 
-    /// The type a pattern binding takes under match ergonomics: `type_id`
-    /// wrapped in the scrutinee's reference kind.
-    ///
-    /// The one place that wrap happens, because it is where `&mut` onto a
-    /// scalar is refused. Wasm GC has no interior pointer to a scalar field —
-    /// the same reason `&mut p.x` is refused — so such a binding would
-    /// reference a copy and lose every write through it.
+    /// `type_id` wrapped in the scrutinee's reference kind — the one place that
+    /// wrap happens, because it is where `&mut` onto a scalar is refused: Wasm
+    /// GC has no interior pointer to one, so it would reference a copy.
     fn pattern_binding_type(
         &mut self,
         name: &str,

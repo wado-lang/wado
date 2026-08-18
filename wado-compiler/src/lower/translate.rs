@@ -333,7 +333,6 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
-    /// What each reference local borrows; see `last_use::RefTargets`.
     ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::compute_moved_roots`]).
@@ -1025,8 +1024,6 @@ impl FunctionTranslator<'_, '_> {
         ))
     }
 
-    /// Emit a call to the `$value_copy$T(...)` helper.
-    ///
     /// A destination needing no copy passes through. Where one is due, a
     /// missing helper is a hole in the seed walk, and aliasing there is silent.
     fn wrap_value_copy(&self, value: ExprId, type_id: tir::TypeId) -> ExprId {

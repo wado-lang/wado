@@ -5,9 +5,8 @@ use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
 
 use super::nullability::Nullability;
 
-/// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed:
-/// exports, element tables, `RefFunc` references, and the `$value_copy$`
-/// helper each `WirInstr::ArrayClone` calls.
+/// `func_id`s that must not be SROA'd: exports, element tables, `RefFunc`
+/// references, and every `$value_copy$` helper an `ArrayClone` calls.
 pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 

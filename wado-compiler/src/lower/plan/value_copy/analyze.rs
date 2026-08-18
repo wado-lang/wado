@@ -186,9 +186,8 @@ pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) 
     should_wrap_into(expr, expr.type_id, type_table, oracle)
 }
 
-/// [`should_wrap`] where the value lands in a destination of type `dest`.
-///
-/// The type test is the destination's: a `let { x, y } = &p` writes a `Point`
+/// [`should_wrap`] where the value lands in a destination of type `dest`: the
+/// type test is the destination's, since `let { x, y } = &p` writes a `Point`
 /// temp out of a `&Point`.
 pub fn should_wrap_into(
     expr: &TirExpr,
@@ -543,11 +542,9 @@ pub fn is_source_immutable(
 /// The local an immutable-source chain is rooted at, or `None` for a shape
 /// [`is_source_immutable`] does not accept.
 ///
-/// A projection through a reference continues at the place that reference
-/// borrows: the root local's immutability binds the reference, not the storage
-/// behind it. An unresolvable one — a reference parameter, a reference a call
-/// returned — names storage this body does not own, and answers nothing; the
-/// share analysis decides those.
+/// A projection through a reference continues at the place it borrows: the root
+/// local's immutability binds the reference, not the storage behind it. An
+/// unresolvable one names storage this body does not own, and answers nothing.
 pub fn source_root(
     expr: &TirExpr,
     type_table: &TypeTable,

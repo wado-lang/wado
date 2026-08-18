@@ -30,8 +30,6 @@ pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_self_projection: &'a FuncKeySet,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
-    /// The function whose own convention is being proved. See
-    /// [`Self::assuming_owned`].
     assumed_owned: Option<(&'a ModuleSource, &'a str)>,
 }
 
@@ -45,13 +43,9 @@ impl<'a> OwnedCalls<'a> {
         }
     }
 
-    /// Assume `func` returns owned while proving that it does.
-    ///
-    /// The fixpoint only ever adds, so a function that calls itself can never
-    /// be lifted out of "borrowed": its own call reads back the verdict being
-    /// computed. Assuming it closes the cycle — every return that does *not*
-    /// go through the recursive call is still checked on its own, and those
-    /// base cases are what a recursive result is ultimately built from.
+    /// Assume `func` returns owned while proving that it does: the fixpoint only
+    /// adds, so a self-call would read back the verdict being computed. Returns
+    /// that avoid the recursive call are still checked on their own.
     pub fn assuming_owned(mut self, module_source: &'a ModuleSource, name: &'a str) -> Self {
         self.assumed_owned = Some((module_source, name));
         self

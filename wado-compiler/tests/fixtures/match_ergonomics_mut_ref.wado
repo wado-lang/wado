@@ -1,10 +1,8 @@
 use { println, Stdout } from "core:cli";
 
-// A `&mut` scrutinee gives its bindings `&mut`. Wasm GC has no interior pointer
-// to a scalar, so a scalar binding would reference a copy and lose every write
-// through it — refused on both the `let` and the `match` path (see
-// `compile_errors::test_scalar_mut_ref_match_binding_is_rejected`). A reference
-// binding onto a non-scalar writes through to the scrutinee.
+// A `&mut` scrutinee gives its bindings `&mut`, and one onto a non-scalar
+// writes through. A scalar binding is refused on both the `let` and the `match`
+// path — Wasm GC has no interior pointer to one, so it would reference a copy.
 
 struct Counter {
     hits: List<i32>,

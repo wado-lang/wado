@@ -266,9 +266,8 @@ struct AccessPath {
     selectors: Vec<Selector>,
 }
 
-/// Where a statement sits: which block, and how far down it. Two entries in the
-/// same block run in written order; anything nested runs conditionally, so only
-/// same-block positions are ordered.
+/// Two positions in one block run in written order; anything nested runs
+/// conditionally, so only same-block positions are ordered.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Pos {
     block: u32,
@@ -281,8 +280,6 @@ impl Pos {
     }
 }
 
-/// A recorded write, and whether it reaches into the storage its path names or
-/// only points that path at something else.
 struct Mutation {
     path: AccessPath,
     /// `p = x` repoints `p`; the value an earlier binding took out of `p` keeps
@@ -291,7 +288,6 @@ struct Mutation {
     pos: Pos,
 }
 
-/// Whether `m` can never change the value read at `read`.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
     if m.rebinds_place {
         return !writes_inside(&m.path, read);
@@ -299,8 +295,8 @@ fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
     disjoint(&m.path, read)
 }
 
-/// Whether the place `write` names sits strictly inside the value `read` names:
-/// every selector `read` has, `write` may agree on, and `write` goes deeper.
+/// Whether `write` names a place strictly inside the value `read` names: every
+/// selector `read` has, `write` may agree on, and `write` goes deeper.
 fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
     if write.selectors.len() <= read.selectors.len() {
         return false;
@@ -315,9 +311,8 @@ fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
     true
 }
 
-/// What each reference local borrows: `let r = &a.b` records `a.b`, so a read
-/// through `r` can be asked about the place that owns it rather than about the
-/// reference. A reference parameter has no entry — its referent is the
+/// What each reference local borrows, so a read through it is asked about the
+/// place that owns it. A reference parameter has no entry — its referent is the
 /// caller's, and this body cannot name it.
 #[derive(Default)]
 pub struct RefTargets {
@@ -336,7 +331,6 @@ impl RefTargets {
         resolved
     }
 
-    /// The root local of the place a reference-typed `expr` borrows.
     #[must_use]
     pub fn referent_root(&self, expr: &TirExpr) -> Option<u32> {
         match &expr.kind {
@@ -349,8 +343,7 @@ impl RefTargets {
         }
     }
 
-    /// The place `value` borrows, for `let r = &place` and for a rebind of an
-    /// already-recorded reference.
+    /// What `value` borrows: `&place`, or a rebind of a recorded reference.
     fn borrowed_path(&self, value: &TirExpr) -> Option<AccessPath> {
         match &value.kind {
             TirExprKind::Unary {
@@ -363,7 +356,6 @@ impl RefTargets {
     }
 }
 
-/// Record what every reference local in `func` borrows.
 #[must_use]
 pub fn compute_ref_targets(func: &TirFunction) -> RefTargets {
     let mut walker = RefTargetWalker {
@@ -521,18 +513,11 @@ struct ShareCollector<'a> {
     mut_receiver_methods: &'a FuncKeySet,
     ref_receiver_methods: &'a FuncKeySet,
     returns_receiver_alias: &'a FuncKeySet,
-    /// Binding local → the access path of its source projection, and where the
-    /// binding was written.
     sources: IndexMap<u32, (AccessPath, Pos)>,
-    /// Every write recorded in the body.
     mutated: Vec<Mutation>,
     /// Locals read in a value position (consumed), so not safe to share.
     consumed: IndexSet<u32>,
-    /// A path rooted at a reference names the storage it borrows, so a write
-    /// the owner makes must compare against that place, not against the
-    /// reference.
     ref_targets: &'a RefTargets,
-    /// Where the walk currently is.
     pos: Pos,
     next_block: u32,
 }
@@ -553,8 +538,6 @@ impl ShareCollector<'_> {
         self.record_write(place, false);
     }
 
-    /// Record `place = value`, which points `place` at something else rather
-    /// than writing into what it currently holds.
     fn record_rebind(&mut self, place: &TirExpr) {
         self.record_write(place, true);
     }

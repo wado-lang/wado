@@ -40,10 +40,9 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
 }
 
 /// Which helper copies a type, keyed by the structural mangle that is the
-/// helper's identity — and the one place a type becomes that key.
-///
-/// The table interns one logical type under several `TypeId`s, so an id-keyed
-/// map answers for one of them and not the others.
+/// helper's identity — and the one place a type becomes that key. The table
+/// interns one logical type under several `TypeId`s, so an id key answers for
+/// one of them only.
 #[derive(Debug)]
 pub struct ValueCopyHelpers<T> {
     by_key: IndexMap<String, T>,
@@ -76,7 +75,6 @@ impl<T> ValueCopyHelpers<T> {
             .get(&type_table.mangle_type_arg_for_generic(type_id))
     }
 
-    /// Re-express every helper as `U`, keeping the keys.
     pub fn map<U>(&self, mut f: impl FnMut(&T) -> U) -> ValueCopyHelpers<U> {
         ValueCopyHelpers {
             by_key: self.by_key.iter().map(|(k, v)| (k.clone(), f(v))).collect(),
@@ -85,9 +83,8 @@ impl<T> ValueCopyHelpers<T> {
     }
 }
 
-/// Which `$value_copy$` helper copies each type, plus the interprocedural
-/// return-convention set the fold consults to decide whether a call result is
-/// owned (a move) or borrowed (a copy).
+/// Which `$value_copy$` helper copies each type, plus the return conventions
+/// telling the fold whether a call result is owned (a move) or borrowed.
 pub struct ValueCopyPlan {
     pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
     pub returns_owned: FuncKeySet,

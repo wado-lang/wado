@@ -233,13 +233,13 @@ struct PatternLowerer<'a> {
     struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
-    /// Locals this lowerer bound to a scrutinee. Their `Let` goes through the
-    /// fold, so each already reads a place nothing can write.
+    /// Locals bound to a scrutinee here. Their `Let` goes through the fold, so
+    /// each already reads a place nothing can write.
     owned_temps: IndexSet<u32>,
 }
 
-/// Whether `pattern` binds any part of the scrutinee by value. Such a binding
-/// aliases the place it reads, so it must read one nothing can write.
+/// Such a binding aliases the place it reads, so it must read one nothing can
+/// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     match pattern {
         TirPattern::Binding { type_id, .. } => {
@@ -1560,12 +1560,10 @@ impl<'a> PatternLowerer<'a> {
                 ));
             }
             TirStmtKind::Expr(mut expr) => {
-                // Bind the scrutinee to a temp, for either of two reasons.
-                // `labeled_block_fusion` keys on the `(Let, Match)` pair and
-                // stops firing on an inline scrutinee. And an owning arm
-                // binding needs a scrutinee nothing can write. Runs after
-                // `resource_cleanup`, so the temp does not perturb
-                // resource-flow analysis.
+                // Two reasons: `labeled_block_fusion` keys on the
+                // `(Let, Match)` pair and stops firing on an inline scrutinee,
+                // and an owning arm binding needs a scrutinee nothing can
+                // write.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,
@@ -1669,9 +1667,8 @@ impl<'a> PatternLowerer<'a> {
         ));
     }
 
-    /// Whether `match` over `scrutinee` must read a temp: an arm binding takes
-    /// ownership of a place that can still be written, so it would otherwise
-    /// alias one. The temp's `Let` then asks the fold for the copy.
+    /// An arm binding that takes ownership of a writable place would alias it.
+    /// The temp's `Let` asks the fold for the copy.
     fn needs_owned_scrutinee(
         &self,
         scrutinee: &TirExpr,
@@ -1689,13 +1686,10 @@ impl<'a> PatternLowerer<'a> {
                 .any(|arm| binds_by_value(&arm.pattern, type_table))
     }
 
-    /// Whether anything can write the place `expr` reads while a binding out of
-    /// it is live.
-    ///
-    /// A projection through a reference is writable whatever it is rooted at: an
-    /// immutable local still holds a `&mut`. Anything that is not a place is a
-    /// temporary this body alone holds — whether it in turn aliases the
-    /// caller's storage is decided where the value escapes, not here.
+    /// A projection through a reference is writable whatever it is rooted at:
+    /// an immutable local still holds a `&mut`. What is not a place is a
+    /// temporary this body alone holds; whether *that* aliases the caller's
+    /// storage is decided where it escapes, not here.
     fn place_is_writable(&self, expr: &TirExpr, type_table: &TypeTable) -> bool {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self
@@ -1716,9 +1710,8 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Move `scrutinee` into a temp local, leaving a read of that local in its
-    /// place. Returns the temp's `Let`, for the caller to put wherever its
-    /// position allows a statement.
+    /// Move `scrutinee` into a temp, leaving a read of it in place. The caller
+    /// puts the returned `Let` wherever its position allows a statement.
     fn bind_scrutinee_to_temp(
         &mut self,
         scrutinee: &mut TirExpr,
@@ -1755,9 +1748,9 @@ impl<'a> PatternLowerer<'a> {
         )
     }
 
-    /// Bind what a compound pattern destructures to a temp its projections
-    /// read. The fold decides the temp's copy, and the per-binding `Let`s then
-    /// share the temp's storage rather than ask a second time.
+    /// The temp a compound pattern's projections read. The fold decides its
+    /// copy, and the per-binding `Let`s share its storage rather than ask
+    /// again.
     fn emit_pattern_temp_let(
         &mut self,
         value: TirExpr,
