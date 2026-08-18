@@ -996,6 +996,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
     }
 
+    /// Reject a `&mut` binding onto a scalar under match ergonomics.
+    ///
+    /// Wasm GC has no interior pointer to a scalar field, which is why
+    /// `&mut p.x` is refused outright. A destructuring pattern reached the same
+    /// place quietly and handed back a `&mut` onto a *copy*, so a write through
+    /// it was lost — `let { x, y } = &mut p; *x = 100` left `p.x` at its old
+    /// value. Refuse it where the explicit form is refused.
+    fn reject_scalar_mut_ref_binding(&mut self, name: &str, type_id: TypeId, span: Span) {
+        let is_scalar = |ty: &ResolvedType| {
+            matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
+        };
+        let (bound, base) = {
+            let tt = self.tysys.type_table.borrow();
+            let base = tt.get_ultimate_base_type(type_id);
+            (tt.get(type_id).clone(), tt.get(base).clone())
+        };
+        if is_scalar(&bound) || is_scalar(&base) {
+            let _ = self.emit(TypeError::CannotAssign {
+                message: format!(
+                    "cannot bind '{name}' as a mutable reference to a primitive: \
+                     destructure by value, or take the reference to the whole value"
+                ),
+                span,
+            });
+        }
+    }
+
     /// Resolve a let pattern (for tuple/struct destructuring).
     /// Applies match ergonomics: if `type_id` is `&T` or `&mut T` and the pattern is
     /// a compound pattern (tuple/struct), peels the reference and wraps bindings.
@@ -1117,11 +1144,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(type_id)),
-                    RefBinding::MutRef => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::MutRef(type_id)),
+                    RefBinding::MutRef => {
+                        self.reject_scalar_mut_ref_binding(name, type_id, *name_span);
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::MutRef(type_id))
+                    }
                     RefBinding::None => type_id,
                 };
                 ctx.add_local_at(name.clone(), binding_type, pat_mut, Some(*id), *name_span);

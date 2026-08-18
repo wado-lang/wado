@@ -14,15 +14,17 @@ fn test_let_struct_ref() with Stdout {
     println("ok");
 }
 
+// Wasm GC has no interior pointer to a scalar field, so `&mut p.x` is refused
+// outright; a `&mut` destructure of scalar fields is the same request written
+// another way, and is refused with it (see `compile_errors.rs`). Take the
+// reference to the whole value and write through that instead.
 fn test_let_struct_mut_ref() with Stdout {
-    // let { x, y } = &mut point should give x: &mut i32, y: &mut i32
     let mut p = Point { x: 10, y: 20 };
-    let { x, y } = &mut p;
-    // x, y are &mut i32 wrapping copies of the fields
+    let { x, y } = &p;
     assert *x == 10;
     assert *y == 20;
-    *x = 100;
-    assert *x == 100;
+    p.x = 100;
+    assert p.x == 100;
     println("ok");
 }
 
