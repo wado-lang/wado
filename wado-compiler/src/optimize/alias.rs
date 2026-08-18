@@ -31,13 +31,8 @@ pub struct AliasInfo {
     pub alias_groups: AliasGroups,
 }
 
-/// The alias equivalence classes, stored once per class and indexed by member.
-///
-/// Members are unique by construction (each comes from one union-find key), so
-/// a slice carries them; the per-member indirection keeps a class of `m` locals
-/// at `O(m)`. Giving every member its own copy of the class instead is
-/// `O(m^2)`, which a generated parser reaches easily — its reference locals
-/// share one pointee struct, so they land in a single class.
+/// The alias equivalence classes, held once per class and indexed by member, so
+/// a class of `m` locals costs `O(m)`, not the `O(m^2)` a copy per member costs.
 #[derive(Default, Clone, Debug)]
 pub struct AliasGroups {
     root_of: IndexMap<u32, u32>,
@@ -49,9 +44,8 @@ impl AliasGroups {
         self.root_of.is_empty()
     }
 
-    /// The alias class containing `local`, itself included, or `None` when
-    /// `local` is in no class. Paired with the class's canonical root, so a
-    /// caller sweeping many locals can visit each class once.
+    /// The alias class containing `local`, itself included, with the canonical
+    /// root a caller sweeping many locals dedupes on.
     pub fn class_of(&self, local: u32) -> Option<(u32, &[u32])> {
         let &root = self.root_of.get(&local)?;
         let members = self.members_of.get(&root)?;
@@ -265,9 +259,8 @@ fn build_mut_escaped(
         })
         .collect();
     // Close over the reference alias groups: if any group member is mutably
-    // escaped, every member's pointee may be mutated through it. Sweeping the
-    // seed by class root visits each class once — the members of one class are
-    // all seeds of it, so walking the member list per seed would be `O(m^2)`.
+    // escaped, every member's pointee may be mutated through it. Nearly every
+    // member seeds its own class, so closing per seed would be `O(m^2)`.
     if !alias_groups.is_empty() {
         let seed: Vec<u32> = esc.iter().copied().collect();
         let mut closed: IndexSet<u32> = IndexSet::default();
@@ -999,9 +992,7 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     if edges.is_empty() {
         return AliasGroups::default();
     }
-    // Union-find via simple parent pointers; locals are sparse u32s. `find` is
-    // iterative: a chain of `let dst = src` copies makes the parent chain as
-    // long as the class, which recursion walks one stack frame at a time.
+    // Union-find via simple parent pointers; locals are sparse u32s.
     let mut parent: IndexMap<u32, u32> = IndexMap::default();
     fn find(parent: &mut IndexMap<u32, u32>, x: u32) -> u32 {
         let mut root = x;
@@ -1285,10 +1276,6 @@ mod tests {
         assert_eq!(members(&groups, 0), None);
     }
 
-    /// Every member used to hold its own copy of the member set, so a function
-    /// whose reference locals share a pointee struct cost `O(m^2)`. These sizes
-    /// are ordinary for a generated parser and intractable under that shape, so
-    /// the case doubles as the complexity guard.
     #[test]
     fn one_large_group_is_linear() {
         const N: u32 = 20_000;
@@ -1304,9 +1291,7 @@ mod tests {
         );
     }
 
-    /// A chain unions each local onto the next, so resolving the first root
-    /// walks the whole chain — depth the union-find must survive, which a
-    /// recursive `find` does not.
+    /// A parent chain as long as the class, a depth recursion does not survive.
     #[test]
     fn long_chain_collapses_to_one_group() {
         const N: u32 = 20_000;

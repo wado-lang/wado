@@ -26,16 +26,9 @@ struct HeapState {
     field_global: IndexMap<u32, HeapVersion>,
     /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
-    /// The generation of the whole `mut_escaped` set, bumped as a unit by
-    /// everything that invalidates all of it at once ([`HeapState::bump_escaped`]'s
-    /// callers). Versions are only ever compared per key, so one shared version
-    /// reads identically to a distinct `per_local` entry per local, at `O(1)`
-    /// instead of the `O(escaped)` a bump each cost.
-    ///
-    /// An *additional* channel, never a replacement: [`HeapState::version_of`]
-    /// maxes it alongside `per_local`, which still carries the bumps aimed at a
-    /// single local (a `&mut` borrow of one, say). Consulting it *instead of*
-    /// `per_local` for an escaped root would drop those.
+    /// The generation of the whole `mut_escaped` set, bumped as a unit. Maxed
+    /// *alongside* `per_local`, never in place of it — `per_local` still carries
+    /// the bumps aimed at one local.
     escaped_version: HeapVersion,
 }
 
@@ -691,8 +684,6 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// [`HeapState::version_of`], reading the `mut_escaped` membership it needs
-    /// to apply the shared escape version.
     fn heap_version_of(&self, root: Option<u32>, field: u32) -> HeapVersion {
         let escaped = root.is_some_and(|r| self.mut_escaped.contains(&r));
         self.heap_state.version_of(root, field, escaped)
@@ -708,11 +699,9 @@ impl<'a> Builder<'a> {
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
         // opaque `ValueId`s and heap versions are handed out in visit order, so
         // this keeps the value graph a deterministic function of the program
-        // regardless of how the alias sets were built (#1440).
-        // An impure call invalidates the whole `mut_escaped` set, which the
-        // shared escape version covers in one step. A pure one reaches only the
-        // `untrackable` locals, too few to be worth a set-wide version, so those
-        // keep their individual `per_local` bump.
+        // regardless of how the alias sets were built (#1440). A pure call
+        // reaches only the `untrackable` locals, too few for the set-wide
+        // version, so those keep their `per_local` bump.
         if !pure {
             self.heap_state.bump_escaped();
         }
@@ -1626,9 +1615,8 @@ impl<'a> Builder<'a> {
         } else {
             pre.default_version
         };
-        // The escape version joins like `default_version`: an arm that bumped it
-        // means the set may have been written on some path in, so the merge
-        // takes a fresh one that no pre-branch read can match.
+        // An arm that bumped it may have written the set, so the merge takes a
+        // fresh version no pre-branch read can match.
         let escaped_changed = live
             .iter()
             .any(|a| a.escaped_version != pre.escaped_version);
