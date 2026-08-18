@@ -580,7 +580,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `@AstId` spelling reaches nothing when read back.
                     if let ResolvedType::Struct { def: head, .. } = target_resolved {
                         (
-                            self.resolve_implicit_struct_literal(struct_lit, ctx, target_type, head),
+                            self.resolve_implicit_struct_literal(
+                                struct_lit,
+                                ctx,
+                                target_type,
+                                head,
+                            ),
                             target_type,
                         )
                     } else if let Some(coerced) =

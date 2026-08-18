@@ -3199,12 +3199,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A literal that only writes fields, against a target that declares
             // a struct, is that struct. A composition (`..base`) is not: its
             // type comes from its members, so it still interns as a shape.
-            let declared_target = expected_type.filter(|_| struct_lit.spreads.is_empty()).and_then(
-                |target| match *self.tysys.type_table.borrow().get(target) {
+            let declared_target = expected_type
+                .filter(|_| struct_lit.spreads.is_empty())
+                .and_then(|target| match *self.tysys.type_table.borrow().get(target) {
                     crate::tir::ResolvedType::Struct { def: head, .. } => Some((target, head)),
                     _ => None,
-                },
-            );
+                });
             if let Some((target, head)) = declared_target {
                 return self.resolve_implicit_struct_literal(struct_lit, ctx, target, head);
             }
