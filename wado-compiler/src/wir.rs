@@ -257,26 +257,19 @@ impl WasmModuleInfo {
 
 /// Recursively remap `WirFuncId` indices in a `WirInstr` tree.
 fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
-    match instr {
-        WirInstr::Call { func_id, args } => {
-            if let Some(&new_idx) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
-            }
-            for arg in args {
-                remap_func_ids_in_instr(arg, remap);
-            }
-        }
-        WirInstr::RefFunc { func_id } => {
-            if let Some(&new_idx) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                remap_func_ids_in_instr(child, remap);
-            });
-        }
+    if let WirInstr::Call { func_id, .. }
+    | WirInstr::RefFunc { func_id }
+    | WirInstr::ArrayClone {
+        element_copy: func_id,
+        ..
+    } = instr
+        && let Some(&new_idx) = remap.get(&func_id.index())
+    {
+        *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
     }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        remap_func_ids_in_instr(child, remap);
+    });
 }
 
 impl WirPackage {
