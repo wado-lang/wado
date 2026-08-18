@@ -9141,8 +9141,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        // A newtype of a wide int shares its representation, so dispatch on
-        // the base; the built call still carries `target_type`.
+        // A newtype of a wide int shares its representation, so dispatch on the base.
         let target_base = self
             .tysys
             .type_table

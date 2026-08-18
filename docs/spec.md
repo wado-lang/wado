@@ -412,9 +412,9 @@ let x = 10 as f64 as i32 as f64;
 let result = (a as f64) + b;
 ```
 
-Between aggregates (structs, variants, tuples, generic instances) `as` is only a
-newtype step: both sides must share an ultimate base type. Anything else needs a
-conversion method — `ArraySlice<T>` ↔ `List<T>` is `.to_list()` / `.as_slice()`.
+`as` between aggregates is only a newtype step: both sides must share an ultimate
+base type. Converting takes a method — `ArraySlice<T>` ↔ `List<T>` is `.to_list()`
+/ `.as_slice()`.
 
 #### Parentheses for Grouping
 

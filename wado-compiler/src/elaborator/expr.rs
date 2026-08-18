@@ -3100,9 +3100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are structs here, with their own rules below.
-            // Only the source is exempt: those rules cover a wide-int source,
-            // while a wide-int target is built for a numeric source alone.
+            // `i128` / `u128` are structs here, with their own rules below —
+            // which cover a wide-int source only, so a wide-int target never
+            // exempts an aggregate.
             let wide_int = |id| {
                 matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
