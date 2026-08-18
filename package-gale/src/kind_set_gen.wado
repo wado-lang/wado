@@ -97,6 +97,9 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
 pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     let entries = ctx.kind_sets();
     for let mut idx = 0; idx < entries.len(); idx += 1 {
+        if !ctx.kind_set_is_used(idx) {
+            continue;
+        }
         if idx < lowered.kind_sets.len() {
             let ks = &lowered.kind_sets[idx];
             gen_kind_set_helper_raw(w, ks.id, &ctx.token_names_of(&ks.tokens));

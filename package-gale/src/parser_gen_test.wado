@@ -7,8 +7,12 @@ use { GenContext } from "./gen_context.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
 
+/// `r` is registered left-recursive: only such a rule's `scan_<r>` takes a
+/// `min_prec` argument, so without it these emitters pass none at all.
 fn empty_ctx() -> GenContext {
-    return GenContext::new(&[], &[]);
+    let mut ctx = GenContext::new(&[], &[]);
+    ctx.set_lr_rule_snakes(&(["r"] as List<String>));
+    return ctx;
 }
 
 fn self_ref_call(target_snake: String) -> ScanElement {
