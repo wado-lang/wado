@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786974124971,
+  "lastUpdate": 1787016782064,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49117,6 +49117,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/78ec2622cca80f7bf88c7e24bab8cd09eed8181e"
         },
         "date": 1786974124377,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "691d11cf0c158bc6370885d3d3021a0ca7390517",
+          "message": "Merge pull request #1845 from wado-lang/bench/comparable-benchmark-rows\n\nbench: make the rows in each table comparable, and refresh them",
+          "timestamp": "2026-08-18T10:19:58+09:00",
+          "tree_id": "c0a5008a3e2e1a8e6bd03479272b7375600f38ae",
+          "url": "https://github.com/wado-lang/wado/commit/691d11cf0c158bc6370885d3d3021a0ca7390517"
+        },
+        "date": 1787016781455,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
