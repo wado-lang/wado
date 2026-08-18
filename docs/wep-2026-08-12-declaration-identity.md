@@ -190,13 +190,14 @@ impl Resolutions {
 ```
 
 Every node that names a declaration carries an `AstId`, and the walk records an
-answer for every one; `ast.rs`'s
-`every_reference_bearing_node_carries_an_ast_id` scans its own source — struct
-declarations and struct-like enum variants alike, since half the reference
-positions are variants — and fails on a name-bearing node with no id unless
-`NAMED_WITHOUT_ID` registers the reason it needs none. A struct pattern's
-qualifier is such a position: naming a type in pattern position is naming a
-declaration.
+answer for every one. A struct pattern's qualifier is such a position: naming a
+type in pattern position is naming a declaration. The nodes that name something
+and deliberately carry no id are the ones naming no declaration — an attribute,
+a WIT interface id, a world export's own name — and the ones building the module
+scope rather than consulting it (`UseItemSimple`, `UseItem::InterfaceFunctions`,
+whose local names are unambiguous within one module by construction), plus
+`StructPatternField`, a field of a known struct type rather than a
+module-scoped name.
 
 `get` is total. A site the walk missed is a bug in the walk, not an absent answer a
 consumer improvises around, so it panics rather than returning `None`. The three
@@ -484,51 +485,73 @@ Each mechanism states what it makes impossible, not what it discourages.
 - `Resolutions::get` is total and panics on a missing site, so a coverage hole in
   the walk fails on the first fixture that reaches it instead of degrading to a
   name comparison.
-- `every_reference_bearing_node_carries_an_ast_id` fails on a new name-bearing AST
-  node without an id, so a new reference position cannot be added silently.
-- `no_reachable_function_turns_a_name_into_an_identity` scans `wado-compiler/src`
-  for a function that takes a name, takes no reference site, and hands back a
-  declaration. That is the shape of the chain this design removes, and the one
-  property the type system cannot state.
 
-  Two things are not part of the shape, and each is a decision. Visibility is
-  not: the scan reads every `fn`, because a private helper of that shape answers
-  the same way for everything in its module, and a module is as large as it
-  grows. A `ModuleSource` _parameter_ is not either — and requiring one is what
-  made an earlier version of this scan nearly vacuous. Every by-name declaration
-  lookup in the elaborator is a method whose vantage is `&self`, so the scan read
-  four functions that merely happen to pass the module as an argument while the
-  whole frame derivation, `TypeLookup`'s by-name queries and a program-wide
-  unique-match sat outside it.
+The list is closed by the type system and the module system, not by a test: no
+mechanism above can be worked around locally, so a new violation needs a new
+API, and adding one is a review decision.
 
-  An `AstId` parameter is the one exemption: a function handed the reference site
-  reads the answer the resolve pass recorded for it, which is what this design
-  asks of a consumer. Deriving an identity from a spelling is the shape; asking
-  for one already derived is not.
+### What still turns a name into a declaration
 
-  `NAME_TO_IDENTITY` lists what is left, each entry with the reason it is there,
-  grouped by what it is: the one scope (`Scopes::resolve`, `resolve_value`); the
-  three recorded facts the frame derivation is built from (`imported_as`,
-  `prelude_decl`, `decls_named`); the derivation itself (`decl_key_or_local`,
-  `TypeLookup::declaration`, `namespace_member`, `scoped_trait_decl_key`,
-  `bound_declaring_assoc_type`); the same derivation in the `Symbol` currency
-  (`symbol_named`, `imported`, `lookup_in_module`, `lookup_in_module_with_visited`),
-  which §2 deletes by moving what they answer onto `DefTable`; the one rendering
-  still compared against a declaration's own (`impl_target_decl_key`); and the
-  Component Model boundary (`cm_decl_in`, `cm_decl`). The test fails on one more,
-  and equally on a stale entry, so neither the class nor the list can grow — and
-  because the shape is now the real one, the list is what remains rather than a
-  sample of it.
+These are what is left, each with the reason it is there. A declaration is
+whatever _identifies_ one, so the census spans both currencies: a `DefId`, and
+a `Symbol` row, which carries the declaring node and answers the same question
+one table earlier. Adding to this list is a design change; the alternative is
+always to give the caller the reference site instead.
 
-  A declaration is whatever identifies one, so the shape reads both currencies:
-  a `DefId`, and a `Symbol` row, which carries the declaring node and answers
-  the same question one table earlier. Matching the type as a whole word is what
-  keeps `SymbolNotation` and `SymbolResolveError` out of it.
-- `no_map_turns_a_name_into_an_identity` scans the same sources for a _field_ of
-  that shape — a map from `(name, module)` to a declaration. The signature scan
-  cannot see one, and a map is the same defect: it answers for whatever key a
-  caller can build. One is allowed, `TypeTable::decl_index`, which is what
-  `cm_decl_in` reads. The other was `local_item_renders`; it is gone.
+The one scope:
+
+- `Scopes::resolve` and `resolve_value` — the one place this shape belongs.
+  Every other entry exists because it is _not_ this.
+
+The three recorded facts the frame derivation is built from. Each is one tier,
+none is a scope, and none takes a vantage a caller could get wrong:
+
+- `imported_as` — the import tier alone, for a caller to whom the _aliasing_ is
+  the question. The one import fact that is not a scope lookup.
+- `prelude_decl` — the prelude tier alone. It cannot be given a vantage: the
+  prelude is in scope in every module, so there is none from which it answers
+  differently.
+- `decls_named` — hands back _every_ declaration written under the name and
+  picks none, so it is not an answer. It holds what modules declare, never what
+  they import, and takes no module: the caller filters by a frame of its own.
+
+The derivation itself — those three tiers, in order, over a frame that is the
+walk's own position rather than a caller's argument:
+
+- `decl_key_or_local` — for a caller holding a rendered head whose reference
+  site is not at hand. A caller _with_ a site reaches `decl_key_at`.
+- `TypeLookup::declaration` — the same, one layer down; `declaration_at` is the
+  sited entry point.
+- `namespace_member` — `imported_as` on the `ns$Name` alias a namespace import
+  registers: the import tier answering the qualification the programmer wrote.
+- `scoped_trait_decl_key` — `declaration` filtered to the trait index, for the
+  `TypeSystem` queries that hold a scope and a bound's spelling but not its site.
+- `bound_declaring_assoc_type` — asks which of a _binder's_ bounds declares an
+  associated-type name. The binder is the walk's own, and the trait comes from
+  each bound's reference site.
+
+The same derivation in the `Symbol` currency. §2 deletes this half by moving
+what these answer onto `DefTable`:
+
+- `symbol_named` — the derivation handing back the symbol row instead of the
+  identity. `symbol_at` is the sited entry point, and answers from the same
+  table so annotate and reify cannot disagree.
+- `imported` — `imported_as` in this currency: the module's own import list, no
+  prelude fallback and no declaration of its own, so a caller orders the layers.
+- `lookup_in_module` / `lookup_in_module_with_visited` — what a module declares
+  under a name, re-export chains followed, the second with its own cycle guard.
+
+One rendering still compared against a declaration's own:
+
+- `impl_target_decl_key` — walks a receiver type's newtype chain for the link
+  whose rendering equals the head an impl was found under. The name is the impl
+  index's, not a caller's; it goes when that index carries `DefId`s.
+
+The Component Model boundary, which is permanent:
+
+- `cm_decl_in`, and `cm_decl` on the synthesis side, which resolves the
+  interface's module first. §9 states why a WIT name has no reference site to
+  ask.
 
 ## The frame derivation
 
@@ -571,7 +594,7 @@ give, the derivation above answers, in the frame that wrote the name.
 Nor does any tier take a vantage it could get wrong: `decls_named` takes no
 module at all, and the derivation filters it by a frame of the walk's own. That
 is why it cannot be mistaken for a scope, and why the derivation is sanctioned
-rather than scheduled for removal — `NAME_TO_IDENTITY` records it as such.
+rather than scheduled for removal — the census above records it as such.
 
 ### What a derivation may not be
 
@@ -685,6 +708,8 @@ declaration, and that made the suffix a convention every minting _and_ lookup
 site had to keep: two sibling functions each declaring `struct Box<T>` took
 seven fixes to close, one per caller of that first-wins index. It answered for
 nothing — no program in `tests/fixtures` reached it, because the tables it
-guarded had already been rekeyed to `DefId` — so it is deleted, and
-`no_map_turns_a_name_into_an_identity` is what keeps it deleted. The suffix
-stays as a renderer (§6), written at one site and read back at none.
+guarded had already been rekeyed to `DefId` — so it is deleted. A map like it
+needs a reader to do any harm, and that reader is exactly the shape the census
+above enumerates, so re-adding one is a review decision rather than a local
+convenience. The suffix stays as a renderer (§6), written at one site and read
+back at none.
