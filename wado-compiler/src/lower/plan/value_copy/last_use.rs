@@ -260,10 +260,59 @@ enum Selector {
 
 /// A storage location: a root local plus a root-first chain of projections.
 /// `self.rows[0]` is `{ root: self, selectors: [Field(rows), Index] }`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct AccessPath {
     root: u32,
     selectors: Vec<Selector>,
+}
+
+/// Where a statement sits: which block, and how far down it. Two entries in the
+/// same block run in written order; anything nested runs conditionally, so only
+/// same-block positions are ordered.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Pos {
+    block: u32,
+    index: u32,
+}
+
+impl Pos {
+    fn runs_after(self, other: Self) -> bool {
+        self.block == other.block && self.index > other.index
+    }
+}
+
+/// A recorded write, and whether it reaches into the storage its path names or
+/// only points that path at something else.
+struct Mutation {
+    path: AccessPath,
+    /// `p = x` repoints `p`; the value an earlier binding took out of `p` keeps
+    /// the storage it already had. Only a write *inside* that value disturbs it.
+    rebinds_place: bool,
+    pos: Pos,
+}
+
+/// Whether `m` can never change the value read at `read`.
+fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
+    if m.rebinds_place {
+        return !writes_inside(&m.path, read);
+    }
+    disjoint(&m.path, read)
+}
+
+/// Whether the place `write` names sits strictly inside the value `read` names:
+/// every selector `read` has, `write` may agree on, and `write` goes deeper.
+fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
+    if write.selectors.len() <= read.selectors.len() {
+        return false;
+    }
+    for (w, r) in write.selectors.iter().zip(read.selectors.iter()) {
+        match (w, r) {
+            (Selector::Field(a), Selector::Field(b)) if a != b => return false,
+            (Selector::Variant(a), Selector::Variant(b)) if a != b => return false,
+            _ => {}
+        }
+    }
+    true
 }
 
 /// What each reference local borrows: `let r = &a.b` records `a.b`, so a read
@@ -433,18 +482,27 @@ pub fn compute_share_eligible(
         mutated: Vec::new(),
         consumed: IndexSet::default(),
         ref_targets,
+        pos: Pos { block: 0, index: 0 },
+        next_block: 1,
     };
     collector.walk_block(body);
 
     collector
         .sources
         .iter()
-        .filter_map(|(&local, path)| {
+        .filter_map(|(&local, (path, read_pos))| {
             if path.root == local {
                 return None;
             }
+            // `let r = p; p = x;` hands `r` the only reference to what `p` held,
+            // so `r` may leave the function even though it was read out of a
+            // place the caller still owns.
+            let released = collector
+                .mutated
+                .iter()
+                .any(|m| m.rebinds_place && m.path == *path && m.pos.runs_after(*read_pos));
             if move_eligible.contains(&local)
-                || collector.consumed.contains(&local)
+                || (!released && collector.consumed.contains(&local))
                 || collector.is_mutated_root(local)
                 || collector.consumed.contains(&path.root)
             {
@@ -453,7 +511,7 @@ pub fn compute_share_eligible(
             let safe = collector
                 .mutated
                 .iter()
-                .all(|m| m.root != path.root || disjoint(m, path));
+                .all(|m| m.path.root != path.root || write_cannot_reach(m, path));
             safe.then_some(local)
         })
         .collect()
@@ -463,21 +521,25 @@ struct ShareCollector<'a> {
     mut_receiver_methods: &'a FuncKeySet,
     ref_receiver_methods: &'a FuncKeySet,
     returns_receiver_alias: &'a FuncKeySet,
-    /// Binding local → the access path of its source projection.
-    sources: IndexMap<u32, AccessPath>,
-    /// Every access path a mutation writes through.
-    mutated: Vec<AccessPath>,
+    /// Binding local → the access path of its source projection, and where the
+    /// binding was written.
+    sources: IndexMap<u32, (AccessPath, Pos)>,
+    /// Every write recorded in the body.
+    mutated: Vec<Mutation>,
     /// Locals read in a value position (consumed), so not safe to share.
     consumed: IndexSet<u32>,
     /// A path rooted at a reference names the storage it borrows, so a write
     /// the owner makes must compare against that place, not against the
     /// reference.
     ref_targets: &'a RefTargets,
+    /// Where the walk currently is.
+    pos: Pos,
+    next_block: u32,
 }
 
 impl ShareCollector<'_> {
     fn is_mutated_root(&self, local: u32) -> bool {
-        self.mutated.iter().any(|m| m.root == local)
+        self.mutated.iter().any(|m| m.path.root == local)
     }
 
     /// Record a write through `place`. When the exact path is unknown, mark
@@ -488,25 +550,48 @@ impl ShareCollector<'_> {
     }
 
     fn record_mutation(&mut self, place: &TirExpr) {
+        self.record_write(place, false);
+    }
+
+    /// Record `place = value`, which points `place` at something else rather
+    /// than writing into what it currently holds.
+    fn record_rebind(&mut self, place: &TirExpr) {
+        self.record_write(place, true);
+    }
+
+    fn record_write(&mut self, place: &TirExpr, rebinds_place: bool) {
+        let pos = self.pos;
         if let Some(p) = place_path(place) {
-            let p = self.resolve(p);
-            self.mutated.push(p);
+            let path = self.resolve(p);
+            self.mutated.push(Mutation {
+                path,
+                rebinds_place,
+                pos,
+            });
         } else {
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
             for r in roots {
-                self.mutated.push(AccessPath {
-                    root: r,
-                    selectors: Vec::new(),
+                self.mutated.push(Mutation {
+                    path: AccessPath {
+                        root: r,
+                        selectors: Vec::new(),
+                    },
+                    rebinds_place: false,
+                    pos,
                 });
             }
         }
     }
 
     fn mark_local_mutated(&mut self, index: u32) {
-        self.mutated.push(AccessPath {
-            root: index,
-            selectors: Vec::new(),
+        self.mutated.push(Mutation {
+            path: AccessPath {
+                root: index,
+                selectors: Vec::new(),
+            },
+            rebinds_place: false,
+            pos: self.pos,
         });
     }
 
@@ -529,9 +614,17 @@ impl ShareCollector<'_> {
     }
 
     fn walk_block(&mut self, block: &TirBlock) {
-        for stmt in &block.stmts {
+        let outer = self.pos;
+        let block_id = self.next_block;
+        self.next_block += 1;
+        for (index, stmt) in block.stmts.iter().enumerate() {
+            self.pos = Pos {
+                block: block_id,
+                index: u32::try_from(index).unwrap_or(u32::MAX),
+            };
             self.walk_stmt(stmt);
         }
+        self.pos = outer;
     }
 
     fn walk_stmt(&mut self, stmt: &TirStmt) {
@@ -540,7 +633,7 @@ impl ShareCollector<'_> {
                 local_index, value, ..
             } => {
                 if let Some(path) = self.source_path(value) {
-                    self.sources.insert(*local_index, path);
+                    self.sources.insert(*local_index, (path, self.pos));
                 }
                 self.walk_value(value);
             }
@@ -610,7 +703,7 @@ impl ShareCollector<'_> {
             TirExprKind::Assign { target, value } => {
                 match &target.kind {
                     TirExprKind::Local { index, .. } => self.mark_local_mutated(*index),
-                    _ => self.record_mutation(target),
+                    _ => self.record_rebind(target),
                 }
                 self.walk_value(value);
             }

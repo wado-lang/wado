@@ -162,3 +162,12 @@ test "a reference binding still sees writes through the scrutinee" {
         }
     }
 }
+
+test "a take-and-replace binding owns what the place gave up" {
+    let mut src = S { items: [1] };
+    let taken = src.items;
+    src.items = [];
+    src.items.push(9);
+    assert taken.len() == 1;
+    assert src.items.len() == 1;
+}
