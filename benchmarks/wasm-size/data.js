@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787016782064,
+  "lastUpdate": 1787032809583,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49161,6 +49161,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/691d11cf0c158bc6370885d3d3021a0ca7390517"
         },
         "date": 1787016781455,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 263926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "67aea445704e3fc04b52a14abe51f7e9c71aca93",
+          "message": "Merge pull request #1846 from wado-lang/bench/server-bound-check\n\nbench(http-routing): check which side ran out of CPU",
+          "timestamp": "2026-08-18T14:48:47+09:00",
+          "tree_id": "caae8e6782a3680e2d54f78df4854ea69ae3217e",
+          "url": "https://github.com/wado-lang/wado/commit/67aea445704e3fc04b52a14abe51f7e9c71aca93"
+        },
+        "date": 1787032809209,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
