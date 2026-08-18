@@ -1,15 +1,6 @@
-// Regression: label-on-rule-ref where the same rule appears under two
-// different labels in one alternative used to emit a duplicate
-// `let <rule> = _parse_<rule>(p)?;` binding, failing compilation with
-// "cannot redeclare X" once Stage B exercised the generated parser.
-//
-// Smallest grammar exhibiting the bug:
-//   e : a=e op=('+'|'-') b=e ;
-//
-// The inner `gen_element` for the labeled element used a fresh
-// name_counts, so the RuleRef binding `e` did not dedup against the
-// outer alt's bindings. Both `a=e` and `b=e` emitted a top-level
-// `let e = _parse_e(p)?;` — the second redeclared the first.
+// Regression: `e : a=e op=('+'|'-') b=e ;` — the labelled element's inner
+// used a fresh `name_counts`, so both labels emitted one shared binding and
+// the generated parser failed to compile on the redeclaration.
 
 use { generate, GenerateOptions } from "./codegen.wado";
 use { parse_checked } from "./g4/parser.wado";
@@ -19,8 +10,7 @@ test "label binding on repeated rule ref dedups against outer scope" {
     // (LeftRecursion/MultipleActions_1) — three alts, action blocks
     // present, multi-alt path triggers the `parse_X_alt_*` backtrack
     // helpers where the bug originally reproduced.
-    // The `{ }` action is what makes the labels observable: a grammar with
-    // no action emits no `let <label> = …` binding for a leaf at all.
+    // A grammar with no action emits no label binding, so nothing to check.
     let g4 = "grammar T;
 e : a=e op=('*'|'/') b=e { }
   | INT
@@ -34,21 +24,13 @@ WS : (' '|'\\n') -> skip ;
         Err(e) => panic(`parse_checked failed: ${e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
-    // Emit binds a labelled element under the LABEL, so the alt `a=e … b=e`
-    // produces `let a = …` / `let b = …`. The bug was the inner `e` binding
-    // leaking into the alternative's scope under one shared name, i.e. the
-    // same `let` line twice before the next `fn ` boundary. Check each label
-    // the grammar declares; different functions each having their own copy is
-    // fine.
     let labels: List<String> = ["a", "b", "x"];
     for let label of &labels {
         let needle = `let ${*label} = _parse_e(p`;
         assert_declared_once_per_fn(&out, &needle);
     }
     // `a=e` is the LR left operand, which the precedence loop carries rather
-    // than binding; `x=e` inside the parenthesised alt is a plain call. Pin
-    // that one, so a future emit that stops binding labels at all cannot make
-    // the duplicate check above pass vacuously.
+    // than binding. Pin `x=e`, so the check above cannot pass vacuously.
     assert out.find("let x = _parse_e(p") matches { Some(_) }, "no labelled binding emitted; the duplicate check would pass vacuously";
 }
 

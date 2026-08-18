@@ -235,9 +235,7 @@ test "generate scalar-labeled group `t=(a | b)`" {
     assert str_contains(&output, &"TK_LIT_X");
     assert str_contains(&output, &"TK_LIT_Y");
     assert str_contains(&output, &"p.expect_set(&SYNC_");
-    // A peel regression panics in `gen_op_group` before reaching here. What is
-    // left to pin is that peeling is *transparent*: with no action to read the
-    // label, the labelled group must emit exactly what the bare group does.
+    // A peel regression panics in `gen_op_group`; transparency is what is left.
     let mut bare = parse_grammar("grammar T; a : ('x' | 'y') ;", "(test)");
     let bare_output = generate(&mut bare, &DEFAULT_OPTIONS).source;
     let labeled_body = extract_fn_body(&output, &"fn _parse_a__inner(");
@@ -473,8 +471,7 @@ test "generate lexer channel" {
     // hides channels other than DEFAULT from parser rules.
     assert str_contains(&output, &"if best_channel != 0");
     assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
-    // No `-> skip` rule and no action: `is_skip` is a compile-time false, so
-    // neither it nor its branch is emitted.
+    // No `-> skip` rule and no action to latch one, so `is_skip` never exists.
     assert !str_contains(&output, &"let is_skip");
 }
 
@@ -791,9 +788,6 @@ a : 'a' ('b' | 'c') 'd' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_a__inner(");
     assert str_contains(&body, &"p.expect_set(&SYNC_");
-    // Naming the old binding would make this unfalsifiable — emit no longer
-    // writes a label binding without an action. The property is that nothing
-    // in the body advances unguarded.
     assert !str_contains(&body, &"p.advance();");
 }
 

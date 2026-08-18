@@ -157,10 +157,8 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 /// `token_kind_name`). Used by driver tests; never called by the parser.
 pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
-    // The tree renderers and the parser's own `$ctx.toStringTree()` all need
-    // the token-name table. The renderers are called from driver tests, so
-    // they build it on demand; `$ctx.toStringTree()` runs inside a parse and
-    // caches it in a global.
+    // The renderers run from driver tests and build the table on demand;
+    // `$ctx.toStringTree()` runs inside a parse, so it caches one.
     w.begin(&"fn _token_names() -> List<String>");
     w.line(&`let mut v: List<String> = List::with_capacity(${n});`);
     w.begin(&`for let mut k = 0; k < ${n}; k += 1`);
@@ -189,9 +187,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.line(&"break;");
     w.end();
     w.end();
-    // An unknown rule name leaves `_kind` at -1, which is `K_ERROR` — without
-    // this guard `find_child` would match an error node and render it as the
-    // requested subtree.
+    // Unknown rule name leaves `_kind` at -1, which is `K_ERROR`.
     w.line(&"if _kind < 0 { return String::new(); }");
     w.line(&"let _sub = result.cst.find_child(0, _kind as NodeKind);");
     w.begin(&"if _sub >= 0");

@@ -96,15 +96,10 @@ pub struct GenContext {
     /// with `|`) representation. IDs are assigned in insertion order so
     /// the same input grammar always produces the same helper names.
     kind_set_registry: TreeMap<String, KindSetEntry>,
-    /// Snake-cased names of the rules lowering classified `LeftRecursive`.
-    /// Only those carry a `min_prec` parameter, so a scan call site consults
-    /// this before passing one.
+    /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
     lr_rule_snakes: List<String>,
-    /// Ids `kind_check_str` / `kind_negate_check_str` actually emitted a
-    /// call for. Lower pre-interns every set it sees, but an emit site may
-    /// pick a cheaper form (a single-token `==`, a first-char dispatch), so
-    /// the registry over-approximates. `gen_kind_set_helpers` emits only
-    /// the marked ids.
+    /// Lower pre-interns every set it sees, but an emit site may pick a
+    /// cheaper form, so the registry over-approximates what is called.
     kind_set_used: List<bool>,
     /// Registry of runtime FOLLOW-continuation masks keyed by canonical
     /// per-depth representation. IDs are assigned in insertion order so
@@ -430,13 +425,11 @@ impl GenContext {
         return self.current_rule_index;
     }
 
-    /// Record the left-recursive rules by snake name, before any body emit:
-    /// a scan call site may target a rule emitted later.
+    /// Must run before any body emit: a call site may target a later rule.
     pub fn set_lr_rule_snakes(&mut self, names: &List<String>) {
         self.lr_rule_snakes = *names;
     }
 
-    /// Whether `scan_<snake>` / `_parse_<snake>` take a `min_prec` argument.
     pub fn rule_takes_min_prec_arg(&self, snake: &String) -> bool {
         for let n of &self.lr_rule_snakes {
             if *n == *snake {
@@ -1592,7 +1585,6 @@ impl GenContext {
         return self.kind_set_registry.values();
     }
 
-    /// Whether any emit site produced a `_kind_set_<id>` call.
     pub fn kind_set_is_used(&self, id: i32) -> bool {
         if id < 0 || id >= self.kind_set_used.len() {
             return false;

@@ -3256,11 +3256,8 @@ fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     return `${access} != ${char_lit(c)}`;
 }
 
-/// `first_char_dispatched` means the caller already emitted an enclosing
-/// `chars[start]` guard for this keyword's first character, so index 0 is
-/// re-tested for nothing. It only subsumes a case-insensitive first char —
-/// the dispatch guard is always CI, an exact `char_ci[0] == false` check is
-/// stricter and stays.
+/// The caller's `chars[start]` dispatch guard is always case-insensitive, so
+/// an exact `char_ci[0] == false` check is stricter and stays.
 fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo, first_char_dispatched: bool = false) {
     let kw_chars: List<char> = kw.lowercase_text.chars().collect();
     let start_at = if first_char_dispatched && kw.char_ci[0] { 1 } else { 0 };
@@ -4252,8 +4249,7 @@ fn gen_tokenize_fn(
     // An action's `lx.skip()` latches `best_act_skip`; OR it into the
     // command-derived skip decision so either route routes the token to trivia.
     let act_skip = if has_actions { " || best_act_skip" } else { "" };
-    // No `-> skip` rule and no action that can latch one: `is_skip` is a
-    // compile-time `false`, so neither it nor its branch is emitted.
+    // Without either, `is_skip` is a compile-time `false`.
     let has_skip = !skip_names.is_empty() || has_actions;
     if skip_names.is_empty() {
         if has_skip {

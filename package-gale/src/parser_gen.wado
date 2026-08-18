@@ -423,8 +423,7 @@ fn gen_scan_function_named(
     };
 
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
-    // declares `min_prec`; `gen_scan_op_element` matches by consulting
-    // `ctx.rule_takes_min_prec_arg` before passing one.
+    // declares `min_prec`.
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
@@ -2949,9 +2948,7 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
     w.line(&`p.atn_ret_pending = ${ret};`);
 }
 
-/// `let <label> = ` prefix for a leaf's emit, or nothing. The binding exists
-/// only so a semantic action can read the label; with no actions in the
-/// grammar nothing can, and the name would just be an unread local.
+/// A label binding exists only for a semantic action to read.
 fn leaf_binding(ctx: &GenContext, field: &String) -> String {
     if ctx.emit_actions() {
         return `let ${*field} = `;
@@ -4534,9 +4531,6 @@ fn gen_consume_token_group_op(
     w.line(&`${leaf_binding(ctx, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
-/// The token-kind constants of a token-only group's alternatives. Each alt
-/// has exactly one element (a `TokenRef` or `Literal`), guaranteed by
-/// `is_token_only_group`.
 fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
     let mut out: List<String> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
@@ -4614,7 +4608,6 @@ fn gen_op_list_label(
     gen_op_leaf(w, &ll.inner, ctx, name_counts);
 }
 
-/// Render the `p.expect_not(&SYNC_<id>)` expression for an `Op::Excluded`.
 fn gen_op_excluded_call(e: &ExcludedOp, ctx: &mut GenContext) -> String {
     return `p.expect_not(${sync_set_ref(ctx, &e.kinds)})`;
 }
@@ -4661,16 +4654,8 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         },
         Label(lab) => {
             // The inner parse appends its match to the builder, so a label
-            // accumulates nothing — same rule `gen_op_list_label` follows for a
-            // leaf or Group inner. A list label emits no `List<T>` container and
-            // no `.push`; only a scalar label rebinds, and only under an action,
-            // which is the sole reader of a label binding (`leaf_binding`).
-            //
-            // The inner is emitted with the shared `name_counts` so its binding
-            // dedups against the outer alt's scope: otherwise `a=e ... b=e`
-            // would emit two top-level `let e = _parse_e(p);` and the second
-            // would fail to compile. Peek the dedup'd inner name before calling
-            // `gen_element`, which performs the actual increment.
+            // accumulates nothing. The inner shares `name_counts` so that
+            // `a=e ... b=e` cannot emit one shared binding.
             let lab_name = dedup_name(&lab.field_name, name_counts);
             let inner_info = element_field_info(&lab.element);
             let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
@@ -5498,8 +5483,7 @@ fn gen_scan_guard_with_prefix(
     return scan_pos_var;
 }
 
-/// Render `p.expect_not(&SYNC_<id>)` for a parser-side `~`. The excluded
-/// set is interned as a global, so no list is rebuilt per call.
+/// Parser-side `~`. The excluded set is interned, so nothing is rebuilt here.
 fn not_match_call(inner: &Element, ctx: &mut GenContext) -> String {
     let unsupported = "not_match_call: unsupported inner element for parser-side ~";
     let kinds = match inner {
@@ -5614,8 +5598,7 @@ fn gen_scan_winner_tournament(
             emit_argmax_update(w, &best_var, &winner_var, &end_var, ai);
         }
         // The early exit skips the alts still to come; after the last one
-        // there are none, and the guard would only break out of a block the
-        // next statement leaves anyway.
+        // there are none.
         if oi + 1 < order.len() {
             w.begin(&`if ${best_var} >= p.kinds.len()`);
             w.line(&`break ${tourney_label};`);
@@ -6504,9 +6487,8 @@ fn gen_prediction_code_inner(
             }
         },
         Dispatch(d) => {
-            // `kind` is the caller's `let kind = p.peek_kind()`. It is only the
-            // token under the cursor while nothing has been consumed, so a
-            // `Consume` prefix (`skip > 0`) falls back to re-reading.
+            // The caller's `kind` is the cursor token only while nothing has
+            // been consumed, so a `Consume` prefix re-reads.
             let check_var = if d.depth == 0 {
                 if skip == 0 {
                     String::from("kind");
