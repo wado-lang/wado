@@ -25,7 +25,8 @@
 //! cargo test --test emi -- --ignored --nocapture
 //! ```
 //!
-//! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
+//! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_SHARD` (`k/n`),
+//! `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
 //!
 //! ## Next
 //!
@@ -643,6 +644,32 @@ fn calibrate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
 // Campaign
 // ---------------------------------------------------------------------------
 
+/// Keep the `k`-th of `n` interleaved slices of `paths`, as `WADO_EMI_SHARD=k/n`.
+///
+/// Interleaved, so a shard's cost does not depend on where the expensive
+/// fixtures cluster alphabetically.
+fn take_shard(paths: Vec<PathBuf>, spec: &str) -> Vec<PathBuf> {
+    let (index, count) = spec
+        .split_once('/')
+        .unwrap_or_else(|| panic!("WADO_EMI_SHARD must read `k/n`, got `{spec}`"));
+    let index: usize = index
+        .parse()
+        .unwrap_or_else(|e| panic!("WADO_EMI_SHARD index `{index}`: {e}"));
+    let count: usize = count
+        .parse()
+        .unwrap_or_else(|e| panic!("WADO_EMI_SHARD count `{count}`: {e}"));
+    assert!(
+        index < count,
+        "WADO_EMI_SHARD index {index} is out of range for {count} shard(s)"
+    );
+    paths
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| i % count == index)
+        .map(|(_, path)| path)
+        .collect()
+}
+
 fn fixture_paths() -> Vec<PathBuf> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let filter = std::env::var("WADO_EMI_FILTER").unwrap_or_default();
@@ -653,6 +680,9 @@ fn fixture_paths() -> Vec<PathBuf> {
         .filter(|path| filter.is_empty() || path.to_string_lossy().contains(filter.as_str()))
         .collect();
     paths.sort();
+    if let Ok(shard) = std::env::var("WADO_EMI_SHARD") {
+        paths = take_shard(paths, &shard);
+    }
     if let Ok(limit) = std::env::var("WADO_EMI_LIMIT") {
         let limit: usize = limit.parse().expect("WADO_EMI_LIMIT must be a number");
         paths.truncate(limit);
@@ -707,7 +737,10 @@ impl Drop for SilencedPanics {
 fn calibrate_corpus() {
     let paths = fixture_paths();
     let total = paths.len();
-    assert!(total > 0, "no fixtures matched WADO_EMI_FILTER");
+    assert!(
+        total > 0,
+        "no fixtures left after WADO_EMI_FILTER / WADO_EMI_SHARD"
+    );
 
     let results = Mutex::new(Results::default());
     let next = AtomicUsize::new(0);
@@ -1007,4 +1040,21 @@ __DATA__
         .err()
         .expect("a printed clock reading cannot be an oracle");
     assert_eq!(excluded.kind(), "fixture is nondeterministic");
+}
+
+/// `WADO_EMI_FILTER` selects by substring and `WADO_EMI_LIMIT` truncates the
+/// sorted list, so neither can express "the k-th of n". The matrix needs that.
+#[test]
+fn shards_partition_the_corpus() {
+    let paths: Vec<PathBuf> = (0..10)
+        .map(|i| PathBuf::from(format!("{i}.wado")))
+        .collect();
+    let shards: Vec<Vec<PathBuf>> = (0..4)
+        .map(|k| take_shard(paths.clone(), &format!("{k}/4")))
+        .collect();
+
+    assert_eq!(shards[0], ["0.wado", "4.wado", "8.wado"].map(PathBuf::from));
+    let mut union = shards.concat();
+    union.sort();
+    assert_eq!(union, paths, "every fixture lands in exactly one shard");
 }
