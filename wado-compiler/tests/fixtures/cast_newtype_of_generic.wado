@@ -1,0 +1,15 @@
+use { println, Stdout } from "core:cli";
+
+type Bytes = List<u8>;
+type Chunk = ArraySlice<u8>;
+
+export fn run() with Stdout {
+    let owned = "hi".as_bytes().to_list();
+    let named = owned as Bytes;
+    let back = named as List<u8>;
+    let view = back.as_slice() as Chunk;
+    println(`${back.len()} ${view.len()}`);
+}
+
+__DATA__
+{"stdout": "2 2\n"}

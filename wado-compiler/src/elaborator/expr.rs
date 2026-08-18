@@ -2877,6 +2877,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.visit_expr(expr);
     }
 
+    /// The method replacing a rejected `ArraySlice<T>` ↔ `List<T>` cast.
+    fn slice_list_conversion(
+        tt: &TypeTable,
+        source_type: TypeId,
+        target_type: TypeId,
+    ) -> Option<&'static str> {
+        let source_base = tt.get_ultimate_base_type(source_type);
+        let target_base = tt.get_ultimate_base_type(target_type);
+        let slice_elem = |id| match tt.get(id) {
+            ResolvedType::GenericInstance { def, type_args }
+                if tt.compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice)
+                    == Some(*def)
+                    && type_args.len() == 1 =>
+            {
+                Some(type_args[0])
+            }
+            _ => None,
+        };
+        if let Some(elem) = slice_elem(source_base)
+            && tt.as_list(target_base) == Some(elem)
+        {
+            return Some("to_list");
+        }
+        if let Some(elem) = slice_elem(target_base)
+            && tt.as_list(source_base) == Some(elem)
+        {
+            return Some("as_slice");
+        }
+        None
+    }
+
     pub(super) fn resolve_cast(
         &mut self,
         cast: &ast::CastExpr,
@@ -3068,25 +3099,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are structs here, with their own rules below.
+            // `i128` / `u128` are structs here; their rules below cover a
+            // wide-int source only, so such a target never exempts an aggregate.
             let wide_int = |id| {
-                matches!(tt.get(id), ResolvedType::Struct { def, .. }
+                matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
+            // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
+            let source_base = tt.get_ultimate_base_type(source_type);
             let source_is_aggregate = !wide_int(source_type)
-                && !wide_int(target_type)
-                && (tt.is_tuple(source_type)
-                    || matches!(tt.get(source_type), ResolvedType::Struct { .. }));
-            source_is_aggregate
-                && tt.get_ultimate_base_type(source_type) != tt.get_ultimate_base_type(target_type)
+                && matches!(
+                    tt.get(source_base),
+                    ResolvedType::Struct { .. }
+                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Variant { .. }
+                );
+            source_is_aggregate && source_base != tt.get_ultimate_base_type(target_type)
         };
         if unrelated_aggregate {
-            let from_name = self.tysys.type_table.borrow().type_name(source_type);
-            let to_name = self.tysys.type_table.borrow().type_name(target_type);
+            let tt = self.tysys.type_table.borrow();
+            let from_name = tt.type_name(source_type);
+            let to_name = tt.type_name(target_type);
+            let conversion = Self::slice_list_conversion(&tt, source_type, target_type);
+            drop(tt);
+            let hint = match conversion {
+                Some(method) => format!(
+                    "a slice is a view and a `List` owns its elements; use `.{method}()` instead"
+                ),
+                None => "the two types share no representation; `as` reinterprets only \
+                         across a newtype boundary"
+                    .to_string(),
+            };
             let _ = self.emit(TypeError::InvalidCast {
                 from: from_name,
                 to: to_name,
-                hint: "the two types share no representation; `as` between aggregates is a newtype step".to_string(),
+                hint,
                 span: cast.span,
             });
             // The target is the cast's answer, as the other invalid-cast arms
