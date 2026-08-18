@@ -432,7 +432,6 @@ fn register_call_wrapper(
             fq: wrapper_fq.to_string(),
         },
         type_id: fn_type_id,
-        value_copy_mangle: None,
         param_names,
         body: Some(body),
         meta: crate::wir::WirMeta::default(),
@@ -609,7 +608,6 @@ fn register_inspect_wrapper(
     let func = WirFunction {
         name: WirName { fq: wrapper_fq },
         type_id: callback_fn_type_id,
-        value_copy_mangle: None,
         param_names: vec![env_local, formatter_local],
         body: Some(body),
         meta: crate::wir::WirMeta::default(),

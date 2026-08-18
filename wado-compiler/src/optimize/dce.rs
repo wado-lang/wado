@@ -291,62 +291,46 @@ fn extend_reachable_for_optimizer_passes(
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
 
-    // WIR codegen names a `$value_copy$` helper by `array_clone::<T>`'s element
-    // *type*, not as a NIR call edge, so seed one virtual root per value-typed
-    // site — keyed by canonical mangle, since the table can intern one type
-    // under several ids while only one helper exists per mangle.
-    // TODO(optimizer): make it a real call-graph edge in `lower::plan::value_copy`.
-    let (helpers_by_mangle, candidates): (
-        IndexMap<String, FunctionId>,
-        Vec<(FunctionId, Vec<String>)>,
-    ) = {
+    // An `array_clone::<T>` site reaches `T`'s `$value_copy$` helper through
+    // the element type rather than a call edge, so seed one root per
+    // value-typed site. `NirPackage::value_copy_helpers` is the join, so which
+    // helper a type reaches is answered in one place.
+    let candidates: Vec<(FunctionId, Vec<FunctionId>)> = {
         let type_table = project.type_table.borrow();
-        let helpers = project
-            .functions
-            .iter()
-            .filter_map(|func_rc| {
-                let func = func_rc.borrow();
-                if let crate::nir::FunctionKind::ValueCopy { type_id } = func.kind
-                    && type_table.get_pruned(type_id).is_some()
-                {
-                    Some((
-                        type_table.mangle_type_arg_for_generic(type_id),
-                        function_id_for(&func),
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let candidates = project
+        project
             .functions
             .iter()
             .map(|func_rc| {
                 let func = func_rc.borrow();
-                let func_id = function_id_for(&func);
-                let mut mangles = Vec::new();
+                let mut helpers = Vec::new();
                 if let Some(body) = func.body.as_ref() {
                     let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
                     collect_array_clone_element_types(body, descriptors, &mut needed);
                     for type_id in needed {
                         // A stale `array_clone::<T>` can name a type already
                         // pruned from the table; it has no helper, so skip it
-                        // rather than canonicalize an absent id (the mangle
-                        // recursion resolves ids through `TypeTable::get`,
-                        // which panics on a missing slot). Guarding only the
-                        // top-level id is sufficient: DCE's `retain` keeps the
-                        // transitive closure over exactly the edges the mangle
-                        // recurses through, so a surviving top-level type never
-                        // has a pruned mangle-reachable component.
-                        if type_table.get_pruned(type_id).is_some() {
-                            mangles.push(type_table.mangle_type_arg_for_generic(type_id));
+                        // rather than resolve an absent id (the structural key
+                        // recurses through `TypeTable::get`, which panics on a
+                        // missing slot). Guarding only the top-level id is
+                        // sufficient: DCE's `retain` keeps the transitive
+                        // closure over exactly the edges the key recurses
+                        // through, so a surviving top-level type never has a
+                        // pruned reachable component.
+                        if type_table.get_pruned(type_id).is_none() {
+                            continue;
+                        }
+                        if let Some(helper) =
+                            project.value_copy_helpers.get(type_id, &type_table)
+                        {
+                            use cranelift_entity::EntityRef;
+                            let helper = project.functions[helper.index()].borrow();
+                            helpers.push(function_id_for(&helper));
                         }
                     }
                 }
-                (func_id, mangles)
+                (function_id_for(&func), helpers)
             })
-            .collect();
-        (helpers, candidates)
+            .collect()
     };
     // Iterate to a fixpoint: a helper newly marked reachable may itself
     // call `array_clone::<T'>` for some `T'` whose helper isn't reachable
@@ -356,14 +340,12 @@ fn extend_reachable_for_optimizer_passes(
     // codegen with `WirInstr::ArrayClone references unknown helper ...`.
     loop {
         let mut added_this_round = false;
-        for (func_id, mangles) in &candidates {
+        for (func_id, helpers) in &candidates {
             if !reachable.contains(func_id) {
                 continue;
             }
-            for mangle in mangles {
-                if let Some(helper_id) = helpers_by_mangle.get(mangle)
-                    && !reachable.contains(helper_id)
-                {
+            for helper_id in helpers {
+                if !reachable.contains(helper_id) {
                     reachable.extend(compute_reachable(call_graph, helper_id));
                     added_this_round = true;
                 }

@@ -72,10 +72,6 @@ struct WirEmitter<'a> {
     func_index_offset: u32,
     /// Map from `WirFuncId` index → Wasm function index.
     func_index_map: IndexMap<u32, u32>,
-    /// Map from a `$value_copy$` helper's `value_copy_mangle` metadata to
-    /// its Wasm function index. Built once so `ArrayClone` emission resolves
-    /// its per-element helper in O(1) instead of scanning `wir.functions`.
-    value_copy_wasm_index: IndexMap<String, u32>,
     /// Map from global fq name to Wasm global index.
     global_name_map: IndexMap<String, u32>,
     /// Local name map for current function.
@@ -118,7 +114,6 @@ impl<'a> WirEmitter<'a> {
             struct_field_map: IndexMap::default(),
             func_index_offset: 0,
             func_index_map: IndexMap::default(),
-            value_copy_wasm_index: IndexMap::default(),
             global_name_map: IndexMap::default(),
             current_locals: IndexMap::default(),
             ref_locals: IndexSet::default(),
@@ -678,19 +673,11 @@ impl<'a> WirEmitter<'a> {
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
-        for (wasm_idx, (i, func)) in
-            (self.func_index_offset..).zip(self.wir.functions.iter().enumerate())
+        for (wasm_idx, i) in
+            (self.func_index_offset..).zip(0..self.wir.functions.len())
         {
             let wir_func_idx = self.defined_func_id(i);
             self.func_index_map.insert(wir_func_idx, wasm_idx);
-            // First-wins mirrors the previous linear scan (which returned the
-            // first matching helper); after synthesis dedup each mangle is
-            // unique among helpers anyway.
-            if let Some(mangle) = &func.value_copy_mangle {
-                self.value_copy_wasm_index
-                    .entry(mangle.clone())
-                    .or_insert(wasm_idx);
-            }
         }
     }
 
@@ -2232,7 +2219,7 @@ impl<'a> WirEmitter<'a> {
             WirInstr::ArrayClone {
                 type_id,
                 src,
-                element_copy_mangle,
+                element_copy,
                 len,
             } => {
                 let arr_wasm_idx = self.resolve_type_index(type_id.index());
@@ -2273,13 +2260,7 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::LocalGet(src_local));
                 f.instruction(&Instruction::LocalGet(loop_idx_local));
                 self.emit_array_get(f, type_id.index());
-                let func_idx = self
-                    .resolve_function_index_by_value_copy_mangle(element_copy_mangle)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "WirInstr::ArrayClone references a value-copy helper for {element_copy_mangle} that was not synthesized"
-                        )
-                    });
+                let func_idx = self.resolve_func_index(element_copy.index());
                 // Wasm GC `array.get` produces `(ref null T)`; the
                 // synthesized `$value_copy$` expects a
                 // non-null `(ref T)`. `List<T>::repr` is sized to
@@ -2682,15 +2663,6 @@ impl<'a> WirEmitter<'a> {
             return Some(self.wir_type_to_val_type(&nullable));
         }
         None
-    }
-
-    /// Look up the Wasm function index of the synthesized `$value_copy$`
-    /// deep-copy helper for the element type whose canonical mangle is
-    /// `copy_mangle`. Used by `WirInstr::ArrayClone` to call the helper
-    /// between `array.get` and `array.set`. Resolution is by the helper's
-    /// `value_copy_mangle` metadata, not by parsing its name.
-    fn resolve_function_index_by_value_copy_mangle(&self, copy_mangle: &str) -> Option<u32> {
-        self.value_copy_wasm_index.get(copy_mangle).copied()
     }
 
     fn get_func_type(&self, wir_type_idx: u32) -> Option<&WirFuncType> {

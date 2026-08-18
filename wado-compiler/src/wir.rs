@@ -221,7 +221,6 @@ impl WasmModuleInfo {
                     attributes: Vec::new(),
                 },
                 locals,
-                value_copy_mangle: None,
                 generic_origin: None,
                 effects: Vec::new(),
                 stores: Vec::new(),
@@ -830,13 +829,6 @@ pub struct WirFunction {
     pub compiler_item: Option<crate::compiler_item::CompilerItem>,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
-    /// The copied type's canonical mangle when this is a synthesized
-    /// `$value_copy$` deep-copy helper (`FunctionKind::ValueCopy`). Lets
-    /// codegen and DCE resolve an `ArrayClone`'s element-copy edge by
-    /// structural type identity instead of parsing the helper's name — and,
-    /// because it is the mangle (not an intern-order `TypeId`), identical
-    /// types interned more than once still resolve to the one helper.
-    pub value_copy_mangle: Option<String>,
     /// Declared locals the emitter allocates from, finalized once per producer
     /// (`optimize_wir` for the main package, `to_wir_package` for a bundled one).
     pub locals: WirLocals,
@@ -1393,10 +1385,10 @@ pub enum WirInstr {
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
-        /// The element type's canonical mangle. Codegen and DCE resolve it to
-        /// the `$value_copy$` helper through each helper's `value_copy_mangle`,
-        /// so the same type interned twice still matches.
-        element_copy_mangle: String,
+        /// The element type's `$value_copy$` helper, resolved at WIR build
+        /// through `NirPackage::value_copy_helpers`. A callee reference like
+        /// any other, so DCE roots it and compaction remaps it.
+        element_copy: WirFuncId,
         /// Number of leading elements to copy — the destination's exact
         /// length. `None` clones the whole array (`array.len(src)`). Must
         /// evaluate to <= `array.len(src)`.

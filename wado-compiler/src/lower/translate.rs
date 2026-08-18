@@ -194,6 +194,17 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         task_return_flat_params,
         wasm_assets,
         trait_env,
+        // Resolved before the interner is drained: a helper only an
+        // `array_clone::<T>` site reaches is never resolved by a wrap, and DCE
+        // still has to root it.
+        value_copy_helpers: value_copy.helpers.map(|(module_source, name)| {
+            translator.interner.borrow_mut().resolve(&nir::FunctionRef {
+                module_source: module_source.clone(),
+                name: name.clone(),
+                monomorph_info: None,
+                method_info: None,
+            })
+        }),
     };
     // Finalize the born-resolved callee ids: append the interned extern stubs,
     // set every function's `id` to its store position (`FuncId == position`), and
@@ -1009,20 +1020,21 @@ impl FunctionTranslator<'_, '_> {
     /// where the semantics call for a fresh value.
     fn wrap_value_copy(&self, value: ExprId, type_id: tir::TypeId) -> ExprId {
         let span = self.expr_span(value);
-        let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
-        else {
+        let helper = {
             let tt = self.base.type_table.borrow();
-            assert!(
-                !value_copy::needs_value_copy(type_id, &tt),
-                "the seed walk registered no value-copy helper for {}",
-                tt.mangle_type_arg_for_generic(type_id)
-            );
-            drop(tt);
-            return value;
+            let Some(helper) = self.base.value_copy.helpers.get(type_id, &tt) else {
+                assert!(
+                    !value_copy::needs_value_copy(type_id, &tt),
+                    "the seed walk registered no value-copy helper for {}",
+                    tt.mangle_type_arg_for_generic(type_id)
+                );
+                return value;
+            };
+            helper.clone()
         };
         let func = nir::FunctionRef {
-            module_source: helper_module.clone(),
-            name: helper_name.clone(),
+            module_source: helper.0,
+            name: helper.1,
             monomorph_info: None,
             method_info: None,
         };
@@ -1698,12 +1710,16 @@ impl FunctionTranslator<'_, '_> {
                 .monomorph_info
                 .as_ref()
                 .and_then(|mi| mi.impl_type_args.first().copied())
-            && let Some((helper_module, helper_name)) =
-                self.base.value_copy.name_for_type.get(&type_id)
+            && let Some((helper_module, helper_name)) = self
+                .base
+                .value_copy
+                .helpers
+                .get(type_id, &self.base.type_table.borrow())
+                .cloned()
         {
             let func = nir::FunctionRef {
-                module_source: helper_module.clone(),
-                name: helper_name.clone(),
+                module_source: helper_module,
+                name: helper_name,
                 monomorph_info: None,
                 method_info: None,
             };
