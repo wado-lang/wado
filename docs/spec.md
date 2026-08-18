@@ -398,7 +398,9 @@ Wado intentionally omits certain operators found in other languages:
 
 #### Type Cast (`as`)
 
-The `as` operator performs explicit type conversion between primitive types:
+The `as` operator converts between primitive types, and reinterprets a value
+across a newtype boundary — any two types sharing an ultimate base, aggregates
+included:
 
 ```wado
 let i = 42;
@@ -411,10 +413,6 @@ let x = 10 as f64 as i32 as f64;
 // Cast in expressions
 let result = (a as f64) + b;
 ```
-
-`as` between aggregates is only a newtype step: both sides must share an ultimate
-base type. Converting takes a method — `ArraySlice<T>` ↔ `List<T>` is `.to_list()`
-/ `.as_slice()`.
 
 #### Parentheses for Grouping
 
