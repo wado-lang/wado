@@ -1,7 +1,6 @@
 // ANTLR4 `generate` benchmark: the generate-time reference for Gale, over the
-// same RustLexer.g4 + RustParser.g4. Runs org.antlr.v4.Tool in-process so the
-// row measures generation rather than JVM startup and classloading, which cost
-// ~0.95s of a ~1.09s subprocess. Throughput auto-calibrates like the others.
+// same RustLexer.g4 + RustParser.g4. Loops org.antlr.v4.Tool in-process, so the
+// row measures generation rather than a cold JVM.
 
 import org.antlr.v4.Tool;
 import java.io.File;
@@ -10,8 +9,7 @@ public class Antlr4GenBench {
     static String[] toolArgs(String outDir, String[] grammars) {
         String[] args = new String[grammars.length + 4];
         args[0] = "-Dlanguage=Java";
-        // Gale emits a parser only; without this ANTLR also writes the two
-        // listener files, ~20% more work over ~30% more output.
+        // Gale emits a parser only; without this ANTLR also writes listeners.
         args[1] = "-no-listener";
         args[2] = "-o";
         args[3] = outDir;
@@ -42,8 +40,7 @@ public class Antlr4GenBench {
             size += new File(g).length();
         }
 
-        // Warm the JIT to steady state: the first generation runs interpreted
-        // and costs ~10x the warm one.
+        // The first generations run interpreted.
         long warmUntil = System.nanoTime() + 8_000_000_000L;
         long warmIters = 0;
         while (System.nanoTime() < warmUntil || warmIters < 20) {

@@ -80,9 +80,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let resp_headers = Fields::new();
     resp_headers.append("content-type", b"application/json" as FieldValue);
     // Without this the body streams out chunked, where the Axum, Node and Bun
-    // servers all send a length. Formatting it costs ~6% of a request, nearly
-    // all of it the header value's allocation — an optimization target, not a
-    // reason to write the digits by hand here.
+    // servers all send a length. The header value's allocation is what it
+    // costs — an optimization target, not a reason to hand-roll the digits.
     resp_headers.append("content-length", `${resp.body.len()}`.as_bytes().to_list() as FieldValue);
     let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
     response.set_status_code(resp.status);

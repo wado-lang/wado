@@ -75,8 +75,8 @@ const catalogObj = JSON.parse(fs.readFileSync(path.join(__dirname, "citm_catalog
 
 console.log(`json-catalog: ${size} bytes`);
 
-// Encoded, because `String.length` counts UTF-16 units rather than UTF-8 bytes,
-// and the other two rows produce UTF-8 bytes.
+// Encoded, because `String.length` counts UTF-16 units and the other two rows
+// produce UTF-8 bytes.
 const encoder = new TextEncoder();
 bench("Ser", size, "B", () => encoder.encode(JSON.stringify(catalogObj)).length);
 

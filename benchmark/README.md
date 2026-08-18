@@ -68,10 +68,9 @@ against `serde_json` (Rust) and `JSON.stringify` / `JSON.parse` (JS), CBOR puts
 JSON source size in both, so the CBOR figures stay readable next to the JSON
 ones; `vs best` ranks within one codec.
 
-Every row starts and ends at UTF-8 bytes: the JS ones go through `TextEncoder`
-and `TextDecoder`, since `String.length` counts UTF-16 units and `JSON.parse`
-wants a string. What the rows build still differs — Rust and Wado a typed struct
-tree, `JSON.parse` an untyped object graph with no field or type checking.
+Every row starts and ends at UTF-8 bytes; the JS ones go through `TextEncoder`
+and `TextDecoder` to get there. What they build still differs — Rust and Wado a
+typed struct tree, `JSON.parse` an untyped object graph with no type checking.
 
 ### twitter
 
@@ -254,10 +253,9 @@ about what a browser would run.
 | tree-sitter (web-tree-sitter) |   2.62 MB/s |  5.087 ms | 4.27x   |
 | Shiki (JS engine)             | 976.63 KB/s | 13.640 ms | 11.45x  |
 
-Every highlighter parses the corpus without errors. Constructs two of them
-mishandled — `AUTOINCREMENT`, `INSERT OR REPLACE`, `LIKE ... ESCAPE` — are
-written another way at the same token count, since a highlighter that gives up
-on a region skips the work of colouring it.
+Every highlighter parses the corpus without errors: a highlighter that gives up
+on a region skips the work of colouring it, so the constructs two of them
+mishandled are written another way at the same token count.
 
 ### Grammar Generation
 
@@ -273,12 +271,11 @@ per second (higher is better).
 | Java (ANTLR4)   | 611.67 KB/s |  56.223 ms | 1.00x   |
 | **Wado** (Gale) | 222.64 KB/s | 154.467 ms | 2.75x   |
 
-Both rows run in-process and warm: Gale does grammar assembly plus code
-generation and emits a Wado recursive-descent parser, ANTLR4 loops
-`org.antlr.v4.Tool` after a JIT warmup and emits Java. Neither generates
-listeners. ANTLR4 writes its output to disk and re-reads the grammars each
-iteration where Gale returns a `String` from memory; both terms are small next
-to generation. The ANTLR4 row needs `java`/`javac` and is skipped without them.
+Both rows run in-process and warm, emitting a parser and no listeners: Gale a
+Wado recursive-descent one from memory, ANTLR4 Java onto disk.
+
+ANTLR4 also re-reads the grammars each iteration; both terms are small next to
+generation. That row needs `java`/`javac` and is skipped without them.
 
 ## Application Server
 

@@ -146,9 +146,7 @@ run_shape() {
 
   # `oha` gets a fixed core count, not "the rest": spreading the same
   # connections over more generator threads thins each one's batch, and the
-  # server pays for the extra wakeups — measured 105k req/s on 4 generator
-  # cores against 69k on 8, for the same server. Four sustains >320k req/s,
-  # well past anything measured here; the headroom check guards the low side.
+  # server pays for the extra wakeups.
   if [ "$PIN_AVAILABLE" -eq 0 ]; then
     echo "CPU pinning: disabled (nproc=${NPROC}, taskset unavailable)"
   elif [ $((workers + OHA_CORE_COUNT)) -gt "$NPROC" ]; then
@@ -210,8 +208,7 @@ run_shape() {
     done
 
     # A gain at 2x connections means `oha` set that number, not the server.
-    # Off by default: it passes at the tuned settings, so it earns its slice
-    # only when CONNECTIONS_PER_WORKER, OHA_CORE_COUNT or a shape changes.
+    # It passes at the tuned settings, so it costs a slice only when asked.
     if [ "$HEADROOM_CHECK" = "1" ] && [ -n "$best_path" ]; then
       CONNECTIONS=$((CONNECTIONS * 2))
       rps=$(measure "$url" "$best_method" "$best_path")

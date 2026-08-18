@@ -1,7 +1,6 @@
 // Build and run the ANTLR4 generate benchmark: compile Antlr4GenBench against
-// the jar's bundled Tool and run it over the same RustLexer.g4 + RustParser.g4
-// the Gale row uses. The jar is cached under ~/.cache/gale and fetched on first
-// use; skips without java/javac.
+// the jar's bundled Tool, over the same grammars the Gale row uses. The jar is
+// cached under ~/.cache/gale; skips without java/javac.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, copyFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';

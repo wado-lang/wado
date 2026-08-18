@@ -75,8 +75,8 @@ const obj = JSON.parse(fs.readFileSync(path.join(__dirname, "twitter.json"), "ut
 
 console.log(`json-twitter: ${size} bytes`);
 
-// Encoded, because `String.length` counts UTF-16 units — 15.8% under the UTF-8
-// byte count on this dataset — and the other two rows produce UTF-8 bytes.
+// Encoded, because `String.length` counts UTF-16 units and the other two rows
+// produce UTF-8 bytes.
 const encoder = new TextEncoder();
 bench("Ser", size, "B", () => encoder.encode(JSON.stringify(obj)).length);
 

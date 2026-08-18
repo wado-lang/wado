@@ -28,29 +28,26 @@ driven end to end over HTTP, so the four are compared as whole servers.
 
 ### Equal core budgets
 
-Throughput scales with worker count, so a table compares servers only when
-every server gets the same one. Two shapes are measured: **1 worker**, a
-1-core container scaled out horizontally, and **4 workers**, a small VM
-running one instance. Node scales out with `node:cluster` (`SCHED_NONE`), Bun
-with one `SO_REUSEPORT` process per worker, `wado serve` with `--workers`,
-Axum with `TOKIO_WORKER_THREADS`.
+Throughput scales with worker count, so a table compares servers only when every
+server gets the same one. `SHAPES` names them: a 1-core container scaled out
+horizontally, and a small VM running one instance.
+
+Node scales out with `node:cluster` (`SCHED_NONE`), Bun with one `SO_REUSEPORT`
+process per worker, `wado serve` with `--workers`, Axum with
+`TOKIO_WORKER_THREADS`.
 
 ### Keeping the load generator off the critical path
 
-A saturated `oha` caps the fastest servers and compresses every ratio, which
-reads as "the servers are closer than they are". Servers take cores
-`0..workers-1` and `oha` a fixed `OHA_CORE_COUNT` at the top — spreading the
-same connections over more generator threads thins each one's batch and the
-server pays for the extra wakeups, so "the rest" is the wrong share.
-`HEADROOM_CHECK=1` re-runs each server at twice the connections; a gain there
-means `oha` set that number, not the server. It passes at the settings above,
-so it is off unless those change.
+A saturated `oha` caps the fastest servers and compresses every ratio. It takes
+a fixed `OHA_CORE_COUNT`, not the cores left over: more generator threads thin
+each one's batch and the server pays for the extra wakeups.
 
-Only the server under measurement runs, and its port is asserted free before
-the next one starts: a survivor keeps serving under `SO_REUSEPORT` alongside
-its replacement, which inflates the row by however many are left. Each server
-is warmed over every route, then each request is measured for `ROUNDS` slices
-and the fastest kept.
+`HEADROOM_CHECK=1` re-runs each server at twice the connections; a gain there
+means `oha` set that number. It passes at the settings above, so it is off.
+
+Only the measured server runs, and its port is asserted free first — a survivor
+keeps serving under `SO_REUSEPORT` and inflates the row. Each server is warmed
+over every route, then measured for `ROUNDS` slices with the fastest kept.
 
 The four servers span four runtimes:
 
