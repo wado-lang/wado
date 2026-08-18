@@ -607,7 +607,7 @@ depended on declarations no module involved could see. All three are gone.
 
   Which positions an impl argument pins is asked twice, and the second asking is
   where §8's rule bites: `impl_is_concrete_instantiation` decides how the impl's
-  methods are *named*, and `inherent_impl_type_args_match` decides which
+  methods are _named_, and `inherent_impl_type_args_match` decides which
   receivers reach that name. They had drifted — neither a namespace-qualified
   argument nor a function type counted as concrete for naming — so a plain
   `impl Cell<ns::Tag>` was named as a template while its call site named an

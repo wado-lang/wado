@@ -2412,10 +2412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Type::Tuple(elems) => elems,
             _ => return false,
         };
-        !args.is_empty()
-            && args
-                .iter()
-                .all(|a| self.tysys.impl_arg_pins_a_position(a))
+        !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully

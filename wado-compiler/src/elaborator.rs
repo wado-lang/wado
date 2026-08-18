@@ -1983,18 +1983,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<crate::name::FqTypeName> = if scope
-                .impl_is_concrete_instantiation(&impl_block.ty) {
-                let tt = scope.tysys.type_table.borrow();
-                let peeled = tt.peel_refs(self_type);
-                matches!(
-                    tt.get(peeled),
-                    crate::tir::ResolvedType::GenericInstance { .. }
-                )
-                .then(|| tt.fq_type_name(peeled))
-            } else {
-                None
-            };
+            let concrete_owner: Option<crate::name::FqTypeName> =
+                if scope.impl_is_concrete_instantiation(&impl_block.ty) {
+                    let tt = scope.tysys.type_table.borrow();
+                    let peeled = tt.peel_refs(self_type);
+                    matches!(
+                        tt.get(peeled),
+                        crate::tir::ResolvedType::GenericInstance { .. }
+                    )
+                    .then(|| tt.fq_type_name(peeled))
+                } else {
+                    None
+                };
             scope.record_impl_facts(
                 impl_block.id,
                 sem::types::ImplFacts {
