@@ -3126,8 +3126,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(method) => format!(
                     "a slice is a view and a `List` owns its elements; use `.{method}()` instead"
                 ),
-                None => "the two types share no representation; `as` between aggregates is a \
-                         newtype step"
+                None => "the two types share no representation; `as` reinterprets only \
+                         across a newtype boundary"
                     .to_string(),
             };
             let _ = self.emit(TypeError::InvalidCast {
