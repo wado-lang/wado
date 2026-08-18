@@ -590,7 +590,8 @@ impl CstStore {
             Open => ChildKind::Node,
             Miss => ChildKind::Missing,
             Skip => ChildKind::Skipped,
-            _ => ChildKind::Token,
+            Tok => ChildKind::Token,
+            Close => panic("CstStore::child_kind: Close is not a child row"),
         };
     }
 
@@ -678,7 +679,7 @@ fn cst_to_string_tree_impl(
                 out.push_str(&">");
                 c += 1;
             },
-            _ => c += 1,
+            Close => c += 1,
         }
     }
     out.push_str(&")");
@@ -2057,11 +2058,6 @@ impl Parser {
         }
     }
 
-    fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.full_message(); }
-        return String::from("");
-    }
-
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
         for let x of set { if *x == k { return true; } }
         return false;
@@ -2200,22 +2196,13 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if k != TK_EOF {
-            let mut blocked = false;
-            for let x of excluded {
-                if x == k {
-                    blocked = true;
-                    break;
-                }
-            }
-            if !blocked {
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
-            }
+        if k != TK_EOF && !self.in_set(k, excluded) {
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
@@ -2226,31 +2213,29 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        for let x of included {
-            if x == k {
-                if k == TK_EOF {
-                    self.b.token(self.pos);
-                    return self.pos;
-                }
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
+        if self.in_set(k, included) {
+            if k == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
             }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            &included,
+            included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -3492,7 +3477,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.expect_set([TK_LIT_1, TK_LIT_2, TK_LIT_3, TK_LIT_4, TK_LIT_5, TK_LIT_6, TK_LIT_7, TK_LIT_8, TK_LIT_9, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66]);
+        let lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66 = p.expect_set(&SYNC_0);
     }
     if !p.speculating {
         p.emit(`${p.rule_text(_rule_start_tok)}\n`);
@@ -3537,7 +3522,7 @@ pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
 }
 
-fn _ctx_token_names() -> List<String> {
+fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(69);
     for let mut k = 0; k < 69; k += 1 {
         v.push(token_kind_name(k));
@@ -3545,21 +3530,13 @@ fn _ctx_token_names() -> List<String> {
     return v;
 }
 
-global CTX_TOKEN_NAMES: List<String> = _ctx_token_names();
+global CTX_TOKEN_NAMES: List<String> = _token_names();
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(69);
-    for let mut k = 0; k < 69; k += 1 {
-        token_names.push(token_kind_name(k));
-    }
-    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(69);
-    for let mut k = 0; k < 69; k += 1 {
-        token_names.push(token_kind_name(k));
-    }
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
         if RULE_NAMES[i] == *rule {
@@ -3567,9 +3544,10 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
             break;
         }
     }
+    if _kind < 0 { return String::new(); }
     let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
 }
@@ -3579,4 +3557,5 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_LIT_1, TK_LIT_10, TK_LIT_11, TK_LIT_12, TK_LIT_13, TK_LIT_14, TK_LIT_15, TK_LIT_16, TK_LIT_17, TK_LIT_18, TK_LIT_19, TK_LIT_2, TK_LIT_20, TK_LIT_21, TK_LIT_22, TK_LIT_23, TK_LIT_24, TK_LIT_25, TK_LIT_26, TK_LIT_27, TK_LIT_28, TK_LIT_29, TK_LIT_3, TK_LIT_30, TK_LIT_31, TK_LIT_32, TK_LIT_33, TK_LIT_34, TK_LIT_35, TK_LIT_36, TK_LIT_37, TK_LIT_38, TK_LIT_39, TK_LIT_4, TK_LIT_40, TK_LIT_41, TK_LIT_42, TK_LIT_43, TK_LIT_44, TK_LIT_45, TK_LIT_46, TK_LIT_47, TK_LIT_48, TK_LIT_49, TK_LIT_5, TK_LIT_50, TK_LIT_51, TK_LIT_52, TK_LIT_53, TK_LIT_54, TK_LIT_55, TK_LIT_56, TK_LIT_57, TK_LIT_58, TK_LIT_59, TK_LIT_6, TK_LIT_60, TK_LIT_61, TK_LIT_62, TK_LIT_63, TK_LIT_64, TK_LIT_65, TK_LIT_66, TK_LIT_7, TK_LIT_8, TK_LIT_9];
 

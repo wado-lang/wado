@@ -96,6 +96,11 @@ pub struct GenContext {
     /// with `|`) representation. IDs are assigned in insertion order so
     /// the same input grammar always produces the same helper names.
     kind_set_registry: TreeMap<String, KindSetEntry>,
+    /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
+    lr_rule_snakes: List<String>,
+    /// Lower pre-interns every set it sees, but an emit site may pick a
+    /// cheaper form, so the registry over-approximates what is called.
+    kind_set_used: List<bool>,
     /// Registry of runtime FOLLOW-continuation masks keyed by canonical
     /// per-depth representation. IDs are assigned in insertion order so
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
@@ -242,6 +247,8 @@ impl GenContext {
             scannable_cache: none_bool_cache(rule_count),
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
+            kind_set_used: [],
+            lr_rule_snakes: [],
             follow_mask_registry: TreeMap::new(),
             sync_set_registry: TreeMap::new(),
             tail_greedy_cache: none_list_cache(rule_count),
@@ -416,6 +423,20 @@ impl GenContext {
     /// The rule currently being emitted, or -1 outside rule-body emission.
     pub fn current_rule_index(&self) -> i32 {
         return self.current_rule_index;
+    }
+
+    /// Must run before any body emit: a call site may target a later rule.
+    pub fn set_lr_rule_snakes(&mut self, names: &List<String>) {
+        self.lr_rule_snakes = *names;
+    }
+
+    pub fn rule_takes_min_prec_arg(&self, snake: &String) -> bool {
+        for let n of &self.lr_rule_snakes {
+            if *n == *snake {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// Store the per-rule ATN loop-entry decision numbers (after `build_atn`).
@@ -1564,6 +1585,20 @@ impl GenContext {
         return self.kind_set_registry.values();
     }
 
+    pub fn kind_set_is_used(&self, id: i32) -> bool {
+        if id < 0 || id >= self.kind_set_used.len() {
+            return false;
+        }
+        return self.kind_set_used[id];
+    }
+
+    fn mark_kind_set_used(&mut self, id: i32) {
+        while self.kind_set_used.len() <= id {
+            self.kind_set_used.push(false);
+        }
+        self.kind_set_used[id] = true;
+    }
+
     /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
     /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
     /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
@@ -1648,6 +1683,7 @@ impl GenContext {
             return `${*expr} == ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
+        self.mark_kind_set_used(id);
         return `_kind_set_${id}(${*expr})`;
     }
 
@@ -1803,6 +1839,7 @@ impl GenContext {
             return `${*expr} != ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
+        self.mark_kind_set_used(id);
         return `!_kind_set_${id}(${*expr})`;
     }
 }
