@@ -574,21 +574,37 @@ question twice: which positions the header pins decides both how its methods are
 _named_ and which receivers reach that name. Two predicates answering it drift,
 so there is one — `TypeSystem::impl_arg_pins_a_position`.
 
-Reading the target is the same hazard one step earlier, and a target has more
-spellings than any one call site remembers: `Cell<T>`, `ns::Cell<T>`, `&Cell<T>`,
-`[i32, T]`. A reading written inline covers the spellings its author had in mind,
-so there are exactly two, and every consumer takes one:
+Reading the target is the same hazard one step earlier, and it is the one this
+design got wrong repeatedly. A target has more spellings than any one call site
+remembers — `Cell<T>`, `ns::Cell<T>`, `&Cell<T>`, `[i32, T]` — so a reading
+written inline covers the spellings its author had in mind and silently declines
+the rest.
 
-- `impl_target_args` — which positions the target writes, for matching and for
-  naming. It reads through a reference and counts a tuple target's elements.
-- `impl_target_head_args` — the arguments the head writes, for binding the
-  header's own parameters and recording the block's. Narrower by one form: a
-  tuple target is the variadic pack, bound by its own path.
+The failure that kept recurring was subtler than a missing spelling: consumers
+asking _different questions_ shared one reading because the questions sound
+alike. "The target's arguments" is three questions.
 
-A consumer that spells a third reading admits some targets and not others, and
-the two halves of one question then answer differently — a namespaced target
-whose parameter one half binds and the other does not is not a header that half
-works, it is a header that compiles to a call nothing defines.
+- **Does this receiver reach this impl, and does this argument pin its
+  position?** `impl_target_args`: a shape comparison, so it reads through a
+  reference and counts a tuple's elements.
+- **What parameters does the header bind, and what does the block record?**
+  `impl_target_head_args`: the head's own argument list. Narrower by one form —
+  a tuple target is the variadic pack, bound by its own path.
+- **What name does the definition mint?** The whole target with references
+  peeled, rendered. This is the only one that must agree with something outside
+  the elaborator: monomorphization asserts the minted `(module, name)` is
+  unique, so a check about duplicate definitions has to ask exactly what that
+  assertion asks, and nothing else.
+
+Sharing a reading across two of these does not fail loudly. It fails as a
+narrower or wider answer than the question wanted: reading _arguments_ where the
+minted _name_ was the question makes `&Cw<i32>` and `&Dw<i32>` render alike,
+because the pointee — the only thing telling them apart — is exactly what a
+shape comparison peels away.
+
+So a reading is named for the question it answers, never for the shape it reads.
+A consumer that cannot name its question in those terms is asking a fourth one,
+and that is the thing to notice.
 
 Each argument is read at its own reference site, never by the shape of its
 spelling:

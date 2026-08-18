@@ -2281,33 +2281,33 @@ fn check_inherent_impl_collisions(
 
     let mut violations = Vec::new();
 
-    // Two instantiations of one target whose arguments *render* alike are one
-    // definition downstream: the methods are named per-instantiation, and the
-    // name is built from the rendering. A function type is the case that
-    // reaches here — `Fn<arity, return>` is its whole spelling, so
-    // `impl FSlot<fn(i32) -> i32>` and `impl FSlot<fn(String) -> i32>` mint one
-    // name for two bodies. Monomorphization asserts that pair away as a
-    // duplicate function; saying so here names both impls instead.
-    let mut rendered_instantiations: IndexMap<(&ImplTargetKey, String, &str), ()> =
-        IndexMap::default();
+    // Two inherent impls whose methods mint one function name are one
+    // definition downstream, and monomorphization asserts that pair away with
+    // a panic. This says it as a diagnostic naming both impls instead.
+    //
+    // The key is the receiver the *definition* side mints under — the whole
+    // target, references peeled, since an inherent `impl &Cw<i32>` defines its
+    // methods on the pointee. Asking for the target's *arguments* answers a
+    // different question: `impl_target_args` reads through a reference to
+    // compare shapes, so `&Cw<i32>` and `&Dw<i32>` both rendered `i32` and the
+    // second was reported as the first's duplicate. What monomorphization
+    // asserts is what this must ask.
+    let mut minted: IndexMap<(String, &str), ()> = IndexMap::default();
     for header in &instantiations {
-        // The same reading of the target the matching side uses. Asking
-        // `written_type_args` instead sees no arguments at all on a reference
-        // or tuple target, so two such impls rendered alike and the second was
-        // reported as the first's duplicate.
-        let rendered = super::method_lookup::impl_target_args(&header.ty)
-            .unwrap_or_default()
-            .iter()
-            .map(|arg| written_type_arg(arg, resolutions).to_mangled())
-            .collect::<Vec<_>>()
-            .join(",");
+        let peeled = match &header.ty {
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
+            other => other,
+        };
+        let receiver = written_type_arg(peeled, resolutions);
         for method in &header.methods {
-            let key = (&header.target, rendered.clone(), method.name.as_str());
-            if rendered_instantiations.insert(key, ()).is_some() {
+            if minted
+                .insert((receiver.to_mangled(), method.name.as_str()), ())
+                .is_some()
+            {
                 violations.push((
                     header.module.clone(),
                     TypeError::DuplicateInherentMethod {
-                        self_type_name: header.target.display_name(defs).to_string(),
+                        self_type_name: receiver.to_display(),
                         method_name: method.name.clone(),
                         span: method.span,
                     },

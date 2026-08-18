@@ -575,17 +575,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
                     let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
-                    // The head, not its rendering: the target already carries
-                    // the declaration it names, and a function-local struct's
-                    // `@AstId` spelling reaches nothing when read back.
-                    if let ResolvedType::Struct { def: head, .. } = target_resolved {
+                    // `resolve_expr` decides what an unnamed literal against a
+                    // declared struct means. Deciding it a second time here is
+                    // how the two spellings came to check different things.
+                    if let ResolvedType::Struct { .. } = target_resolved {
                         (
-                            self.resolve_implicit_struct_literal(
-                                struct_lit,
-                                ctx,
-                                target_type,
-                                head,
-                            ),
+                            self.resolve_expr(ast_value, ctx, Some(target_type)),
                             target_type,
                         )
                     } else if let Some(coerced) =

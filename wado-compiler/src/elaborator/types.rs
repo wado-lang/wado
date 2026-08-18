@@ -1270,7 +1270,7 @@ impl TypeError {
             } => (
                 Code::OrphanRule,
                 format!(
-                    "duplicate definition of `{method_name}` for `{self_type_name}`: an inherent impl generic over the same type already defines it, and an inherent impl carries no trait contract to make the two interchangeable"
+                    "duplicate definition of `{method_name}` for `{self_type_name}`: another inherent impl already defines it, and an inherent impl carries no trait contract to make the two interchangeable"
                 ),
                 *span,
             ),

@@ -4952,26 +4952,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
         }
 
-        let Some(struct_name) = struct_lit.name.clone() else {
-            // Anonymous struct literal `{ x: 1, y: 2 }` — annotate
-            // synthesised the struct from the field shape and
-            // registered it via `make_struct` + populated
-            // `local_struct_fields` / `pending_anonymous_structs`.
-            // Reify reproduces the deterministic naming scheme and
-            // reads the already-registered type back from the type
-            // table.
-            return self.reify_anonymous_struct_literal(struct_lit, ctx, recorded_type);
-        };
-
         // Resolve the decl's canonical (name, module) from `recorded_type` —
         // the struct type annotate already resolved — instead of re-resolving
-        // the source-written `struct_name`, which may be an import alias or
-        // `ns::Type`. A second by-name lookup could pick a same-named struct
-        // from another module (issue #1416); `recorded_type` carries the
-        // definer directly.
+        // the source-written name, which may be an import alias or `ns::Type`.
+        // A second by-name lookup could pick a same-named struct from another
+        // module (issue #1416); `recorded_type` carries the definer directly.
         let struct_head =
             super::expr::peel_to_struct(&self.tysys.type_table.borrow(), recorded_type)
                 .map(|(head, _)| head);
+
+        // What the literal *is*, which annotate decided and recorded on the
+        // type — not how it was spelled. An unnamed literal against a declared
+        // target is that struct, so dispatching on the spelling here made reify
+        // disagree with the pass that decided, and the shape path then looked
+        // for a synthesised name nothing had recorded.
+        if struct_lit.name.is_none() && !matches!(struct_head, Some(crate::tir::StructDef::Decl(_)))
+        {
+            return self.reify_anonymous_struct_literal(struct_lit, ctx, recorded_type);
+        }
+        // The storage name the WIR struct registry is keyed by, for the
+        // instantiation slot's fallback below.
+        let struct_name = struct_lit.name.clone().unwrap_or_else(|| {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_head(recorded_type)
+                .map(|(n, _)| n)
+                .unwrap_or_default()
+        });
         let struct_module = match struct_head {
             Some(crate::tir::StructDef::Decl(def)) => {
                 self.tysys.resolutions.defs().module(def).clone()
