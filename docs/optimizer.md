@@ -136,7 +136,7 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 
 `wado-compiler/tests/emi.rs` checks the optimizer against itself. A block behind `builtin::black_box(false)` is unreachable at run time, opaque to every NIR pass, and erased by WIR build, so injecting one into a working program must leave that program's output unchanged — a difference is a wrong-code bug. Guards are written on a single line, so the code after an injection keeps the line numbers it had.
 
-`mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. The mutation stages draw only on the calibrated corpus.
+`mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. A divergence re-runs the baseline, so a fixture that moves on its own is recorded as nondeterministic rather than charged to the guard. The mutation stages draw only on the calibrated corpus.
 
 ## Not yet implemented
 

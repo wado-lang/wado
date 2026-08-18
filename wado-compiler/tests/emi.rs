@@ -13,8 +13,9 @@
 //! code after an injection keeps the line numbers it had and a fixture that
 //! prints an assertion diagnostic is not disturbed; what calibration still
 //! catches is a fixture that reads a column, an allocation address, or a
-//! generated test-export name. Those cannot serve as an EMI oracle, and naming
-//! them here is what keeps a later divergence from being mistaken for one.
+//! generated test-export name, and one whose output moves between runs of the
+//! same program. Those cannot serve as an EMI oracle, and naming them here is
+//! what keeps a later divergence from being mistaken for one.
 //!
 //! The eligible names are written to `target/emi/corpus.txt` for the mutation
 //! stages to consume; every exclusion lands in `target/emi/calibration.txt`
@@ -183,6 +184,12 @@ enum Excluded {
         level: OptLevel,
         detail: String,
     },
+    /// The fixture's own output moves between runs, so no mutant can be
+    /// compared against it.
+    Nondeterministic {
+        level: OptLevel,
+        detail: String,
+    },
     /// Not an exclusion but a finding: an unreachable guard crashed the
     /// compiler or the runtime. The campaign reports these separately and
     /// fails on them.
@@ -205,6 +212,7 @@ impl Excluded {
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
             Excluded::GuardRejected { .. } => "guard failed to compile",
             Excluded::GuardChangedOutput { .. } => "guard changed the output",
+            Excluded::Nondeterministic { .. } => "fixture is nondeterministic",
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
         }
     }
@@ -218,6 +226,7 @@ impl Excluded {
             | Excluded::BaselineUnhealthy { level, detail }
             | Excluded::GuardRejected { level, detail }
             | Excluded::GuardChangedOutput { level, detail }
+            | Excluded::Nondeterministic { level, detail }
             | Excluded::GuardCrashed { level, detail } => {
                 format!("[{}] {detail}", common::opt_level_name(*level))
             }
@@ -537,6 +546,26 @@ struct Finding {
     detail: String,
 }
 
+/// Re-run the baseline: reached only on a divergence, so a fixture whose own
+/// output moves is not charged to the guard.
+fn baseline_moved(
+    path: &Path,
+    canonical: &str,
+    spec: &Spec,
+    level: OptLevel,
+    first: &Outcome,
+) -> Option<String> {
+    match evaluate(path, canonical, spec, level) {
+        Evaluation::Ran(second) => {
+            let differences = first.differences(&second);
+            (!differences.is_empty()).then(|| differences.join("; "))
+        }
+        Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
+            Some(format!("the baseline stopped running: {detail}"))
+        }
+    }
+}
+
 fn calibrate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
     let name = path
         .file_name()
@@ -582,6 +611,10 @@ fn calibrate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
             Evaluation::Ran(outcome) => {
                 let differences = baseline.differences(&outcome);
                 if !differences.is_empty() {
+                    if let Some(detail) = baseline_moved(path, &canonical, &spec, level, &baseline)
+                    {
+                        return Err(Excluded::Nondeterministic { level, detail });
+                    }
                     return Err(Excluded::GuardChangedOutput {
                         level,
                         detail: differences.join("; "),
@@ -948,4 +981,27 @@ fn unsupported_data_key_leaves_the_corpus() {
 fn missing_data_section_runs_the_test_world() {
     let spec = Spec::parse("fn f() {}\n").expect("a source without __DATA__ is eligible");
     assert!(spec.test_world);
+}
+
+/// The mutation stage reports a divergence as a finding, so a fixture whose own
+/// output moves has to be told apart from a guard's doing before it becomes one.
+#[test]
+fn nondeterminism_is_told_apart_from_a_guard_divergence() {
+    let source = r#"use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with (Stdout, MonotonicClock) {
+    let t = MonotonicClock::now();
+    println(`${t}`);
+}
+
+__DATA__
+{}
+"#;
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/emi_clock_nondeterminism.wado");
+    let excluded = calibrate(&path, source)
+        .err()
+        .expect("a printed clock reading cannot be an oracle");
+    assert_eq!(excluded.kind(), "fixture is nondeterministic");
 }
