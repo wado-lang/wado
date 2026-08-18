@@ -61,6 +61,7 @@ use wado_compiler::ast::{
     AstVisitor, Block, Function, Item, Module, Stmt, walk_block, walk_function, walk_item,
     walk_stmt,
 };
+use wado_compiler::hashmap::IndexSet;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// Levels the calibration compares. `O0` is the reference the optimizer must
@@ -361,17 +362,36 @@ impl AstVisitor for SiteCollector {
 /// template interpolation on its own, so a node inside `${…}` carries an offset
 /// relative to the fragment rather than to the file, and inserting there splices
 /// a guard into unrelated text. Rather than enumerate which spans to distrust,
-/// the collected set is checked against the parser — all at once, since a
-/// fixture normally has nothing wrong with it, and site by site only when that
-/// fails.
+/// every span is required to start a token, and the survivors are checked
+/// against the parser — all at once, since a fixture normally has nothing wrong
+/// with it, and site by site only when that fails.
 fn injection_sites(source: &str) -> Vec<Site> {
-    let sites = SiteCollector::collect(&wado_compiler::parse(source).ast);
+    let starts = token_starts(source);
+    let sites: Vec<Site> = SiteCollector::collect(&wado_compiler::parse(source).ast)
+        .into_iter()
+        .filter(|site| starts.contains(&site.offset))
+        .collect();
     if parses(&inject(source, &sites, "")) {
         return sites;
     }
     sites
         .into_iter()
         .filter(|site| parses(&inject(source, std::slice::from_ref(site), "")))
+        .collect()
+}
+
+/// The offsets a token starts at.
+///
+/// A site that is not one lands inside a token — inside a string literal, say,
+/// where a spliced guard still parses and so survives [`parses`] below. A
+/// template string is one token, so this gives up the statement positions
+/// inside its `${…}` too rather than tell them from the literal text around
+/// them: 6 sites of 23408, against a class of false finding.
+fn token_starts(source: &str) -> IndexSet<usize> {
+    wado_compiler::lex(source)
+        .tokens
+        .iter()
+        .map(|token| token.span.start)
         .collect()
 }
 
@@ -1057,4 +1077,35 @@ fn shards_partition_the_corpus() {
     let mut union = shards.concat();
     union.sort();
     assert_eq!(union, paths, "every fixture lands in exactly one shard");
+}
+
+/// A statement's span is a claim about the AST, not about the text. An offset
+/// that lands inside a string literal still parses once a guard is spliced in,
+/// so the parse check cannot see it; a token start can.
+#[test]
+fn a_position_inside_a_string_literal_is_not_a_token_start() {
+    let source = "fn f() -> String {\n    return \"return x;\";\n}\n";
+    let starts = token_starts(source);
+    assert!(starts.contains(&source.find("return").expect("the statement")));
+    assert!(!starts.contains(&source.find("return x;").expect("the text in the literal")));
+}
+
+#[test]
+fn every_site_is_a_token_start() {
+    let source = r#"use { println, Stdout } from "core:cli";
+
+fn f(n: i32) with Stdout {
+    println("return n;");
+    let s = "let x = 1;";
+    println(s);
+}
+"#;
+    let starts = token_starts(source);
+    for site in injection_sites(source) {
+        assert!(
+            starts.contains(&site.offset),
+            "site at {} lands inside a token",
+            site.offset
+        );
+    }
 }
