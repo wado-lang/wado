@@ -1590,9 +1590,10 @@ impl<'a> PatternLowerer<'a> {
                     ..
                 } = &mut expr.kind
                     && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
-                        || arms
-                            .iter()
-                            .any(|arm| binds_by_value(&arm.pattern, type_table)))
+                        || (self.scrutinee_is_mutable(scrutinee)
+                            && arms
+                                .iter()
+                                .any(|arm| binds_by_value(&arm.pattern, type_table))))
                 {
                     let placeholder =
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
@@ -1715,6 +1716,32 @@ impl<'a> PatternLowerer<'a> {
         ));
     }
 
+    /// Whether a bare-local scrutinee's storage can still be written while an
+    /// arm binding reads it. An immutable local is never reassigned and cannot
+    /// lend a `&mut`, so its bindings may share its storage — the same reason
+    /// `source_shares_immutable_storage` lets an immutable source skip a copy.
+    fn scrutinee_is_mutable(&self, scrutinee: &TirExpr) -> bool {
+        let mut expr = scrutinee;
+        loop {
+            match &expr.kind {
+                TirExprKind::Local { index, .. } => {
+                    return self
+                        .locals
+                        .get(*index as usize)
+                        .is_none_or(|local| local.is_mut);
+                }
+                TirExprKind::FieldAccess { expr: inner, .. }
+                | TirExprKind::Unary {
+                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                    expr: inner,
+                } => expr = inner,
+                // Anything else — a call result, a deref of a reference the
+                // walk cannot follow — is assumed writable.
+                _ => return true,
+            }
+        }
+    }
+
     /// Bind what a compound pattern destructures to a temp its projections
     /// read, and answer the temp's index and name.
     ///
@@ -1725,13 +1752,21 @@ impl<'a> PatternLowerer<'a> {
     /// source.
     fn emit_pattern_temp_let(
         &mut self,
+        pattern: &TirPattern,
         value: TirExpr,
         span: Span,
+        type_table: &TypeTable,
         out: &mut Vec<TirStmt>,
     ) -> (u32, String) {
         let local_index = self.alloc_local(value.type_id);
         let name = self.next_temp_name();
         let type_id = value.type_id;
+        // Same question the `match` hoist asks: the copy is for bindings taken
+        // by value out of storage that can still be written. Reference
+        // bindings (`let { x, y } = &p`) and an immutable source need none, and
+        // a nested temp reads a projection of a temp that already copied.
+        let needs_copy =
+            binds_by_value(pattern, type_table) && self.scrutinee_is_mutable(&value);
         out.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),
@@ -1740,7 +1775,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id,
                 value,
-                skip_value_copy: false,
+                skip_value_copy: !needs_copy,
             },
             span,
         ));
@@ -1785,7 +1820,7 @@ impl<'a> PatternLowerer<'a> {
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
                 let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 
                 // Get element types
                 let elem_types = type_table
@@ -1834,7 +1869,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 let (variant_temp_index, variant_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 
                 // If there are bindings, extract payload
                 if let Some(binding) = bindings.first() {
@@ -1867,7 +1902,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Struct { fields, .. } => {
                 let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 
                 // Get field type info from struct definition
                 let struct_fields_info = self.get_struct_fields(
@@ -1947,7 +1982,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse
                 let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 
                 let elem_types = type_table
                     .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
@@ -1998,7 +2033,7 @@ impl<'a> PatternLowerer<'a> {
                 {
 
                     let (variant_temp_index, variant_temp_name) =
-                        self.emit_pattern_temp_let(value, span, out);
+                        self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 
                     let payload_expr = TirExpr::new(
                         TirExprKind::VariantPayload {
@@ -2030,7 +2065,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Struct { fields, .. } => {
                 // Nested struct - allocate temp and recurse
                 let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 
                 let struct_fields_info = self.get_struct_fields(
                     type_table.get_local_type(struct_temp_index, &self.locals),
