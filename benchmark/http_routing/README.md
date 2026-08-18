@@ -42,8 +42,11 @@ A saturated `oha` caps the fastest servers and compresses every ratio. It takes
 a fixed `OHA_CORE_COUNT`, not the cores left over: more generator threads thin
 each one's batch and the server pays for the extra wakeups.
 
-`HEADROOM_CHECK=1` re-runs each server at twice the connections; a gain there
-means `oha` set that number. It passes at the settings above, so it is off.
+Every row is checked for which side ran out of CPU. Against a fast enough
+server the generator runs out first, and that row is a floor.
+
+`HEADROOM_CHECK=1` also re-runs each server at twice the connections, for a
+generator short of those rather than of CPU. Off, since it passes here.
 
 Only the measured server runs, and its port is asserted free first — a survivor
 keeps serving under `SO_REUSEPORT` and inflates the row. Each server is warmed
