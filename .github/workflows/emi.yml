@@ -64,6 +64,11 @@ jobs:
           WADO_EMI_SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.count }}
           WADO_EMI_FILTER: ${{ inputs.filter }}
         run: cargo test --locked -p wado-compiler --test emi -- --ignored --nocapture calibrate_corpus
+      # Same job as the calibration it consumes: the corpus this shard wrote is
+      # already its slice, and the mutation stage takes that file whole.
+      - name: Mutate
+        if: always()
+        run: cargo test --locked -p wado-compiler --test emi -- --ignored --nocapture mutate_corpus
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -136,9 +136,11 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 
 `wado-compiler/tests/emi.rs` checks the optimizer against itself. A block behind `builtin::black_box(false)` is unreachable at run time, opaque to every NIR pass, and erased by WIR build, so injecting one into a working program must leave that program's output unchanged — a difference is a wrong-code bug. Guards are written on a single line, so the code after an injection keeps the line numbers it had.
 
-`mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. A divergence re-runs the baseline, so a fixture that moves on its own is recorded as nondeterministic rather than charged to the guard. The mutation stages draw only on the calibrated corpus.
+`mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. A divergence re-runs the baseline, so a fixture that moves on its own is recorded as nondeterministic rather than charged to the guard. The mutation stage draws only on the calibrated corpus.
 
-`.github/workflows/emi.yml` runs the same stage nightly over `WADO_EMI_SHARD=k/n` shards, merging their reports into one job summary.
+`mise run emi-mutate` runs that stage: every guard writes to each `let mut` in scope, so the dead region touches the live program. A fixture whose output moves is a wrong-code finding, delta-debugged back to the guards responsible and written out as a reduced mutant under `target/emi/findings/`.
+
+`.github/workflows/emi.yml` runs both stages nightly over `WADO_EMI_SHARD=k/n` shards, merging their reports into one job summary.
 
 ## Not yet implemented
 

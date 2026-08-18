@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Aggregate the EMI shards' calibration reports into one Markdown job summary.
-// A shard that died before writing one is named in the output, so the totals
+// Aggregate the EMI shards' stage reports into one Markdown job summary.
+// A shard that did not write a report is named in the output, so the totals
 // cannot read as full coverage when they are not.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,69 +8,86 @@ import { join } from 'node:path';
 const root = process.argv[2] ?? 'shards';
 const dirs = existsSync(root) ? readdirSync(root).sort() : [];
 
-const total = { scanned: 0, eligible: 0, sites: 0, excluded: 0, findings: 0 };
-const buckets = new Map<string, number>();
-const findings: string[] = [];
-const missing: string[] = [];
+type Stage = {
+  total: { scanned: number; eligible: number; sites: number; excluded: number; findings: number };
+  buckets: Map<string, number>;
+  findings: string[];
+  missing: string[];
+};
 
 function count(text: string, pattern: RegExp): number {
   const match = text.match(pattern);
   return match ? Number(match[1]) : 0;
 }
 
-for (const dir of dirs) {
-  const path = join(root, dir, 'calibration.txt');
-  if (!existsSync(path)) {
-    missing.push(dir);
-    continue;
-  }
-  const text = readFileSync(path, 'utf8');
-  total.scanned += count(text, /^fixtures scanned: (\d+)$/m);
-  total.eligible += count(text, /^eligible: (\d+)/m);
-  total.sites += count(text, /^eligible: \d+ \((\d+) injection sites\)$/m);
-  total.excluded += count(text, /^excluded: (\d+)$/m);
-  total.findings += count(text, /^findings: (\d+)$/m);
-
-  let bucket: string | null = null;
-  for (const line of text.split('\n')) {
-    const header = line.match(/^=== (.+?) \((\d+)\) ===$/);
-    if (header) {
-      buckets.set(header[1], (buckets.get(header[1]) ?? 0) + Number(header[2]));
-      bucket = null;
+function read(file: string): Stage {
+  const stage: Stage = {
+    total: { scanned: 0, eligible: 0, sites: 0, excluded: 0, findings: 0 },
+    buckets: new Map(),
+    findings: [],
+    missing: [],
+  };
+  for (const dir of dirs) {
+    const path = join(root, dir, file);
+    if (!existsSync(path)) {
+      stage.missing.push(dir);
       continue;
     }
-    if (line === '=== findings ===') {
-      bucket = 'findings';
-      continue;
-    }
-    if (bucket === 'findings' && line.trim() !== '') {
-      findings.push(line);
+    const text = readFileSync(path, 'utf8');
+    stage.total.scanned += count(text, /^fixtures scanned: (\d+)$/m);
+    stage.total.eligible += count(text, /^eligible: (\d+)/m);
+    stage.total.sites += count(text, /^eligible: \d+ \((\d+) injection sites\)$/m);
+    stage.total.excluded += count(text, /^excluded: (\d+)$/m);
+    stage.total.findings += count(text, /^findings: (\d+)$/m);
+
+    let inFindings = false;
+    for (const line of text.split('\n')) {
+      const header = line.match(/^=== (.+?) \((\d+)\) ===$/);
+      if (header) {
+        stage.buckets.set(header[1], (stage.buckets.get(header[1]) ?? 0) + Number(header[2]));
+        inFindings = false;
+        continue;
+      }
+      if (line === '=== findings ===') {
+        inFindings = true;
+        continue;
+      }
+      if (inFindings && line.trim() !== '') {
+        stage.findings.push(line);
+      }
     }
   }
+  return stage;
 }
 
-const out: string[] = ['## EMI calibration', ''];
-out.push('| Metric | Value |', '| --- | --- |');
-out.push(`| fixtures scanned | ${total.scanned} |`);
-out.push(`| eligible | ${total.eligible} (${total.sites} injection sites) |`);
-out.push(`| excluded | ${total.excluded} |`);
-out.push(`| findings | ${total.findings} |`);
-out.push('');
-
-if (findings.length > 0) {
-  out.push('### Findings', '', '```', ...findings, '```', '');
-}
-
-if (buckets.size > 0) {
-  out.push('### Exclusions', '', '| Reason | Count |', '| --- | --- |');
-  for (const [name, n] of [...buckets].sort((a, b) => b[1] - a[1])) {
-    out.push(`| ${name} | ${n} |`);
-  }
+function render(title: string, stage: Stage): string[] {
+  const out = [`## ${title}`, ''];
+  out.push('| Metric | Value |', '| --- | --- |');
+  out.push(`| fixtures scanned | ${stage.total.scanned} |`);
+  out.push(`| eligible | ${stage.total.eligible} (${stage.total.sites} injection sites) |`);
+  out.push(`| excluded | ${stage.total.excluded} |`);
+  out.push(`| findings | ${stage.total.findings} |`);
   out.push('');
+
+  if (stage.findings.length > 0) {
+    out.push('### Findings', '', '```', ...stage.findings, '```', '');
+  }
+  if (stage.buckets.size > 0) {
+    out.push('### Exclusions', '', '| Reason | Count |', '| --- | --- |');
+    for (const [name, n] of [...stage.buckets].sort((a, b) => b[1] - a[1])) {
+      out.push(`| ${name} | ${n} |`);
+    }
+    out.push('');
+  }
+  if (stage.missing.length > 0) {
+    out.push('### Shards that reported nothing', '', ...stage.missing.map((d) => `- ${d}`), '');
+  }
+  return out;
 }
 
-if (missing.length > 0) {
-  out.push('### Shards that reported nothing', '', ...missing.map((d) => `- ${d}`), '');
-}
-
-process.stdout.write(`${out.join('\n')}\n`);
+process.stdout.write(
+  `${[
+    ...render('EMI calibration', read('calibration.txt')),
+    ...render('EMI mutation', read('mutation.txt')),
+  ].join('\n')}\n`,
+);

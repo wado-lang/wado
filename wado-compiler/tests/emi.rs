@@ -7,7 +7,7 @@
 //! one into a working program must therefore leave the program's output
 //! untouched — a difference is a wrong-code bug.
 //!
-//! This file carries the campaign's calibration stage. It injects an *empty*
+//! [`calibrate_corpus`] carries the calibration stage. It injects an *empty*
 //! guard at every statement boundary of every fixture and keeps the ones whose
 //! observable behaviour survives. Guards are written on a single line, so the
 //! code after an injection keeps the line numbers it had and a fixture that
@@ -18,8 +18,14 @@
 //! what keeps a later divergence from being mistaken for one.
 //!
 //! The eligible names are written to `target/emi/corpus.txt` for the mutation
-//! stages to consume; every exclusion lands in `target/emi/calibration.txt`
+//! stage to consume; every exclusion lands in `target/emi/calibration.txt`
 //! with its reason.
+//!
+//! [`mutate_corpus`] carries the mutation stage: each guard writes to every
+//! `let mut` in scope, so the dead region touches the live program and the
+//! alias and mod/ref analyses behind `licm`, `store_load_forward`,
+//! `field_scalarize`, `copy_prop` and `sroa` have to survive it. A divergence
+//! is delta-debugged back to the guards that caused it.
 //!
 //! ```sh
 //! cargo test --test emi -- --ignored --nocapture
@@ -30,27 +36,12 @@
 //!
 //! ## Next
 //!
-//! An empty guard only changes the shape a pass sees. A guard with a body makes
-//! the dead region read and write the live program, which is what the analyses
-//! most likely to be wrong — alias, mod/ref, loop — actually rest on.
-//!
-//! - [ ] Payload: `x = builtin::black_box(x)` for each `let mut` in scope. It
-//!   is an opaque write to a real binding and needs no type inference, since
-//!   `black_box` is generic and the assignment is the identity. Attacks `licm`,
-//!   `store_load_forward`, `field_scalarize`, `copy_prop`, `sroa`.
 //! - [ ] Payload: statements harvested from elsewhere in the same function,
 //!   type-correct by construction wherever their free variables are in scope.
 //! - [ ] `while builtin::black_box(false) { … }` as a second guard shape, for
 //!   the loop passes.
-//! - [ ] Reduction: delta-debug the injection set to the guard that matters,
-//!   then bisect `WADO_LIST_PASSES` with `WADO_SKIP_PASS` to name the pass, and
-//!   write the reduced program out as a fixture.
-//! - [ ] A bounded CI run over a rotating slice of the corpus.
-//!
-//! One more gap the calibration cannot see: a site whose offset lands inside a
-//! string literal still parses, so [`injection_sites`] would keep it. Nothing
-//! produces such an offset now that interpolation spans are rebased, but
-//! checking a site against the token boundaries would close it by construction.
+//! - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
+//!   `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
 
 mod common;
 
@@ -58,8 +49,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wado_compiler::ast::{
-    AstVisitor, Block, Function, Item, Module, Stmt, walk_block, walk_function, walk_item,
-    walk_stmt,
+    AstVisitor, Block, Expr, Function, Item, Module, Pattern, Stmt, walk_block, walk_expr,
+    walk_function, walk_item, walk_stmt,
 };
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::{CompilerOptions, OptLevel};
@@ -167,6 +158,8 @@ enum Excluded {
     Todo,
     FormatFailed(String),
     NoInjectionSite,
+    /// No `let mut` in scope at any site, so the payload has nothing to write.
+    NoMutableInScope,
     BaselineCompileFailed {
         level: OptLevel,
         detail: String,
@@ -210,6 +203,7 @@ impl Excluded {
             Excluded::Todo => "TODO module",
             Excluded::FormatFailed(_) => "formatter rejected the fixture",
             Excluded::NoInjectionSite => "no injection site",
+            Excluded::NoMutableInScope => "no mutable binding in scope",
             Excluded::BaselineCompileFailed { .. } => "baseline failed to compile",
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
             Excluded::GuardRejected { .. } => "guard failed to compile",
@@ -223,7 +217,9 @@ impl Excluded {
         match self {
             Excluded::MalformedData(d) | Excluded::FormatFailed(d) => d.clone(),
             Excluded::UnsupportedDataKey(k) => k.clone(),
-            Excluded::Todo | Excluded::NoInjectionSite => String::new(),
+            Excluded::Todo | Excluded::NoInjectionSite | Excluded::NoMutableInScope => {
+                String::new()
+            }
             Excluded::BaselineCompileFailed { level, detail }
             | Excluded::BaselineUnhealthy { level, detail }
             | Excluded::GuardRejected { level, detail }
@@ -241,9 +237,12 @@ impl Excluded {
 // ---------------------------------------------------------------------------
 
 /// A position a guard may be inserted at, and what stands there.
+#[derive(Clone)]
 struct Site {
     offset: usize,
     kind: &'static str,
+    /// The `let mut` bindings in scope here, which a payload may write to.
+    mutables: Vec<String>,
 }
 
 fn stmt_kind(stmt: &Stmt) -> &'static str {
@@ -277,6 +276,8 @@ fn stmt_kind(stmt: &Stmt) -> &'static str {
 struct SiteCollector {
     sites: Vec<Site>,
     body_depth: u32,
+    /// `let mut` bindings per open block, innermost last.
+    scopes: Vec<Vec<String>>,
 }
 
 impl SiteCollector {
@@ -284,34 +285,79 @@ impl SiteCollector {
         let mut collector = Self {
             sites: Vec::new(),
             body_depth: 0,
+            scopes: Vec::new(),
         };
         for item in &module.items {
             collector.visit_item(item);
         }
-        collector.sites.sort_unstable_by_key(|site| site.offset);
+        collector.sites.sort_by_key(|site| site.offset);
         collector.sites.dedup_by_key(|site| site.offset);
         collector.sites
     }
+
+    fn visible_mutables(&self) -> Vec<String> {
+        self.scopes.iter().flatten().cloned().collect()
+    }
+
+    /// Enter a body with its own scope stack, so a nested function does not
+    /// inherit bindings it cannot name.
+    fn in_body(&mut self, walk: impl FnOnce(&mut Self)) {
+        self.body_depth += 1;
+        let outer = std::mem::take(&mut self.scopes);
+        walk(self);
+        self.scopes = outer;
+        self.body_depth -= 1;
+    }
+}
+
+/// The name a statement introduces as an assignable binding.
+///
+/// An uninitialized `let mut x: i32;` is left out: a payload that reads it
+/// before its first assignment would not compile.
+fn mut_binding(stmt: &Stmt) -> Option<String> {
+    let Stmt::Let(let_stmt) = stmt else {
+        return None;
+    };
+    if let_stmt.is_reactive || let_stmt.value.is_none() {
+        return None;
+    }
+    // `let mut x` carries the `mut` on the statement; `MutIdent` is what a
+    // nested pattern binds.
+    if let Pattern::MutIdent { name, .. } = &let_stmt.pattern {
+        return Some(name.clone());
+    }
+    if let Pattern::Ident { name, .. } = &let_stmt.pattern
+        && let_stmt.is_mut
+    {
+        return Some(name.clone());
+    }
+    None
 }
 
 impl AstVisitor for SiteCollector {
     fn visit_item(&mut self, item: &Item) {
         // A `test` body is a function body in every way that matters here; the
         // rest reach their bodies through `visit_function`.
-        let is_test = matches!(item, Item::Test(_));
-        if is_test {
-            self.body_depth += 1;
-        }
-        walk_item(self, item);
-        if is_test {
-            self.body_depth -= 1;
+        if matches!(item, Item::Test(_)) {
+            self.in_body(|s| walk_item(s, item));
+        } else {
+            walk_item(self, item);
         }
     }
 
     fn visit_function(&mut self, func: &Function) {
-        self.body_depth += 1;
-        walk_function(self, func);
-        self.body_depth -= 1;
+        self.in_body(|s| walk_function(s, func));
+    }
+
+    /// A closure gets its own scope stack, not for hygiene but for typing: a
+    /// payload writing to a binding the closure captured would promote it to
+    /// `fn mut`, and every call through a plain `let` then stops compiling.
+    fn visit_expr(&mut self, expr: &Expr) {
+        if matches!(expr, Expr::Closure(_)) {
+            self.in_body(|s| walk_expr(s, expr));
+        } else {
+            walk_expr(self, expr);
+        }
     }
 
     /// `else if` is an `else` block holding one `If`, and that `If`'s span
@@ -338,20 +384,27 @@ impl AstVisitor for SiteCollector {
     }
 
     fn visit_block(&mut self, block: &Block) {
-        if self.body_depth > 0 {
-            for stmt in &block.stmts {
-                // A local item carries its attributes outside its span, so the
-                // start offset would land between `#[...]` and the declaration.
-                if matches!(stmt, Stmt::Item(_)) {
-                    continue;
-                }
+        if self.body_depth == 0 {
+            walk_block(self, block);
+            return;
+        }
+        self.scopes.push(Vec::new());
+        for stmt in &block.stmts {
+            // A local item carries its attributes outside its span, so the
+            // start offset would land between `#[...]` and the declaration.
+            if !matches!(stmt, Stmt::Item(_)) {
                 self.sites.push(Site {
                     offset: stmt.span().start,
                     kind: stmt_kind(stmt),
+                    mutables: self.visible_mutables(),
                 });
             }
+            self.visit_stmt(stmt);
+            if let Some(name) = mut_binding(stmt) {
+                self.scopes.last_mut().expect("a scope is open").push(name);
+            }
         }
-        walk_block(self, block);
+        self.scopes.pop();
     }
 }
 
@@ -399,16 +452,31 @@ fn parses(source: &str) -> bool {
     wado_compiler::format(source).is_ok()
 }
 
-/// Insert `payload`, wrapped in a guard, at each of `sites`.
+fn inject(source: &str, sites: &[Site], payload: &str) -> String {
+    inject_each(source, sites, |_| payload.to_string())
+}
+
+/// Insert a guard at each of `sites`, its body written for that site.
 ///
 /// Offsets are consumed back to front so the earlier ones stay valid.
-fn inject(source: &str, sites: &[Site], payload: &str) -> String {
-    let text = guard(payload);
+fn inject_each(source: &str, sites: &[Site], payload: impl Fn(&Site) -> String) -> String {
     let mut mutant = source.to_string();
     for site in sites.iter().rev() {
-        mutant.insert_str(site.offset, &text);
+        mutant.insert_str(site.offset, &guard(&payload(site)));
     }
     mutant
+}
+
+/// An opaque write to every binding the dead region can name.
+///
+/// `black_box` is generic and the assignment is the identity, so this needs no
+/// type inference.
+fn opaque_writes(site: &Site) -> String {
+    site.mutables
+        .iter()
+        .map(|name| format!("{name} = builtin::black_box({name});"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ---------------------------------------------------------------------------
@@ -563,7 +631,7 @@ struct Eligible {
 /// A mutant that misbehaved in a way an injection is not allowed to.
 struct Finding {
     name: String,
-    level: OptLevel,
+    kind: &'static str,
     detail: String,
 }
 
@@ -585,6 +653,146 @@ fn baseline_moved(
             Some(format!("the baseline stopped running: {detail}"))
         }
     }
+}
+
+/// Delta-debug `sites` to a subset that still diverges.
+///
+/// A mutant carries every site at once — one site per compile is tens of
+/// thousands of runs — so this is what makes a finding readable.
+fn reduce(mut sites: Vec<Site>, diverges: &dyn Fn(&[Site]) -> bool) -> Vec<Site> {
+    let mut granularity = 2;
+    while sites.len() > 1 {
+        let chunk = sites.len().div_ceil(granularity);
+        let bounds: Vec<(usize, usize)> = (0..sites.len())
+            .step_by(chunk)
+            .map(|start| (start, (start + chunk).min(sites.len())))
+            .collect();
+
+        if let Some(part) = bounds
+            .iter()
+            .map(|&(start, end)| sites[start..end].to_vec())
+            .find(|part| diverges(part))
+        {
+            sites = part;
+            granularity = 2;
+            continue;
+        }
+
+        let complement = bounds
+            .iter()
+            .map(|&(start, end)| {
+                let mut rest = sites[..start].to_vec();
+                rest.extend_from_slice(&sites[end..]);
+                rest
+            })
+            .find(|rest| !rest.is_empty() && diverges(rest));
+
+        if let Some(rest) = complement {
+            granularity = (granularity - 1).max(2);
+            sites = rest;
+            continue;
+        }
+
+        if granularity >= sites.len() {
+            break;
+        }
+        granularity = (granularity * 2).min(sites.len());
+    }
+    sites
+}
+
+/// `line:column kind` for each site, on one line.
+fn site_positions(source: &str, sites: &[Site]) -> String {
+    sites
+        .iter()
+        .map(|site| {
+            let before = &source[..site.offset];
+            let line = before.matches('\n').count() + 1;
+            let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
+            format!("{line}:{column} {}", site.kind)
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Inject an opaque write to every binding in scope at every site, and compare
+/// the result against the program it came from.
+fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
+    let name = fixture_name(path);
+    let spec = Spec::parse(source)?;
+    let canonical =
+        wado_compiler::format(source).map_err(|e| Excluded::FormatFailed(e.to_string()))?;
+
+    let sites: Vec<Site> = injection_sites(&canonical)
+        .into_iter()
+        .filter(|site| !site.mutables.is_empty())
+        .collect();
+    if sites.is_empty() {
+        return Err(Excluded::NoMutableInScope);
+    }
+
+    for level in CALIBRATION_LEVELS {
+        let baseline = match evaluate(path, &canonical, &spec, level) {
+            Evaluation::Ran(outcome) => outcome,
+            Evaluation::CompileError(detail) => {
+                return Err(Excluded::BaselineCompileFailed { level, detail });
+            }
+            Evaluation::Crashed(detail) => {
+                return Err(Excluded::BaselineUnhealthy { level, detail });
+            }
+        };
+        let diverges = |subset: &[Site]| {
+            let mutant = inject_each(&canonical, subset, opaque_writes);
+            match evaluate(path, &mutant, &spec, level) {
+                Evaluation::Ran(outcome) => !baseline.differences(&outcome).is_empty(),
+                Evaluation::CompileError(_) | Evaluation::Crashed(_) => false,
+            }
+        };
+
+        let mutant = inject_each(&canonical, &sites, opaque_writes);
+        match evaluate(path, &mutant, &spec, level) {
+            Evaluation::Ran(outcome) => {
+                let differences = baseline.differences(&outcome);
+                if !differences.is_empty() {
+                    if let Some(detail) = baseline_moved(path, &canonical, &spec, level, &baseline)
+                    {
+                        return Err(Excluded::Nondeterministic { level, detail });
+                    }
+                    let reduced = reduce(sites.clone(), &diverges);
+                    write_finding(&name, &inject_each(&canonical, &reduced, opaque_writes));
+                    return Err(Excluded::GuardChangedOutput {
+                        level,
+                        detail: format!(
+                            "{} — reduced to {} of {} sites at {}",
+                            differences.join("; "),
+                            reduced.len(),
+                            sites.len(),
+                            site_positions(&canonical, &reduced)
+                        ),
+                    });
+                }
+            }
+            Evaluation::CompileError(detail) => {
+                return Err(Excluded::GuardRejected { level, detail });
+            }
+            Evaluation::Crashed(detail) => {
+                return Err(Excluded::GuardCrashed { level, detail });
+            }
+        }
+    }
+
+    Ok(Eligible {
+        name,
+        sites: sites.len(),
+    })
+}
+
+/// Write the reduced mutant so a finding can be read, and re-run, as source.
+fn write_finding(name: &str, mutant: &str) {
+    let dir = out_dir().join("findings");
+    std::fs::create_dir_all(&dir)
+        .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+    std::fs::write(dir.join(name), mutant).expect("cannot write the reduced mutant");
 }
 
 fn calibrate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
@@ -690,8 +898,19 @@ fn take_shard(paths: Vec<PathBuf>, spec: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+fn fixtures_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+}
+
+fn fixture_name(path: &Path) -> String {
+    path.file_name()
+        .expect("fixture path has a file name")
+        .to_string_lossy()
+        .to_string()
+}
+
 fn fixture_paths() -> Vec<PathBuf> {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let dir = fixtures_dir();
     let filter = std::env::var("WADO_EMI_FILTER").unwrap_or_default();
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
@@ -708,6 +927,21 @@ fn fixture_paths() -> Vec<PathBuf> {
         paths.truncate(limit);
     }
     paths
+}
+
+/// The fixtures the calibration left in `corpus.txt`, all of them.
+///
+/// The selection knobs act on the calibration, which is what writes this file,
+/// so applying them again here would shard an already-sharded list.
+fn corpus_paths() -> Vec<PathBuf> {
+    let path = out_dir().join("corpus.txt");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {} — calibrate first: {e}", path.display()));
+    let dir = fixtures_dir();
+    text.lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(|name| dir.join(name))
+        .collect()
 }
 
 fn jobs() -> usize {
@@ -748,14 +982,15 @@ impl Drop for SilencedPanics {
     }
 }
 
-/// Calibrate the fixture corpus: keep the fixtures an empty guard leaves alone.
+/// Run `stage` over `paths` on a pool of workers, and sort what comes back.
 ///
-/// `#[ignore]`d because it compiles and runs the whole corpus several times
-/// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
-#[test]
-#[ignore = "EMI campaign — minutes to hours over the full corpus"]
-fn calibrate_corpus() {
-    let paths = fixture_paths();
+/// `is_finding` is where the two stages differ: an empty guard that moves the
+/// output disqualifies a fixture, while a payload that moves it is wrong code.
+fn campaign(
+    paths: &[PathBuf],
+    stage: impl Fn(&Path, &str) -> Result<Eligible, Excluded> + Sync,
+    is_finding: impl Fn(&Excluded) -> bool + Sync,
+) -> Results {
     let total = paths.len();
     assert!(
         total > 0,
@@ -775,13 +1010,9 @@ fn calibrate_corpus() {
                     let index = next.fetch_add(1, Ordering::Relaxed);
                     let Some(path) = paths.get(index) else { break };
                     let source = std::fs::read_to_string(path).expect("fixture is readable");
-                    let name = path
-                        .file_name()
-                        .expect("fixture path has a file name")
-                        .to_string_lossy()
-                        .to_string();
+                    let name = fixture_name(path);
 
-                    let outcome = calibrate(path, &source);
+                    let outcome = stage(path, &source);
                     let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if finished.is_multiple_of(50) {
                         eprintln!("[emi] {finished}/{total}");
@@ -790,11 +1021,11 @@ fn calibrate_corpus() {
                     let mut results = results.lock().expect("results lock");
                     match outcome {
                         Ok(eligible) => results.eligible.push(eligible),
-                        Err(Excluded::GuardCrashed { level, detail }) => {
+                        Err(excluded) if is_finding(&excluded) => {
                             results.findings.push(Finding {
                                 name,
-                                level,
-                                detail,
+                                kind: excluded.kind(),
+                                detail: excluded.detail(),
                             });
                         }
                         Err(excluded) => results.excluded.push((name, excluded)),
@@ -812,8 +1043,22 @@ fn calibrate_corpus() {
     results.eligible.sort_by(|a, b| a.name.cmp(&b.name));
     results.excluded.sort_by(|a, b| a.0.cmp(&b.0));
     results.findings.sort_by(|a, b| a.name.cmp(&b.name));
+    results
+}
 
-    write_report(&results, total);
+/// Calibrate the fixture corpus: keep the fixtures an empty guard leaves alone.
+///
+/// `#[ignore]`d because it compiles and runs the whole corpus several times
+/// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
+#[test]
+#[ignore = "EMI campaign — minutes to hours over the full corpus"]
+fn calibrate_corpus() {
+    let paths = fixture_paths();
+    let results = campaign(&paths, calibrate, |excluded| {
+        matches!(excluded, Excluded::GuardCrashed { .. })
+    });
+    write_corpus(&results);
+    write_report(&results, paths.len(), "calibration");
 
     assert!(
         results.findings.is_empty(),
@@ -826,6 +1071,29 @@ fn calibrate_corpus() {
     );
 }
 
+/// Mutate the calibrated corpus: every dead region writes to every binding it
+/// can name, and the program must not notice.
+///
+/// Reads `corpus.txt`, so the calibration runs first.
+#[test]
+#[ignore = "EMI campaign — hours over the calibrated corpus"]
+fn mutate_corpus() {
+    let paths = corpus_paths();
+    let results = campaign(&paths, mutate, |excluded| {
+        matches!(
+            excluded,
+            Excluded::GuardCrashed { .. } | Excluded::GuardChangedOutput { .. }
+        )
+    });
+    write_report(&results, paths.len(), "mutation");
+
+    assert!(
+        results.findings.is_empty(),
+        "a payload behind an undecidable guard changed {} fixture(s); see the report",
+        results.findings.len()
+    );
+}
+
 fn out_dir() -> PathBuf {
     std::env::var("WADO_EMI_OUT").map_or_else(
         |_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/emi"),
@@ -833,16 +1101,21 @@ fn out_dir() -> PathBuf {
     )
 }
 
-fn write_report(results: &Results, total: usize) {
+fn write_corpus(results: &Results) {
     let dir = out_dir();
     std::fs::create_dir_all(&dir)
         .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
-
     let mut corpus = String::new();
     for eligible in &results.eligible {
         corpus.push_str(&format!("{} {}\n", eligible.name, eligible.sites));
     }
     std::fs::write(dir.join("corpus.txt"), &corpus).expect("cannot write corpus.txt");
+}
+
+fn write_report(results: &Results, total: usize, stage: &str) {
+    let dir = out_dir();
+    std::fs::create_dir_all(&dir)
+        .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
 
     let mut report = String::new();
     let sites: usize = results.eligible.iter().map(|e| e.sites).sum();
@@ -857,10 +1130,8 @@ fn write_report(results: &Results, total: usize) {
         report.push_str("\n=== findings ===\n");
         for finding in &results.findings {
             report.push_str(&format!(
-                "{} [{}] {}\n",
-                finding.name,
-                common::opt_level_name(finding.level),
-                finding.detail
+                "{} ({}) {}\n",
+                finding.name, finding.kind, finding.detail
             ));
         }
     }
@@ -880,8 +1151,8 @@ fn write_report(results: &Results, total: usize) {
         }
     }
 
-    let path = dir.join("calibration.txt");
-    std::fs::write(&path, &report).expect("cannot write calibration.txt");
+    let path = dir.join(format!("{stage}.txt"));
+    std::fs::write(&path, &report).expect("cannot write the report");
     eprintln!(
         "[emi] {} eligible / {total} scanned, {} sites — {}",
         results.eligible.len(),
@@ -1108,4 +1379,57 @@ fn f(n: i32) with Stdout {
             site.offset
         );
     }
+}
+
+/// The payload writes to the bindings the dead region can name, so a site has
+/// to know which `let mut` are live where it stands — and which have gone out
+/// of scope again.
+#[test]
+fn a_site_sees_the_mutable_bindings_in_scope() {
+    let source = r#"fn f(n: i32) -> i32 {
+    let mut a = 0;
+    let b = 1;
+    if n > 0 {
+        let mut c = 2;
+        a = a + c;
+    }
+    return a + b;
+}
+"#;
+    let seen: Vec<(&str, Vec<String>)> = injection_sites(source)
+        .iter()
+        .map(|site| (site.kind, site.mutables.clone()))
+        .collect();
+    let expected: Vec<(&str, Vec<String>)> = vec![
+        ("let", vec![]),
+        ("let", vec!["a".into()]),
+        ("if", vec!["a".into()]),
+        ("let", vec!["a".into()]),
+        ("expr", vec!["a".into(), "c".into()]),
+        ("return", vec!["a".into()]),
+    ];
+    assert_eq!(seen, expected);
+}
+
+/// A finding arrives as a mutant carrying every site at once, so the reduction
+/// is what names the guards that actually moved the output.
+#[test]
+fn reduction_keeps_only_the_sites_that_matter() {
+    let sites: Vec<Site> = (0..16)
+        .map(|offset| Site {
+            offset,
+            kind: "let",
+            mutables: Vec::new(),
+        })
+        .collect();
+    let culprits = [3, 11];
+    let reduced = reduce(sites, &|subset| {
+        culprits
+            .iter()
+            .all(|c| subset.iter().any(|site| site.offset == *c))
+    });
+    assert_eq!(
+        reduced.iter().map(|site| site.offset).collect::<Vec<_>>(),
+        culprits
+    );
 }
