@@ -695,10 +695,11 @@ impl FunctionTranslator<'_, '_> {
     /// copying it: the source must be rooted at an immutable local whose
     /// storage is never moved to a new owner.
     fn source_shares_immutable_storage(&self, value: &TirExpr) -> bool {
-        if !value_copy::analyze::is_source_immutable(value, &self.immutable_locals) {
+        let type_table = self.base.type_table.borrow();
+        if !value_copy::analyze::is_source_immutable(value, &self.immutable_locals, &type_table) {
             return false;
         }
-        value_copy::analyze::source_root(value)
+        value_copy::analyze::source_root(value, &type_table)
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 

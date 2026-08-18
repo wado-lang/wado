@@ -172,20 +172,22 @@ pub fn compute_move_eligible(
     // Structural freshness: the locals *holding* an owned value, however often
     // read. A least fixpoint — seed every sourced local, drop those whose source
     // is not owned given the rest. By-value params are seeded too, the caller
-    // having deep-copied or move-elided the argument; reference params borrow
-    // the caller's storage and never are.
+    // having deep-copied or move-elided the argument. A local of reference type
+    // never is: it borrows storage someone else owns, so its death frees
+    // nothing and a projection out of it moves nothing.
     let mut fresh: IndexSet<u32> = a
         .let_sources
         .keys()
         .copied()
         .chain(a.declared_owned.iter().copied())
         .chain(a.match_sources.iter().map(|(l, _)| *l))
-        .chain(
-            func.params
-                .iter()
-                .filter(|p| !is_reference_type(p.type_id, type_table))
-                .map(|p| p.local_index),
-        )
+        .chain(func.params.iter().map(|p| p.local_index))
+        .filter(|idx| {
+            !func
+                .locals
+                .get(*idx as usize)
+                .is_some_and(|l| is_reference_type(l.type_id, type_table))
+        })
         .collect();
     let mut changed = true;
     while changed {
@@ -352,6 +354,7 @@ pub fn compute_share_eligible(
         sources: IndexMap::default(),
         mutated: Vec::new(),
         consumed: IndexSet::default(),
+        ref_targets: IndexMap::default(),
     };
     collector.walk_block(body);
 
@@ -388,6 +391,9 @@ struct ShareCollector<'a> {
     mutated: Vec<AccessPath>,
     /// Locals read in a value position (consumed), so not safe to share.
     consumed: IndexSet<u32>,
+    /// `let r = &place` — the place `r` borrows. A path rooted at `r` names
+    /// that storage, so a write the owner makes must compare against it.
+    ref_targets: IndexMap<u32, AccessPath>,
 }
 
 impl ShareCollector<'_> {
@@ -398,8 +404,19 @@ impl ShareCollector<'_> {
     /// Record a write through `place`. When the exact path is unknown, mark
     /// every local `place` mentions as fully mutated (a bare-root path) — the
     /// conservative default.
+    /// Re-root a path borrowed through a reference at the place it borrows.
+    fn resolve(&self, path: AccessPath) -> AccessPath {
+        let Some(target) = self.ref_targets.get(&path.root) else {
+            return path;
+        };
+        let mut resolved = target.clone();
+        resolved.selectors.extend(path.selectors);
+        resolved
+    }
+
     fn record_mutation(&mut self, place: &TirExpr) {
         if let Some(p) = place_path(place) {
+            let p = self.resolve(p);
             self.mutated.push(p);
         } else {
             let mut roots: IndexSet<u32> = IndexSet::default();
@@ -424,7 +441,7 @@ impl ShareCollector<'_> {
     /// receiver-aliasing accessor call whose receiver / first arg is a place.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
         if let Some(p) = place_path(value) {
-            return Some(p);
+            return Some(self.resolve(p));
         }
         match &value.kind {
             TirExprKind::Call { func, args, .. }
@@ -432,9 +449,24 @@ impl ShareCollector<'_> {
                     .returns_receiver_alias
                     .contains(&func.module_source, &func.name) =>
             {
-                place_path(&args.first()?.expr)
+                Some(self.resolve(place_path(&args.first()?.expr)?))
             }
             _ => None,
+        }
+    }
+
+    /// Record `let r = &place`, so paths through `r` re-root at `place`.
+    fn record_ref_target(&mut self, local_index: u32, value: &TirExpr) {
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } = &value.kind
+        else {
+            return;
+        };
+        if let Some(p) = place_path(place) {
+            let p = self.resolve(p);
+            self.ref_targets.insert(local_index, p);
         }
     }
 
@@ -449,6 +481,7 @@ impl ShareCollector<'_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
+                self.record_ref_target(*local_index, value);
                 if let Some(path) = self.source_path(value) {
                     self.sources.insert(*local_index, path);
                 }
