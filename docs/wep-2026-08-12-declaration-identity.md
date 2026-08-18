@@ -7,10 +7,11 @@ A name in Wado source is module-relative. `Greet` written in `entry.wado` and
 means is a fact about the module that wrote it — its `use` list, its aliases, its
 own declarations, the prelude behind them.
 
-The compiler gets that wrong in a recurring, recognisable way: a program compiles
-or fails depending on whether two unrelated declarations happen to share a
-spelling, and renaming one of them changes the answer. That signature identifies
-the whole class.
+Anything that treats a spelling as the declaration gets that wrong in one
+recognisable way: a program compiles or fails depending on whether two unrelated
+declarations happen to share a spelling, and renaming one of them changes the
+answer. That signature identifies the whole class, and these are the instances it
+has been recorded under:
 
 | issue | layer                      | symptom                                                        |
 | ----- | -------------------------- | -------------------------------------------------------------- |
@@ -19,8 +20,7 @@ the whole class.
 | #1769 | inherent-impl coherence    | collision bucket keyed on the written head                     |
 | #1785 | trait-impl lookup          | aliased bound unsatisfiable; same-named foreign trait accepted |
 
-`tests/fixtures/cross_module_same_name_*` is 26 fixtures, one per occurrence
-found by hand, and the class keeps producing more.
+`tests/fixtures/cross_module_same_name_*` holds a fixture per known occurrence.
 
 ## Decision
 
@@ -69,10 +69,9 @@ The properties are in what is absent:
   `Resolution::Unresolved`, a value the consumer must handle — never a `DefId`
   standing for a declaration that does not exist.
 
-`DefId` replaces `DeclKey`, `ImplTargetKey::Decl`, `TraitKey`, the
-`(ModuleSource, String)` pairs `CompilerItems::Resolved` and
-`Resolutions::declared` hand back, and the head of `FqTypeName` / `FqTraitName`.
-Equality is index equality.
+Nothing else identifies a declaration. Impl target keys, trait keys, and the
+heads of `FqTypeName` and `FqTraitName` all carry a `DefId`, and equality is
+index equality.
 
 A head that reaches no declaration is not given one: `ImplTargetKey` carries an
 `Undeclared` case for a written name that resolves to nothing and for the
@@ -89,28 +88,20 @@ alone.
 already keyed by the declaring node's. Two reasons: `AstId` is the id type of
 _every_ node and `AstId::fresh()` is public, so a use-site id type-checks wherever
 a declaration id is expected and one can be minted from nothing; and `AstId` is
-sparse, so per-declaration data cannot be a `Vec`, which is what axis C needs.
+sparse, so per-declaration data cannot be the dense columns §5 keys by it.
 
-`DefId` is dense, never rendered, never serialised, never parsed. It is an index
-into one table, so every fact that carries one must be read against the table
-that minted it. The stdlib snapshot is where that stops being obvious: it caches
-whole declaration facts — `ModuleDecls::clone_digests_from` hands a later compile
-the stdlib's `ImplSig`s verbatim, and those compiles never re-run the decl pass
-for a snapshot module. A `(ModuleSource, String)` key survived that boundary
-because it describes a declaration rather than indexing one; a `DefId` does not,
-and reading one against a freshly built table silently names some other
-declaration.
-
-So the table is seeded rather than rebuilt: `DefTable::build_seeded` continues the
+`DefId` is dense, never rendered, never serialised, never parsed. It indexes one
+table, so every fact carrying one must be read against the table that minted it.
+The stdlib snapshot crosses that boundary: it caches whole declaration facts, and
+a compile restoring it never re-runs the decl pass for a snapshot module. So the
+table is seeded rather than rebuilt — `DefTable::build_seeded` continues the
 snapshot's table, keeping every declaration it already identified at its `DefId`
-and minting only what it never saw. `TypeTable` is seeded the same way and for the
-same reason. What makes it sound is that the stdlib AST is parsed once per process
-and shared, so an `AstId` means the same node in both tables — the invariant the
-snapshot's reference re-seeding already relies on.
+and minting only what it never saw, and `TypeTable` is seeded the same way. What
+makes that sound is that the stdlib AST is parsed once per process and shared, so
+an `AstId` means the same node in both tables.
 
-This is a precondition for every later step, not a detail of this one: a `DefId`
-in `ResolvedType`, in a registry key, or in any other cached declaration fact
-crosses the same boundary.
+The rule binds every cached declaration fact, not just this one: a `DefId` in a
+`ResolvedType` or a registry key crosses the same boundary.
 
 ### 2. `Scope` — the one implementation of visibility
 
@@ -154,21 +145,19 @@ incidental fallbacks:
 5. the case names of variant / enum / flags types in scope, which a type of the
    same name always shadows.
 
-`Scope` is private to `crate::resolve`, and nothing outside it can run the walk
-by name: the scope is reached only through a reference site, and a caller
-holding a spelling and no site gets the frame derivation below instead — which
-is not a scope and cannot pretend to be one. `SymbolTable`'s name-keyed accessors,
-`ModuleImports` and `TypeLookup`'s import branch are deleted, and with them the
-name-scope half of `module_import_scope`; what survives it is `namespace_imports_of`,
-answering the one import fact the symbol table does not record — which module a
-namespace alias stands for. The facts they carried that are not scope — a module's
-re-export list, an interface's members — stay, keyed by `DefId`.
+`Scope` is private to `crate::resolve`, and nothing outside it runs the walk by
+name: the scope is reached only through a reference site, and a caller holding a
+spelling and no site gets the frame derivation below instead — which is not a
+scope and cannot pretend to be one. No name-keyed scope accessor stands beside
+it. The facts such accessors would carry that are _not_ scope — a module's
+re-export list, an interface's members, which module a namespace alias stands
+for — are kept, keyed by `DefId`.
 
 What an explicit `use` means is the analyzer's answer and only its answer: it
 resolves aliases and re-export chains once and records them, and every consumer
-reads that record. Re-walking the `use` declarations to answer the same question a
-second way is what let a namespace-qualified import and a `pub use` barrel resolve
-differently depending on which walk a pass happened to reach.
+reads that record. Re-walking the `use` declarations to answer the same question
+a second way makes what a name means depend on which walk a pass happened to
+reach.
 
 ### 3. `Resolutions` — the one answer, total over reference sites
 
@@ -206,62 +195,44 @@ diagnostic a name that reaches nothing deserves. `walked` keeps a fourth case
 apart from all three — a node no walk saw, which synthesis mints — because that
 is the only one for which some other source of truth is honest.
 
-Type resolution is the largest consumer and takes the site with it: `resolve_type`
-hands the head's `AstId` to `resolve_named_type` / `resolve_generic_type`, which
-read the declaration off this table rather than re-running a scope lookup from
-wherever the walk stands. An alias, a namespace prefix and a function-local
-`struct` reach their own declarations with no vantage supplied. One entry point
-declines a site — `resolve_unsited_type_name`, for a `Self::` / `T::` receiver
-the elaborator rewrote to a spelling no source segment names; giving the
-static-call chain the receiver's own site is what removes it.
+Type resolution carries the site with it: the head's `AstId` reaches
+`resolve_named_type` / `resolve_generic_type`, which read the declaration off
+this table rather than re-running a scope lookup from wherever the walk stands.
+An alias, a namespace prefix and a function-local `struct` reach their own
+declarations with no vantage supplied.
 
 `Unresolved` is not a synonym for "error", but an `impl` header's trait position
-is: implementing a trait is naming it. `impl Deserialize for Point;` written in a
-module that never named `Deserialize` used to compile, resolved by a global scan
-over every declaration index — and the header then carried no identity, so
-dispatch was left comparing spellings. The header's own reference site answers and
-only it, so every header carries a declaration and the comparison has nothing else
-to fall back to.
+is: implementing a trait is naming it. A header's own reference site answers that
+position and only it, so every header carries a declaration and dispatch has no
+spelling to fall back to.
 
 ### 4. Queries take identities, never a name beside one
 
 Every query that decides identity takes a `DefId` and does not take the name.
 
 ```rust
-// before — the identity is optional, so 16 of 30 callers omit it
-fn type_implements_trait(&self, …, trait_name: &str, trait_ref: Option<DeclRef>) -> bool;
-
-// after — a caller without an identity cannot call
 fn type_implements_trait(&self, …, trait_: DefId) -> bool;
 ```
 
-Four rules, each of which the current signature breaks:
+Four rules:
 
 - An identity parameter is never `Option`. Optional means the caller may decline,
-  and the measurement says the caller declines.
+  and a caller that may decline does.
 - An identity parameter never travels beside the name it would be compared
-  against. A name in the same argument list is a fallback waiting to be written,
-  and `same_trait`'s `impl_trait_name == trait_name` is that fallback already
-  written.
+  against. A name in the same argument list is a fallback waiting to be written.
 - A declaration is compared to a declaration, never to the spelling that reached
-  it. `def_name(def) == written` reads as a check and behaves as a filter: it
-  declines exactly when the two spellings differ, which is exactly when an
-  import alias, a namespace prefix, or a local item's `@AstId` mangle is in
-  play. Backward type-argument inference held four of these, so a generic
-  variant named through an alias inferred nothing at all.
+  it. `name(def) == written` reads as a check and behaves as a filter: it
+  declines exactly when the two spellings differ, which is exactly when an import
+  alias, a namespace prefix, or a local item's `@AstId` mangle is in play.
 - A diagnostic reads its spelling at the point of reporting, from the site and the
   AST — never from a name threaded down for the purpose.
 
-Flipping a parameter's type is what makes the work enumerable: the compiler lists
-every caller that still holds a name, and each is either given the site it lost or
-shown to have one already.
-
 ### 5. Declaration data is keyed by `DefId`
 
-The seven name-keyed registries collapse into `DefId`-indexed columns on
-`DefTable`: fields, cases, members, methods, type parameters, bounds, visibility,
-span. `TypeLookup`'s four-tier scope walk disappears, because there is nothing
-left to walk — the caller arrives holding the `DefId` its site resolved to.
+Declaration data is `DefId`-indexed columns on `DefTable`: fields, cases,
+members, methods, type parameters, bounds, visibility, span. No registry is
+keyed by a name, and no consumer walks a scope to reach one — the caller arrives
+holding the `DefId` its site resolved to.
 
 The tables a walk builds as it goes are keyed the same way. `ModuleDecls`'
 `local_*` maps — the fields, cases, members and newtypes the module being
@@ -274,9 +245,7 @@ Reaching them takes an identity or the site that resolved to one:
 take the `DefId`, and `variant_cases_at` / `enum_cases_at` / `flags_members_at`
 mirror `declaration_at` for a written qualifier — the `Color` of `Color::Red`,
 read off its own path segment in both annotate and reify so the two cannot
-disagree about which `Color`. There is no by-name form beside them: the last
-caller that had one, `synth_qualified_case`, holds the path expression and so
-holds the segment.
+disagree about which `Color`. There is no by-name form beside them.
 
 A key whose subject may also be a shape no declaration names takes the head
 rather than the declaration. `synthesis::traits::SynthRequests` — the
@@ -309,33 +278,24 @@ Flags    { def: DefId },
 ```
 
 `TypeId` equality then means declaration equality without the interner comparing
-strings, and a `ResolvedType` can no longer be built for a declaration that does
-not exist. `AssocTypeProjection::owning_trait` becomes a `DefId` too, which is
-what `resolve_assoc_type_qualified` needs to stop declining when two declarations
-share a name. `Newtype` gains the same head/arguments split `Struct` has, so
-`impl_receiver_key` and `newtype_own_name` stop handing the impl index a fused
-spelling no `impl` header writes.
+strings, and a `ResolvedType` cannot be built for a declaration that does not
+exist. `AssocTypeProjection::owning_trait` carries a `DefId` for the same reason.
+`Newtype` carries the same head/arguments split `Struct` has, so the impl index
+is never handed a fused spelling no `impl` header writes.
 
 A shape no declaration names — a tuple, a reference, a function type, a pack — has
 no `DefId` and needs none; each is already its own variant. Primitives are not
 special: `i32`, `()` and `!` are `internal type` declarations in
 `core:prelude/primitive.wado` and get `DefId`s like anything else.
 
-An anonymous struct is such a shape and is _not_ already its own variant, which
-is the one place this rule needs a decision rather than an application. A struct
-literal with no type name interns as a `Struct` today, under a spelling
-synthesized from its fields, and two literals of the same shape deliberately
-reach one type — so there is no declaration to identify and no node to identify
-it by.
+An anonymous struct is such a shape and is not already its own variant. A struct
+literal with no type name interns as a `Struct`, and two literals of the same
+shape deliberately reach one type — so there is no declaration to identify and no
+node to identify it by.
 
-It does not become a ninth variant. Measured: adding one breaks twelve exhaustive
-matches, and that number is the trap — an anonymous struct rides the `Struct`
-path through field access, layout and codegen at every one of the 121 sites that
-match `Struct` today, and those sites would stop matching it _silently_. The
-compiler would report the twelve it can see and none of the rest, which is the
-opposite of what this design asks of a migration.
-
-So the head splits instead of the variant:
+It does not become a variant of its own: an anonymous struct rides the `Struct`
+path through field access, layout and codegen, and a separate variant would make
+every one of those sites stop matching it silently. The head splits instead:
 
 ```rust
 Struct { def: StructDef, type_args: Vec<TypeId> },
@@ -347,35 +307,28 @@ enum StructDef {
 }
 ```
 
-Every site that matches `Struct` keeps matching it; every site that reads the
-head has to say which case it means, and the compiler lists them. The
-synthesized `__anon_{…}` spelling goes: it exists only to key the interner, and
-the fields are the key. A shape's fields are filed under its `AnonStructId`
-beside the declarations' under their `DefId`s, so nothing has to render a
-spelling to store them and nothing has to reproduce that spelling to read them
-back.
+Every site that matches `Struct` keeps matching it, and every site that reads the
+head says which case it means. A shape has no synthesized spelling: its fields
+are its key, filed under its `AnonStructId` beside the declarations' under their
+`DefId`s, so nothing renders a spelling to store them and nothing reproduces one
+to read them back.
 
-Interning identity does not change. `TypeTable` keys an interned type by its
-rendered spelling, because holding argument `TypeId`s as identity would mint two
-types where equivalent-but-distinct ids meet — such ids demonstrably exist, which
-is why `Monomorphizer::try_queue_function` dedupes a blanket instance reached from
-two dispatch sites. What this step buys is that the head and the arguments become
-separately readable, not that identity changes.
+An interned type is keyed by its rendered spelling. Holding argument `TypeId`s as
+identity would mint two types where equivalent-but-distinct ids meet, and such
+ids exist — a blanket instance reached from two dispatch sites is one. The head
+and the arguments are separately readable; that is what carrying a `DefId` buys,
+not a change of interning identity.
 
-The table renders the head, so it has to be able to. `TypeTable::type_name` is
-what mints every mangled name, and with a `DefId` in place of the spelling it
-needs the `DefTable` to read one out — an `Arc<DefTable>` attached where
-`Resolutions` is built, and again on the snapshot restore path, whose seeded
-table hands back the same identities by construction.
+`TypeTable` renders every mangled name, so it holds the `DefTable` its heads
+index — attached where `Resolutions` is built, and on the snapshot restore path,
+whose seeded table hands back the same identities by construction.
 
-`mangle_local_item_name` does not retire with it, and the earlier claim that it
-would was wrong. A local item's type is distinct because its declaration is —
-that is what removed the reverse lookup — but the mangled namespaces downstream
-are still name-keyed, and monomorphization asserts `(module, name)` is unique
-across the emitted function set. So the `@AstId` suffix stays, as the thing that
-keeps a _rendering_ injective. Every mangle owes that (§8); a local item is not
-an exception to a rule, it is an instance of one. What matters is the direction:
-the suffix is written at one site and read back at none.
+A local item's type is distinct because its declaration is, but the mangled
+namespaces downstream are name-keyed and monomorphization asserts `(module,
+name)` is unique across the emitted function set. So `mangle_local_item_name`'s
+`@AstId` suffix stays, as what keeps a _rendering_ injective — which every mangle
+owes (§8). The direction is what matters: written at one site, read back at
+none.
 
 ### 7. Synthesis records referents, it does not spell names
 
@@ -400,13 +353,10 @@ structured function identity — the defining module, the receiver and its type
 arguments, the trait and its type arguments, the method name and its type
 arguments, every head an identity or a shape — and it renders on demand.
 
-Every question a consumer answers today by splitting a mangled string
-(`split_local_method_name`, `split_trait_method_receiver`, `split_head_and_args`,
-`split_base_name`, `extract_local_name`, `rebase_monomorph_method`,
-`replace_type_name_in_mangled`) becomes a field access, and those functions are
-deleted rather than deprecated. `MangledName` is constructible only from a
-structured identity, so a declaration name cannot be promoted to a mangled one
-by hand.
+A mangled name is never split back apart: every question about one is a field
+access on the structured identity, and no function parses a mangle. `MangledName`
+is constructible only from such an identity, so a declaration name cannot be
+promoted to a mangled one by hand.
 
 `FqTypeName`, `FqTraitName`, `Receiver`, `TypeHead` and `DeclName` are the
 pieces it is built from. Each keeps its own namespace honest — the mangled one,
@@ -422,23 +372,19 @@ one renderer for a type argument: `TypeTable::mangle_type_arg_for_generic` _is_
 `FqTypeName::to_mangled`, so a definition's name and a lookup's name cannot be
 spelled by two functions that drift.
 
-Two rules survive from the structured-name work and still apply to the renderer:
+Two rules bind the renderer:
 
 - A name minted for a definition and a name built to look one up must come from
-  one function, or nothing makes them agree. This is what silently killed every
-  ref-impl candidate (`&<List<i32>>` against `&List<i32>`) and what let DCE key
-  definitions and call sites two ways. The regression test asserts the two sides
-  agree, rather than pinning either one's output.
+  one function, or nothing makes them agree. A regression test asserts the two
+  sides agree rather than pinning either one's output.
 - A surviving `TypeId` must stay readable. `TypeTable::retain` closes over each
-  surviving struct's `type_args` transitively, so a struct cannot survive spelling
-  itself with an id that no longer resolves. It must also re-enter each survivor
-  under the spelling `intern` entered it by — `Box` for the declaration,
-  `Box<i32>` for that instantiation. Rebuilding the index on the declaration name
-  alone put every instantiation of `Box` on one entry, so the last survivor
-  answered for the declaration and for its siblings, and
-  `find_decl_type_by_name` — documented to return declarations only — returned an
-  instantiation. That is the same defect one layer down: a rendering standing in
-  for an identity, and two things rendering the same.
+  surviving struct's `type_args` transitively, so a struct cannot survive
+  spelling itself with an id that no longer resolves; and it re-enters each
+  survivor under the spelling `intern` entered it by — `Box` for the declaration,
+  `Box<i32>` for that instantiation. Re-indexing on the declaration name alone
+  puts every instantiation on one entry, and a query documented to return
+  declarations returns an instantiation: the same defect one layer down, two
+  things rendering the same.
 
 The rendered format is not itself a constraint. A mangle has to be injective and
 has to agree between the site that mints a name and the site that looks one up;
@@ -530,8 +476,8 @@ walk's own position rather than a caller's argument:
   associated-type name. The binder is the walk's own, and the trait comes from
   each bound's reference site.
 
-The same derivation in the `Symbol` currency. §2 deletes this half by moving
-what these answer onto `DefTable`:
+The same derivation in the `Symbol` currency, which the `DefId` columns of §5
+subsume:
 
 - `symbol_named` — the derivation handing back the symbol row instead of the
   identity. `symbol_at` is the sited entry point, and answers from the same
@@ -555,11 +501,9 @@ The Component Model boundary, which is permanent:
 
 ## The frame derivation
 
-A name whose reference site is not at hand still has to reach a declaration:
-`declaring_module_of` asked for a synthesis target, `symbol_named` for a
-mangled name, a `*_case(name)` lookup for a resolved type's rendered head.
-Nothing walks a module's scope for them. Three recorded facts answer instead, in
-order:
+A name whose reference site is not at hand still has to reach a declaration — a
+synthesis target, a mangled name's head. Nothing walks a module's scope for it.
+Three recorded facts answer instead, in order:
 
 1. `Resolutions::imported_as` — what this module `use`d under that local name.
    The one import fact that is not a scope lookup: it cannot reach another
@@ -583,133 +527,76 @@ module that wrote the name — this WEP's defect class by the back door. Both
 frames come from the walk's position; the derivation takes no module, so no
 caller can supply a vantage.
 
-There is no fourth tier, and a qualified call does not reach the derivation at
-all where it can avoid it. `Type::method` names its receiver at its own path
-segment, which the resolve pass answered for like any other reference, so
-`impl_target_at` reads that site and the spelling is never split back into an
-identity. Reading the site is what keeps the gate and the resolution naming one
-declaration; where a caller holds only a mangled spelling and has no site to
-give, the derivation above answers, in the frame that wrote the name.
+There is no fourth tier, and a caller that can avoid the derivation does.
+`Type::method` names its receiver at its own path segment, which the resolve pass
+answered for like any other reference, so the site is read and the spelling is
+never split back into an identity. The derivation answers only where a caller
+holds a mangled spelling and has no site to give.
 
-Nor does any tier take a vantage it could get wrong: `decls_named` takes no
-module at all, and the derivation filters it by a frame of the walk's own. That
-is why it cannot be mistaken for a scope, and why the derivation is sanctioned
-rather than scheduled for removal — the census above records it as such.
+No tier takes a vantage it could get wrong: `decls_named` takes no module at all,
+and the derivation filters it by a frame of the walk's own. That is why it cannot
+be mistaken for a scope, and why it is sanctioned rather than scheduled for
+removal.
 
 ### What a derivation may not be
 
-Three things sat beside the derivation and looked like more of it. None was: each
-reached past the module's own scope into the whole program, so what a name meant
-depended on declarations no module involved could see. All three are gone.
+A derivation reaches a module's own scope and no further. Three shapes look like
+more of it and are not, because each answers from declarations no module involved
+can see — so what a name means depends on the rest of the program.
 
-- `find_struct_like_decl_key(name)` took no module at all and answered with the
-  unique struct-like declaration of that name program-wide, declining when two
-  modules declared it. Declining is not neutral: its caller mangles an `impl`
-  header's written type argument to compare against the receiver's, and the bare
-  spelling it fell back to never equals a qualified mangle. So
-  `impl Holder<Tag>` stopped applying the moment an unrelated module declared its
-  own `Tag`. The header wrote that argument, so it has a reference site;
-  `concrete_arg_mangled` reads it (`cross_module_same_name_impl_arg`).
+- A program-wide unique match. "The one declaration of that name anywhere,
+  declining when two modules declare it" makes an unrelated module's declaration
+  change an answer, and declining is not neutral: whatever the caller falls back
+  to is the comparison this design removes.
+- A first-in-build-order pick. An index keyed by name with no ambiguity check
+  answers whichever module was loaded first.
+- A second key tried when the first misses. Filing a fact under the call site's
+  frame and the receiver's, then taking whichever hits, makes the order a
+  silent tiebreak — and a receiver reached through a namespace prefix is where
+  the order is wrong. One key, built from the receiver the caller holds: the
+  path segment's own reference site, the middle segment of a `ns::Type::method`
+  path, or the receiver type's own declaration. A head that names no declaration
+  falls to the frame derivation, which is one vantage rather than two.
 
-  Reading the site is the whole of it, and two further rules follow. The
-  header's own type parameters need no separate check: a binder shadows every
-  declaration of its name, so the walk answers `Binder` and the argument is free
-  without a name being compared. Comparing the resolved declaration's name
-  against the header's binders instead answers "binder" for an alias whose target
-  happens to be spelled like one, and silently drops a constraint the header
-  wrote (`impl_arg_alias_shadows_impl_binder`). And whether an argument
-  constrains is a question about the declaration it names, not about the shape of
-  the spelling naming it — matching only `Type::Named` and `Type::Generic` let a
-  namespace-qualified `ns::Tag` through as "names nothing, matches anything".
-  `resolve::head_site` answers for all three (`impl_arg_ns_qualified`).
+Where a position reaches nothing, the answer is the diagnostic, not a wider
+search. An `impl` header's trait position is §3's case: implementing a trait is
+naming it, so a position that reaches nothing is "trait not in scope", and the
+key it gets carries a spelling no query can mistake for an identity.
 
-  "Names no declaration" is not "matches anything" either, and a tuple, a
-  reference and a function type each name none: they are shapes, and a receiver
-  either has the shape or has not. Dropping them to the free case let such an
-  impl apply to every receiver, and the call reached WIR build as an unresolved
-  `Call` rather than a diagnostic (`impl_arg_shape_*_error`). Each renders
-  through the renderer that produces the receiver's side of the comparison — a
-  reference through its referent, since that is what `TypeNameInfo::Ref` hands
-  back; a tuple's elements through `written_type_arg`, whose `to_mangled` _is_
-  `mangle_type_arg_for_generic`, the form a tuple's elements are spelled in. Only
-  a binder is free, and `FqTypeName::names_a_binder` asks that of the whole name
-  rather than its head, so `impl<T> Slot<[i32, T]>` stays free where
-  `impl Slot<[i32, Tag]>` does not.
+A rendering is never read back into a declaration, and a map from a name to one
+is the same defect waiting for a reader. `mangle_local_item_name`'s `@AstId`
+suffix stays a renderer (§6): written at one site, read back at none.
 
-  Which positions an impl argument pins is asked twice, and the second asking is
-  where §8's rule bites: `impl_is_concrete_instantiation` decides how the impl's
-  methods are _named_, and `inherent_impl_type_args_match` decides which
-  receivers reach that name. They had drifted twice over. Neither a
-  namespace-qualified argument nor a function type counted as concrete for
-  naming, so a plain `impl Cell<ns::Tag>` was named as a template while its call
-  site named an instantiation (`impl_arg_concrete_ns`); and the two read the
-  target's own shape separately, so a namespaced _target_ — `impl ns::Cell<i32>`
-  — was named as an instantiation while the matching side saw a shape it did not
-  enumerate and imposed no constraint at all, letting every `Cell` reach that
-  name (`impl_arg_ns_target`). Both now go through one predicate,
-  `TypeSystem::impl_arg_pins_a_position`, over one reading of the target,
-  `impl_target_args`.
+## Impl target arguments
 
-  No renderer at all, in the end. Whether a receiver reaches an impl was decided
-  by rendering both sides and comparing the strings, and that is this design's
-  own §8 hazard: the header side is an AST, the receiver side a `TypeId`, so a
-  comparison by name needs two renderers to agree on every shape at every depth.
-  Each way they disagreed was a defect — a top level spelled with
-  `mangle_type_name`, which drops a reference, beside tuple elements spelled
-  with `to_mangled`, which keeps it, so `impl Slot<&Tag>` accepted a by-value
-  `Slot<Tag>` that `impl Slot<[i32, &Tag]>` rejected; a `&mut` written without
-  the separator its counterpart carries; a function type whose mangled head
-  spells arity and return type and so could not tell `fn(i32) -> i32` from
-  `fn(String) -> i32`.
+An `impl` header's type arguments are where this design is asked the same
+question twice: which positions the header pins decides both how its methods are
+_named_ and which receivers reach that name. Two predicates answering it drift,
+so there is one — `TypeSystem::impl_arg_pins_a_position`, over one reading of the
+target, `impl_target_args`.
 
-  `inherent_impl_type_args_match` compares structure instead. Two declarations
-  are compared as declarations through `TypeHead` — which is `DefId` equality
-  where a declaration names one, and the rendering where nothing declares the
-  shape, so `i32` and `()` compare correctly without being nominal types. Every
-  other shape is compared as the shape it is: a reference to a reference of the
-  same kind, a tuple to a tuple of the same arity, a function type through its
-  parameters as well as its return. Nothing is spelled, so nothing can be
-  spelled two ways, and the function-type blind spot closes without touching
-  what the closure system spells (`impl_arg_shape_fn_params`).
+Each argument is read at its own reference site, never by the shape of its
+spelling:
 
-  A binder is a wildcard where it stands and nowhere else:
-  `impl<T> Slot<[i32, T]>` still requires a two-element tuple whose first
-  element is `i32`. Where the header cannot bind it at all — a binder nested in
-  a shape, which `bind_target_param` does not reach — the impl matches nothing,
-  because a receiver it matched would have nothing to instantiate it with. That
-  is asked of the binder's reference site, not its spelling; a name-based test
-  reads the `ns::Tag` of `impl<Tag> Slot<ns::Tag, Tag>` as the binder.
-- `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
-  and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
-  _first declaring module in build order_, with no ambiguity check at all. Every
-  caller already preferred the receiver's own `ResolvedType`, so what the scan
-  answered was only ever the case where no declaration was named. It is now
-  `declaring_module_of`: the frame derivation, then the walk's own newtype table,
-  then the module the walk stands in. Both indexes are deleted.
-- `unique_declared_trait` answered an `impl` header's trait position by
-  per-family unique-match when the header's site named nothing. But implementing
-  a trait _is_ naming it — §3 — so a position that reaches nothing is the
-  "trait not in scope" error, and the key it gets carries a spelling no query can
-  mistake for an identity.
+- A binder is free where it stands, and nowhere else. `impl<T> Slot<[i32, T]>`
+  still requires a two-element tuple whose first element is `i32`. Asking this of
+  the site rather than the spelling is what keeps an alias whose target happens
+  to be spelled like a type parameter from reading as a binder, and a
+  namespace-qualified `ns::Tag` from reading as one either.
+- Where the header cannot bind a binder at all — one nested inside a shape — the
+  impl matches nothing, because a receiver it matched would have nothing to
+  instantiate it with.
+- Naming no declaration is not matching anything. A tuple, a reference and a
+  function type each name none: they are shapes, and a receiver either has the
+  shape or has not.
 
-`static_receiver_keys` was the same defect one step removed: it filed a static
-call under two keys, the call site's frame first and the receiver's second, and
-took whichever hit. A receiver that arrived through a namespace prefix is the
-case that made the order wrong. It is gone; `static_method_decl_id` takes the key
-and derives none, and each caller builds that one key from the receiver it holds
-— the path segment's own reference site, the middle segment of a `ns::Type::method`
-path, or the receiver type's own declaration. A head that names none — an
-instantiation's fused spelling, an anonymous shape — falls to the frame
-derivation, which is one vantage rather than two.
-
-One reading did survive the first pass and no longer does. `local_item_renders`
-read `name::mangle_local_item_name`'s `@AstId` rendering back into a
-declaration, and that made the suffix a convention every minting _and_ lookup
-site had to keep: two sibling functions each declaring `struct Box<T>` took
-seven fixes to close, one per caller of that first-wins index. It answered for
-nothing — no program in `tests/fixtures` reached it, because the tables it
-guarded had already been rekeyed to `DefId` — so it is deleted. A map like it
-needs a reader to do any harm, and that reader is exactly the shape the census
-above enumerates, so re-adding one is a review decision rather than a local
-convenience. The suffix stays as a renderer (§6), written at one site and read
-back at none.
+The comparison is structural, not textual. Rendering both sides and comparing the
+strings is §8's hazard from the inside: the header side is an AST and the
+receiver side a `TypeId`, so it takes two renderers agreeing on every shape at
+every depth. They cannot be made to. Instead, two declarations are compared as
+declarations through `TypeHead` — `DefId` equality where a declaration names one,
+the rendering where nothing declares the shape, so `i32` and `()` compare
+correctly without being nominal types — and every other shape is compared as the
+shape it is: a reference to a reference of the same kind, a tuple to a tuple of
+the same arity, a function type through its parameters as well as its return.
+Nothing is spelled, so nothing can be spelled two ways.
