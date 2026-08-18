@@ -399,8 +399,7 @@ Wado intentionally omits certain operators found in other languages:
 #### Type Cast (`as`)
 
 The `as` operator converts between primitive types, and reinterprets a value
-across a newtype boundary — any two types sharing an ultimate base, aggregates
-included:
+across a newtype boundary — any two types sharing an ultimate base:
 
 ```wado
 let i = 42;
