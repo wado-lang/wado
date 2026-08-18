@@ -26,11 +26,16 @@ struct HeapState {
     field_global: IndexMap<u32, HeapVersion>,
     /// Version covering slots in none of the maps above.
     default_version: HeapVersion,
-    /// One version standing in for a `per_local` entry on every `mut_escaped`
-    /// local. An impure call invalidates that whole set at once, and versions
-    /// are only ever compared per key, so a shared version reads identically to
-    /// a distinct one per local — at `O(1)` per call instead of the
-    /// `O(escaped)` a bump each cost.
+    /// The generation of the whole `mut_escaped` set, bumped as a unit by
+    /// everything that invalidates all of it at once ([`HeapState::bump_escaped`]'s
+    /// callers). Versions are only ever compared per key, so one shared version
+    /// reads identically to a distinct `per_local` entry per local, at `O(1)`
+    /// instead of the `O(escaped)` a bump each cost.
+    ///
+    /// An *additional* channel, never a replacement: [`HeapState::version_of`]
+    /// maxes it alongside `per_local`, which still carries the bumps aimed at a
+    /// single local (a `&mut` borrow of one, say). Consulting it *instead of*
+    /// `per_local` for an escaped root would drop those.
     escaped_version: HeapVersion,
 }
 
@@ -1854,9 +1859,9 @@ impl<'a> Builder<'a> {
 
     /// Invalidate the heap generations a loop body may write: a written
     /// `local.field` bumps `per_slot`, or `field_global` when aliased; a borrow
-    /// bumps `per_local`; an external write invalidates every `mut_escaped`
-    /// local. Keyed on `mut_escaped` to agree with the per-call
-    /// [`Builder::bump_call_effects`]; untouched fields survive.
+    /// bumps that one local's `per_local`; an external write invalidates the
+    /// whole `mut_escaped` set through its shared version, exactly as the
+    /// per-call [`Builder::bump_call_effects`] does. Untouched fields survive.
     fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
         for &(local, field) in &eff.written_fields {
             if self.aliased.contains(&local) {
@@ -1869,9 +1874,7 @@ impl<'a> Builder<'a> {
             self.heap_state.bump_local(local);
         }
         if eff.has_external_writes {
-            for &local in &self.mut_escaped {
-                self.heap_state.bump_local(local);
-            }
+            self.heap_state.bump_escaped();
         }
     }
 
