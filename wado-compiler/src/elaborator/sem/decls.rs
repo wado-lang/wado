@@ -161,14 +161,6 @@ pub(crate) struct ModuleDecls {
     /// [`crate::tir::StructDef::Anon`] carries.
     pub(crate) anon_struct_fields: IndexMap<crate::tir::AnonStructId, StructFieldInfo>,
 
-    /// The spelling a local item's *type* renders to, back to the declaration.
-    ///
-    /// The type is interned on its declaration and renders as `{name}@{AstId}`,
-    /// which is what keeps two functions' same-named structs apart in the
-    /// registries still keyed by a rendered name. This index is the one place
-    /// that rendering is turned back into a declaration, for the consumers that
-    /// still arrive holding a spelling.
-
     /// The local items in scope at the walk's position, by the name written in
     /// source. `hoist_local_items` saves and restores it per block, and
     /// `clear_fn_local_items` empties it per function body.

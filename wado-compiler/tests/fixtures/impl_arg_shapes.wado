@@ -4,9 +4,9 @@
 //
 // The gate is only half of it. What makes a position concrete also decides how
 // the impl's methods are *named*, so the same predicate has to answer both or
-// the definition and the call site mint two names — see
-// `impl_is_concrete_instantiation`. These calls are what proves they agree:
-// each reached WIR build as an unresolved `Call` when they did not.
+// the definition and the call site mint two names — see `impl_target_args`.
+// These calls are what proves they agree: each reached WIR build as an
+// unresolved `Call` when they did not.
 
 use { Slot } from "./sub/impl_arg_shapes_holder.wado";
 use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";
@@ -18,6 +18,12 @@ fn double(n: i32) -> i32 {
 test "a tuple impl argument applies to its own shape" {
     let s = Slot { a: [1, Tag { n: 2 }] };
     assert s.tup() == 1;
+}
+
+test "a reference impl argument applies to a reference receiver" {
+    let t = Tag { n: 9 };
+    let s = Slot { a: &t };
+    assert s.refr() == 2;
 }
 
 test "a function-type impl argument applies to its own shape" {

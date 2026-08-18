@@ -1,0 +1,18 @@
+// `impl c::Cell<i32>` must not apply to a `Cell<String>`.
+//
+// `impl_is_concrete_instantiation` reads a namespaced target's arguments, so it
+// named this impl's methods as an instantiation; `inherent_impl_type_args_match`
+// matched only `Type::Generic` and returned "no constraint" for every other
+// target shape, so every `Cell` reached that name. Both now ask the same
+// function for the target's arguments.
+
+use { Cell } from "./sub/impl_arg_ns_target_cell.wado";
+use {} from "./sub/impl_arg_ns_target_holder.wado";
+
+export fn run() {
+    let s = Cell { a: "not an i32" };
+    let _ = s.get();
+}
+
+__DATA__
+{"compile_error": "no method 'get' found"}

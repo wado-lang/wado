@@ -2402,15 +2402,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// here, so `impl Slot<ns::Tag>` was named as a template while its call
     /// site named an instantiation, and the call reached WIR build unresolved.
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
-        let inner = match impl_ty {
-            ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let args: &[ast::Type] = match inner {
-            ast::Type::Generic(g) => &g.args,
-            ast::Type::NamespacedGeneric(ns) => &ns.args,
-            ast::Type::Tuple(elems) => elems,
-            _ => return false,
+        let Some(args) = super::method_lookup::impl_target_args(impl_ty) else {
+            return false;
         };
         !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
     }

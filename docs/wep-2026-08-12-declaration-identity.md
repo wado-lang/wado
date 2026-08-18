@@ -616,12 +616,24 @@ depended on declarations no module involved could see. All three are gone.
   Which positions an impl argument pins is asked twice, and the second asking is
   where §8's rule bites: `impl_is_concrete_instantiation` decides how the impl's
   methods are _named_, and `inherent_impl_type_args_match` decides which
-  receivers reach that name. They had drifted — neither a namespace-qualified
-  argument nor a function type counted as concrete for naming — so a plain
-  `impl Cell<ns::Tag>` was named as a template while its call site named an
-  instantiation, and the call reached WIR build as an unresolved `Call`
-  (`impl_arg_concrete_ns`). There is now one predicate,
-  `TypeSystem::impl_arg_pins_a_position`, and the naming side calls it.
+  receivers reach that name. They had drifted twice over. Neither a
+  namespace-qualified argument nor a function type counted as concrete for
+  naming, so a plain `impl Cell<ns::Tag>` was named as a template while its call
+  site named an instantiation (`impl_arg_concrete_ns`); and the two read the
+  target's own shape separately, so a namespaced _target_ — `impl ns::Cell<i32>`
+  — was named as an instantiation while the matching side saw a shape it did not
+  enumerate and imposed no constraint at all, letting every `Cell` reach that
+  name (`impl_arg_ns_target`). Both now go through one predicate,
+  `TypeSystem::impl_arg_pins_a_position`, over one reading of the target,
+  `impl_target_args`.
+
+  One renderer, likewise. The comparison spelled its two sides with
+  `mangle_type_name` at the top level and `FqTypeName::to_mangled` inside a
+  tuple, and the first drops a reference — `TypeNameInfo::Ref` hands back the
+  inner name. So `impl Slot<&Tag>` accepted a by-value `Slot<Tag>` that
+  `impl Slot<[i32, &Tag]>` correctly rejected (`impl_arg_shape_ref_by_value`).
+  Every level now renders in the type-argument form, which is the form the
+  receiver side is read in.
 - `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
   and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
   _first declaring module in build order_, with no ambiguity check at all. Every

@@ -109,6 +109,28 @@ pub(super) struct MethodInferenceInput<'a> {
     pub span: Span,
 }
 
+/// The type arguments an `impl` target writes, or `None` for a target that
+/// takes none (`impl i32`, `impl Foo`) and so constrains nothing here.
+///
+/// The one place the target's shape is read. Which positions an impl pins
+/// decides both how its methods are *named*
+/// (`Elaborator::impl_is_concrete_instantiation`) and which receivers reach that
+/// name (`TypeSystem::inherent_impl_type_args_match`); reading the shape twice
+/// is how `impl ns::Cell<i32>` came to be named as an instantiation while every
+/// `Cell` matched it.
+pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
+    let inner = match impl_ty {
+        Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
+        other => other,
+    };
+    match inner {
+        Type::Generic(g) => Some(&g.args),
+        Type::NamespacedGeneric(ns) => Some(&ns.args),
+        Type::Tuple(elems) => Some(elems),
+        _ => None,
+    }
+}
+
 impl TypeSystem {
     /// For an inherent `impl` on a possibly-generic type, check that any
     /// concrete type arguments written in the impl header (e.g. the `u8` in
@@ -123,11 +145,7 @@ impl TypeSystem {
         impl_ty: &Type,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        let inner = match impl_ty {
-            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
-            other => other,
-        };
-        let Type::Generic(generic) = inner else {
+        let Some(written) = impl_target_args(impl_ty) else {
             return true;
         };
         // No receiver type args supplied (an existence/bounds check that did not
@@ -135,19 +153,30 @@ impl TypeSystem {
         let Some(args) = receiver_type_args else {
             return true;
         };
-        for (i, arg) in generic.args.iter().enumerate() {
+        for (i, arg) in written.iter().enumerate() {
             // A concrete arg (recursing into nested generics) must equal the
             // receiver's arg; one naming no declaration matches anything.
             if let Some(expected) = self.concrete_arg_mangled(arg) {
                 let Some(&recv) = args.get(i) else {
                     return false;
                 };
-                if self.type_table.borrow().mangle_type_name(recv) != expected {
+                if self.type_table.borrow().mangle_type_arg_for_generic(recv) != expected {
                     return false;
                 }
             }
         }
         true
+    }
+
+    /// Whether `arg` pins its position — the receiver's argument must equal it —
+    /// rather than standing for whatever the receiver supplies.
+    ///
+    /// The same answer [`Self::concrete_arg_mangled`] gives, because it *is*
+    /// that answer: what makes a position concrete decides both how the impl's
+    /// methods are named and which receivers reach that name, and two functions
+    /// deciding it is two functions minting one name.
+    pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
+        self.concrete_arg_mangled(arg).is_some()
     }
 
     /// The mangled type name a concrete impl argument must equal in the
@@ -163,17 +192,14 @@ impl TypeSystem {
     /// and `crate::resolve::head_site` finds the site for a namespace-qualified
     /// `ns::Tag` as readily as for a bare name — matching on the spelling's
     /// *shape* is what let that one through unconstrained.
-    /// Whether `arg` pins its position — the receiver's argument must equal it —
-    /// rather than standing for whatever the receiver supplies.
     ///
-    /// The same answer [`Self::concrete_arg_mangled`] gives, because it *is*
-    /// that answer: what makes a position concrete decides both how the impl's
-    /// methods are named and which receivers reach that name, and two functions
-    /// deciding it is two functions minting one name.
-    pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
-        self.concrete_arg_mangled(arg).is_some()
-    }
-
+    /// Every level renders in the *type-argument* form —
+    /// `TypeTable::mangle_type_arg_for_generic`, which is
+    /// `FqTypeName::to_mangled` — because that is the one the receiver side is
+    /// read in. `mangle_type_name` drops a reference (`TypeNameInfo::Ref` hands
+    /// back the inner name), so spelling the top level with it and a tuple's
+    /// elements with the other made `impl Slot<&Tag>` accept a by-value
+    /// `Slot<Tag>` that `impl Slot<[i32, &Tag]>` correctly rejected.
     fn concrete_arg_mangled(&self, arg: &Type) -> Option<String> {
         let head = crate::resolve::head_site(arg).and_then(|site| self.mangled_decl_name_at(site));
         match arg {
@@ -194,13 +220,25 @@ impl TypeSystem {
                     .map(|a| self.concrete_arg_mangled(a))
                     .collect::<Option<Vec<String>>>()?,
             )),
-            // A reference mangles as its referent — `TypeNameInfo::Ref` hands
-            // back the inner name — so `&Tag` constrains exactly as `Tag` does.
-            Type::Reference(inner) | Type::MutReference(inner) => self.concrete_arg_mangled(inner),
+            // A reference is part of the identity here: `&Tag` and `Tag` are two
+            // receivers, and the type-argument form spells the difference.
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                let kind = crate::name::RefKind::from_ast(arg)?;
+                Some(format!(
+                    "{}{}",
+                    kind.prefix(),
+                    self.concrete_arg_mangled(inner)?
+                ))
+            }
             Type::Tuple(elems) if elems.is_empty() => {
                 Some(crate::tir::TypeTable::UNIT_TYPE_NAME.to_string())
             }
-            Type::Tuple(elems) => Some(crate::name::mangle_tuple_type(&self.arg_form(elems)?)),
+            Type::Tuple(elems) => Some(crate::name::mangle_tuple_type(
+                &elems
+                    .iter()
+                    .map(|e| self.concrete_arg_mangled(e))
+                    .collect::<Option<Vec<String>>>()?,
+            )),
             // The mangle carries the arity and the return type; the parameter
             // types are not part of it on either side.
             Type::Function(ft) => Some(crate::name::mangle_fn_type(
@@ -211,23 +249,6 @@ impl TypeSystem {
             // whatever the receiver supplies.
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => None,
         }
-    }
-
-    /// A tuple's elements in the form the receiver's mangle spells them —
-    /// `mangle_type_arg_for_generic`, which is `FqTypeName::to_mangled`, and so
-    /// module-qualified where the top level is not.
-    ///
-    /// `None` if any element names a binder, at any depth: the tuple then
-    /// constrains nothing, the same answer the other arms reach by propagating
-    /// their own `None`.
-    fn arg_form(&self, elems: &[Type]) -> Option<Vec<String>> {
-        elems
-            .iter()
-            .map(|elem| {
-                let fq = super::trait_env::written_type_arg(elem, &self.resolutions);
-                (!fq.names_a_binder()).then(|| fq.to_mangled())
-            })
-            .collect()
     }
 
     /// The mangled spelling of the declaration the reference site `site` names,
@@ -246,7 +267,7 @@ impl TypeSystem {
         {
             let tt = self.type_table.borrow();
             if let Some(id) = tt.type_of_symbol(&defs.ast_id(def)) {
-                return Some(tt.mangle_type_name(id));
+                return Some(tt.mangle_type_arg_for_generic(id));
             }
         }
         // `of_head`, not `declared`: a builtin shape is spelled bare wherever a
