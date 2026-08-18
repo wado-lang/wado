@@ -2877,8 +2877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.visit_expr(expr);
     }
 
-    /// The method replacing a rejected `ArraySlice<T>` ↔ `List<T>` cast,
-    /// modulo newtypes.
+    /// The method replacing a rejected `ArraySlice<T>` ↔ `List<T>` cast.
     fn slice_list_conversion(
         tt: &TypeTable,
         source_type: TypeId,
@@ -3100,15 +3099,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are structs here, with their own rules below —
-            // which cover a wide-int source only, so a wide-int target never
-            // exempts an aggregate.
+            // `i128` / `u128` are structs here; their rules below cover a
+            // wide-int source only, so such a target never exempts an aggregate.
             let wide_int = |id| {
                 matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
-            // Classify the base, not the spelling: a newtype of an aggregate
-            // is an aggregate. A tuple is a `GenericInstance` of a tuple head.
+            // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
             let source_base = tt.get_ultimate_base_type(source_type);
             let source_is_aggregate = !wide_int(source_type)
                 && matches!(

@@ -9129,19 +9129,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// Replay an `expr as i128/u128` cast. Literal and negated-literal
-    /// operands construct the value directly; a general numeric operand
-    /// becomes `name::from_u64/from_i64(operand as u64/i64)`. Returns
-    /// `None` for non-128-bit targets (normal cast) and for non-numeric
-    /// operands (the caller's bare-cast fallback handles those). Mirrors
-    /// `Elaborator::resolve_cast`.
+    /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
+    /// any other target; a non-numeric operand yields the bare cast.
     fn try_reify_int128_cast(
         &mut self,
         cast: &ast::CastExpr,
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        // A newtype of a wide int shares its representation, so dispatch on the base.
         let target_base = self
             .tysys
             .type_table
