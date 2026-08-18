@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787092236923,
+  "lastUpdate": 1787095243587,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49293,6 +49293,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6d44110ee9a351c35bd66d0269cd3005c8748c5b"
         },
         "date": 1787092236014,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "29673a201f916492e5917dd8929fd8b16475b29f",
+          "message": "Merge pull request #1848 from wado-lang/claude/byteslice-list-u8-ice-mz4qdh\n\nfix(elaborator): classify `as` cast operands by their ultimate base type",
+          "timestamp": "2026-08-19T08:08:07+09:00",
+          "tree_id": "727cd70bbc3df53eeb4471c7b324a1b26b16a754",
+          "url": "https://github.com/wado-lang/wado/commit/29673a201f916492e5917dd8929fd8b16475b29f"
+        },
+        "date": 1787095242758,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
