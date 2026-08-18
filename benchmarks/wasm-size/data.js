@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787047170517,
+  "lastUpdate": 1787092236923,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49269,6 +49269,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 263926,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d44110ee9a351c35bd66d0269cd3005c8748c5b",
+          "message": "Merge pull request #1849 from wado-lang/claude/package-gale-code-review-45y6cp\n\nrefactor(gale): emit only what the generated parser reads",
+          "timestamp": "2026-08-19T07:17:35+09:00",
+          "tree_id": "2c7667a6f74bd869469d4e0f2e70ab547b9a227c",
+          "url": "https://github.com/wado-lang/wado/commit/6d44110ee9a351c35bd66d0269cd3005c8748c5b"
+        },
+        "date": 1787092236014,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254726,
             "unit": "bytes"
           }
         ]
