@@ -264,10 +264,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .register_decl_type(struct_decl.id, type_id);
         let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
-        self.sem.decls.local_item_renders.insert(
-            (mangled_name.clone(), self.current_module_source.clone()),
-            def,
-        );
         self.sem
             .decls
             .fn_local_items
@@ -457,7 +453,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if base_type_id == crate::tir::TypeTable::UNKNOWN {
             return false;
         }
-        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         // Same as the local struct: the head is this declaration's identity.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return true;
@@ -479,10 +474,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return true;
         };
-        self.sem
-            .decls
-            .local_item_renders
-            .insert((mangled_name, self.current_module_source.clone()), def);
         self.sem.decls.local_newtypes.insert(def, type_id);
         self.sem
             .decls

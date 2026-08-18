@@ -147,8 +147,11 @@ struct Def {
     /// Members declared inside this one, in source order.
     members: Vec<DefId>,
     /// Declared inside a function body rather than at module level. Two sibling
-    /// functions may each declare a `struct Point`, so a name-keyed registry needs
-    /// [`crate::name::mangle_local_item_name`]; this tells a renderer to apply it.
+    /// functions may each declare a `struct Point`, and the mangled namespaces
+    /// downstream are name-keyed, so a renderer applies
+    /// [`crate::name::mangle_local_item_name`] to keep the two spellings apart.
+    /// This tells it to. Nothing reads that spelling back — which declaration a
+    /// name means is this table's question, never a rendering's.
     function_local: bool,
 }
 
@@ -693,7 +696,11 @@ mod tests {
 /// Every reachable function that still derives a declaration from a name
 /// without a reference site, each with the reason it survives. This is the
 /// whole list, not a sample: the scan below fails on a new one and equally on a
-/// stale entry. See `docs/wep-2026-08-12-declaration-identity.md`.
+/// stale entry.
+///
+/// A declaration is whatever *identifies* one, so the list spans both
+/// currencies: [`DefId`], and the [`crate::symbol::Symbol`] rows that carry the
+/// declaring node. See `docs/wep-2026-08-12-declaration-identity.md`.
 #[cfg(test)]
 const NAME_TO_IDENTITY: &[(&str, &str)] = &[
     // The one scope.
@@ -739,13 +746,6 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
          layer down. `declaration_at` is the sited entry point.",
     ),
     (
-        "declaration_or_render",
-        "`declaration`, plus the index that reads a function-local item's \
-         `{name}@{AstId}` rendering back into its declaration. The rendering is \
-         a convention every minting and lookup site keeps, not a key — the one \
-         place this design still trades a mechanism for a discipline.",
-    ),
-    (
         "namespace_member",
         "`imported_as` on the `ns$Name` alias a namespace import registers — \
          the import tier answering the qualification the programmer wrote.",
@@ -768,6 +768,31 @@ const NAME_TO_IDENTITY: &[(&str, &str)] = &[
         "walks a receiver type's newtype chain for the link whose rendering \
          equals the head an impl was found under. The name is the impl index's, \
          not a caller's; it goes when that index carries `DefId`s.",
+    ),
+    // The same derivation in the `Symbol` currency. A symbol row carries the
+    // declaring node, so it identifies a declaration as surely as a `DefId`
+    // does; §2 deletes this half by moving what these answer onto `DefTable`.
+    (
+        "symbol_named",
+        "the frame derivation, handing back the symbol row instead of the \
+         identity. `symbol_at` is the sited entry point, and answers from the \
+         same table so annotate and reify cannot disagree.",
+    ),
+    (
+        "imported",
+        "`imported_as` in the symbol currency: the module's own import list, \
+         no prelude fallback and no declaration of its own, so a caller orders \
+         those layers itself.",
+    ),
+    (
+        "lookup_in_module",
+        "what a module declares under a name, re-export chains followed. The \
+         derivation's second tier in the symbol currency; it reads one module's \
+         own declarations and cannot reach another's imports.",
+    ),
+    (
+        "lookup_in_module_with_visited",
+        "`lookup_in_module` carrying its own re-export cycle guard.",
     ),
     // The Component Model boundary.
     (
@@ -825,8 +850,21 @@ mod enforcement {
             .collect()
     }
 
+    /// Whether `ty` mentions the type `name` — as a whole word, so
+    /// `SymbolNotation` and `SymbolResolveError` are not `Symbol`.
+    fn mentions_type(ty: &str, name: &str) -> bool {
+        let boundary = |c: Option<char>| !c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+        ty.match_indices(name).any(|(i, _)| {
+            boundary(ty[..i].chars().next_back()) && boundary(ty[i + name.len()..].chars().next())
+        })
+    }
+
     /// Whether `signature` takes a name and no reference site and hands back a
     /// declaration.
+    ///
+    /// A declaration is whatever identifies one, so both currencies count: a
+    /// `DefId`, and a `Symbol` row, which carries the declaring node and so
+    /// answers the same question one table earlier.
     ///
     /// A `ModuleSource` parameter is deliberately *not* part of the shape. Every
     /// by-name declaration lookup in the elaborator is a method whose vantage is
@@ -847,7 +885,8 @@ mod enforcement {
         let types = param_types(params.trim_end().trim_end_matches(')'));
         let is_name = |ty: &&str| matches!(*ty, "&str" | "String" | "&String");
         let is_site = |ty: &&str| ty.contains("AstId");
-        ret.contains("DefId") && types.iter().any(is_name) && !types.iter().any(is_site)
+        let hands_back_a_declaration = mentions_type(ret, "DefId") || mentions_type(ret, "Symbol");
+        hands_back_a_declaration && types.iter().any(is_name) && !types.iter().any(is_site)
     }
 
     fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -919,6 +958,80 @@ mod enforcement {
             stale.is_empty(),
             "NAME_TO_IDENTITY lists functions that no longer exist: {stale:?}. \
              Delete the entries — the list is what is left to remove."
+        );
+    }
+
+    /// A field of this shape is the same defect a function of it is: a map from
+    /// a spelling to a declaration answers for whatever key a caller can build,
+    /// so it turns a rendering back into an identity. The scan above reads
+    /// signatures, so it cannot see one.
+    ///
+    /// One survives, and it is the Component Model boundary: `TypeTable`'s
+    /// `decl_index` is what `cm_decl_in` reads, for a WIT name that has no Wado
+    /// reference site. The other was `local_item_renders`, which read a
+    /// function-local item's `{name}@{AstId}` rendering back into its
+    /// declaration; it is gone, and with it the last place this design traded a
+    /// mechanism for a convention.
+    #[test]
+    fn no_map_turns_a_name_into_an_identity() {
+        const ALLOWED: &[&str] = &["decl_index"];
+
+        let mut files = Vec::new();
+        rust_sources(std::path::Path::new("src"), &mut files);
+        let mut offenders: Vec<String> = Vec::new();
+        let mut seen: Vec<&str> = Vec::new();
+        for file in &files {
+            let source = std::fs::read_to_string(file).expect("a readable source file");
+            for (offset, _) in source.match_indices("IndexMap<(") {
+                let Some(entry) = source[..offset].rfind('\n') else {
+                    continue;
+                };
+                let decl = &source[entry + 1..offset];
+                let Some(field) = decl.rsplit_once(':').map(|(before, _)| before.trim()) else {
+                    continue;
+                };
+                let field = field
+                    .rsplit(|c: char| c.is_whitespace())
+                    .next()
+                    .unwrap_or("");
+                // `IndexMap<(K1, K2), V>` — the key pair, then the value.
+                let rest = &source[offset + "IndexMap<(".len()..];
+                let Some(close) = rest.find(')') else {
+                    continue;
+                };
+                let (key, value) = rest.split_at(close);
+                let Some(value) = value.split_once(',').map(|(_, v)| v) else {
+                    continue;
+                };
+                let value = value.split('>').next().unwrap_or("");
+                let keyed_by_a_name = key.contains("String") && key.contains("ModuleSource");
+                let holds_a_declaration =
+                    mentions_type(value, "DefId") || mentions_type(value, "AstId");
+                if !(keyed_by_a_name && holds_a_declaration) {
+                    continue;
+                }
+                match ALLOWED.iter().find(|allowed| **allowed == field) {
+                    Some(allowed) => seen.push(allowed),
+                    None => offenders.push(format!("{}::{field}", file.display())),
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "these map a spelling and a module to a declaration, so a consumer \
+             holding only a rendering can read an identity back out of it: \
+             {offenders:?}. Key the map by the declaration instead."
+        );
+        let stale: Vec<&str> = ALLOWED
+            .iter()
+            .copied()
+            .filter(|n| !seen.contains(n))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "no such map any more: {stale:?}. Delete the entry — the list is \
+             what is left to remove."
         );
     }
 }

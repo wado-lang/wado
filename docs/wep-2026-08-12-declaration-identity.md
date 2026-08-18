@@ -273,10 +273,9 @@ Reaching them takes an identity or the site that resolved to one:
 take the `DefId`, and `variant_cases_at` / `enum_cases_at` / `flags_members_at`
 mirror `declaration_at` for a written qualifier — the `Color` of `Color::Red`,
 read off its own path segment in both annotate and reify so the two cannot
-disagree about which `Color`. What still arrives holding only a spelling is a
-name synthesis assembled, for which there is no segment to read:
-`synth_qualified_case` is the one such caller left, and the by-name form exists
-for it.
+disagree about which `Color`. There is no by-name form beside them: the last
+caller that had one, `synth_qualified_case`, holds the path expression and so
+holds the segment.
 
 A key whose subject may also be a shape no declaration names takes the head
 rather than the declaration. `synthesis::traits::SynthRequests` — the
@@ -366,9 +365,16 @@ The table renders the head, so it has to be able to. `TypeTable::type_name` is
 what mints every mangled name, and with a `DefId` in place of the spelling it
 needs the `DefTable` to read one out — an `Arc<DefTable>` attached where
 `Resolutions` is built, and again on the snapshot restore path, whose seeded
-table hands back the same identities by construction. This is also what retires
-`mangle_local_item_name`: a local item's type is distinct because its
-declaration is, not because its spelling carries an `AstId`.
+table hands back the same identities by construction.
+
+`mangle_local_item_name` does not retire with it, and the earlier claim that it
+would was wrong. A local item's type is distinct because its declaration is —
+that is what removed the reverse lookup — but the mangled namespaces downstream
+are still name-keyed, and monomorphization asserts `(module, name)` is unique
+across the emitted function set. So the `@AstId` suffix stays, as the thing that
+keeps a _rendering_ injective. Every mangle owes that (§8); a local item is not
+an exception to a rule, it is an instance of one. What matters is the direction:
+the suffix is written at one site and read back at none.
 
 ### 7. Synthesis records referents, it does not spell names
 
@@ -504,23 +510,25 @@ Each mechanism states what it makes impossible, not what it discourages.
   grouped by what it is: the one scope (`Scopes::resolve`, `resolve_value`); the
   three recorded facts the frame derivation is built from (`imported_as`,
   `prelude_decl`, `decls_named`); the derivation itself (`decl_key_or_local`,
-  `TypeLookup::declaration` and `declaration_or_render`, `namespace_member`,
-  `scoped_trait_decl_key`, `bound_declaring_assoc_type`); the one rendering still
-  compared against a declaration's own (`impl_target_decl_key`); and the
+  `TypeLookup::declaration`, `namespace_member`, `scoped_trait_decl_key`,
+  `bound_declaring_assoc_type`); the same derivation in the `Symbol` currency
+  (`symbol_named`, `imported`, `lookup_in_module`, `lookup_in_module_with_visited`),
+  which §2 deletes by moving what they answer onto `DefTable`; the one rendering
+  still compared against a declaration's own (`impl_target_decl_key`); and the
   Component Model boundary (`cm_decl_in`, `cm_decl`). The test fails on one more,
   and equally on a stale entry, so neither the class nor the list can grow — and
   because the shape is now the real one, the list is what remains rather than a
   sample of it.
 
-  Two things the scan still does not see, stated so the list is not read as more
-  than it is. It matches on `DefId` in the return type, so a function handing
-  back a `Symbol` — which carries the declaring node — is outside it:
-  `symbol_named` is the frame derivation in that currency, and
-  `SymbolTable`'s own name-keyed accessors are the class §2 deletes. And it reads
-  function signatures, not fields, so a `(name, module) -> DefId` _map_ is
-  invisible; there are two, and each is accounted for by a listed function that
-  reads it — `local_item_renders` by `declaration_or_render`, `TypeTable`'s
-  `decl_index` by `cm_decl_in`.
+  A declaration is whatever identifies one, so the shape reads both currencies:
+  a `DefId`, and a `Symbol` row, which carries the declaring node and answers
+  the same question one table earlier. Matching the type as a whole word is what
+  keeps `SymbolNotation` and `SymbolResolveError` out of it.
+- `no_map_turns_a_name_into_an_identity` scans the same sources for a _field_ of
+  that shape — a map from `(name, module)` to a declaration. The signature scan
+  cannot see one, and a map is the same defect: it answers for whatever key a
+  caller can build. One is allowed, `TypeTable::decl_index`, which is what
+  `cm_decl_in` reads. The other was `local_item_renders`; it is gone.
 
 ## The frame derivation
 
@@ -637,13 +645,12 @@ path, or the receiver type's own declaration. A head that names none — an
 instantiation's fused spelling, an anonymous shape — falls to the frame
 derivation, which is one vantage rather than two.
 
-What still prevents some collisions by convention rather than by key is
-`name::mangle_local_item_name`'s `@AstId` suffix, and the `local_item_renders`
-index that reads it back into a declaration — a convention every minting and
-lookup site has to keep. Two sibling functions each declaring `struct Box<T>`
-took seven fixes to close, one per caller of that first-wins index; a removed
-mechanism takes one. This is the one place the design still trades a mechanism
-for a discipline, and `declaration_or_render`'s `NAME_TO_IDENTITY` entry says so.
-Retiring it is §6's remaining step: it needs the registries still keyed by a
-rendered name — the WIR struct registry above all — to be keyed by declaration
-first.
+One reading did survive the first pass and no longer does. `local_item_renders`
+read `name::mangle_local_item_name`'s `@AstId` rendering back into a
+declaration, and that made the suffix a convention every minting _and_ lookup
+site had to keep: two sibling functions each declaring `struct Box<T>` took
+seven fixes to close, one per caller of that first-wins index. It answered for
+nothing — no program in `tests/fixtures` reached it, because the tables it
+guarded had already been rekeyed to `DefId` — so it is deleted, and
+`no_map_turns_a_name_into_an_identity` is what keeps it deleted. The suffix
+stays as a renderer (§6), written at one site and read back at none.

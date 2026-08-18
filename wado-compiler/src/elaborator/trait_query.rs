@@ -1398,7 +1398,7 @@ impl TypeSystem {
         let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
             return false;
         };
-        let Some(def) = scope.declaration_or_render(type_name.as_decl_str()) else {
+        let Some(def) = scope.declaration(type_name.as_decl_str()) else {
             return false;
         };
         let subject = match on_bound {

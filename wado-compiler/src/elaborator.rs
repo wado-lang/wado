@@ -293,7 +293,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
             anon_struct_fields: &self.sem.decls.anon_struct_fields,
-            local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
             decls: Some(&self.tysys.trait_env),
         }
@@ -328,18 +327,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
     ) -> Option<&FlagsInfo> {
         self.type_lookup().flags_members_at(site, name)
-    }
-
-    pub(super) fn lookup_variant_case(&self, name: &str) -> Option<&VariantInfo> {
-        self.type_lookup().variant_case(name)
-    }
-
-    pub(super) fn lookup_enum_case(&self, name: &str) -> Option<&EnumInfo> {
-        self.type_lookup().enum_case(name)
-    }
-
-    pub(super) fn lookup_flags_case(&self, name: &str) -> Option<&FlagsInfo> {
-        self.type_lookup().flags_case(name)
     }
 
     pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {

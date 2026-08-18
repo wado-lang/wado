@@ -33,19 +33,22 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 }
 
 /// Separator between a local item's declared name and its disambiguating
-/// `AstId` in the storage name a function-scoped `struct` / `type` declaration
+/// `AstId` in the mangled name a function-scoped `struct` / `type` declaration
 /// (`Stmt::Item`) renders to. `@` is not a valid Wado identifier character.
 ///
-/// The declaration data is keyed by [`crate::defs::DefId`]; this is what keeps
-/// two sibling functions' same-named local items apart in the registries still
-/// keyed by a rendered name — the WIR struct registry above all. A diagnostic
-/// never sees it: [`crate::tir::TypeTable::type_name`] renders the declared
-/// head instead of trimming this one back off.
+/// It appears here and at the one call site below, and nowhere else: nothing
+/// splits it back off. The declaration data is keyed by
+/// [`crate::defs::DefId`], so this is not how two sibling functions'
+/// same-named local items are told apart — it is what keeps the *rendering*
+/// injective, which every mangle must be, for the post-monomorphization
+/// `(module, name)` namespace and the WIR struct registry. A diagnostic never
+/// sees it: [`crate::tir::TypeTable::type_name`] renders the declared head
+/// rather than trimming this one back off.
 pub const LOCAL_ITEM_ID_SEP: char = '@';
 
-/// Build the internal storage name for a local item declaration: the declared
-/// name plus the `AstId`'s module-local index, so same-named local items in
-/// different functions do not collide in the module-wide storage tables.
+/// Build the mangled name for a local item declaration: the declared name plus
+/// the `AstId`'s module-local index, so two sibling functions' same-named local
+/// items render to two names rather than one.
 /// Only `local` is encoded, never the `AstIdSpace` — that is a process-global
 /// counter, and encoding it would make mangled WIR names non-deterministic.
 pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {

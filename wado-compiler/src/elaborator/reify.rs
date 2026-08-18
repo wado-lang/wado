@@ -478,11 +478,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_variant_cases: &self.sem.decls.local_variant_cases,
             anon_struct_fields: &self.sem.decls.anon_struct_fields,
             // A function-local item is reached through the `local_*` tables
-            // above, by the declaration `local_item_renders` recovers from its
-            // mangled storage name — not through the per-function tier below,
-            // which annotate clears between functions and reify never
-            // repopulates.
-            local_item_renders: &self.sem.decls.local_item_renders,
+            // above, which are keyed by declaration — not through the
+            // per-function tier below, which annotate clears between functions
+            // and reify never repopulates.
             fn_local_items: &self.sem.decls.fn_local_items,
             decls: Some(&self.tysys.trait_env),
         }

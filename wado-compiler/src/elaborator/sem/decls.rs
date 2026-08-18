@@ -168,7 +168,6 @@ pub(crate) struct ModuleDecls {
     /// registries still keyed by a rendered name. This index is the one place
     /// that rendering is turned back into a declaration, for the consumers that
     /// still arrive holding a spelling.
-    pub(crate) local_item_renders: IndexMap<(String, ModuleSource), crate::defs::DefId>,
 
     /// The local items in scope at the walk's position, by the name written in
     /// source. `hoist_local_items` saves and restores it per block, and

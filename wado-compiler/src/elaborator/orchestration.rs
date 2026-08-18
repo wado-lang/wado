@@ -379,8 +379,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_anon_struct: IndexMap<crate::tir::AnonStructId, StructFieldInfo> =
                     IndexMap::default();
                 let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
-                let empty_local_renders: IndexMap<(String, ModuleSource), crate::defs::DefId> =
-                    IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -417,7 +415,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             local_generic_newtypes: &empty_gnt,
                             local_variant_cases: &empty_variant,
                             anon_struct_fields: &empty_anon_struct,
-                            local_item_renders: &empty_local_renders,
                             fn_local_items: &empty_local_items,
                             decls: None,
                         };
@@ -483,8 +480,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let empty_anon_struct: IndexMap<crate::tir::AnonStructId, StructFieldInfo> =
                 IndexMap::default();
             let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
-            let empty_local_renders: IndexMap<(String, ModuleSource), crate::defs::DefId> =
-                IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
@@ -505,7 +500,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     local_generic_newtypes: &empty_gnt,
                     local_variant_cases: &empty_variant,
                     anon_struct_fields: &empty_anon_struct,
-                    local_item_renders: &empty_local_renders,
                     fn_local_items: &empty_local_items,
                     decls: None,
                 };
