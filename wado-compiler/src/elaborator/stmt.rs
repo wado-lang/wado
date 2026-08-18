@@ -996,28 +996,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
     }
 
-    /// Reject a `&mut` binding onto a scalar under match ergonomics.
+    /// The type a pattern binding takes under match ergonomics: `type_id`
+    /// wrapped in the scrutinee's reference kind.
     ///
-    /// Wasm GC has no interior pointer to a scalar field, which is why `&mut
-    /// p.x` is refused. A pattern reached the same place and answered with a
-    /// `&mut` onto a copy, so writes through it were lost.
-    fn reject_scalar_mut_ref_binding(&mut self, name: &str, type_id: TypeId, span: Span) {
-        let is_scalar = |ty: &ResolvedType| {
-            matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
-        };
-        let (bound, base) = {
-            let tt = self.tysys.type_table.borrow();
-            let base = tt.get_ultimate_base_type(type_id);
-            (tt.get(type_id).clone(), tt.get(base).clone())
-        };
-        if is_scalar(&bound) || is_scalar(&base) {
-            let _ = self.emit(TypeError::CannotAssign {
-                message: format!(
-                    "cannot bind '{name}' as a mutable reference to a primitive: \
-                     destructure by value, or take the reference to the whole value"
-                ),
-                span,
-            });
+    /// The one place that wrap happens, because it is where `&mut` onto a
+    /// scalar is refused. Wasm GC has no interior pointer to a scalar field —
+    /// the same reason `&mut p.x` is refused — so such a binding would
+    /// reference a copy and lose every write through it.
+    fn pattern_binding_type(
+        &mut self,
+        name: &str,
+        type_id: TypeId,
+        ref_binding: RefBinding,
+        span: Span,
+    ) -> TypeId {
+        match ref_binding {
+            RefBinding::None => type_id,
+            RefBinding::Ref => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::Ref(type_id)),
+            RefBinding::MutRef => {
+                let is_scalar = |ty: &ResolvedType| {
+                    matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
+                };
+                let (bound, base) = {
+                    let tt = self.tysys.type_table.borrow();
+                    let base = tt.get_ultimate_base_type(type_id);
+                    (tt.get(type_id).clone(), tt.get(base).clone())
+                };
+                if is_scalar(&bound) || is_scalar(&base) {
+                    let _ = self.emit(TypeError::CannotAssign {
+                        message: format!(
+                            "cannot bind '{name}' as a mutable reference to a primitive: \
+                             destructure by value, or take the reference to the whole value"
+                        ),
+                        span,
+                    });
+                }
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::MutRef(type_id))
+            }
         }
     }
 
@@ -1136,21 +1158,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: name_span,
             } => {
                 let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
-                let binding_type = match ref_binding {
-                    RefBinding::Ref => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(type_id)),
-                    RefBinding::MutRef => {
-                        self.reject_scalar_mut_ref_binding(name, type_id, *name_span);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::MutRef(type_id))
-                    }
-                    RefBinding::None => type_id,
-                };
+                let binding_type =
+                    self.pattern_binding_type(name, type_id, ref_binding, *name_span);
                 ctx.add_local_at(name.clone(), binding_type, pat_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
@@ -1569,19 +1578,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_item_reference_by_name(*id, name);
                     return Vec::new();
                 }
-                let binding_type = match ref_binding {
-                    RefBinding::Ref => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(scrutinee_type)),
-                    RefBinding::MutRef => self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::MutRef(scrutinee_type)),
-                    RefBinding::None => scrutinee_type,
-                };
+                let binding_type =
+                    self.pattern_binding_type(name, scrutinee_type, ref_binding, *name_span);
                 let index =
                     ctx.add_local_at(name.clone(), binding_type, is_mut, Some(*id), *name_span);
                 self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
@@ -1676,19 +1674,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Vec::new();
                     }
 
-                    let binding_type = match ref_binding {
-                        RefBinding::Ref => self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::Ref(scrutinee_type)),
-                        RefBinding::MutRef => self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::MutRef(scrutinee_type)),
-                        RefBinding::None => scrutinee_type,
-                    };
+                    let binding_type = self.pattern_binding_type(
+                        &qualified_variant_name,
+                        scrutinee_type,
+                        ref_binding,
+                        *span,
+                    );
                     let index =
                         ctx.add_local(qualified_variant_name.clone(), binding_type, false, None);
                     return vec![(qualified_variant_name, index, binding_type)];

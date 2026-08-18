@@ -632,6 +632,32 @@ export fn run() {
     );
 }
 
+/// The same rule on the `match` path, which reaches the wrap by a different
+/// route and used to answer with a `&mut` onto a copy — an invalid module.
+#[test]
+fn test_scalar_mut_ref_match_binding_is_rejected() {
+    let source = r"
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let mut p = Point { x: 10, y: 20 };
+    match &mut p {
+        Point { x, y } => {
+            *x = 100;
+            *y = 200;
+        }
+    }
+}
+";
+
+    let err = crate::common::compile_source(source).expect_err("expected a type error");
+    let text = err.to_string();
+    assert!(
+        text.contains("mutable reference to a primitive"),
+        "Unexpected message: {text}"
+    );
+}
+
 /// Its non-scalar counterpart still binds by reference and writes through.
 #[test]
 fn test_non_scalar_mut_ref_binding_is_allowed() {
