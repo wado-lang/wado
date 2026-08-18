@@ -124,8 +124,7 @@ fn dummy_span() -> Span {
 }
 
 /// The helper for `type_id`, and the structural key it is identified by — the
-/// one derivation of that key, handed to [`ValueCopyHelpers`] rather than
-/// spelled again by a consumer.
+/// one derivation of that key.
 fn generate_copy_function(
     type_id: TypeId,
     project: &FlatPackage,

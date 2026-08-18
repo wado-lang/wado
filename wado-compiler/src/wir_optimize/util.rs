@@ -38,10 +38,8 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     }
 
     // Codegen emits an `ArrayClone`'s helper call by hand, not through the
-    // `Call` path. An SROA return rewrite would change the helper's signature
-    // without touching that emit path, leaving the call expecting a single
-    // `(ref T)` from a helper that now returns multi-value. Pin every helper an
-    // `ArrayClone` calls so the rewrites skip them.
+    // `Call` path, so an SROA return rewrite would change the signature under
+    // it. Pin every helper an `ArrayClone` calls.
     for func in &module.functions {
         if let Some(body) = &func.body {
             collect_array_clone_helpers(body, &mut pinned);

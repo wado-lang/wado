@@ -1,12 +1,6 @@
-// A destructure reads its scrutinee through a temp minted during lowering, and
-// that temp is where the copy lands: the per-binding `Let`s that project out of
-// it share its storage, because an immutable local's storage is assumed
-// unaliased. Skip the temp's copy and the bindings alias the source, so a later
-// write through the source is visible through them.
-//
-// The temp is minted after the seed walk that registers `$value_copy$` helpers,
-// so what keeps this working is the walk seeding the temp's type rather than
-// the scrutinee expression's.
+// A destructure reads its scrutinee through a temp, and that temp is where the
+// copy lands — the per-binding `Let`s share its storage. Skip it and every
+// binding aliases the source.
 
 struct S {
     items: List<i32>,
@@ -38,8 +32,6 @@ test "a match-arm binding does not alias its scrutinee" {
     }
 }
 
-// A bare local scrutinee is the shape the hoist used to skip, so it took no
-// copy at all and every arm binding aliased the local.
 test "a match-arm binding does not alias a local scrutinee" {
     let mut s = S { items: [1] };
     match s {

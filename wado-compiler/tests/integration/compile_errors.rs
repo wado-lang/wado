@@ -610,9 +610,8 @@ fn test_sealed_reflect_error_attributed_to_user_file() {
     assert_eq!(filename, "orphan_phase_diag.wado");
 }
 
-/// A `&mut` destructure of scalar fields asks for the interior pointer
-/// `&mut p.x` is refused for, and used to answer with a `&mut` onto a copy —
-/// so `*x = 100` was written to storage nobody could read back.
+/// A `&mut` destructure of scalar fields used to answer with a `&mut` onto a
+/// copy, so `*x = 100` wrote to storage nobody could read back.
 #[test]
 fn test_scalar_mut_ref_binding_is_rejected() {
     let source = r"

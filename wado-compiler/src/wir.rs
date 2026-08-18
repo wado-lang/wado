@@ -1385,8 +1385,7 @@ pub enum WirInstr {
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
-        /// The element type's `$value_copy$` helper, resolved at WIR build
-        /// through `NirPackage::value_copy_helpers`. A callee reference like
+        /// The element type's `$value_copy$` helper. A callee reference like
         /// any other, so DCE roots it and compaction remaps it.
         element_copy: WirFuncId,
         /// Number of leading elements to copy — the destination's exact

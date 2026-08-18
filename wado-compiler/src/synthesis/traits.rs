@@ -1343,9 +1343,8 @@ fn generate_field_get_helper(
 /// Build `Type^ReflectKind::type_name() -> String { return "Type"; }` —
 /// shared by the struct `ReflectStruct` and variant `ReflectVariant` syntheses.
 ///
-/// `display_name` is what the string says, and it is the caller's because it
-/// belongs to the declaration namespace: an anonymous shape's head *is* its
-/// mangle, module paths and all, and that is not what a reader should be shown.
+/// `display_name` is the caller's because it belongs to the declaration
+/// namespace: an anonymous shape's head is its mangle, module paths and all.
 fn generate_type_name_fn(
     receiver: &FqTypeName,
     display_name: &str,

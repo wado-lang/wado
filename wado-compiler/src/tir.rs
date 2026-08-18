@@ -1094,22 +1094,17 @@ impl TypeTable {
         &self.anon_structs[id.0 as usize].0
     }
 
-    /// The spelling an anonymous struct shows a reader, derived from its
-    /// fields — `__anon_{x:i32,y:i32}`. The declaration namespace, so the field
-    /// types read as source writes them; [`Self::anon_struct_mangle`] is what a
-    /// key is built from.
+    /// The spelling an anonymous struct shows a reader —
+    /// `__anon_{x:i32,y:i32}`. The declaration namespace;
+    /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
         self.render_anon_struct(id, &|tt, ty| tt.type_name(ty))
     }
 
     /// [`Self::anon_struct_name`] in the mangled namespace: every field type is
-    /// module-qualified.
-    ///
-    /// A shape has no declaration, so its rendering *is* its identity — and two
-    /// modules declaring the same name gave `{ v: a }` and `{ v: b }` one
-    /// spelling, hence one identity, hence one synthesized helper for two
-    /// signatures.
+    /// module-qualified. A shape has no declaration, so its rendering *is* its
+    /// identity, and an unqualified one collapses two shapes onto one helper.
     #[must_use]
     pub fn anon_struct_mangle(&self, id: AnonStructId) -> String {
         self.render_anon_struct(id, &|tt, ty| tt.mangle_type_arg_for_generic(ty))
@@ -1121,8 +1116,6 @@ impl TypeTable {
         field_type: &dyn Fn(&Self, TypeId) -> String,
     ) -> String {
         match &self.anon_structs[id.0 as usize].1 {
-            // A synthetic shape is named by lowering, not by its captures, so
-            // both namespaces spell it the same way.
             AnonShape::Synthetic(name) => name.clone(),
             AnonShape::Fields(fields) => {
                 let parts: Vec<String> = fields

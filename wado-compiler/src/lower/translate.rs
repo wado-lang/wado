@@ -194,9 +194,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         task_return_flat_params,
         wasm_assets,
         trait_env,
-        // Resolved before the interner is drained: a helper only an
-        // `array_clone::<T>` site reaches is never resolved by a wrap, and DCE
-        // still has to root it.
+        // Before the interner is drained: a helper only `array_clone::<T>`
+        // reaches is never resolved by a wrap, and DCE still has to root it.
         value_copy_helpers: value_copy.helpers.map(|(module_source, name)| {
             translator.interner.borrow_mut().resolve(&nir::FunctionRef {
                 module_source: module_source.clone(),
@@ -1012,12 +1011,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit a call to the `$value_copy$T(...)` helper.
     ///
-    /// The wrap decision is made on the *value*'s type, while the type wrapped
-    /// is the destination's — a deref target, a `Let`'s declared type — so a
-    /// destination that is itself a reference reaches here needing no copy at
-    /// all, and passes through. Where the destination does need one, a missing
-    /// helper is a hole in the seed walk: passing the value through would alias
-    /// where the semantics call for a fresh value.
+    /// A destination needing no copy passes through. Where one is due, a
+    /// missing helper is a hole in the seed walk, and aliasing there is silent.
     fn wrap_value_copy(&self, value: ExprId, type_id: tir::TypeId) -> ExprId {
         let span = self.expr_span(value);
         let helper = {

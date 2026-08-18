@@ -673,9 +673,7 @@ impl<'a> WirEmitter<'a> {
         for i in 0..self.func_index_offset {
             self.func_index_map.insert(i, i);
         }
-        for (wasm_idx, i) in
-            (self.func_index_offset..).zip(0..self.wir.functions.len())
-        {
+        for (wasm_idx, i) in (self.func_index_offset..).zip(0..self.wir.functions.len()) {
             let wir_func_idx = self.defined_func_id(i);
             self.func_index_map.insert(wir_func_idx, wasm_idx);
         }

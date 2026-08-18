@@ -218,10 +218,8 @@ impl FunctionTranslator<'_, '_> {
         if !crate::lower::plan::value_copy::needs_value_copy(elem, self.type_table) {
             return None;
         }
-        // A value-typed element with no reachable helper is a hole upstream —
-        // synthesis, or DCE rooting the wrong one. Falling back to the bulk
-        // clone would answer with a shallow `array.copy`, aliasing every
-        // element instead of copying it.
+        // Falling back to the bulk clone would answer a deep copy with a
+        // shallow `array.copy`, aliasing every element.
         let helper = self
             .ctx
             .package

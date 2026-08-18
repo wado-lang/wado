@@ -291,10 +291,8 @@ fn extend_reachable_for_optimizer_passes(
         reachable.extend(compute_reachable(call_graph, &char_id));
     }
 
-    // An `array_clone::<T>` site reaches `T`'s `$value_copy$` helper through
-    // the element type rather than a call edge, so seed one root per
-    // value-typed site. `NirPackage::value_copy_helpers` is the join, so which
-    // helper a type reaches is answered in one place.
+    // An `array_clone::<T>` site reaches its helper through the element type
+    // rather than a call edge, so seed one root per value-typed site.
     let candidates: Vec<(FunctionId, Vec<FunctionId>)> = {
         let type_table = project.type_table.borrow();
         project
@@ -311,17 +309,12 @@ fn extend_reachable_for_optimizer_passes(
                         // pruned from the table; it has no helper, so skip it
                         // rather than resolve an absent id (the structural key
                         // recurses through `TypeTable::get`, which panics on a
-                        // missing slot). Guarding only the top-level id is
-                        // sufficient: DCE's `retain` keeps the transitive
-                        // closure over exactly the edges the key recurses
-                        // through, so a surviving top-level type never has a
-                        // pruned reachable component.
+                        // missing slot). The top-level id suffices: `retain`
+                        // keeps the closure over exactly those edges.
                         if type_table.get_pruned(type_id).is_none() {
                             continue;
                         }
-                        if let Some(helper) =
-                            project.value_copy_helpers.get(type_id, &type_table)
-                        {
+                        if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
                             use cranelift_entity::EntityRef;
                             let helper = project.functions[helper.index()].borrow();
                             helpers.push(function_id_for(&helper));

@@ -1,9 +1,6 @@
-// An anonymous struct's identity is its shape, and a shape is its field types.
-// Two modules declare `Foo`, so `{ v: a }` and `{ v: b }` are two shapes that
-// spell their field type the same way. Rendering the field types unqualified
-// gave both the head `__anon_{v:Foo}`, collapsing them onto one identity —
-// every synthesized helper keyed by it (`$value_copy$`, `ReflectStruct`) then
-// had one definition for two signatures.
+// An anonymous struct's identity is its field types. Rendering them unqualified
+// gave `{ v: a }` and `{ v: b }` one head, `__anon_{v:Foo}`, so every helper
+// keyed by it had one definition for two signatures.
 
 use { make as make_a } from "./sub/cross_module_same_name_anon_field_a.wado";
 use { make as make_b } from "./sub/cross_module_same_name_anon_field_b.wado";

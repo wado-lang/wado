@@ -236,19 +236,16 @@ struct PatternLowerer<'a> {
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
 }
 
-/// Whether `pattern` binds any part of the scrutinee by value in a way that
-/// could alias it — the only thing a scrutinee temp's defensive copy protects.
-///
-/// A wildcard, a literal, a discriminant test and a reference binding all read
-/// without taking ownership, so a `match` made only of those needs no temp.
+/// Whether `pattern` takes ownership of any part of the scrutinee — the only
+/// thing a temp's defensive copy protects.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     match pattern {
         TirPattern::Binding { type_id, .. } => {
             crate::lower::plan::value_copy::needs_value_copy(*type_id, type_table)
         }
-        TirPattern::Tuple(sub, _) | TirPattern::Variant { bindings: sub, .. } | TirPattern::Or(sub) => {
-            sub.iter().any(|p| binds_by_value(p, type_table))
-        }
+        TirPattern::Tuple(sub, _)
+        | TirPattern::Variant { bindings: sub, .. }
+        | TirPattern::Or(sub) => sub.iter().any(|p| binds_by_value(p, type_table)),
         TirPattern::Struct { fields, .. } => fields
             .iter()
             .any(|f| binds_by_value(&f.pattern, type_table)),
@@ -260,12 +257,9 @@ fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     }
 }
 
-/// The type a compound pattern's temp holds: the scrutinee's, with the
-/// match-ergonomic references peeled off.
-///
-/// Shared with the value-copy seed walk, which cannot see the temp — it is
-/// minted here, during lowering — and would otherwise spell the peel a second
-/// time to register the helper the temp's copy asks for.
+/// The type a compound pattern's temp holds: the scrutinee's, match-ergonomic
+/// references peeled. Shared with the value-copy seed walk, which mints no temp
+/// of its own and would otherwise spell the peel a second time.
 pub(crate) fn pattern_temp_type(
     pattern: &TirPattern,
     value_type: TypeId,
@@ -1563,27 +1557,13 @@ impl<'a> PatternLowerer<'a> {
                 ));
             }
             TirStmtKind::Expr(mut expr) => {
-                // Hoist a statement-position `Match` scrutinee into a temp
-                // local. Two reasons, and either is enough:
-                //
-                // `labeled_block_fusion` keys on the `(Let, Match)` pair to
-                // eliminate GC allocations from inlined `Option<T>`-returning
-                // calls (e.g. `Iterator::next` in `while let` loops); with the
-                // scrutinee inline the optimisation stops firing.
-                //
-                // And the temp is where a defensive copy lands when an arm
-                // binds part of the scrutinee *by value*: those bindings
-                // project out of the temp and take no copy of their own, so
-                // without one they alias the scrutinee and a write through it
-                // shows up through the binding. That is a fact about what the
-                // arms bind, not about the scrutinee's type — `if let Err(_) =
-                // r` binds nothing, and copying `r` there rebuilds a whole
-                // variant for no one. The `Let` still goes through the fold's
-                // own decision, which elides the copy where the value is fresh
-                // or moved.
-                //
-                // This runs after `resource_cleanup`, so the temp does not
-                // perturb resource-flow analysis.
+                // Hoist a statement-position `Match` scrutinee into a temp,
+                // for either of two reasons. `labeled_block_fusion` keys on the
+                // `(Let, Match)` pair, and stops firing on an inline scrutinee.
+                // And the temp is where an owning arm binding's defensive copy
+                // lands — those bindings project out of it and take none of
+                // their own. Runs after `resource_cleanup`, so the temp does
+                // not perturb resource-flow analysis.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,
@@ -1716,10 +1696,9 @@ impl<'a> PatternLowerer<'a> {
         ));
     }
 
-    /// Whether a bare-local scrutinee's storage can still be written while an
-    /// arm binding reads it. An immutable local is never reassigned and cannot
-    /// lend a `&mut`, so its bindings may share its storage — the same reason
-    /// `source_shares_immutable_storage` lets an immutable source skip a copy.
+    /// Whether the storage a binding reads can still be written. An immutable
+    /// local is never reassigned and cannot lend a `&mut`, the same ground
+    /// `source_shares_immutable_storage` stands on.
     fn scrutinee_is_mutable(&self, scrutinee: &TirExpr) -> bool {
         let mut expr = scrutinee;
         loop {
@@ -1735,21 +1714,14 @@ impl<'a> PatternLowerer<'a> {
                     op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                     expr: inner,
                 } => expr = inner,
-                // Anything else — a call result, a deref of a reference the
-                // walk cannot follow — is assumed writable.
                 _ => return true,
             }
         }
     }
 
     /// Bind what a compound pattern destructures to a temp its projections
-    /// read, and answer the temp's index and name.
-    ///
-    /// This temp takes the destructure's only defensive copy. The per-binding
-    /// `Let`s that project out of it are immutable reads of an immutable local,
-    /// which `source_shares_immutable_storage` lets share storage rather than
-    /// copy — sound only because this copy already severed the tie to the
-    /// source.
+    /// read. The temp takes the destructure's only defensive copy: the
+    /// per-binding `Let`s share its storage rather than copy again.
     fn emit_pattern_temp_let(
         &mut self,
         pattern: &TirPattern,
@@ -1761,12 +1733,10 @@ impl<'a> PatternLowerer<'a> {
         let local_index = self.alloc_local(value.type_id);
         let name = self.next_temp_name();
         let type_id = value.type_id;
-        // Same question the `match` hoist asks: the copy is for bindings taken
-        // by value out of storage that can still be written. Reference
-        // bindings (`let { x, y } = &p`) and an immutable source need none, and
-        // a nested temp reads a projection of a temp that already copied.
-        let needs_copy =
-            binds_by_value(pattern, type_table) && self.scrutinee_is_mutable(&value);
+        // The `match` hoist's question: an owning binding out of storage that
+        // can still be written. `let { x, y } = &p` binds references, and a
+        // nested temp projects out of a temp that already copied.
+        let needs_copy = binds_by_value(pattern, type_table) && self.scrutinee_is_mutable(&value);
         out.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),
@@ -1796,8 +1766,6 @@ impl<'a> PatternLowerer<'a> {
         let mut value = value;
         self.lower_expr(&mut value, type_table);
 
-        // Match ergonomics: a compound pattern against a reference reads
-        // through it, so deref down to the type its temp will hold.
         let target = pattern_temp_type(pattern, value.type_id, type_table);
         let mut value = value;
         while value.type_id != target {
@@ -2031,7 +1999,6 @@ impl<'a> PatternLowerer<'a> {
                     && !(*payload_type == TypeTable::UNIT
                         && matches!(binding, TirPattern::Wildcard))
                 {
-
                     let (variant_temp_index, variant_temp_name) =
                         self.emit_pattern_temp_let(pattern, value, span, type_table, out);
 

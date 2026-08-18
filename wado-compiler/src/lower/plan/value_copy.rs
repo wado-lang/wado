@@ -40,24 +40,15 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
 }
 
 /// Which helper copies a type, keyed by the structural mangle that is the
-/// helper's identity.
+/// helper's identity — and the one place a type becomes that key.
 ///
-/// The one place a type becomes that key. The type table interns the same
-/// logical type under more than one `TypeId` — a `GenericInstance` beside its
-/// monomorphized `Struct`, a `List` whose arguments were interned twice — so a
-/// map keyed on the id alone answers for one of them and not the other. Keying
-/// on the structure answers for every id, including one this walk never saw,
-/// and having a single `get` is what keeps a definition's key and a lookup's
-/// key from being spelled by two functions that drift.
-///
-/// `T` is what a consumer needs the helper as: the synthesized function's
-/// `(module, name)` at plan time, its [`crate::nir::FuncId`] once lowering has
-/// resolved one.
+/// The table interns one logical type under several `TypeId`s, so an id-keyed
+/// map answers for one of them and not the others.
 #[derive(Debug)]
 pub struct ValueCopyHelpers<T> {
     by_key: IndexMap<String, T>,
-    /// Keys of the types synthesis walked, so the fold's repeat lookups skip
-    /// the mangle. A miss is unobservable: `get` derives the key instead.
+    /// Memo over the types synthesis walked. A miss is unobservable — `get`
+    /// derives the key instead.
     key_of: IndexMap<TypeId, String>,
 }
 
@@ -85,8 +76,7 @@ impl<T> ValueCopyHelpers<T> {
             .get(&type_table.mangle_type_arg_for_generic(type_id))
     }
 
-    /// Re-express every helper as `U`, keeping the keys — how the plan's
-    /// `(module, name)` becomes the `FuncId` lowering resolved for it.
+    /// Re-express every helper as `U`, keeping the keys.
     pub fn map<U>(&self, mut f: impl FnMut(&T) -> U) -> ValueCopyHelpers<U> {
         ValueCopyHelpers {
             by_key: self.by_key.iter().map(|(k, v)| (k.clone(), f(v))).collect(),
