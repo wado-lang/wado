@@ -4660,28 +4660,22 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
         },
         Label(lab) => {
-            if lab.list {
-                // Bare list label: allocate the array, parse the inner element
-                // once, and push. Repeats wrap this via gen_repeat below.
-                let inner_info = element_field_info(&lab.element);
-                let lab_name = dedup_name(&lab.field_name, name_counts);
-                w.line(&`let mut ${lab_name}: List<${inner_info.1}> = [];`);
-                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-                gen_element(w, &lab.element, ctx, name_counts);
-                w.line(&`${lab_name}.push(${predicted_inner});`);
-            } else {
-                // Scalar label `name = element`: parse the inner element with
-                // the shared `name_counts` so its emitted binding dedups
-                // against the outer alt's scope (otherwise `a=e ... b=e` would
-                // emit two top-level `let e = _parse_e(p);` and the second
-                // would fail compilation with "cannot redeclare e"). Then
-                // re-bind under the label name so the struct initializer
-                // resolves. Peek the dedup'd inner name before calling
-                // `gen_element`, which performs the actual increment.
-                let lab_name = dedup_name(&lab.field_name, name_counts);
-                let inner_info = element_field_info(&lab.element);
-                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-                gen_element(w, &lab.element, ctx, name_counts);
+            // The inner parse appends its match to the builder, so a label
+            // accumulates nothing — same rule `gen_op_list_label` follows for a
+            // leaf or Group inner. A list label emits no `List<T>` container and
+            // no `.push`; only a scalar label rebinds, and only under an action,
+            // which is the sole reader of a label binding (`leaf_binding`).
+            //
+            // The inner is emitted with the shared `name_counts` so its binding
+            // dedups against the outer alt's scope: otherwise `a=e ... b=e`
+            // would emit two top-level `let e = _parse_e(p);` and the second
+            // would fail to compile. Peek the dedup'd inner name before calling
+            // `gen_element`, which performs the actual increment.
+            let lab_name = dedup_name(&lab.field_name, name_counts);
+            let inner_info = element_field_info(&lab.element);
+            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+            gen_element(w, &lab.element, ctx, name_counts);
+            if !lab.list && ctx.emit_actions() {
                 w.line(&`let ${lab_name} = ${predicted_inner};`);
             }
         },

@@ -1190,11 +1190,12 @@ pub global RK_STREAM: NodeKind = 0;
 pub global RK_LEADING_LIST: NodeKind = 1;
 pub global RK_TRAILING_LIST: NodeKind = 2;
 pub global RK_LIST_GROUP: NodeKind = 3;
-pub global RK_LAZY_PLUS: NodeKind = 4;
-pub global RK_LAZY_PLUS_AFTER: NodeKind = 5;
-pub global RK_LAZY_PLUS_LIST_AFTER: NodeKind = 6;
+pub global RK_NESTED_LIST: NodeKind = 4;
+pub global RK_LAZY_PLUS: NodeKind = 5;
+pub global RK_LAZY_PLUS_AFTER: NodeKind = 6;
+pub global RK_LAZY_PLUS_LIST_AFTER: NodeKind = 7;
 
-global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "lazy_plus", "lazy_plus_after", "lazy_plus_list_after"];
+global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "nested_list", "lazy_plus", "lazy_plus_after", "lazy_plus_list_after"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1505,6 +1506,15 @@ fn scan_list_group(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
+fn scan_nested_list(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_lazy_plus(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
@@ -1698,6 +1708,23 @@ fn _parse_list_group(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_nested_list__inner(p: &mut Parser) -> () {
+    p.expect(TK_TAG, &EMPTY_SYNC);
+    p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_nested_list(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_NESTED_LIST, _start);
+    _parse_nested_list__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("nested_list");
+    }
+}
+
 fn _parse_lazy_plus__inner(p: &mut Parser) -> () {
     p.expect(TK_TAG, &SYNC_1);
     _first_iter: {
@@ -1811,6 +1838,10 @@ pub fn parse_trailing_list(input: &String, max_errors: i32 = i32::MAX) -> ParseR
 
 pub fn parse_list_group(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_list_group(p));
+}
+
+pub fn parse_nested_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_nested_list(p));
 }
 
 pub fn parse_lazy_plus(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

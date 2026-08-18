@@ -34,15 +34,30 @@ WS : (' '|'\\n') -> skip ;
         Err(e) => panic(`parse_checked failed: ${e.message}`),
     };
     let out = generate(&mut grammar, &GenerateOptions {}).source;
-    // The buggy codegen emitted two `let e = _parse_e(p)?;` lines in the
-    // same function body for the alt `a=e ... b=e`. Different functions
-    // each having their own copy is fine; the failure mode is the same
-    // line repeated before the next `fn ` boundary.
-    let parse_e_decl = "let e = _parse_e(p);";
+    // Emit binds a labelled element under the LABEL, so the alt `a=e … b=e`
+    // produces `let a = …` / `let b = …`. The bug was the inner `e` binding
+    // leaking into the alternative's scope under one shared name, i.e. the
+    // same `let` line twice before the next `fn ` boundary. Check each label
+    // the grammar declares; different functions each having their own copy is
+    // fine.
+    let labels: List<String> = ["a", "b", "x"];
+    for let label of &labels {
+        let needle = `let ${*label} = _parse_e(p`;
+        assert_declared_once_per_fn(&out, &needle);
+    }
+    // `a=e` is the LR left operand, which the precedence loop carries rather
+    // than binding; `x=e` inside the parenthesised alt is a plain call. Pin
+    // that one, so a future emit that stops binding labels at all cannot make
+    // the duplicate check above pass vacuously.
+    assert out.find("let x = _parse_e(p") matches { Some(_) }, "no labelled binding emitted; the duplicate check would pass vacuously";
+}
+
+/// Fail if `decl` appears twice before the next `\nfn ` boundary.
+fn assert_declared_once_per_fn(out: &String, decl: &String) {
     let mut pos = 0;
     loop {
         let rest = out.substr_bytes(pos, out.len());
-        let opt_i = rest.find(parse_e_decl);
+        let opt_i = rest.find(*decl);
         if opt_i matches { None } {
             break;
         }
@@ -52,18 +67,18 @@ WS : (' '|'\\n') -> skip ;
             0;
         };
         let abs = pos + i;
-        let after = out.substr_bytes(abs + parse_e_decl.len(), out.len());
+        let after = out.substr_bytes(abs + decl.len(), out.len());
         let next_fn = if let Some(j) = after.find("\nfn ") {
             j;
         } else {
             after.len();
         };
-        let next_decl = if let Some(j) = after.find(parse_e_decl) {
+        let next_decl = if let Some(j) = after.find(*decl) {
             j;
         } else {
             after.len();
         };
-        assert next_decl >= next_fn, `two 'let e = _parse_e(p)?;' in same function body — bug repro at offset ${abs}`;
-        pos = abs + parse_e_decl.len();
+        assert next_decl >= next_fn, `two '${*decl}' in the same function body — bug repro at offset ${abs}`;
+        pos = abs + decl.len();
     }
 }
