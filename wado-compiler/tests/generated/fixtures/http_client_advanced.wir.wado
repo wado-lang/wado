@@ -661,13 +661,13 @@ fn "http_client_advanced.wado/read_body"(resp) {
             break_if b2 chunk.used == 0;
             self_18 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: chunk.used };
             collected = "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/ArrayIter<u8>>"(self_18);
-            let __vr_11_mv_0: i32;
-            let __vr_11_mv_1: ref null "core:prelude/string.wado//String";
-            multivalue_bind [__vr_11_mv_0, __vr_11_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
-            text = (if @likely(__vr_11_mv_0 == 0) -> ref "core:prelude/string.wado//String" {
-                s = ref.as_non_null(__vr_11_mv_1);
+            let __match_11_mv_0: i32;
+            let __match_11_mv_1: ref null "core:prelude/string.wado//String";
+            multivalue_bind [__match_11_mv_0, __match_11_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+            text = (if @likely(__match_11_mv_0 == 0) -> ref "core:prelude/string.wado//String" {
+                s = ref.as_non_null(__match_11_mv_1);
                 s;
-            } else if __vr_11_mv_0 == 1 -> ref "core:prelude/string.wado//String" {
+            } else if __match_11_mv_0 == 1 -> ref "core:prelude/string.wado//String" {
                 "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid utf-8"), used: 13 });
                 unreachable;
             } else {

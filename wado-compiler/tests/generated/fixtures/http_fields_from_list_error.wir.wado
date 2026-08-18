@@ -660,13 +660,13 @@ fn "http_fields_from_list_error.wado/handle"(request) {
     null_byte = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(0), used: 1 };
     self_212 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: null_byte.repr, index: 0, end: 1 };
     collected = "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/ArrayIter<u8>>"(self_212);
-    let __vr_197_mv_0: i32;
-    let __vr_197_mv_1: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__vr_197_mv_0, __vr_197_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
-    null_name = (if @likely(__vr_197_mv_0 == 0) -> ref "core:prelude/string.wado//String" {
-        s_7 = ref.as_non_null(__vr_197_mv_1);
+    let __match_195_mv_0: i32;
+    let __match_195_mv_1: ref null "core:prelude/string.wado//String";
+    multivalue_bind [__match_195_mv_0, __match_195_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+    null_name = (if @likely(__match_195_mv_0 == 0) -> ref "core:prelude/string.wado//String" {
+        s_7 = ref.as_non_null(__match_195_mv_1);
         s_7;
-    } else if __vr_197_mv_0 == 1 -> ref "core:prelude/string.wado//String" {
+    } else if __match_195_mv_0 == 1 -> ref "core:prelude/string.wado//String" {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failed to create string with null byte"), used: 38 });
         unreachable;
     } else {

@@ -6327,10 +6327,10 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
     let val: ref "core:prelude/types.wado//Box<core:value/Value>";
     let __qm_e_26: ref "core:serde//SerializeError";
     let __qm_e_28: ref "core:serde//SerializeError";
-    let __local_30: ref null "core:serde//SerializeError";
-    let __local_31: ref null "tuple//[core:prelude/string.wado/String, core:value/Value]";
-    let __local_32: ref null "core:serde//SerializeError";
-    let __local_33: ref null "core:serde//SerializeError";
+    let __local_31: ref null "core:serde//SerializeError";
+    let __local_33: ref null "tuple//[core:prelude/string.wado/String, core:value/Value]";
+    let __local_34: ref null "core:serde//SerializeError";
+    let __local_35: ref null "core:serde//SerializeError";
     let v_53: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let new_used_62: i32;
     let start_63: i32;
@@ -6347,8 +6347,8 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
     let start_121: i32;
     let __sroa___iter_14_repr: ref "Array<core:value/Value>";
     let __sroa___iter_14_index: i32;
-    let __sroa___vr_35_1: ref null "core:json//JsonMapSerializer";
-    let __sroa___vr_34_1: ref null "core:json//JsonSeqSerializer";
+    let __sroa___match_32_1: ref null "core:json//JsonMapSerializer";
+    let __sroa___match_29_1: ref null "core:json//JsonSeqSerializer";
     return let __match_scrut_0: ref "core:value//Value", __match_scrut_0 = self.value, (if __match_scrut_0.discriminant == 0 -> ref null "core:serde//SerializeError" {
         "core:json/write_json_null"(s);
     } else if ref.test "core:value//Value::Bool"(__match_scrut_0) -> ref null "core:serde//SerializeError" {
@@ -6383,8 +6383,8 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         start_63 = s.used;
         s.used = new_used_62;
         builtin::array_set_u8(s.repr, start_63, 91);
-        __sroa___vr_34_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
-        __qm_v_11 = ref.as_non_null(__sroa___vr_34_1);
+        __sroa___match_29_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
+        __qm_v_11 = ref.as_non_null(__sroa___match_29_1);
         end_75 = arr.used;
         __sroa___iter_14_repr = arr.repr;
         __sroa___iter_14_index = 0;
@@ -6393,10 +6393,10 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
                 break_if b716 __sroa___iter_14_index >= end_75;
                 ref_val = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: builtin::array_get<ref "core:value//Value">(__sroa___iter_14_repr, __sroa___iter_14_index) };
                 __sroa___iter_14_index = __sroa___iter_14_index + 1;
-                __local_30 = "core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>"(__qm_v_11, ref_val);
-                if @likely(ref.is_null(__local_30)) {
+                __local_31 = "core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>"(__qm_v_11, ref_val);
+                if @likely(ref.is_null(__local_31)) {
                 } else {
-                    __qm_e_17 = ref.as_non_null(__local_30);
+                    __qm_e_17 = ref.as_non_null(__local_31);
                     cold_path;
                     return __qm_e_17;
                 }
@@ -6423,29 +6423,29 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         start_102 = s.used;
         s.used = new_used_101;
         builtin::array_set_u8(s.repr, start_102, 123);
-        __sroa___vr_35_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
-        __qm_v_19 = ref.as_non_null(__sroa___vr_35_1);
+        __sroa___match_32_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
+        __qm_v_19 = ref.as_non_null(__sroa___match_32_1);
         self_110 = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::entries"(map);
         __iter_22 = struct.new "core:prelude/slice.wado//ArrayIter<[core:prelude/string.wado/String,core:value/Value]>" { repr: self_110.repr, index: 0, end: self_110.used };
         b722: block {
             l723: loop {
-                __local_31 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,core:value/Value]>^core:prelude/traits.wado/Iterator::next"(__iter_22);
-                if ref.is_null(__local_31) == 0 {
+                __local_33 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[core:prelude/string.wado/String,core:value/Value]>^core:prelude/traits.wado/Iterator::next"(__iter_22);
+                if ref.is_null(__local_33) == 0 {
                     let __variant_payload_1: ref "tuple//[core:prelude/string.wado/String, core:value/Value]";
-                    __variant_payload_1 = ref.as_non_null(__local_31);
+                    __variant_payload_1 = ref.as_non_null(__local_33);
                     key = __variant_payload_1.0;
                     val = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: __variant_payload_1.1 };
-                    __local_32 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_19, key);
-                    if @likely(ref.is_null(__local_32)) {
+                    __local_34 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_19, key);
+                    if @likely(ref.is_null(__local_34)) {
                     } else {
-                        __qm_e_26 = ref.as_non_null(__local_32);
+                        __qm_e_26 = ref.as_non_null(__local_34);
                         cold_path;
                         return __qm_e_26;
                     }
-                    __local_33 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::value<core:value/Value>"(__qm_v_19, val);
-                    if @likely(ref.is_null(__local_33)) {
+                    __local_35 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::value<core:value/Value>"(__qm_v_19, val);
+                    if @likely(ref.is_null(__local_35)) {
                     } else {
-                        __qm_e_28 = ref.as_non_null(__local_33);
+                        __qm_e_28 = ref.as_non_null(__local_35);
                         cold_path;
                         return __qm_e_28;
                     }

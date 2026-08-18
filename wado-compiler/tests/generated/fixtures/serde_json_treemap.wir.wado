@@ -2198,15 +2198,15 @@ fn "core:json/core/json/from_bytes<core:collections/TreeMap<core:prelude/string.
     let self_7: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let repr: ref Array<u8>;
     de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(repr = input.repr; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: input.used }), pos: 0 };
-    let __vr_5_mv_0: i32;
-    let __vr_5_mv_1: ref null "core:collections//TreeMap<core:prelude/string.wado/String,i32>";
-    let __vr_5_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__vr_5_mv_0, __vr_5_mv_1, __vr_5_mv_2] = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>"(de);
-    v = (if __vr_5_mv_0 == 0 -> ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>" {
-        __qm_v = ref.as_non_null(__vr_5_mv_1);
+    let __match_5_mv_0: i32;
+    let __match_5_mv_1: ref null "core:collections//TreeMap<core:prelude/string.wado/String,i32>";
+    let __match_5_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__match_5_mv_0, __match_5_mv_1, __match_5_mv_2] = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>"(de);
+    v = (if __match_5_mv_0 == 0 -> ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>" {
+        __qm_v = ref.as_non_null(__match_5_mv_1);
         __qm_v;
-    } else if @unlikely(__vr_5_mv_0 == 1) -> ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>" {
-        __qm_e = ref.as_non_null(__vr_5_mv_2);
+    } else if @unlikely(__match_5_mv_0 == 1) -> ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>" {
+        __qm_e = ref.as_non_null(__match_5_mv_2);
         cold_path;
         return struct.new "core:prelude/types.wado//Result<core:collections/TreeMap<core:prelude/string.wado/String,i32>,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: __qm_e };
     } else {
@@ -3148,7 +3148,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
     let __qm_e_17: ref "core:serde//DeserializeError";
     let __local_18: ref "core:prelude/string.wado//String";
     let __local_19: ref "core:prelude/format.wado//Formatter";
-    let __match_20: ref null "core:serde//DeserializeError";
+    let __match_22: ref null "core:serde//DeserializeError";
     let __hfs_pos_27: i32;
     let __hfs_call_28: ref null "core:prelude/string.wado//String";
     let __hfs_call_29: ref null "core:serde//DeserializeError";
@@ -3169,15 +3169,15 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
     let prefix_mv_valid: bool;
     multivalue_bind [prefix_mv_end, prefix_mv_at_escape, prefix_mv_valid] = "core:json/core:json/JsonDeserializer::scan_string_run"(self, prefix_start);
     if @likely(select i32(prefix_mv_end < input_len, prefix_mv_at_escape == 0, 0)) {
-        let __vr_21_mv_0: i32;
-        let __vr_21_mv_1: ref null "core:prelude/string.wado//String";
-        let __vr_21_mv_2: ref null "core:serde//DeserializeError";
-        multivalue_bind [__vr_21_mv_0, __vr_21_mv_1, __vr_21_mv_2] = "core:json/core:json/JsonDeserializer::take_scanned_run"(self, prefix_start, prefix_mv_end, prefix_mv_valid);
-        result_6 = (if __vr_21_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
-            __qm_v_4 = ref.as_non_null(__vr_21_mv_1);
+        let __match_20_mv_0: i32;
+        let __match_20_mv_1: ref null "core:prelude/string.wado//String";
+        let __match_20_mv_2: ref null "core:serde//DeserializeError";
+        multivalue_bind [__match_20_mv_0, __match_20_mv_1, __match_20_mv_2] = "core:json/core:json/JsonDeserializer::take_scanned_run"(self, prefix_start, prefix_mv_end, prefix_mv_valid);
+        result_6 = (if __match_20_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
+            __qm_v_4 = ref.as_non_null(__match_20_mv_1);
             __qm_v_4;
-        } else if @unlikely(__vr_21_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
-            __qm_e_5 = ref.as_non_null(__vr_21_mv_2);
+        } else if @unlikely(__match_20_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
+            __qm_e_5 = ref.as_non_null(__match_20_mv_2);
             cold_path;
             return 1, ref.null none, __qm_e_5;
         } else {
@@ -3187,17 +3187,17 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
         return 0, result_6, ref.null none;
     }
     cold_path;
-    let __vr_22_mv_0: i32;
-    let __vr_22_mv_1: ref null "core:prelude/string.wado//String";
-    let __vr_22_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__vr_22_mv_0, __vr_22_mv_1, __vr_22_mv_2] = "core:json/core:json/JsonDeserializer::take_scanned_run"(self, prefix_start, prefix_mv_end, prefix_mv_valid);
-    result_9 = (if __vr_22_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
-        __qm_v_7 = ref.as_non_null(__vr_22_mv_1);
+    let __match_21_mv_0: i32;
+    let __match_21_mv_1: ref null "core:prelude/string.wado//String";
+    let __match_21_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__match_21_mv_0, __match_21_mv_1, __match_21_mv_2] = "core:json/core:json/JsonDeserializer::take_scanned_run"(self, prefix_start, prefix_mv_end, prefix_mv_valid);
+    result_9 = (if __match_21_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
+        __qm_v_7 = ref.as_non_null(__match_21_mv_1);
         __qm_v_7;
-    } else if @unlikely(__vr_22_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
-        __qm_e_8 = ref.as_non_null(__vr_22_mv_2);
+    } else if @unlikely(__match_21_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
+        __qm_e_8 = ref.as_non_null(__match_21_mv_2);
         cold_path;
-        return 1, ref.null none, __qm_e_8;
+        return 1, ref.null none, "serde_json_treemap.wado/$value_copy$core:serde/DeserializeError"(__qm_e_8);
     } else {
         unreachable;
     });
@@ -3211,10 +3211,10 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
             let chunk_mv_valid: bool;
             multivalue_bind [chunk_mv_end, chunk_mv_at_escape, chunk_mv_valid] = "core:json/core:json/JsonDeserializer::scan_string_run"(self, chunk_start);
             __hfs_pos_27 = chunk_mv_end;
-            __match_20 = "core:json/core:json/JsonDeserializer::append_scanned_run"(self, result_9, chunk_start, chunk_mv_end, chunk_mv_valid);
-            if @likely(ref.is_null(__match_20)) {
+            __match_22 = "core:json/core:json/JsonDeserializer::append_scanned_run"(self, result_9, chunk_start, chunk_mv_end, chunk_mv_valid);
+            if @likely(ref.is_null(__match_22)) {
             } else {
-                __qm_e_13 = ref.as_non_null(__match_20);
+                __qm_e_13 = ref.as_non_null(__match_22);
                 cold_path;
                 __hfs_call_28 = ref.null none;
                 __hfs_call_29 = ref.as_non_null("serde_json_treemap.wado/$value_copy$core:serde/DeserializeError"(__qm_e_13));
@@ -3262,10 +3262,10 @@ fn "core:json/core:json/JsonDeserializer::read_json_string"(self) {
             } else if esc == 102 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(result_9, 12);
             } else if @likely(esc == 117) {
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(result_9, self.pos = __hfs_pos_27; let __vr_23_mv_0: i32; let __vr_23_mv_1: char; let __vr_23_mv_2: ref null "core:serde//DeserializeError"; multivalue_bind [__vr_23_mv_0, __vr_23_mv_1, __vr_23_mv_2] = "core:json/core:json/JsonDeserializer::read_unicode_escape"(self); (if __vr_23_mv_0 == 0 -> char {
-                    __vr_23_mv_1;
-                } else if @unlikely(__vr_23_mv_0 == 1) -> char {
-                    __qm_e_17 = ref.as_non_null(__vr_23_mv_2);
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(result_9, self.pos = __hfs_pos_27; let __local_23_mv_0: i32; let __local_23_mv_1: char; let __local_23_mv_2: ref null "core:serde//DeserializeError"; multivalue_bind [__local_23_mv_0, __local_23_mv_1, __local_23_mv_2] = "core:json/core:json/JsonDeserializer::read_unicode_escape"(self); (if __local_23_mv_0 == 0 -> char {
+                    __local_23_mv_1;
+                } else if @unlikely(__local_23_mv_0 == 1) -> char {
+                    __qm_e_17 = ref.as_non_null(__local_23_mv_2);
                     cold_path;
                     return 1, ref.null none, __qm_e_17;
                 } else {
@@ -3345,14 +3345,14 @@ fn "core:json/core:json/JsonDeserializer::read_unicode_escape"(self) {
     let __sroa_slot_25: char;
     self.pos = self.pos + 1;
     start = builtin::i64_extend_i32_s(self.pos);
-    let __vr_14_mv_0: i32;
-    let __vr_14_mv_1: u32;
-    let __vr_14_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__vr_14_mv_0, __vr_14_mv_1, __vr_14_mv_2] = "core:json/core:json/JsonDeserializer::read_hex4"(self);
-    hi = (if __vr_14_mv_0 == 0 -> u32 {
-        __vr_14_mv_1;
-    } else if @unlikely(__vr_14_mv_0 == 1) -> u32 {
-        __qm_e_3 = ref.as_non_null(__vr_14_mv_2);
+    let __match_14_mv_0: i32;
+    let __match_14_mv_1: u32;
+    let __match_14_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__match_14_mv_0, __match_14_mv_1, __match_14_mv_2] = "core:json/core:json/JsonDeserializer::read_hex4"(self);
+    hi = (if __match_14_mv_0 == 0 -> u32 {
+        __match_14_mv_1;
+    } else if @unlikely(__match_14_mv_0 == 1) -> u32 {
+        __qm_e_3 = ref.as_non_null(__match_14_mv_2);
         cold_path;
         return 1, 0, __qm_e_3;
     } else {
@@ -3375,14 +3375,14 @@ fn "core:json/core:json/JsonDeserializer::read_unicode_escape"(self) {
             0;
         }) -> bool {
             self.pos = self.pos + 2;
-            let __vr_15_mv_0: i32;
-            let __vr_15_mv_1: u32;
-            let __vr_15_mv_2: ref null "core:serde//DeserializeError";
-            multivalue_bind [__vr_15_mv_0, __vr_15_mv_1, __vr_15_mv_2] = "core:json/core:json/JsonDeserializer::read_hex4"(self);
-            lo = (if __vr_15_mv_0 == 0 -> u32 {
-                __vr_15_mv_1;
-            } else if @unlikely(__vr_15_mv_0 == 1) -> u32 {
-                __qm_e_10 = ref.as_non_null(__vr_15_mv_2);
+            let __local_15_mv_0: i32;
+            let __local_15_mv_1: u32;
+            let __local_15_mv_2: ref null "core:serde//DeserializeError";
+            multivalue_bind [__local_15_mv_0, __local_15_mv_1, __local_15_mv_2] = "core:json/core:json/JsonDeserializer::read_hex4"(self);
+            lo = (if __local_15_mv_0 == 0 -> u32 {
+                __local_15_mv_1;
+            } else if @unlikely(__local_15_mv_0 == 1) -> u32 {
+                __qm_e_10 = ref.as_non_null(__local_15_mv_2);
                 cold_path;
                 return 1, 0, __qm_e_10;
             } else {
@@ -3685,14 +3685,14 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_direct"(self) {
         v_6 = n.digits;
         return 0, builtin::i32_wrap_i64(select i64(n.neg, 0_i64 - v_6, v_6)), ref.null none;
     }
-    let __vr_11_mv_0: i32;
-    let __vr_11_mv_1: f64;
-    let __vr_11_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__vr_11_mv_0, __vr_11_mv_1, __vr_11_mv_2] = "core:json/checked_int_f64"("core:json/scanned_to_f64"(n), -2147483648, 2147483648, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start);
-    v_9 = (if __vr_11_mv_0 == 0 -> f64 {
-        __vr_11_mv_1;
-    } else if @unlikely(__vr_11_mv_0 == 1) -> f64 {
-        __qm_e_8 = ref.as_non_null(__vr_11_mv_2);
+    let __match_11_mv_0: i32;
+    let __match_11_mv_1: f64;
+    let __match_11_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__match_11_mv_0, __match_11_mv_1, __match_11_mv_2] = "core:json/checked_int_f64"("core:json/scanned_to_f64"(n), -2147483648, 2147483648, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start);
+    v_9 = (if __match_11_mv_0 == 0 -> f64 {
+        __match_11_mv_1;
+    } else if @unlikely(__match_11_mv_0 == 1) -> f64 {
+        __qm_e_8 = ref.as_non_null(__match_11_mv_2);
         cold_path;
         return 1, 0, __qm_e_8;
     } else {
@@ -3707,7 +3707,7 @@ fn "core:json/core:json/JsonMapAccess^core:serde/DeserializeMap::next_key_string
     let __qm_e_3: ref "core:serde//DeserializeError";
     let key: ref "core:prelude/string.wado//String";
     let __qm_e_6: ref "core:serde//DeserializeError";
-    let __match_7: ref null "core:serde//DeserializeError";
+    let __match_8: ref null "core:serde//DeserializeError";
     "core:json/core:json/JsonDeserializer::skip_whitespace"(self.de);
     if @unlikely(self.de.pos >= (self.de.input.end - self.de.input.start)) {
         cold_path;
@@ -3725,24 +3725,24 @@ fn "core:json/core:json/JsonMapAccess^core:serde/DeserializeMap::next_key_string
         self.de.pos = self.de.pos + 1;
     }
     self.first = 0;
-    let __vr_8_mv_0: i32;
-    let __vr_8_mv_1: ref null "core:prelude/string.wado//String";
-    let __vr_8_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__vr_8_mv_0, __vr_8_mv_1, __vr_8_mv_2] = "core:json/core:json/JsonDeserializer::read_json_string"(self.de);
-    key = (if __vr_8_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
-        __qm_v_2 = ref.as_non_null(__vr_8_mv_1);
+    let __match_7_mv_0: i32;
+    let __match_7_mv_1: ref null "core:prelude/string.wado//String";
+    let __match_7_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__match_7_mv_0, __match_7_mv_1, __match_7_mv_2] = "core:json/core:json/JsonDeserializer::read_json_string"(self.de);
+    key = (if __match_7_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
+        __qm_v_2 = ref.as_non_null(__match_7_mv_1);
         __qm_v_2;
-    } else if @unlikely(__vr_8_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
-        __qm_e_3 = ref.as_non_null(__vr_8_mv_2);
+    } else if @unlikely(__match_7_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
+        __qm_e_3 = ref.as_non_null(__match_7_mv_2);
         cold_path;
         return 1, ref.null none, __qm_e_3;
     } else {
         unreachable;
     });
-    __match_7 = "core:json/core:json/JsonDeserializer::expect_char"(self.de, 58);
-    if @likely(ref.is_null(__match_7)) {
+    __match_8 = "core:json/core:json/JsonDeserializer::expect_char"(self.de, 58);
+    if @likely(ref.is_null(__match_8)) {
     } else {
-        __qm_e_6 = ref.as_non_null(__match_7);
+        __qm_e_6 = ref.as_non_null(__match_8);
         cold_path;
         return 1, ref.null none, __qm_e_6;
     }
@@ -3913,7 +3913,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     let __qm_v_2: ref "core:json//JsonMapSerializer";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __qm_e_10: ref "core:serde//SerializeError";
-    let __match_12: ref null "core:serde//SerializeError";
+    let __match_13: ref null "core:serde//SerializeError";
     let new_used_23: i32;
     let start_24: i32;
     let self_32: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
@@ -3927,7 +3927,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     let __sroa___iter_5_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
     let __sroa___iter_5_index: i32;
     let f_75: ref "core:prelude/format.wado//Formatter";
-    let __sroa___vr_14_1: ref null "core:json//JsonMapSerializer";
+    let __sroa___match_11_1: ref null "core:json//JsonMapSerializer";
     new_used_23 = s.used + 1;
     if @unlikely(new_used_23 > builtin::array_len(s.repr)) {
         cold_path;
@@ -3936,8 +3936,8 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     start_24 = s.used;
     s.used = new_used_23;
     builtin::array_set_u8(s.repr, start_24, 123);
-    __sroa___vr_14_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___vr_14_1);
+    __sroa___match_11_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___match_11_1);
     self_32 = self.entries;
     end = self_32.used;
     __sroa___iter_5_repr = self_32.repr;
@@ -3948,10 +3948,10 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
             ref_val = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             if ref_val.deleted == 0 {
-                __match_12 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
-                if @likely(ref.is_null(__match_12)) {
+                __match_13 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
+                if @likely(ref.is_null(__match_13)) {
                 } else {
-                    __qm_e_8 = ref.as_non_null(__match_12);
+                    __qm_e_8 = ref.as_non_null(__match_13);
                     cold_path;
                     return __qm_e_8;
                 }
@@ -4004,7 +4004,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let __qm_v_2: ref "core:json//JsonMapSerializer";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __qm_e_10: ref "core:serde//SerializeError";
-    let __match_12: ref null "core:serde//SerializeError";
+    let __match_13: ref null "core:serde//SerializeError";
     let new_used_23: i32;
     let start_24: i32;
     let self_32: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
@@ -4016,7 +4016,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let start_54: i32;
     let __sroa___iter_5_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>";
     let __sroa___iter_5_index: i32;
-    let __sroa___vr_14_1: ref null "core:json//JsonMapSerializer";
+    let __sroa___match_11_1: ref null "core:json//JsonMapSerializer";
     new_used_23 = s.used + 1;
     if @unlikely(new_used_23 > builtin::array_len(s.repr)) {
         cold_path;
@@ -4025,8 +4025,8 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     start_24 = s.used;
     s.used = new_used_23;
     builtin::array_set_u8(s.repr, start_24, 123);
-    __sroa___vr_14_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___vr_14_1);
+    __sroa___match_11_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___match_11_1);
     self_32 = self.entries;
     end = self_32.used;
     __sroa___iter_5_repr = self_32.repr;
@@ -4037,10 +4037,10 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
             ref_val = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>">(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             if ref_val.deleted == 0 {
-                __match_12 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
-                if @likely(ref.is_null(__match_12)) {
+                __match_13 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
+                if @likely(ref.is_null(__match_13)) {
                 } else {
-                    __qm_e_8 = ref.as_non_null(__match_12);
+                    __qm_e_8 = ref.as_non_null(__match_13);
                     cold_path;
                     return __qm_e_8;
                 }
@@ -4091,7 +4091,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,bo
     let __qm_v_2: ref "core:json//JsonMapSerializer";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __qm_e_10: ref "core:serde//SerializeError";
-    let __match_12: ref null "core:serde//SerializeError";
+    let __match_13: ref null "core:serde//SerializeError";
     let new_used_23: i32;
     let start_24: i32;
     let self_32: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,bool>>";
@@ -4105,7 +4105,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,bo
     let __sroa_value_value: bool;
     let __sroa___iter_5_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,bool>>";
     let __sroa___iter_5_index: i32;
-    let __sroa___vr_14_1: ref null "core:json//JsonMapSerializer";
+    let __sroa___match_11_1: ref null "core:json//JsonMapSerializer";
     new_used_23 = s.used + 1;
     if @unlikely(new_used_23 > builtin::array_len(s.repr)) {
         cold_path;
@@ -4114,8 +4114,8 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,bo
     start_24 = s.used;
     s.used = new_used_23;
     builtin::array_set_u8(s.repr, start_24, 123);
-    __sroa___vr_14_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___vr_14_1);
+    __sroa___match_11_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___match_11_1);
     self_32 = self.entries;
     end = self_32.used;
     __sroa___iter_5_repr = self_32.repr;
@@ -4126,10 +4126,10 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,bo
             ref_val = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,bool>">(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             if ref_val.deleted == 0 {
-                __match_12 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
-                if @likely(ref.is_null(__match_12)) {
+                __match_13 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
+                if @likely(ref.is_null(__match_13)) {
                 } else {
-                    __qm_e_8 = ref.as_non_null(__match_12);
+                    __qm_e_8 = ref.as_non_null(__match_13);
                     cold_path;
                     return __qm_e_8;
                 }
@@ -4181,7 +4181,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let __qm_v_2: ref "core:json//JsonMapSerializer";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __qm_e_10: ref "core:serde//SerializeError";
-    let __match_12: ref null "core:serde//SerializeError";
+    let __match_13: ref null "core:serde//SerializeError";
     let new_used_23: i32;
     let start_24: i32;
     let self_32: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>>";
@@ -4194,7 +4194,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let start_52: i32;
     let __sroa___iter_5_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>>";
     let __sroa___iter_5_index: i32;
-    let __sroa___vr_14_1: ref null "core:json//JsonMapSerializer";
+    let __sroa___match_11_1: ref null "core:json//JsonMapSerializer";
     new_used_23 = s.used + 1;
     if @unlikely(new_used_23 > builtin::array_len(s.repr)) {
         cold_path;
@@ -4203,8 +4203,8 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     start_24 = s.used;
     s.used = new_used_23;
     builtin::array_set_u8(s.repr, start_24, 123);
-    __sroa___vr_14_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___vr_14_1);
+    __sroa___match_11_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___match_11_1);
     self_32 = self.entries;
     end = self_32.used;
     __sroa___iter_5_repr = self_32.repr;
@@ -4215,10 +4215,10 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
             ref_val = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>">(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             if ref_val.deleted == 0 {
-                __match_12 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
-                if @likely(ref.is_null(__match_12)) {
+                __match_13 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
+                if @likely(ref.is_null(__match_13)) {
                 } else {
-                    __qm_e_8 = ref.as_non_null(__match_12);
+                    __qm_e_8 = ref.as_non_null(__match_13);
                     cold_path;
                     return __qm_e_8;
                 }
@@ -4269,7 +4269,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let __qm_v_2: ref "core:json//JsonMapSerializer";
     let __qm_e_8: ref "core:serde//SerializeError";
     let __qm_e_10: ref "core:serde//SerializeError";
-    let __match_12: ref null "core:serde//SerializeError";
+    let __match_13: ref null "core:serde//SerializeError";
     let new_used_23: i32;
     let start_24: i32;
     let self_32: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>>";
@@ -4288,7 +4288,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let __sroa___iter_5_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>>";
     let __sroa___iter_5_index: i32;
     let f_78: ref "core:prelude/format.wado//Formatter";
-    let __sroa___vr_14_1: ref null "core:json//JsonMapSerializer";
+    let __sroa___match_11_1: ref null "core:json//JsonMapSerializer";
     new_used_23 = s.used + 1;
     if @unlikely(new_used_23 > builtin::array_len(s.repr)) {
         cold_path;
@@ -4297,8 +4297,8 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     start_24 = s.used;
     s.used = new_used_23;
     builtin::array_set_u8(s.repr, start_24, 123);
-    __sroa___vr_14_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___vr_14_1);
+    __sroa___match_11_1 = struct.new "core:json//JsonMapSerializer" { buf: s, count: 0, need_value: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___match_11_1);
     self_32 = self.entries;
     end = self_32.used;
     __sroa___iter_5_repr = self_32.repr;
@@ -4309,10 +4309,10 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
             ref_val = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>">(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             if ref_val.deleted == 0 {
-                __match_12 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
-                if @likely(ref.is_null(__match_12)) {
+                __match_13 = "core:json/core:json/JsonMapSerializer^core:serde/SerializeMap::key<core:prelude/string.wado/String>"(__qm_v_2, ref_val.key);
+                if @likely(ref.is_null(__match_13)) {
                 } else {
-                    __qm_e_8 = ref.as_non_null(__match_12);
+                    __qm_e_8 = ref.as_non_null(__match_13);
                     cold_path;
                     return __qm_e_8;
                 }
@@ -4865,7 +4865,7 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     let key: ref "core:prelude/string.wado//String";
     let __qm_e_13: ref "core:serde//DeserializeError";
     let val: i32;
-    let __local_15: ref null "core:serde//DeserializeError";
+    let __local_18: ref null "core:serde//DeserializeError";
     let __qm_e_21: ref "core:serde//DeserializeError";
     let __local_3: ref null "core:serde//DeserializeError";
     let __sroa_slot_30: i32;
@@ -4898,21 +4898,21 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     } else if @unlikely(__match_scrut_1 == 1) -> ref "core:json//JsonMapAccess" {
         __qm_e_2 = ref.as_non_null(__sroa_slot_32);
         cold_path;
-        return 1, ref.null none, __qm_e_2;
+        return 1, ref.null none, "serde_json_treemap.wado/$value_copy$core:serde/DeserializeError"(__qm_e_2);
     } else {
         unreachable;
     });
     result = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }, entries: struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(0), used: 0 }, size: 0, deleted_count: 0 };
     block {
         l496: loop {
-            let __vr_17_mv_0: i32;
-            let __vr_17_mv_1: ref null "core:prelude/string.wado//String";
-            let __vr_17_mv_2: ref null "core:serde//DeserializeError";
-            multivalue_bind [__vr_17_mv_0, __vr_17_mv_1, __vr_17_mv_2] = "core:json/core:json/JsonMapAccess^core:serde/DeserializeMap::next_key_string"(map);
-            key_opt = (if __vr_17_mv_0 == 0 -> ref null "core:prelude/string.wado//String" {
-                __vr_17_mv_1;
-            } else if @unlikely(__vr_17_mv_0 == 1) -> ref null "core:prelude/string.wado//String" {
-                __qm_e_7 = ref.as_non_null(__vr_17_mv_2);
+            let __match_16_mv_0: i32;
+            let __match_16_mv_1: ref null "core:prelude/string.wado//String";
+            let __match_16_mv_2: ref null "core:serde//DeserializeError";
+            multivalue_bind [__match_16_mv_0, __match_16_mv_1, __match_16_mv_2] = "core:json/core:json/JsonMapAccess^core:serde/DeserializeMap::next_key_string"(map);
+            key_opt = (if __match_16_mv_0 == 0 -> ref null "core:prelude/string.wado//String" {
+                __match_16_mv_1;
+            } else if @unlikely(__match_16_mv_0 == 1) -> ref null "core:prelude/string.wado//String" {
+                __qm_e_7 = ref.as_non_null(__match_16_mv_2);
                 cold_path;
                 return 1, ref.null none, __qm_e_7;
             } else {
@@ -4921,14 +4921,14 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
             if ref.is_null(key_opt) == 0 {
                 key = ref.as_non_null(key_opt);
                 self_39 = map.de;
-                let __vr_18_mv_0: i32;
-                let __vr_18_mv_1: i32;
-                let __vr_18_mv_2: ref null "core:serde//DeserializeError";
-                multivalue_bind [__vr_18_mv_0, __vr_18_mv_1, __vr_18_mv_2] = "core:json/core:json/JsonDeserializer::parse_i32_direct"(self_39);
-                val = (if __vr_18_mv_0 == 0 -> i32 {
-                    __vr_18_mv_1;
-                } else if @unlikely(__vr_18_mv_0 == 1) -> i32 {
-                    __qm_e_13 = ref.as_non_null(__vr_18_mv_2);
+                let __local_17_mv_0: i32;
+                let __local_17_mv_1: i32;
+                let __local_17_mv_2: ref null "core:serde//DeserializeError";
+                multivalue_bind [__local_17_mv_0, __local_17_mv_1, __local_17_mv_2] = "core:json/core:json/JsonDeserializer::parse_i32_direct"(self_39);
+                val = (if __local_17_mv_0 == 0 -> i32 {
+                    __local_17_mv_1;
+                } else if @unlikely(__local_17_mv_0 == 1) -> i32 {
+                    __qm_e_13 = ref.as_non_null(__local_17_mv_2);
                     cold_path;
                     return 1, ref.null none, __qm_e_13;
                 } else {
@@ -4936,10 +4936,10 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
                 });
                 "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(result, key, val);
             } else {
-                __local_15 = "core:json/core:json/JsonDeserializer::expect_char"(map.de, 125);
-                if @likely(ref.is_null(__local_15)) {
+                __local_18 = "core:json/core:json/JsonDeserializer::expect_char"(map.de, 125);
+                if @likely(ref.is_null(__local_18)) {
                 } else {
-                    __qm_e_10 = ref.as_non_null(__local_15);
+                    __qm_e_10 = ref.as_non_null(__local_18);
                     cold_path;
                     return 1, ref.null none, __qm_e_10;
                 }
@@ -5579,7 +5579,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     let __sroa___iter_5_index: i32;
     let v_80: i32;
     let f_86: ref "core:prelude/format.wado//Formatter";
-    let __sroa___vr_11_1: ref null "core:json//JsonSeqSerializer";
+    let __sroa___match_9_1: ref null "core:json//JsonSeqSerializer";
     new_used_20 = s.used + 1;
     if @unlikely(new_used_20 > builtin::array_len(s.repr)) {
         cold_path;
@@ -5588,8 +5588,8 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     start_21 = s.used;
     s.used = new_used_20;
     builtin::array_set_u8(s.repr, start_21, 91);
-    __sroa___vr_11_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___vr_11_1);
+    __sroa___match_9_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___match_9_1);
     end = self.used;
     __sroa___iter_5_repr = self.repr;
     __sroa___iter_5_index = 0;
