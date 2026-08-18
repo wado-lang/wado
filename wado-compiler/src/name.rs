@@ -2422,6 +2422,18 @@ impl FqTypeName {
         &self.head
     }
 
+    /// Whether a template's own binder appears anywhere in this name — as the
+    /// head, or inside a type argument at any depth.
+    ///
+    /// A binder stands for whatever the receiver supplies, so a name carrying
+    /// one constrains nothing: `impl<T> Slot<[i32, T]>` accepts every second
+    /// element. Asking the whole name rather than its head is the difference
+    /// between that and `impl Slot<[i32, Tag]>`, which accepts one.
+    #[must_use]
+    pub fn names_a_binder(&self) -> bool {
+        matches!(self.head, TypeHead::Binder(_)) || self.args.iter().any(Self::names_a_binder)
+    }
+
     /// The same head with its type arguments dropped — the base receiver a
     /// dispatch template is named after.
     #[must_use]

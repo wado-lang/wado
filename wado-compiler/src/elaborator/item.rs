@@ -1177,11 +1177,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         block.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
-        let impl_is_concrete = block.impl_is_concrete_instantiation(
-            &impl_block.ty,
-            &impl_block.type_params,
-            &block.current_module_source.clone(),
-        );
+        let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
 
         block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
@@ -2391,60 +2387,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Whether an impl type argument is a concrete (already-declared) type
-    /// rather than a free type parameter. `u8` / `MyStruct` are concrete; a
-    /// bare `T` is not — and neither is a name that, although it matches a
-    /// known type, was *declared as an impl type parameter* (e.g. the `i32`
-    /// in `impl<i32> Trait for Wrapper<i32>`, which shadows the primitive).
-    pub(super) fn is_concrete_type_arg(
-        &self,
-        arg: &ast::Type,
-        impl_params: &[ast::GenericParam],
-        impl_module: &ModuleSource,
-    ) -> bool {
-        match arg {
-            ast::Type::Named(named) => {
-                self.tysys.is_known_type_name_in(impl_module, &named.name)
-                    && !impl_params.iter().any(|p| p.name == named.name)
-            }
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .all(|a| self.is_concrete_type_arg(a, impl_params, impl_module)),
-            ast::Type::Tuple(elems) => elems
-                .iter()
-                .all(|e| self.is_concrete_type_arg(e, impl_params, impl_module)),
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                self.is_concrete_type_arg(inner, impl_params, impl_module)
-            }
-            _ => false,
-        }
-    }
-
     /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
     /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
     /// every argument is concrete. Its methods are per-instantiation functions
     /// named `List<u8>::method` and called directly. The tuple arm carries
     /// coherence Rule 1: the variadic template is skipped for that arity.
-    pub(super) fn impl_is_concrete_instantiation(
-        &self,
-        impl_ty: &ast::Type,
-        impl_type_params: &[ast::GenericParam],
-        impl_module: &ModuleSource,
-    ) -> bool {
+    ///
+    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and nothing
+    /// else. This decides how a method is *named* and
+    /// `inherent_impl_type_args_match` decides which receivers *reach* that
+    /// name, so a second answer here is two functions minting one name — the
+    /// hazard WEP 2026-08-12 §8 states. They had drifted: neither a
+    /// namespace-qualified argument nor a function type counted as concrete
+    /// here, so `impl Slot<ns::Tag>` was named as a template while its call
+    /// site named an instantiation, and the call reached WIR build unresolved.
+    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
         let inner = match impl_ty {
             ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
             other => other,
         };
         let args: &[ast::Type] = match inner {
             ast::Type::Generic(g) => &g.args,
+            ast::Type::NamespacedGeneric(ns) => &ns.args,
             ast::Type::Tuple(elems) => elems,
             _ => return false,
         };
         !args.is_empty()
             && args
                 .iter()
-                .all(|a| self.is_concrete_type_arg(a, impl_type_params, impl_module))
+                .all(|a| self.tysys.impl_arg_pins_a_position(a))
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully

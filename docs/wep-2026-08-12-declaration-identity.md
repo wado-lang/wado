@@ -591,6 +591,29 @@ depended on declarations no module involved could see. All three are gone.
   the spelling naming it — matching only `Type::Named` and `Type::Generic` let a
   namespace-qualified `ns::Tag` through as "names nothing, matches anything".
   `resolve::head_site` answers for all three (`impl_arg_ns_qualified`).
+
+  "Names no declaration" is not "matches anything" either, and a tuple, a
+  reference and a function type each name none: they are shapes, and a receiver
+  either has the shape or has not. Dropping them to the free case let such an
+  impl apply to every receiver, and the call reached WIR build as an unresolved
+  `Call` rather than a diagnostic (`impl_arg_shape_*_error`). Each renders
+  through the renderer that produces the receiver's side of the comparison — a
+  reference through its referent, since that is what `TypeNameInfo::Ref` hands
+  back; a tuple's elements through `written_type_arg`, whose `to_mangled` _is_
+  `mangle_type_arg_for_generic`, the form a tuple's elements are spelled in. Only
+  a binder is free, and `FqTypeName::names_a_binder` asks that of the whole name
+  rather than its head, so `impl<T> Slot<[i32, T]>` stays free where
+  `impl Slot<[i32, Tag]>` does not.
+
+  Which positions an impl argument pins is asked twice, and the second asking is
+  where §8's rule bites: `impl_is_concrete_instantiation` decides how the impl's
+  methods are *named*, and `inherent_impl_type_args_match` decides which
+  receivers reach that name. They had drifted — neither a namespace-qualified
+  argument nor a function type counted as concrete for naming — so a plain
+  `impl Cell<ns::Tag>` was named as a template while its call site named an
+  instantiation, and the call reached WIR build as an unresolved `Call`
+  (`impl_arg_concrete_ns`). There is now one predicate,
+  `TypeSystem::impl_arg_pins_a_position`, and the naming side calls it.
 - `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
   and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
   _first declaring module in build order_, with no ambiguity check at all. Every

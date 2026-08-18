@@ -1984,11 +1984,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
             let concrete_owner: Option<crate::name::FqTypeName> = if scope
-                .impl_is_concrete_instantiation(
-                    &impl_block.ty,
-                    &impl_block.type_params,
-                    &scope.current_module_source,
-                ) {
+                .impl_is_concrete_instantiation(&impl_block.ty) {
                 let tt = scope.tysys.type_table.borrow();
                 let peeled = tt.peel_refs(self_type);
                 matches!(
@@ -2017,11 +2013,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let provided_method_names: Vec<String> =
             impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
-        let impl_is_concrete = scope.impl_is_concrete_instantiation(
-            &impl_block.ty,
-            &impl_block.type_params,
-            &scope.current_module_source,
-        );
+        let impl_is_concrete = scope.impl_is_concrete_instantiation(&impl_block.ty);
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.

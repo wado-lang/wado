@@ -163,6 +163,17 @@ impl TypeSystem {
     /// and `crate::resolve::head_site` finds the site for a namespace-qualified
     /// `ns::Tag` as readily as for a bare name — matching on the spelling's
     /// *shape* is what let that one through unconstrained.
+    /// Whether `arg` pins its position — the receiver's argument must equal it —
+    /// rather than standing for whatever the receiver supplies.
+    ///
+    /// The same answer [`Self::concrete_arg_mangled`] gives, because it *is*
+    /// that answer: what makes a position concrete decides both how the impl's
+    /// methods are named and which receivers reach that name, and two functions
+    /// deciding it is two functions minting one name.
+    pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
+        self.concrete_arg_mangled(arg).is_some()
+    }
+
     fn concrete_arg_mangled(&self, arg: &Type) -> Option<String> {
         let head = crate::resolve::head_site(arg).and_then(|site| self.mangled_decl_name_at(site));
         match arg {
@@ -183,8 +194,40 @@ impl TypeSystem {
                     .map(|a| self.concrete_arg_mangled(a))
                     .collect::<Option<Vec<String>>>()?,
             )),
-            _ => None,
+            // A reference mangles as its referent — `TypeNameInfo::Ref` hands
+            // back the inner name — so `&Tag` constrains exactly as `Tag` does.
+            Type::Reference(inner) | Type::MutReference(inner) => self.concrete_arg_mangled(inner),
+            Type::Tuple(elems) if elems.is_empty() => {
+                Some(crate::tir::TypeTable::UNIT_TYPE_NAME.to_string())
+            }
+            Type::Tuple(elems) => Some(crate::name::mangle_tuple_type(&self.arg_form(elems)?)),
+            // The mangle carries the arity and the return type; the parameter
+            // types are not part of it on either side.
+            Type::Function(ft) => Some(crate::name::mangle_fn_type(
+                ft.params.len(),
+                &self.concrete_arg_mangled(&ft.return_type)?,
+            )),
+            // A pack, an `_`, a parse error: these name nothing and stand for
+            // whatever the receiver supplies.
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => None,
         }
+    }
+
+    /// A tuple's elements in the form the receiver's mangle spells them —
+    /// `mangle_type_arg_for_generic`, which is `FqTypeName::to_mangled`, and so
+    /// module-qualified where the top level is not.
+    ///
+    /// `None` if any element names a binder, at any depth: the tuple then
+    /// constrains nothing, the same answer the other arms reach by propagating
+    /// their own `None`.
+    fn arg_form(&self, elems: &[Type]) -> Option<Vec<String>> {
+        elems
+            .iter()
+            .map(|elem| {
+                let fq = super::trait_env::written_type_arg(elem, &self.resolutions);
+                (!fq.names_a_binder()).then(|| fq.to_mangled())
+            })
+            .collect()
     }
 
     /// The mangled spelling of the declaration the reference site `site` names,
@@ -858,11 +901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_type_param_ids: sig.own_type_param_ids(),
             method_own_params: sig.own_params.clone(),
             impl_module: Some(impl_ref.0.clone()),
-            from_concrete_impl: self.impl_is_concrete_instantiation(
-                &header.ty,
-                &header.type_params,
-                &impl_ref.0,
-            ),
+            from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
@@ -1828,11 +1867,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
         // directly (no monomorphization), living in the impl's module.
-        let impl_is_concrete = self.impl_is_concrete_instantiation(
-            &header.ty,
-            &header.type_params,
-            &impl_module_source,
-        );
+        let impl_is_concrete = self.impl_is_concrete_instantiation(&header.ty);
 
         // Save trait context for this impl block scope. We use an inherited
         // scope (saves the full ctx via clone) and then selectively clear

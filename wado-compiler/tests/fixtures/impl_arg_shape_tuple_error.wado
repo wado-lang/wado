@@ -1,0 +1,17 @@
+// `impl Slot<[i32, Tag]>` must not apply to a `Slot<i32>`.
+//
+// A tuple, a reference and a function type name no declaration, so the
+// argument's head reference site answers nothing — but "names no declaration"
+// is not "matches anything". Dropping these to the free case let every such
+// impl apply to every receiver, and the call reached WIR build as an
+// unresolved `Call` rather than a diagnostic.
+
+use { Slot } from "./sub/impl_arg_shapes_holder.wado";
+
+export fn run() {
+    let s = Slot { a: 7 };
+    let _ = s.tup();
+}
+
+__DATA__
+{"compile_error": "no method 'tup' found"}
