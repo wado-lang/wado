@@ -138,6 +138,8 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 
 `mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. A divergence re-runs the baseline, so a fixture that moves on its own is recorded as nondeterministic rather than charged to the guard. The mutation stages draw only on the calibrated corpus.
 
+`.github/workflows/emi.yml` runs the same stage nightly over `WADO_EMI_SHARD=k/n` shards, merging their reports into one job summary.
+
 ## Not yet implemented
 
 Missing optimizations, one entry per pass-shaped gap. Architectural work — compile speed, graph precision, the saturation end state — is tracked in [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md) instead.
