@@ -1,6 +1,5 @@
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
-
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
@@ -234,10 +233,13 @@ struct PatternLowerer<'a> {
     struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
+    /// Locals this lowerer bound to a scrutinee. Their `Let` goes through the
+    /// fold, so each already reads a place nothing can write.
+    owned_temps: IndexSet<u32>,
 }
 
-/// Whether `pattern` takes ownership of any part of the scrutinee — the only
-/// thing a temp's defensive copy protects.
+/// Whether `pattern` binds any part of the scrutinee by value. Such a binding
+/// aliases the place it reads, so it must read one nothing can write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     match pattern {
         TirPattern::Binding { type_id, .. } => {
@@ -294,6 +296,7 @@ impl<'a> PatternLowerer<'a> {
             variant_case_map,
             struct_fields_map,
             const_int_globals,
+            owned_temps: IndexSet::default(),
         }
     }
 
@@ -1557,52 +1560,22 @@ impl<'a> PatternLowerer<'a> {
                 ));
             }
             TirStmtKind::Expr(mut expr) => {
-                // Hoist a statement-position `Match` scrutinee into a temp,
-                // for either of two reasons. `labeled_block_fusion` keys on the
-                // `(Let, Match)` pair, and stops firing on an inline scrutinee.
-                // And the temp is where an owning arm binding's defensive copy
-                // lands — those bindings project out of it and take none of
-                // their own. Runs after `resource_cleanup`, so the temp does
-                // not perturb resource-flow analysis.
+                // Bind the scrutinee to a temp, for either of two reasons.
+                // `labeled_block_fusion` keys on the `(Let, Match)` pair and
+                // stops firing on an inline scrutinee. And an owning arm
+                // binding needs a scrutinee nothing can write. Runs after
+                // `resource_cleanup`, so the temp does not perturb
+                // resource-flow analysis.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,
                     ..
                 } = &mut expr.kind
                     && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
-                        || (self.scrutinee_is_mutable(scrutinee)
-                            && arms
-                                .iter()
-                                .any(|arm| binds_by_value(&arm.pattern, type_table))))
+                        || self.needs_owned_scrutinee(scrutinee, arms, type_table))
                 {
-                    let placeholder =
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
-                    let mut hoisted = std::mem::replace(&mut **scrutinee, placeholder);
-                    self.lower_expr(&mut hoisted, type_table);
-                    let scrutinee_type = hoisted.type_id;
-                    let scrutinee_span = hoisted.span;
-                    let temp = self.alloc_local(scrutinee_type);
-                    let temp_name = format!("__match_{temp}");
-                    out.push(TirStmt::new(
-                        TirStmtKind::Let {
-                            name: temp_name.clone(),
-                            local_index: temp,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id: scrutinee_type,
-                            value: hoisted,
-                            skip_value_copy: false,
-                        },
-                        stmt.span,
-                    ));
-                    **scrutinee = TirExpr::new(
-                        TirExprKind::Local {
-                            index: temp,
-                            name: temp_name,
-                        },
-                        scrutinee_type,
-                        scrutinee_span,
-                    );
+                    let temp_let = self.bind_scrutinee_to_temp(scrutinee, type_table, stmt.span);
+                    out.push(temp_let);
                 }
                 self.lower_expr(&mut expr, type_table);
                 out.push(TirStmt::new(TirStmtKind::Expr(expr), stmt.span));
@@ -1696,47 +1669,105 @@ impl<'a> PatternLowerer<'a> {
         ));
     }
 
-    /// Whether the storage a binding reads can still be written. An immutable
-    /// local is never reassigned and cannot lend a `&mut`, the same ground
-    /// `source_shares_immutable_storage` stands on.
-    fn scrutinee_is_mutable(&self, scrutinee: &TirExpr) -> bool {
-        let mut expr = scrutinee;
-        loop {
-            match &expr.kind {
-                TirExprKind::Local { index, .. } => {
-                    return self
-                        .locals
-                        .get(*index as usize)
-                        .is_none_or(|local| local.is_mut);
-                }
-                TirExprKind::FieldAccess { expr: inner, .. }
-                | TirExprKind::Unary {
-                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                    expr: inner,
-                } => expr = inner,
-                _ => return true,
+    /// Whether `match` over `scrutinee` must read a temp: an arm binding takes
+    /// ownership of a place that can still be written, so it would otherwise
+    /// alias one. The temp's `Let` then asks the fold for the copy.
+    fn needs_owned_scrutinee(
+        &self,
+        scrutinee: &TirExpr,
+        arms: &[TirMatchArm],
+        type_table: &TypeTable,
+    ) -> bool {
+        if let TirExprKind::Local { index, .. } = &scrutinee.kind
+            && self.owned_temps.contains(index)
+        {
+            return false;
+        }
+        self.place_is_writable(scrutinee, type_table)
+            && arms
+                .iter()
+                .any(|arm| binds_by_value(&arm.pattern, type_table))
+    }
+
+    /// Whether anything can write the place `expr` reads while a binding out of
+    /// it is live.
+    ///
+    /// A projection through a reference is writable whatever it is rooted at: an
+    /// immutable local still holds a `&mut`. A shape that is not a place at all
+    /// is a value nothing else holds, but says nothing about what a call hands
+    /// back — the fold decides that one, and elides the copy when it is fresh.
+    fn place_is_writable(&self, expr: &TirExpr, type_table: &TypeTable) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self
+                .locals
+                .get(*index as usize)
+                .is_none_or(|local| local.is_mut),
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+                expr: inner,
+            } => {
+                matches!(
+                    type_table.get(inner.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                ) || self.place_is_writable(inner, type_table)
             }
+            _ => true,
         }
     }
 
+    /// Move `scrutinee` into a temp local, leaving a read of that local in its
+    /// place. Returns the temp's `Let`, for the caller to put wherever its
+    /// position allows a statement.
+    fn bind_scrutinee_to_temp(
+        &mut self,
+        scrutinee: &mut TirExpr,
+        type_table: &TypeTable,
+        span: Span,
+    ) -> TirStmt {
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
+        let mut hoisted = std::mem::replace(scrutinee, placeholder);
+        self.lower_expr(&mut hoisted, type_table);
+        let type_id = hoisted.type_id;
+        let scrutinee_span = hoisted.span;
+        let temp = self.alloc_local(type_id);
+        let name = format!("__match_{temp}");
+        self.owned_temps.insert(temp);
+        *scrutinee = TirExpr::new(
+            TirExprKind::Local {
+                index: temp,
+                name: name.clone(),
+            },
+            type_id,
+            scrutinee_span,
+        );
+        TirStmt::new(
+            TirStmtKind::Let {
+                name,
+                local_index: temp,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value: hoisted,
+                skip_value_copy: false,
+            },
+            span,
+        )
+    }
+
     /// Bind what a compound pattern destructures to a temp its projections
-    /// read. The temp takes the destructure's only defensive copy: the
-    /// per-binding `Let`s share its storage rather than copy again.
+    /// read. The fold decides the temp's copy, and the per-binding `Let`s then
+    /// share the temp's storage rather than ask a second time.
     fn emit_pattern_temp_let(
         &mut self,
-        pattern: &TirPattern,
         value: TirExpr,
         span: Span,
-        type_table: &TypeTable,
         out: &mut Vec<TirStmt>,
     ) -> (u32, String) {
         let local_index = self.alloc_local(value.type_id);
         let name = self.next_temp_name();
         let type_id = value.type_id;
-        // The `match` hoist's question: an owning binding out of storage that
-        // can still be written. `let { x, y } = &p` binds references, and a
-        // nested temp projects out of a temp that already copied.
-        let needs_copy = binds_by_value(pattern, type_table) && self.scrutinee_is_mutable(&value);
+        self.owned_temps.insert(local_index);
         out.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),
@@ -1745,7 +1776,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id,
                 value,
-                skip_value_copy: !needs_copy,
+                skip_value_copy: false,
             },
             span,
         ));
@@ -1788,7 +1819,7 @@ impl<'a> PatternLowerer<'a> {
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
                 let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // Get element types
                 let elem_types = type_table
@@ -1837,7 +1868,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 let (variant_temp_index, variant_temp_name) =
-                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // If there are bindings, extract payload
                 if let Some(binding) = bindings.first() {
@@ -1870,7 +1901,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Struct { fields, .. } => {
                 let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // Get field type info from struct definition
                 let struct_fields_info = self.get_struct_fields(
@@ -1950,7 +1981,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse
                 let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
+                    self.emit_pattern_temp_let(value, span, out);
 
                 let elem_types = type_table
                     .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
@@ -2000,7 +2031,7 @@ impl<'a> PatternLowerer<'a> {
                         && matches!(binding, TirPattern::Wildcard))
                 {
                     let (variant_temp_index, variant_temp_name) =
-                        self.emit_pattern_temp_let(pattern, value, span, type_table, out);
+                        self.emit_pattern_temp_let(value, span, out);
 
                     let payload_expr = TirExpr::new(
                         TirExprKind::VariantPayload {
@@ -2032,7 +2063,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Struct { fields, .. } => {
                 // Nested struct - allocate temp and recurse
                 let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(pattern, value, span, type_table, out);
+                    self.emit_pattern_temp_let(value, span, out);
 
                 let struct_fields_info = self.get_struct_fields(
                     type_table.get_local_type(struct_temp_index, &self.locals),
@@ -2093,6 +2124,10 @@ impl<'a> PatternLowerer<'a> {
     }
     /// Lower expressions (recurse into sub-expressions)
     fn lower_expr(&mut self, expr: &mut TirExpr, type_table: &TypeTable) {
+        let span = expr.span;
+        // A `Match` in expression position has no statement slot for the temp
+        // its owning arm bindings need, so it grows a block to hold one.
+        let mut scrutinee_temp: Option<TirStmt> = None;
         match &mut expr.kind {
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
                 self.lower_block(block, type_table);
@@ -2112,8 +2147,11 @@ impl<'a> PatternLowerer<'a> {
                 expr: scrutinee,
                 arms,
             } => {
-                // First, recursively lower sub-expressions
-                self.lower_expr(scrutinee, type_table);
+                if self.needs_owned_scrutinee(scrutinee, arms, type_table) {
+                    scrutinee_temp = Some(self.bind_scrutinee_to_temp(scrutinee, type_table, span));
+                } else {
+                    self.lower_expr(scrutinee, type_table);
+                }
                 for arm in arms.iter_mut() {
                     if let Some(guard) = &mut arm.guard {
                         self.lower_expr(guard, type_table);
@@ -2393,6 +2431,19 @@ impl<'a> PatternLowerer<'a> {
                     "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
                 )
             }
+        }
+        if let Some(temp_let) = scrutinee_temp {
+            let matched =
+                std::mem::replace(expr, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
+            let type_id = matched.type_id;
+            *expr = TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![temp_let, TirStmt::new(TirStmtKind::Expr(matched), span)],
+                    span,
+                )),
+                type_id,
+                span,
+            );
         }
     }
 }

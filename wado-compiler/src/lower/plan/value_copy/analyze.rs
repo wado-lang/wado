@@ -107,16 +107,6 @@ impl TirRefVisitor for SeedWalker<'_> {
                     ),
                 );
             }
-            // Lowering hoists a statement-position `Match` scrutinee into a
-            // temp that takes the copy. Nothing here sees it, so seed its type.
-            TirStmtKind::Expr(expr) => {
-                if let TirExprKind::Match {
-                    expr: scrutinee, ..
-                } = &expr.kind
-                {
-                    self.record_if_wrap(scrutinee);
-                }
-            }
             _ => {}
         }
         self.walk_stmt(stmt);
@@ -125,6 +115,11 @@ impl TirRefVisitor for SeedWalker<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         self.record_array_clone_element(expr);
         match &expr.kind {
+            // Lowering binds a `Match` scrutinee to a temp that takes the copy,
+            // in any position. Nothing here sees it, so seed its type.
+            TirExprKind::Match {
+                expr: scrutinee, ..
+            } => self.record_if_wrap(scrutinee),
             TirExprKind::Call { args, .. } => {
                 // Every by-value argument is copied — value semantics: passing
                 // a value to a function deep-copies it. `should_wrap` already

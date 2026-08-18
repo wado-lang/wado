@@ -1,6 +1,11 @@
-// A destructure reads its scrutinee through a temp, and that temp is where the
-// copy lands — the per-binding `Let`s share its storage. Skip it and every
-// binding aliases the source.
+// A binding that takes ownership aliases the place it reads, so that place must
+// be one nothing can write. Lowering answers by binding the scrutinee to a temp
+// and letting the fold decide its copy — in every syntactic position, since the
+// binding's safety cannot depend on where its `match` was written.
+//
+// The matrix: {let destructure, statement match, expression match, if let,
+// while let} x {mut local, field of a mut local, through a `&mut`, immutable}
+// x {owning binding, reference binding}.
 
 struct S {
     items: List<i32>,
@@ -15,14 +20,42 @@ variant V {
     B,
 }
 
-test "a let-destructure binding does not alias its source" {
+fn make() -> S {
+    return S { items: [1] };
+}
+
+test "a let-destructure binding does not alias a mut local" {
     let mut src = S { items: [1] };
     let S { items } = src;
     src.items.push(2);
     assert items.len() == 1;
 }
 
-test "a match-arm binding does not alias its scrutinee" {
+test "a let-destructure binding does not alias through a &mut" {
+    let mut src = S { items: [1] };
+    let r = &mut src;
+    let S { items } = *r;
+    r.items.push(2);
+    assert items.len() == 1;
+}
+
+test "a plain let does not alias through a shared &" {
+    let mut src = S { items: [1] };
+    let r = &src;
+    let taken = r.items;
+    src.items.push(2);
+    assert taken.len() == 1;
+}
+
+test "a plain let does not alias through a &mut" {
+    let mut src = S { items: [1] };
+    let r = &mut src;
+    let taken = r.items;
+    r.items.push(2);
+    assert taken.len() == 1;
+}
+
+test "a statement-match binding does not alias a field of a mut local" {
     let mut h = Holder { s: S { items: [1] } };
     match h.s {
         S { items } => {
@@ -32,7 +65,7 @@ test "a match-arm binding does not alias its scrutinee" {
     }
 }
 
-test "a match-arm binding does not alias a local scrutinee" {
+test "a statement-match binding does not alias a mut local" {
     let mut s = S { items: [1] };
     match s {
         S { items } => {
@@ -42,7 +75,30 @@ test "a match-arm binding does not alias a local scrutinee" {
     }
 }
 
-test "a variant payload binding does not alias a local scrutinee" {
+test "an expression-match binding does not alias a mut local" {
+    let mut s = S { items: [1] };
+    let n = match s {
+        S { items } => {
+            s.items.push(2);
+            items.len()
+        }
+    };
+    assert n == 1;
+}
+
+test "an expression-match binding does not alias through a &mut" {
+    let mut src = S { items: [1] };
+    let r = &mut src;
+    let n = match *r {
+        S { items } => {
+            r.items.push(2);
+            items.len()
+        }
+    };
+    assert n == 1;
+}
+
+test "a variant payload binding does not alias a mut local" {
     let mut v = V::A([1]);
     match v {
         V::A(xs) => {
@@ -53,10 +109,56 @@ test "a variant payload binding does not alias a local scrutinee" {
     }
 }
 
-test "a tuple destructure binding does not alias its source" {
+test "an if-let binding does not alias a mut local" {
+    let mut v = V::A([1]);
+    if let V::A(xs) = v {
+        v = V::A([9, 9]);
+        assert xs.len() == 1;
+    }
+}
+
+test "a while-let binding does not alias a mut local" {
+    let mut v = V::A([1]);
+    let mut rounds = 0;
+    while let V::A(xs) = v {
+        v = V::B;
+        assert xs.len() == 1;
+        rounds = rounds + 1;
+    }
+    assert rounds == 1;
+}
+
+test "a tuple destructure binding does not alias a mut local" {
     let mut src: [i32, List<i32>] = [1, [2]];
     let [a, rest] = src;
     src.1.push(9);
     assert a == 1;
     assert rest.len() == 1;
+}
+
+test "a binding out of an immutable local reads the same values" {
+    let src = S { items: [1, 2] };
+    match src {
+        S { items } => {
+            assert items.len() == 2;
+        }
+    }
+    assert src.items.len() == 2;
+}
+
+test "a binding out of a call result reads the same values" {
+    match make() {
+        S { items } => {
+            assert items.len() == 1;
+        }
+    }
+}
+
+test "a reference binding still sees writes through the scrutinee" {
+    let s = S { items: [1] };
+    match &s {
+        S { items } => {
+            assert items.len() == 1;
+        }
+    }
 }
