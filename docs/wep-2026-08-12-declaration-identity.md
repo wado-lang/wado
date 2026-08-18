@@ -627,13 +627,35 @@ depended on declarations no module involved could see. All three are gone.
   `TypeSystem::impl_arg_pins_a_position`, over one reading of the target,
   `impl_target_args`.
 
-  One renderer, likewise. The comparison spelled its two sides with
-  `mangle_type_name` at the top level and `FqTypeName::to_mangled` inside a
-  tuple, and the first drops a reference — `TypeNameInfo::Ref` hands back the
-  inner name. So `impl Slot<&Tag>` accepted a by-value `Slot<Tag>` that
-  `impl Slot<[i32, &Tag]>` correctly rejected (`impl_arg_shape_ref_by_value`).
-  Every level now renders in the type-argument form, which is the form the
-  receiver side is read in.
+  No renderer at all, in the end. Whether a receiver reaches an impl was decided
+  by rendering both sides and comparing the strings, and that is this design's
+  own §8 hazard: the header side is an AST, the receiver side a `TypeId`, so a
+  comparison by name needs two renderers to agree on every shape at every depth.
+  Each way they disagreed was a defect — a top level spelled with
+  `mangle_type_name`, which drops a reference, beside tuple elements spelled
+  with `to_mangled`, which keeps it, so `impl Slot<&Tag>` accepted a by-value
+  `Slot<Tag>` that `impl Slot<[i32, &Tag]>` rejected; a `&mut` written without
+  the separator its counterpart carries; a function type whose mangled head
+  spells arity and return type and so could not tell `fn(i32) -> i32` from
+  `fn(String) -> i32`.
+
+  `inherent_impl_type_args_match` compares structure instead. Two declarations
+  are compared as declarations through `TypeHead` — which is `DefId` equality
+  where a declaration names one, and the rendering where nothing declares the
+  shape, so `i32` and `()` compare correctly without being nominal types. Every
+  other shape is compared as the shape it is: a reference to a reference of the
+  same kind, a tuple to a tuple of the same arity, a function type through its
+  parameters as well as its return. Nothing is spelled, so nothing can be
+  spelled two ways, and the function-type blind spot closes without touching
+  what the closure system spells (`impl_arg_shape_fn_params`).
+
+  A binder is a wildcard where it stands and nowhere else:
+  `impl<T> Slot<[i32, T]>` still requires a two-element tuple whose first
+  element is `i32`. Where the header cannot bind it at all — a binder nested in
+  a shape, which `bind_target_param` does not reach — the impl matches nothing,
+  because a receiver it matched would have nothing to instantiate it with. That
+  is asked of the binder's reference site, not its spelling; a name-based test
+  reads the `ns::Tag` of `impl<Tag> Slot<ns::Tag, Tag>` as the binder.
 - `find_struct_module_source(name)` fell through to `struct_like_decl_modules`
   and `newtype_decl_modules` — two name-keyed program-wide indexes — and took the
   _first declaring module in build order_, with no ambiguity check at all. Every

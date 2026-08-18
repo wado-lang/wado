@@ -8,7 +8,7 @@
 // These calls are what proves they agree: each reached WIR build as an
 // unresolved `Call` when they did not.
 
-use { Slot } from "./sub/impl_arg_shapes_holder.wado";
+use { Slot, MSlot } from "./sub/impl_arg_shapes_holder.wado";
 use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";
 
 fn double(n: i32) -> i32 {
@@ -31,3 +31,10 @@ test "a function-type impl argument applies to its own shape" {
     assert s.func() == 3;
     assert (s.a)(4) == 8;
 }
+
+test "a mut reference impl argument applies to a mut reference receiver" {
+    let mut t = Tag { n: 3 };
+    let s = MSlot { a: &mut t };
+    assert s.refm() == 4;
+}
+

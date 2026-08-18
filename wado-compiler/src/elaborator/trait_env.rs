@@ -1259,7 +1259,11 @@ impl TraitEnv {
         );
 
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
-        violations.extend(check_inherent_impl_collisions(defs, &impl_headers));
+        violations.extend(check_inherent_impl_collisions(
+            defs,
+            &impl_headers,
+            resolutions,
+        ));
 
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
@@ -2253,6 +2257,7 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
 fn check_inherent_impl_collisions(
     defs: &crate::defs::DefTable,
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    resolutions: &crate::resolve::Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
         IndexMap::default();
@@ -2274,6 +2279,37 @@ fn check_inherent_impl_collisions(
     }
 
     let mut violations = Vec::new();
+
+    // Two instantiations of one target whose arguments *render* alike are one
+    // definition downstream: the methods are named per-instantiation, and the
+    // name is built from the rendering. A function type is the case that
+    // reaches here — `Fn<arity, return>` is its whole spelling, so
+    // `impl FSlot<fn(i32) -> i32>` and `impl FSlot<fn(String) -> i32>` mint one
+    // name for two bodies. Monomorphization asserts that pair away as a
+    // duplicate function; saying so here names both impls instead.
+    let mut rendered_instantiations: IndexMap<(&ImplTargetKey, String, &str), ()> =
+        IndexMap::default();
+    for header in &instantiations {
+        let rendered = written_type_args(&header.ty, resolutions)
+            .iter()
+            .map(name::FqTypeName::to_mangled)
+            .collect::<Vec<_>>()
+            .join(",");
+        for method in &header.methods {
+            let key = (&header.target, rendered.clone(), method.name.as_str());
+            if rendered_instantiations.insert(key, ()).is_some() {
+                violations.push((
+                    header.module.clone(),
+                    TypeError::DuplicateInherentMethod {
+                        self_type_name: header.target.display_name(defs).to_string(),
+                        method_name: method.name.clone(),
+                        span: method.span,
+                    },
+                ));
+            }
+        }
+    }
+
     for header in instantiations {
         let Some(generic_methods) = generic_methods_by_target.get(&header.target) else {
             continue;
@@ -2452,6 +2488,13 @@ pub(super) fn written_type_arg(
             name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
+        // A function type is spelled by the closure system's own head — arity
+        // and return type, the identity `TypeTable::fq_type_name` gives the
+        // resolved form. Parameter types are not part of it on either side.
+        ast::Type::Function(ft) => name::FqTypeName::builtin(&name::mangle_fn_type(
+            ft.params.len(),
+            &written_type_arg(&ft.return_type, resolutions).to_mangled(),
+        )),
         _ => {
             let head = match crate::resolve::head_site(ty).map(|site| resolutions.get(site)) {
                 Some(crate::resolve::Resolution::Def(def)) => {

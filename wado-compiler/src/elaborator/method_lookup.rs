@@ -154,125 +154,217 @@ impl TypeSystem {
             return true;
         };
         for (i, arg) in written.iter().enumerate() {
-            // A concrete arg (recursing into nested generics) must equal the
-            // receiver's arg; one naming no declaration matches anything.
-            if let Some(expected) = self.concrete_arg_mangled(arg) {
-                let Some(&recv) = args.get(i) else {
-                    return false;
-                };
-                if self.type_table.borrow().mangle_type_arg_for_generic(recv) != expected {
-                    return false;
-                }
+            let Some(&recv) = args.get(i) else {
+                return false;
+            };
+            // `bind_target_param` binds a target parameter from a bare
+            // argument and reaches nothing deeper, so `impl<T> Nest<[i32, T]>`
+            // gives `T` no slot: a receiver it matched would have nothing to
+            // instantiate it with and would reach WIR build unresolved.
+            // Declining makes that a diagnostic. A pack is not this — `[..T]`
+            // binds through the variadic path — and the question is asked of
+            // the site, so a namespaced `ns::Tag` is not mistaken for a binder
+            // that happens to be spelled `Tag`.
+            if self.nests_a_binder(arg) {
+                return false;
+            }
+            if !self.arg_matches(arg, recv) {
+                return false;
             }
         }
         true
     }
 
+    /// Whether the receiver's argument `recv` is what the header wrote at this
+    /// position, with the header's own type parameters standing for anything.
+    ///
+    /// A match, not an equality, and structural rather than rendered. Two
+    /// declarations are compared as declarations (WEP 2026-08-12 §4); every
+    /// other shape is compared as the shape it is, so a reference matches a
+    /// reference of the same kind and a tuple matches a tuple of the same
+    /// arity. Nothing is spelled.
+    ///
+    /// Spelling it was the mistake this replaces. The header side is an AST and
+    /// the receiver side a `TypeId`, so a comparison by name needs two
+    /// renderers to agree on every shape at every depth, and each way they
+    /// disagreed was a bug: `&mut` written without the separator its counterpart
+    /// carries, a tuple's elements spelled in a different form than the tuple
+    /// around them, `&Tag` and `Tag` rendering alike because the top-level
+    /// renderer drops a reference. Structure has no spelling to get wrong.
+    ///
+    /// A binder matches anything, but only where it stands: `impl<T> Slot<[i32, T]>`
+    /// still requires a two-element tuple whose first element is `i32`.
+    fn arg_matches(&self, written: &Type, recv: TypeId) -> bool {
+        use crate::tir::ResolvedType;
+        let tt = self.type_table.borrow();
+        let resolved = tt.get(recv).clone();
+        drop(tt);
+        match written {
+            Type::Reference(inner) => match resolved {
+                ResolvedType::Ref(target) => self.arg_matches(inner, target),
+                _ => false,
+            },
+            Type::MutReference(inner) => match resolved {
+                ResolvedType::MutRef(target) => self.arg_matches(inner, target),
+                _ => false,
+            },
+            Type::Tuple(elems) if elems.is_empty() => matches!(resolved, ResolvedType::Unit),
+            Type::Tuple(elems) => {
+                let tt = self.type_table.borrow();
+                let is_tuple = matches!(
+                    tt.fq_base_type_name(recv).head(),
+                    crate::name::TypeHead::Tuple
+                );
+                let recv_elems = tt.generic_type_args(recv).unwrap_or_default();
+                drop(tt);
+                is_tuple
+                    && recv_elems.len() == elems.len()
+                    && elems
+                        .iter()
+                        .zip(recv_elems)
+                        .all(|(e, r)| self.arg_matches(e, r))
+            }
+            // Parameters are part of the shape even though the mangled `Fn`
+            // head spells only arity and return type, so comparing structure
+            // separates `fn(i32) -> i32` from `fn(String) -> i32`.
+            Type::Function(ft) => match resolved {
+                ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } => {
+                    params.len() == ft.params.len()
+                        && self.arg_matches(&ft.return_type, return_type)
+                        && ft
+                            .params
+                            .iter()
+                            .zip(params)
+                            .all(|(p, r)| self.arg_matches(p, r))
+                }
+                _ => false,
+            },
+            // A pack, an `_`, a parse error: nothing written to match against.
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => true,
+            // A written head: a binder matches anything, a declaration matches
+            // its own, and the arguments recurse.
+            _ => {
+                let Some(def) = crate::resolve::head_site(written)
+                    .and_then(|site| self.resolutions.declared_if_walked(site))
+                else {
+                    // A binder, or a name reaching nothing: no one type to
+                    // require, so it accepts whatever the receiver supplies.
+                    return true;
+                };
+                let tt = self.type_table.borrow();
+                // `TypeHead` is the comparison this design provides: `Declared`
+                // compares by `DefId`, and a shape no module declares — `i32`,
+                // `()`, the raw `Array` — by the rendering that is all it has.
+                // Asking `nominal_def` instead answers `None` for every one of
+                // those, because a primitive is not a nominal type even though
+                // `i32` is a declaration.
+                let written_head = crate::name::FqTypeName::of_head(self.resolutions.defs(), def);
+                if *written_head.head() != *tt.fq_base_type_name(recv).head() {
+                    return false;
+                }
+                let recv_args = tt.generic_type_args(recv).unwrap_or_default();
+                drop(tt);
+                let written_args = match written {
+                    Type::Generic(g) => g.args.as_slice(),
+                    Type::NamespacedGeneric(ns) => ns.args.as_slice(),
+                    _ => &[],
+                };
+                // A head written bare (`impl Slot<Box>`) constrains the head
+                // alone; the receiver's own arguments are not its business.
+                written_args.is_empty()
+                    || (written_args.len() == recv_args.len()
+                        && written_args
+                            .iter()
+                            .zip(recv_args)
+                            .all(|(w, r)| self.arg_matches(w, r)))
+            }
+        }
+    }
+
     /// Whether `arg` pins its position — the receiver's argument must equal it —
     /// rather than standing for whatever the receiver supplies.
     ///
-    /// The same answer [`Self::concrete_arg_mangled`] gives, because it *is*
-    /// that answer: what makes a position concrete decides both how the impl's
-    /// methods are named and which receivers reach that name, and two functions
-    /// deciding it is two functions minting one name.
+    /// [`Self::arg_pins`], which is also what decides whether the impl's
+    /// methods are named per-instantiation. Which positions an impl fixes
+    /// decides both, and two functions deciding it is two functions minting one
+    /// name.
     pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
-        self.concrete_arg_mangled(arg).is_some()
+        self.arg_pins(arg)
     }
 
-    /// The mangled type name a concrete impl argument must equal in the
-    /// receiver (`u8` → `"u8"`, `Box<u8>` → `"Box<u8>"`), or `None` when the
-    /// argument names no declaration — a type parameter, or a name that reaches
-    /// nothing — and so must match any receiver argument. Recurses so nested
-    /// generic args (`List<Box<u8>>`) are constrained, not silently accepted.
+    /// Whether a binder appears *inside* `arg` rather than as `arg` itself —
+    /// the position the header can bind.
     ///
-    /// The header wrote these arguments, so each has a reference site the
-    /// resolve pass answered for, whatever it is spelled like. Nothing here
-    /// re-resolves the spelling: the argument of an `impl Holder<Tag>` reaches
-    /// the `Tag` this module imported even when another module declares one too,
-    /// and `crate::resolve::head_site` finds the site for a namespace-qualified
-    /// `ns::Tag` as readily as for a bare name — matching on the spelling's
-    /// *shape* is what let that one through unconstrained.
+    /// Asked of each head's reference site, never of its spelling: a
+    /// namespace-qualified `ns::Tag` beside an `impl<Tag>` binder is a
+    /// declaration, and a name-based test reads it as the binder.
+    fn nests_a_binder(&self, arg: &Type) -> bool {
+        fn walk(this: &TypeSystem, ty: &Type, inside: bool) -> bool {
+            let is_binder = crate::resolve::head_site(ty).is_some_and(|site| {
+                matches!(
+                    this.resolutions.walked(site),
+                    Some(crate::resolve::Resolution::Binder(_))
+                )
+            });
+            if inside && is_binder {
+                return true;
+            }
+            let nested = |args: &[Type]| args.iter().any(|a| walk(this, a, true));
+            match ty {
+                Type::Reference(inner) | Type::MutReference(inner) => walk(this, inner, true),
+                // `[..T]` is the variadic form, bound by its own path.
+                Type::Tuple(elems)
+                    if elems.iter().any(|e| matches!(e, Type::TypePackSpread(..))) =>
+                {
+                    false
+                }
+                Type::Tuple(elems) => nested(elems),
+                Type::Function(ft) => nested(&ft.params) || walk(this, &ft.return_type, true),
+                Type::Generic(g) => nested(&g.args),
+                Type::NamespacedGeneric(ns) => nested(&ns.args),
+                _ => false,
+            }
+        }
+        walk(self, arg, false)
+    }
+
+    /// Whether every head inside `arg` names a declaration, so the argument
+    /// stands for one type rather than for whatever the receiver supplies.
     ///
-    /// Every level renders in the *type-argument* form —
-    /// `TypeTable::mangle_type_arg_for_generic`, which is
-    /// `FqTypeName::to_mangled` — because that is the one the receiver side is
-    /// read in. `mangle_type_name` drops a reference (`TypeNameInfo::Ref` hands
-    /// back the inner name), so spelling the top level with it and a tuple's
-    /// elements with the other made `impl Slot<&Tag>` accept a by-value
-    /// `Slot<Tag>` that `impl Slot<[i32, &Tag]>` correctly rejected.
-    fn concrete_arg_mangled(&self, arg: &Type) -> Option<String> {
-        let head = crate::resolve::head_site(arg).and_then(|site| self.mangled_decl_name_at(site));
+    /// Rendering cannot answer this. `written_type_arg` spells a head that
+    /// reached nothing as a bare `Builtin`, which is right for a mangle — the
+    /// spelling is all such a head has — and wrong here, where it would read as
+    /// a pin: a prelude `impl<T> Array<T>` whose binder the walk answered for
+    /// would stop registering its own type parameter. So the site decides, as
+    /// it does everywhere else in this design, and the renderer only renders.
+    fn arg_pins(&self, arg: &Type) -> bool {
+        let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a));
         match arg {
-            Type::Named(_) => head,
-            // A head naming no declaration is a binder, and a binder head keeps
-            // its own spelling: `impl<T> Foo<T<i32>>` constrains on `T<i32>`.
-            Type::Generic(g) => Some(crate::name::mangle_generic_name(
-                &head.unwrap_or_else(|| g.name.clone()),
-                &g.args
-                    .iter()
-                    .map(|a| self.concrete_arg_mangled(a))
-                    .collect::<Option<Vec<String>>>()?,
-            )),
-            Type::NamespacedGeneric(ns) => Some(crate::name::mangle_generic_name(
-                &head?,
-                &ns.args
-                    .iter()
-                    .map(|a| self.concrete_arg_mangled(a))
-                    .collect::<Option<Vec<String>>>()?,
-            )),
-            // A reference is part of the identity here: `&Tag` and `Tag` are two
-            // receivers, and the type-argument form spells the difference.
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                let kind = crate::name::RefKind::from_ast(arg)?;
-                Some(format!(
-                    "{}{}",
-                    kind.prefix(),
-                    self.concrete_arg_mangled(inner)?
-                ))
-            }
-            Type::Tuple(elems) if elems.is_empty() => {
-                Some(crate::tir::TypeTable::UNIT_TYPE_NAME.to_string())
-            }
-            Type::Tuple(elems) => Some(crate::name::mangle_tuple_type(
-                &elems
-                    .iter()
-                    .map(|e| self.concrete_arg_mangled(e))
-                    .collect::<Option<Vec<String>>>()?,
-            )),
-            // The mangle carries the arity and the return type; the parameter
-            // types are not part of it on either side.
-            Type::Function(ft) => Some(crate::name::mangle_fn_type(
-                ft.params.len(),
-                &self.concrete_arg_mangled(&ft.return_type)?,
-            )),
-            // A pack, an `_`, a parse error: these name nothing and stand for
-            // whatever the receiver supplies.
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => None,
+            // A reference pins what it refers to; the kind is structural.
+            Type::Reference(inner) | Type::MutReference(inner) => self.arg_pins(inner),
+            // `[]` is the unit type and pins by itself.
+            Type::Tuple(elems) => nested_pin(elems),
+            // `Fn<arity, return>` is the whole of a function type's identity
+            // here, so only the return type has a head to name.
+            Type::Function(ft) => self.arg_pins(&ft.return_type),
+            Type::Generic(g) => self.head_is_declared(arg) && nested_pin(&g.args),
+            Type::NamespacedGeneric(ns) => self.head_is_declared(arg) && nested_pin(&ns.args),
+            Type::Named(_) => self.head_is_declared(arg),
+            // A pack, an `_`, a parse error: nothing to name.
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
         }
     }
 
-    /// The mangled spelling of the declaration the reference site `site` names,
-    /// in the form the receiver side of the comparison carries. `None` for a
-    /// binder, for a name that reaches nothing, and for a node no walk saw.
-    ///
-    /// The header's own type parameters need no separate check: a binder shadows
-    /// every declaration of its name, so the walk answers
-    /// [`crate::resolve::Resolution::Binder`] for one and this hands back `None`.
-    /// Comparing the resolved declaration's name against them instead answered
-    /// "binder" for an alias whose target happens to be spelled like one, and
-    /// dropped a constraint the header wrote.
-    fn mangled_decl_name_at(&self, site: crate::ast::AstId) -> Option<String> {
-        let def = self.resolutions.declared_if_walked(site)?;
-        let defs = self.resolutions.defs();
-        {
-            let tt = self.type_table.borrow();
-            if let Some(id) = tt.type_of_symbol(&defs.ast_id(def)) {
-                return Some(tt.mangle_type_arg_for_generic(id));
-            }
-        }
-        // `of_head`, not `declared`: a builtin shape is spelled bare wherever a
-        // mangler puts it.
-        Some(crate::name::FqTypeName::of_head(defs, def).into_string())
+    /// Whether this type's head reaches a declaration. A binder and a name that
+    /// reaches nothing both answer `false` — neither is one type.
+    fn head_is_declared(&self, ty: &Type) -> bool {
+        crate::resolve::head_site(ty)
+            .and_then(|site| self.resolutions.declared_if_walked(site))
+            .is_some()
     }
 }
 
