@@ -674,17 +674,12 @@ struct Results {
     findings: Vec<Finding>,
 }
 
-/// Calibrate the fixture corpus: keep the fixtures an empty guard leaves alone.
-///
-/// `#[ignore]`d because it compiles and runs the whole corpus several times
-/// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
 /// Silences the panic hook for as long as it is alive.
 ///
 /// The campaign's workers are meant to panic: a mutant that crashes the
 /// compiler is a finding, and [`evaluate`] catches it, so the default hook
-/// would print a backtrace for every one. Restoring on drop is what keeps a
-/// panic that escapes a worker — an unreadable fixture, a bad offset — from
-/// leaving the rest of the test binary silent.
+/// would print a backtrace for every one. Restoring the hook is what keeps a
+/// panic raised outside a worker reportable at all.
 struct SilencedPanics(Option<Box<dyn Fn(&std::panic::PanicHookInfo<'_>) + Sync + Send + 'static>>);
 
 impl SilencedPanics {
@@ -703,6 +698,10 @@ impl Drop for SilencedPanics {
     }
 }
 
+/// Calibrate the fixture corpus: keep the fixtures an empty guard leaves alone.
+///
+/// `#[ignore]`d because it compiles and runs the whole corpus several times
+/// over; run it on demand with `cargo test --test emi -- --ignored --nocapture`.
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the full corpus"]
 fn calibrate_corpus() {
@@ -751,6 +750,10 @@ fn calibrate_corpus() {
             });
         }
     });
+
+    // Restore the hook before the verdict: an assertion raised under the
+    // workers' silence aborts the process instead of failing the test.
+    drop(_silenced);
 
     let mut results = results.into_inner().expect("results lock");
     results.eligible.sort_by(|a, b| a.name.cmp(&b.name));
