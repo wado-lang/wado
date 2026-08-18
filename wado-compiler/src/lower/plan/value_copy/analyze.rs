@@ -11,8 +11,8 @@ use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -531,19 +531,26 @@ fn scan_expr_for_breaks(
 }
 
 /// An immutable destination binding can alias an immutable-rooted
-/// source without a defensive copy. Mirrors
-/// `wir_build::value_copy::is_source_immutable`.
+/// source without a defensive copy.
 ///
 /// Immutability of the *binding* is not immutability of the storage, so the
 /// caller also checks the root against
 /// [`super::last_use::compute_moved_roots`].
-pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> bool {
-    source_root(expr).is_some_and(|r| immutable_locals.contains(&r))
+pub fn is_source_immutable(
+    expr: &TirExpr,
+    immutable_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+) -> bool {
+    source_root(expr, type_table).is_some_and(|r| immutable_locals.contains(&r))
 }
 
 /// The local an immutable-source chain is rooted at, or `None` for a shape
 /// [`is_source_immutable`] does not accept.
-pub fn source_root(expr: &TirExpr) -> Option<u32> {
+///
+/// A projection through a reference stops the walk: the root local's
+/// immutability binds the reference, not the storage behind it, which the owner
+/// or any `&mut` to the same place can still write.
+pub fn source_root(expr: &TirExpr, type_table: &TypeTable) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }
@@ -551,7 +558,15 @@ pub fn source_root(expr: &TirExpr) -> Option<u32> {
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
-        } => source_root(inner),
+        } => {
+            if matches!(
+                type_table.get(inner.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ) {
+                return None;
+            }
+            source_root(inner, type_table)
+        }
         _ => None,
     }
 }
