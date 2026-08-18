@@ -493,6 +493,7 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 42 as f64
 'A' as i32              // char -> i32: 65
 // 65 as char           // compile error: use char::from_u32()
+// slice as List<u8>    // compile error: use slice.to_list() / list.as_slice()
 
 // Range: exclusive and inclusive
 ..<  ..=

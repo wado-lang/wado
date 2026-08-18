@@ -1,0 +1,26 @@
+// Two variants share no representation, so `as` between them is rejected the
+// same way it is between structs.
+
+use { println, Stdout } from "core:cli";
+
+variant Src {
+    Payload(i32),
+    Empty,
+}
+
+variant Dst {
+    Text(String),
+    Empty,
+}
+
+export fn run() with Stdout {
+    let n = 1;
+    let src = Src::Payload(n);
+    let dst = src as Dst;
+    if let Dst::Text(s) = dst {
+        println(`${s}`);
+    }
+}
+
+__DATA__
+{"compile_error": "cannot cast 'Src' to 'Dst'"}

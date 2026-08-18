@@ -1,0 +1,12 @@
+// The other direction of `cast_slice_to_list.wado`.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let owned = "49".as_bytes().to_list();
+    let view = owned as ArraySlice<u8>;
+    println(`${view.len()}`);
+}
+
+__DATA__
+{"compile_error": "cannot cast 'List<u8>' to 'ArraySlice<u8>': a slice is a view and a `List` owns its elements; use `.as_slice()` instead"}
