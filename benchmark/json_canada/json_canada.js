@@ -65,16 +65,23 @@ function bench(label, workPerIter, unit, f) {
   return result;
 }
 
-const jsonData = fs.readFileSync(path.join(__dirname, "canada.json"), "utf-8");
-const size = Buffer.byteLength(jsonData, "utf-8");
-const fcObj = JSON.parse(jsonData);
+// Raw bytes so the deserialize row starts where the Rust and Wado rows do.
+// The object under Ser is parsed from a plainly-read string: decoding through
+// TextDecoder instead leaves V8 a representation that halves stringify.
+const jsonBytes = fs.readFileSync(path.join(__dirname, "canada.json"));
+const size = jsonBytes.length;
+const decoder = new TextDecoder();
+const fcObj = JSON.parse(fs.readFileSync(path.join(__dirname, "canada.json"), "utf-8"));
 
 console.log(`json-canada: ${size} bytes`);
 
-bench("Ser", size, "B", () => JSON.stringify(fcObj).length);
+// Encoded, because `String.length` counts UTF-16 units and the other two rows
+// produce UTF-8 bytes.
+const encoder = new TextEncoder();
+bench("Ser", size, "B", () => encoder.encode(JSON.stringify(fcObj)).length);
 
 const totalPoints = bench("De", size, "B", () => {
-  const fc = JSON.parse(jsonData);
+  const fc = JSON.parse(decoder.decode(jsonBytes));
   let points = 0;
   for (const feat of fc.features) {
     for (const ring of feat.geometry.coordinates) {

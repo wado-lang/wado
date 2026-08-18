@@ -65,16 +65,23 @@ function bench(label, workPerIter, unit, f) {
   return result;
 }
 
-const jsonData = fs.readFileSync(path.join(__dirname, "citm_catalog.json"), "utf-8");
-const size = Buffer.byteLength(jsonData, "utf-8");
-const catalogObj = JSON.parse(jsonData);
+// Raw bytes so the deserialize row starts where the Rust and Wado rows do.
+// The object under Ser is parsed from a plainly-read string: decoding through
+// TextDecoder instead leaves V8 a representation that halves stringify.
+const jsonBytes = fs.readFileSync(path.join(__dirname, "citm_catalog.json"));
+const size = jsonBytes.length;
+const decoder = new TextDecoder();
+const catalogObj = JSON.parse(fs.readFileSync(path.join(__dirname, "citm_catalog.json"), "utf-8"));
 
 console.log(`json-catalog: ${size} bytes`);
 
-bench("Ser", size, "B", () => JSON.stringify(catalogObj).length);
+// Encoded, because `String.length` counts UTF-16 units and the other two rows
+// produce UTF-8 bytes.
+const encoder = new TextEncoder();
+bench("Ser", size, "B", () => encoder.encode(JSON.stringify(catalogObj)).length);
 
 const counts = bench("De", size, "B", () => {
-  const catalog = JSON.parse(jsonData);
+  const catalog = JSON.parse(decoder.decode(jsonBytes));
   return [Object.keys(catalog.events).length, catalog.performances.length];
 });
 
