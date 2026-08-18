@@ -232,11 +232,17 @@ test "generate scalar-labeled group `t=(a | b)`" {
     // and the surface field name survives via the rebound op.
     let mut grammar = parse_grammar("grammar T; a : t=('x' | 'y') ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    // The generated parser must reference the hoisted anonymous tokens
-    // and consume the labeled group as one scalar token.
     assert str_contains(&output, &"TK_LIT_X");
     assert str_contains(&output, &"TK_LIT_Y");
     assert str_contains(&output, &"p.expect_set(&SYNC_");
+    // A peel regression panics in `gen_op_group` before reaching here. What is
+    // left to pin is that peeling is *transparent*: with no action to read the
+    // label, the labelled group must emit exactly what the bare group does.
+    let mut bare = parse_grammar("grammar T; a : ('x' | 'y') ;", "(test)");
+    let bare_output = generate(&mut bare, &DEFAULT_OPTIONS).source;
+    let labeled_body = extract_fn_body(&output, &"fn _parse_a__inner(");
+    let bare_body = extract_fn_body(&bare_output, &"fn _parse_a__inner(");
+    assert labeled_body == bare_body, `scalar label changed the emit:\nlabeled: ${labeled_body}\nbare:    ${bare_body}`;
 }
 
 test "generate scalar-labeled single-alt group `t=(A B)`" {
@@ -785,7 +791,10 @@ a : 'a' ('b' | 'c') 'd' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_a__inner(");
     assert str_contains(&body, &"p.expect_set(&SYNC_");
-    assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();");
+    // Naming the old binding would make this unfalsifiable — emit no longer
+    // writes a label binding without an action. The property is that nothing
+    // in the body advances unguarded.
+    assert !str_contains(&body, &"p.advance();");
 }
 
 fn extract_fn_body(output: &String, header: &String) -> String {
