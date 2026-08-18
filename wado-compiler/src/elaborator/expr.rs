@@ -3196,6 +3196,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Handle implicit struct literals (name is None) — anonymous struct inference
         let Some(raw_name) = &struct_lit.name else {
+            // A literal that only writes fields, against a target that declares
+            // a struct, is that struct. A composition (`..base`) is not: its
+            // type comes from its members, so it still interns as a shape.
+            let declared_target = expected_type.filter(|_| struct_lit.spreads.is_empty()).and_then(
+                |target| match *self.tysys.type_table.borrow().get(target) {
+                    crate::tir::ResolvedType::Struct { def: head, .. } => Some((target, head)),
+                    _ => None,
+                },
+            );
+            if let Some((target, head)) = declared_target {
+                return self.resolve_implicit_struct_literal(struct_lit, ctx, target, head);
+            }
             return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
         };
         // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
@@ -3824,6 +3836,88 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
             }
         }
+    }
+
+    /// An implicit struct literal — `{ x: 1 }`, no name — against a target that
+    /// declares a struct *is* that struct. One place decides that, so a field's
+    /// literal builds the field's struct rather than interning a shape the
+    /// enclosing struct's layout will not accept.
+    ///
+    /// The declaration comes from the target's own head. Rendering it and
+    /// looking the rendering back up loses a function-local struct, whose
+    /// storage name carries `@AstId`.
+    pub(super) fn resolve_implicit_struct_literal(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+        head: crate::tir::StructDef,
+    ) -> TypeId {
+        let (mangled_name, module_source) = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_head(target_type)
+            .expect("a struct names a declaration");
+        // What the programmer wrote, for the diagnostics below. `nominal_head`
+        // renders the storage name, which carries a local item's `@AstId`.
+        let name = self.tysys.type_table.borrow().type_name(target_type);
+
+        let struct_field_types: Vec<(String, TypeId)> = self
+            .lookup_struct_fields_of(head)
+            .map(|info| {
+                info.fields
+                    .iter()
+                    .map(|(n, t, _)| (n.clone(), *t))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if module_source != self.current_module_source
+            && let Some(struct_info) = self.lookup_struct_fields_of(head)
+        {
+            let same_package = module_source.same_package(&self.current_module_source);
+            for (fname, _, vis) in &struct_info.fields {
+                if !vis.reachable_from(same_package)
+                    && struct_lit.fields.iter().any(|f| f.name == *fname)
+                {
+                    let _ = self.emit(TypeError::PrivateFieldAccess {
+                        struct_name: name.clone(),
+                        field_name: fname.clone(),
+                        visibility: *vis,
+                        span: struct_lit.span,
+                    });
+                }
+            }
+        }
+
+        for field in &struct_lit.fields {
+            if !struct_field_types.iter().any(|(n, _)| n == &field.name)
+                && !struct_field_types.is_empty()
+            {
+                let _ = self.emit(TypeError::ExtraField {
+                    struct_name: name.clone(),
+                    field_name: field.name.clone(),
+                    span: field.span,
+                });
+            }
+            let expected_field_type = struct_field_types
+                .iter()
+                .find(|(n, _)| n == &field.name)
+                .map(|(_, type_id)| *type_id);
+            self.resolve_expr(&field.value, ctx, expected_field_type);
+        }
+
+        // Record the target's own mangled name so reify reads it from
+        // `GenericInstantiation` instead of taking the anon-literal path, which
+        // expects a synthesised `__anon_{…}` name.
+        self.record_generic_instantiation_with_mangle(
+            struct_lit.id,
+            vec![],
+            target_type,
+            Some(mangled_name),
+        );
+        target_type
     }
 
     /// Resolve an anonymous struct literal `{ x: 1, y: 2 }` by inferring a struct type

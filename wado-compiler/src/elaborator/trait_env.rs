@@ -2240,10 +2240,11 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
             target_mentions_impl_param(inner, params)
         }
         ast::Type::TypePackSpread(name, _) => params.contains(name.as_str()),
-        ast::Type::NamespacedGeneric(_)
-        | ast::Type::Function(_)
-        | ast::Type::Infer(_)
-        | ast::Type::Error(_) => false,
+        ast::Type::NamespacedGeneric(ns) => ns
+            .args
+            .iter()
+            .any(|a| target_mentions_impl_param(a, params)),
+        ast::Type::Function(_) | ast::Type::Infer(_) | ast::Type::Error(_) => false,
     }
 }
 
@@ -2290,9 +2291,14 @@ fn check_inherent_impl_collisions(
     let mut rendered_instantiations: IndexMap<(&ImplTargetKey, String, &str), ()> =
         IndexMap::default();
     for header in &instantiations {
-        let rendered = written_type_args(&header.ty, resolutions)
+        // The same reading of the target the matching side uses. Asking
+        // `written_type_args` instead sees no arguments at all on a reference
+        // or tuple target, so two such impls rendered alike and the second was
+        // reported as the first's duplicate.
+        let rendered = super::method_lookup::impl_target_args(&header.ty)
+            .unwrap_or_default()
             .iter()
-            .map(name::FqTypeName::to_mangled)
+            .map(|arg| written_type_arg(arg, resolutions).to_mangled())
             .collect::<Vec<_>>()
             .join(",");
         for method in &header.methods {

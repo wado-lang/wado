@@ -124,9 +124,22 @@ pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
         other => other,
     };
     match inner {
+        Type::Tuple(elems) => Some(elems),
+        other => impl_target_head_args(other),
+    }
+}
+
+/// The arguments a target's *head* writes — `Cell<T>` and `ns::Cell<T>` alike,
+/// since a namespace says which module declares the head and not what the
+/// argument list holds.
+///
+/// Narrower than [`impl_target_args`] by exactly one form: a tuple target's
+/// elements are its arguments for matching, but binding reads them as the
+/// variadic pack they are, through its own path.
+pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
+    match impl_ty {
         Type::Generic(g) => Some(&g.args),
         Type::NamespacedGeneric(ns) => Some(&ns.args),
-        Type::Tuple(elems) => Some(elems),
         _ => None,
     }
 }
@@ -245,6 +258,14 @@ impl TypeSystem {
             },
             // A pack, an `_`, a parse error: nothing written to match against.
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => true,
+            // Written is not a reference, and the arms below read the receiver
+            // through `fq_base_type_name` / `generic_type_args`, both of which
+            // see past one. Reference-ness is compared here so that no arm can
+            // peel one side and not the other: a reference receiver is reached
+            // only by an argument that pins nothing.
+            _ if matches!(resolved, ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => {
+                !self.arg_pins(written)
+            }
             // A written head: a binder matches anything, a declaration matches
             // its own, and the arguments recurse.
             _ => {

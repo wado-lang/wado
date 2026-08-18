@@ -632,11 +632,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// unused rather than shifting the rest.
     fn bind_declared_target_params(
         &mut self,
-        generic: &ast::GenericType,
+        target_args: &[Type],
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<crate::tir::TirTypeParam> {
         let mut params = Vec::new();
-        for (index, arg) in generic.args.iter().enumerate() {
+        for (index, arg) in target_args.iter().enumerate() {
             let ast::Type::Named(named) = arg else {
                 continue;
             };
@@ -780,10 +780,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
             other => other,
         };
-        let impl_type_params = if let ast::Type::Generic(generic) = impl_type_inner
+        // The head's arguments however the head is spelled: `impl<T> Cell<T>`
+        // and `impl<T> ns::Cell<T>` write one target a namespace apart, and
+        // reading only the first left the second's parameter unregistered.
+        let head_args = super::method_lookup::impl_target_head_args(impl_type_inner);
+        let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
         {
-            self.bind_declared_target_params(generic, impl_declared_params)
+            self.bind_declared_target_params(args, impl_declared_params)
         } else {
             match impl_type {
                 ast::Type::Named(named) => {
@@ -964,15 +968,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         });
     }
 
-    /// The type arguments a generic type reference writes, resolved in the
-    /// current frame. A non-generic reference writes none.
+    /// The type arguments a type reference's head writes, resolved in the
+    /// current frame. A head with no argument list writes none.
+    ///
+    /// The same reading the impl frame binds through, so an `impl` block's
+    /// recorded arguments and its bound parameters are numbered against one
+    /// set of positions — `ns::Cell<T>` included.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
-        let Type::Generic(generic) = ty else {
+        let Some(args) = super::method_lookup::impl_target_head_args(ty) else {
             return Vec::new();
         };
-        generic
-            .args
-            .clone()
+        args.to_vec()
             .iter()
             .map(|arg| self.resolve_type(arg))
             .collect()

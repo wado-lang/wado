@@ -1,0 +1,28 @@
+// An implicit struct literal — `{ … }` with no name — against a target that
+// declares a struct *is* that struct, at every depth. One place decides that
+// (`resolve_implicit_struct_literal`), so a field's literal builds the field's
+// struct instead of interning a shape whose layout the enclosing struct's does
+// not accept.
+//
+// A function-local struct is the case that proves the target is read as an
+// identity: its storage name carries `@AstId`, so a lookup by rendering finds
+// nothing and the literal loses its field types.
+
+struct Inner { a: i32 }
+struct Outer { i: Inner, n: f64 }
+
+fn local_target() -> f64 {
+    struct P { v: f64 }
+    let p: P = { v: 1 };
+    return p.v
+}
+
+test "a nested implicit literal builds the field's declared struct" {
+    let o: Outer = { i: { a: 1 }, n: 2 };
+    assert o.i.a == 1;
+    assert o.n == 2.0;
+}
+
+test "an implicit literal builds a function-local struct" {
+    assert local_target() == 1.0;
+}

@@ -572,8 +572,23 @@ suffix stays a renderer (§6): written at one site, read back at none.
 An `impl` header's type arguments are where this design is asked the same
 question twice: which positions the header pins decides both how its methods are
 _named_ and which receivers reach that name. Two predicates answering it drift,
-so there is one — `TypeSystem::impl_arg_pins_a_position`, over one reading of the
-target, `impl_target_args`.
+so there is one — `TypeSystem::impl_arg_pins_a_position`.
+
+Reading the target is the same hazard one step earlier, and a target has more
+spellings than any one call site remembers: `Cell<T>`, `ns::Cell<T>`, `&Cell<T>`,
+`[i32, T]`. A reading written inline covers the spellings its author had in mind,
+so there are exactly two, and every consumer takes one:
+
+- `impl_target_args` — which positions the target writes, for matching and for
+  naming. It reads through a reference and counts a tuple target's elements.
+- `impl_target_head_args` — the arguments the head writes, for binding the
+  header's own parameters and recording the block's. Narrower by one form: a
+  tuple target is the variadic pack, bound by its own path.
+
+A consumer that spells a third reading admits some targets and not others, and
+the two halves of one question then answer differently — a namespaced target
+whose parameter one half binds and the other does not is not a header that half
+works, it is a header that compiles to a call nothing defines.
 
 Each argument is read at its own reference site, never by the shape of its
 spelling:

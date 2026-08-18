@@ -36,8 +36,8 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 /// `AstId` in the mangled name a function-scoped `struct` / `type` declaration
 /// (`Stmt::Item`) renders to. `@` is not a valid Wado identifier character.
 ///
-/// It appears here and at the one call site below, and nowhere else: nothing
-/// splits it back off. The declaration data is keyed by
+/// It is written only by [`mangle_local_item_name`] below and read back
+/// nowhere: nothing splits it off again. The declaration data is keyed by
 /// [`crate::defs::DefId`], so this is not how two sibling functions'
 /// same-named local items are told apart — it is what keeps the *rendering*
 /// injective, which every mangle must be, for the post-monomorphization

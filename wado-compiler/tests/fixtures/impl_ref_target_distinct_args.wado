@@ -1,0 +1,24 @@
+// Two instantiations collide only when their arguments *render* alike, and the
+// arguments come from `impl_target_args` — the same reading of the target the
+// matching side uses. Reading the written head instead sees no arguments at all
+// on a reference target, so every one of these rendered alike and the second
+// was reported as the first's duplicate.
+
+struct Cw<T> { a: T }
+
+impl &Cw<i32> {
+    fn one(self) -> i32 {
+        return 1
+    }
+}
+
+impl &Cw<bool> {
+    fn one(self) -> i32 {
+        return 2
+    }
+}
+
+test "distinct reference targets are not one instantiation" {
+    let c = Cw { a: 7 };
+    assert c.a == 7;
+}

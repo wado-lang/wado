@@ -307,10 +307,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.imports.strip_ns_prefix(name)
     }
 
-    pub(super) fn lookup_struct_fields(&self, name: &str) -> Option<&StructFieldInfo> {
-        self.type_lookup().struct_fields(name)
-    }
-
     /// The cases of the variant a written qualifier names — see
     /// [`super::types::TypeLookup::variant_cases_at`].
     pub(super) fn lookup_variant_cases_at(

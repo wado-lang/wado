@@ -553,6 +553,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
+            // The `ns$Name` alias a namespace import registers, which is the
+            // form the receiver registries are keyed by.
+            Type::NamespacedGeneric(g) => self
+                .sem
+                .imports
+                .canonical_ns_ref(&format!("{}::{}", g.namespace, g.name))
+                .unwrap_or_else(|| g.name.clone()),
             Type::Reference(_) | Type::MutReference(_) => RefKind::from_ast(ty)
                 .expect("ref classify")
                 .prefix()
@@ -588,6 +595,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|a| self.get_type_name_full(a))
                     .collect();
                 format!("{}<{}>", generic.name, args.join(", "))
+            }
+            // What the programmer wrote, prefix and arguments both: this
+            // renders for diagnostics, where `get_type_name`'s `ns$Name`
+            // registry key is not a spelling anyone typed.
+            Type::NamespacedGeneric(g) => {
+                let args: Vec<String> = g.args.iter().map(|a| self.get_type_name_full(a)).collect();
+                format!("{}::{}<{}>", g.namespace, g.name, args.join(", "))
             }
             Type::Reference(inner) => format!("&{}", self.get_type_name_full(inner)),
             Type::MutReference(inner) => format!("&mut {}", self.get_type_name_full(inner)),
