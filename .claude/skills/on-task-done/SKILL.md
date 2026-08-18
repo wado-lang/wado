@@ -1,6 +1,6 @@
 ---
 name: on-task-done
-description: Mandatory task-completion flow: self-review the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 40+ min) and commit its generated changes. Run before committing a finished task or opening a PR.
+description: "Task-completion flow: self-review the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 70+ min) and commit its generated changes. Run when asked to."
 ---
 
 # Overview
@@ -27,7 +27,7 @@ mise run test
 mise run test-wado
 ```
 
-`on-task-done` will take 40+ minutes.
+`on-task-done` will take 70+ minutes.
 
 ## Notes
 
