@@ -266,6 +266,83 @@ struct AccessPath {
     selectors: Vec<Selector>,
 }
 
+/// What each reference local borrows: `let r = &a.b` records `a.b`, so a read
+/// through `r` can be asked about the place that owns it rather than about the
+/// reference. A reference parameter has no entry — its referent is the
+/// caller's, and this body cannot name it.
+#[derive(Default)]
+pub struct RefTargets {
+    map: IndexMap<u32, AccessPath>,
+}
+
+impl RefTargets {
+    /// Re-root a path read through a reference at the place it borrows.
+    #[allow(clippy::wrong_self_convention)]
+    fn resolve(&self, path: AccessPath) -> AccessPath {
+        let Some(target) = self.map.get(&path.root) else {
+            return path;
+        };
+        let mut resolved = target.clone();
+        resolved.selectors.extend(path.selectors);
+        resolved
+    }
+
+    /// The root local of the place a reference-typed `expr` borrows.
+    #[must_use]
+    pub fn referent_root(&self, expr: &TirExpr) -> Option<u32> {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self.map.get(index).map(|p| p.root),
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => Some(self.resolve(place_path(place)?).root),
+            _ => None,
+        }
+    }
+
+    /// The place `value` borrows, for `let r = &place` and for a rebind of an
+    /// already-recorded reference.
+    fn borrowed_path(&self, value: &TirExpr) -> Option<AccessPath> {
+        match &value.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => Some(self.resolve(place_path(place)?)),
+            TirExprKind::Local { index, .. } => self.map.get(index).cloned(),
+            _ => None,
+        }
+    }
+}
+
+/// Record what every reference local in `func` borrows.
+#[must_use]
+pub fn compute_ref_targets(func: &TirFunction) -> RefTargets {
+    let mut walker = RefTargetWalker {
+        targets: RefTargets::default(),
+    };
+    if let Some(body) = &func.body {
+        walker.visit_block(body);
+    }
+    walker.targets
+}
+
+struct RefTargetWalker {
+    targets: RefTargets,
+}
+
+impl TirRefVisitor for RefTargetWalker {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index, value, ..
+        } = &stmt.kind
+            && let Some(path) = self.targets.borrowed_path(value)
+        {
+            self.targets.map.insert(*local_index, path);
+        }
+        self.walk_stmt(stmt);
+    }
+}
+
 /// The access path of a pure place expression, or `None` for a non-place: a
 /// deref (the pointee has no local identity), a call/construction result, or a
 /// projection off one. Casts and non-deref unaries are transparent.
@@ -340,6 +417,7 @@ pub fn compute_share_eligible(
     mut_receiver_methods: &FuncKeySet,
     ref_receiver_methods: &FuncKeySet,
     returns_receiver_alias: &FuncKeySet,
+    ref_targets: &RefTargets,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -354,7 +432,7 @@ pub fn compute_share_eligible(
         sources: IndexMap::default(),
         mutated: Vec::new(),
         consumed: IndexSet::default(),
-        ref_targets: IndexMap::default(),
+        ref_targets,
     };
     collector.walk_block(body);
 
@@ -391,9 +469,10 @@ struct ShareCollector<'a> {
     mutated: Vec<AccessPath>,
     /// Locals read in a value position (consumed), so not safe to share.
     consumed: IndexSet<u32>,
-    /// `let r = &place` — the place `r` borrows. A path rooted at `r` names
-    /// that storage, so a write the owner makes must compare against it.
-    ref_targets: IndexMap<u32, AccessPath>,
+    /// A path rooted at a reference names the storage it borrows, so a write
+    /// the owner makes must compare against that place, not against the
+    /// reference.
+    ref_targets: &'a RefTargets,
 }
 
 impl ShareCollector<'_> {
@@ -404,14 +483,8 @@ impl ShareCollector<'_> {
     /// Record a write through `place`. When the exact path is unknown, mark
     /// every local `place` mentions as fully mutated (a bare-root path) — the
     /// conservative default.
-    /// Re-root a path borrowed through a reference at the place it borrows.
     fn resolve(&self, path: AccessPath) -> AccessPath {
-        let Some(target) = self.ref_targets.get(&path.root) else {
-            return path;
-        };
-        let mut resolved = target.clone();
-        resolved.selectors.extend(path.selectors);
-        resolved
+        self.ref_targets.resolve(path)
     }
 
     fn record_mutation(&mut self, place: &TirExpr) {
@@ -455,21 +528,6 @@ impl ShareCollector<'_> {
         }
     }
 
-    /// Record `let r = &place`, so paths through `r` re-root at `place`.
-    fn record_ref_target(&mut self, local_index: u32, value: &TirExpr) {
-        let TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: place,
-        } = &value.kind
-        else {
-            return;
-        };
-        if let Some(p) = place_path(place) {
-            let p = self.resolve(p);
-            self.ref_targets.insert(local_index, p);
-        }
-    }
-
     fn walk_block(&mut self, block: &TirBlock) {
         for stmt in &block.stmts {
             self.walk_stmt(stmt);
@@ -481,7 +539,6 @@ impl ShareCollector<'_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                self.record_ref_target(*local_index, value);
                 if let Some(path) = self.source_path(value) {
                     self.sources.insert(*local_index, path);
                 }

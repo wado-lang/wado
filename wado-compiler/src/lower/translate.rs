@@ -333,6 +333,8 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
+    /// What each reference local borrows; see `last_use::RefTargets`.
+    ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::compute_moved_roots`]).
     moved_roots: IndexSet<u32>,
@@ -404,6 +406,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
+        let ref_targets = if needs_copy_analysis {
+            value_copy::last_use::compute_ref_targets(func)
+        } else {
+            value_copy::last_use::RefTargets::default()
+        };
         let share_eligible_locals = if needs_copy_analysis {
             value_copy::last_use::compute_share_eligible(
                 func,
@@ -411,6 +418,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.mut_receiver_methods,
                 &base.value_copy.ref_receiver_methods,
                 &base.value_copy.returns_receiver_alias,
+                &ref_targets,
             )
         } else {
             IndexSet::default()
@@ -433,6 +441,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_locals,
             move_eligible_place_spans,
             share_eligible_locals,
+            ref_targets,
             moved_roots,
             alias_components,
             arena: RefCell::new(Body::empty()),
@@ -456,6 +465,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_locals: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
             share_eligible_locals: IndexSet::default(),
+            ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
             arena: RefCell::new(Body::empty()),
@@ -696,10 +706,15 @@ impl FunctionTranslator<'_, '_> {
     /// storage is never moved to a new owner.
     fn source_shares_immutable_storage(&self, value: &TirExpr) -> bool {
         let type_table = self.base.type_table.borrow();
-        if !value_copy::analyze::is_source_immutable(value, &self.immutable_locals, &type_table) {
+        if !value_copy::analyze::is_source_immutable(
+            value,
+            &self.immutable_locals,
+            &type_table,
+            &self.ref_targets,
+        ) {
             return false;
         }
-        value_copy::analyze::source_root(value, &type_table)
+        value_copy::analyze::source_root(value, &type_table, &self.ref_targets)
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 

@@ -535,17 +535,24 @@ pub fn is_source_immutable(
     expr: &TirExpr,
     immutable_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    ref_targets: &super::last_use::RefTargets,
 ) -> bool {
-    source_root(expr, type_table).is_some_and(|r| immutable_locals.contains(&r))
+    source_root(expr, type_table, ref_targets).is_some_and(|r| immutable_locals.contains(&r))
 }
 
 /// The local an immutable-source chain is rooted at, or `None` for a shape
 /// [`is_source_immutable`] does not accept.
 ///
-/// A projection through a reference stops the walk: the root local's
-/// immutability binds the reference, not the storage behind it, which the owner
-/// or any `&mut` to the same place can still write.
-pub fn source_root(expr: &TirExpr, type_table: &TypeTable) -> Option<u32> {
+/// A projection through a reference continues at the place that reference
+/// borrows: the root local's immutability binds the reference, not the storage
+/// behind it. An unresolvable one — a reference parameter, a reference a call
+/// returned — names storage this body does not own, and answers nothing; the
+/// share analysis decides those.
+pub fn source_root(
+    expr: &TirExpr,
+    type_table: &TypeTable,
+    ref_targets: &super::last_use::RefTargets,
+) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }
@@ -558,9 +565,9 @@ pub fn source_root(expr: &TirExpr, type_table: &TypeTable) -> Option<u32> {
                 type_table.get(inner.type_id),
                 ResolvedType::Ref(_) | ResolvedType::MutRef(_)
             ) {
-                return None;
+                return ref_targets.referent_root(inner);
             }
-            source_root(inner, type_table)
+            source_root(inner, type_table, ref_targets)
         }
         _ => None,
     }

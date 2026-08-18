@@ -1098,14 +1098,14 @@ fn "core:json/core/json/from_bytes<i32,core:prelude/string.wado/String>"(input) 
     let self_9: ref "core:prelude/slice.wado//ArraySlice<u8>";
     let repr: ref Array<u8>;
     de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(repr = input.repr; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr, start: 0, end: input.used }), pos: 0 };
-    let __match_5_mv_0: i32;
-    let __match_5_mv_1: i32;
-    let __match_5_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__match_5_mv_0, __match_5_mv_1, __match_5_mv_2] = "core:json/core:json/JsonDeserializer::parse_i32_direct"(de);
-    v = (if __match_5_mv_0 == 0 -> i32 {
-        __match_5_mv_1;
-    } else if @unlikely(__match_5_mv_0 == 1) -> i32 {
-        __qm_e = ref.as_non_null(__match_5_mv_2);
+    let __vr_5_mv_0: i32;
+    let __vr_5_mv_1: i32;
+    let __vr_5_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__vr_5_mv_0, __vr_5_mv_1, __vr_5_mv_2] = "core:json/core:json/JsonDeserializer::parse_i32_direct"(de);
+    v = (if __vr_5_mv_0 == 0 -> i32 {
+        __vr_5_mv_1;
+    } else if @unlikely(__vr_5_mv_0 == 1) -> i32 {
+        __qm_e = ref.as_non_null(__vr_5_mv_2);
         cold_path;
         return 1, 0, __qm_e;
     } else {
@@ -1916,14 +1916,14 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_direct"(self) {
         v_6 = n.digits;
         return 0, builtin::i32_wrap_i64(select i64(n.neg, 0_i64 - v_6, v_6)), ref.null none;
     }
-    let __match_11_mv_0: i32;
-    let __match_11_mv_1: f64;
-    let __match_11_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__match_11_mv_0, __match_11_mv_1, __match_11_mv_2] = "core:json/checked_int_f64"("core:json/scanned_to_f64"(n), -2147483648, 2147483648, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start);
-    v_9 = (if __match_11_mv_0 == 0 -> f64 {
-        __match_11_mv_1;
-    } else if @unlikely(__match_11_mv_0 == 1) -> f64 {
-        __qm_e_8 = ref.as_non_null(__match_11_mv_2);
+    let __vr_11_mv_0: i32;
+    let __vr_11_mv_1: f64;
+    let __vr_11_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__vr_11_mv_0, __vr_11_mv_1, __vr_11_mv_2] = "core:json/checked_int_f64"("core:json/scanned_to_f64"(n), -2147483648, 2147483648, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start);
+    v_9 = (if __vr_11_mv_0 == 0 -> f64 {
+        __vr_11_mv_1;
+    } else if @unlikely(__vr_11_mv_0 == 1) -> f64 {
+        __qm_e_8 = ref.as_non_null(__vr_11_mv_2);
         cold_path;
         return 1, 0, __qm_e_8;
     } else {
@@ -1947,7 +1947,7 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
     let _licm_buf_75: ref "core:prelude/string.wado//String";
     let __sroa___iter_5_repr: ref "Array<core:prelude/string.wado/String>";
     let __sroa___iter_5_index: i32;
-    let __sroa___match_9_1: ref null "core:json//JsonSeqSerializer";
+    let __sroa___vr_11_1: ref null "core:json//JsonSeqSerializer";
     new_used_20 = s.used + 1;
     if @unlikely(new_used_20 > builtin::array_len(s.repr)) {
         cold_path;
@@ -1956,8 +1956,8 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
     start_21 = s.used;
     s.used = new_used_20;
     builtin::array_set_u8(s.repr, start_21, 91);
-    __sroa___match_9_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___match_9_1);
+    __sroa___vr_11_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___vr_11_1);
     end = self.used;
     __sroa___iter_5_repr = self.repr;
     __sroa___iter_5_index = 0;
@@ -2011,7 +2011,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     let __sroa___iter_5_index: i32;
     let v_80: i32;
     let f_86: ref "core:prelude/format.wado//Formatter";
-    let __sroa___match_9_1: ref null "core:json//JsonSeqSerializer";
+    let __sroa___vr_11_1: ref null "core:json//JsonSeqSerializer";
     new_used_20 = s.used + 1;
     if @unlikely(new_used_20 > builtin::array_len(s.repr)) {
         cold_path;
@@ -2020,8 +2020,8 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     start_21 = s.used;
     s.used = new_used_20;
     builtin::array_set_u8(s.repr, start_21, 91);
-    __sroa___match_9_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
-    __qm_v_2 = ref.as_non_null(__sroa___match_9_1);
+    __sroa___vr_11_1 = struct.new "core:json//JsonSeqSerializer" { buf: s, count: 0 };
+    __qm_v_2 = ref.as_non_null(__sroa___vr_11_1);
     end = self.used;
     __sroa___iter_5_repr = self.repr;
     __sroa___iter_5_index = 0;

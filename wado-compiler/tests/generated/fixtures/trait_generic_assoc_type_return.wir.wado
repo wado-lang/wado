@@ -340,15 +340,15 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from_str_radix: radix must be in 2..=36"), used: 39 });
         unreachable;
     }
-    let __match_13_mv_0: i32;
-    let __match_13_mv_1: ref null "tuple//[bool, i32]";
-    let __match_13_mv_2: "core:prelude/intparse.wado//enum:IntErrorKind";
-    multivalue_bind [__match_13_mv_0, __match_13_mv_1, __match_13_mv_2] = "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end);
-    __pattern_temp_0 = (if __match_13_mv_0 == 0 -> ref "tuple//[bool, i32]" {
-        p = ref.as_non_null(__match_13_mv_1);
+    let __vr_14_mv_0: i32;
+    let __vr_14_mv_1: ref null "tuple//[bool, i32]";
+    let __vr_14_mv_2: "core:prelude/intparse.wado//enum:IntErrorKind";
+    multivalue_bind [__vr_14_mv_0, __vr_14_mv_1, __vr_14_mv_2] = "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end);
+    __pattern_temp_0 = (if __vr_14_mv_0 == 0 -> ref "tuple//[bool, i32]" {
+        p = ref.as_non_null(__vr_14_mv_1);
         p;
-    } else if @likely(__match_13_mv_0 == 1) -> ref "tuple//[bool, i32]" {
-        return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __match_13_mv_2 };
+    } else if @likely(__vr_14_mv_0 == 1) -> ref "tuple//[bool, i32]" {
+        return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: __vr_14_mv_2 };
     } else {
         unreachable;
     });
@@ -510,14 +510,14 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/FromStr::from_str_range"(s, start, end) {
     let e: ref "core:prelude/intparse.wado//ParseIntError";
-    let __local_5_mv_0: i32;
-    let __local_5_mv_1: i64;
-    let __local_5_mv_2: ref null "core:prelude/intparse.wado//ParseIntError";
-    multivalue_bind [__local_5_mv_0, __local_5_mv_1, __local_5_mv_2] = "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, 10, 2147483647_i64, 2147483648_i64);
-    if __local_5_mv_0 == 0 {
-        return 0, builtin::i32_wrap_i64(__local_5_mv_1), ref.null none;
-    } else if @likely(__local_5_mv_0 == 1) {
-        e = ref.as_non_null(__local_5_mv_2);
+    let __vr_5_mv_0: i32;
+    let __vr_5_mv_1: i64;
+    let __vr_5_mv_2: ref null "core:prelude/intparse.wado//ParseIntError";
+    multivalue_bind [__vr_5_mv_0, __vr_5_mv_1, __vr_5_mv_2] = "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, 10, 2147483647_i64, 2147483648_i64);
+    if __vr_5_mv_0 == 0 {
+        return 0, builtin::i32_wrap_i64(__vr_5_mv_1), ref.null none;
+    } else if @likely(__vr_5_mv_0 == 1) {
+        e = ref.as_non_null(__vr_5_mv_2);
         return 1, 0, e;
     } else {
         unreachable;

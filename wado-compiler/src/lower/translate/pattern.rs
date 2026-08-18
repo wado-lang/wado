@@ -1693,9 +1693,9 @@ impl<'a> PatternLowerer<'a> {
     /// it is live.
     ///
     /// A projection through a reference is writable whatever it is rooted at: an
-    /// immutable local still holds a `&mut`. A shape that is not a place at all
-    /// is a value nothing else holds, but says nothing about what a call hands
-    /// back — the fold decides that one, and elides the copy when it is fresh.
+    /// immutable local still holds a `&mut`. Anything that is not a place is a
+    /// temporary this body alone holds — whether it in turn aliases the
+    /// caller's storage is decided where the value escapes, not here.
     fn place_is_writable(&self, expr: &TirExpr, type_table: &TypeTable) -> bool {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self
@@ -1712,7 +1712,7 @@ impl<'a> PatternLowerer<'a> {
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 ) || self.place_is_writable(inner, type_table)
             }
-            _ => true,
+            _ => false,
         }
     }
 
