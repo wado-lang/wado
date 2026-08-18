@@ -1,0 +1,20 @@
+// A newtype of `i128` / `u128` is a valid `as` target. Reify dispatched on the
+// written type, so only a bare wide int reached the `from_*` lowering.
+
+use { println, Stdout } from "core:cli";
+
+type Money = i128;
+type Big = u128;
+
+export fn run() with Stdout {
+    let n = 5;
+    let from_local = n as Money;
+    let huge = 170141183460469231731687303715884105727 as Money;
+    let neg = -170141183460469231731687303715884105728 as Money;
+    let unsigned = 42 as Big;
+    let rounded = 2.5 as Money;
+    println(`${from_local} ${huge} ${neg} ${unsigned} ${rounded}`);
+}
+
+__DATA__
+{"stdout": "5 170141183460469231731687303715884105727 -170141183460469231731687303715884105728 42 2\n"}

@@ -3101,22 +3101,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let unrelated_aggregate = {
             let tt = self.tysys.type_table.borrow();
             // `i128` / `u128` are structs here, with their own rules below.
+            // Only the source is exempt: those rules cover a wide-int source,
+            // while a wide-int target is built for a numeric source alone.
             let wide_int = |id| {
                 matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
             // Classify the base, not the spelling: a newtype of an aggregate
-            // is an aggregate.
+            // is an aggregate. A tuple is a `GenericInstance` of a tuple head.
             let source_base = tt.get_ultimate_base_type(source_type);
             let source_is_aggregate = !wide_int(source_type)
-                && !wide_int(target_type)
-                && (tt.is_tuple(source_base)
-                    || matches!(
-                        tt.get(source_base),
-                        ResolvedType::Struct { .. }
-                            | ResolvedType::GenericInstance { .. }
-                            | ResolvedType::Variant { .. }
-                    ));
+                && matches!(
+                    tt.get(source_base),
+                    ResolvedType::Struct { .. }
+                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Variant { .. }
+                );
             source_is_aggregate && source_base != tt.get_ultimate_base_type(target_type)
         };
         if unrelated_aggregate {

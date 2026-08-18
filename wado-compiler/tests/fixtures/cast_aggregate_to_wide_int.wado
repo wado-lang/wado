@@ -1,0 +1,19 @@
+// A wide-int target exempts only a wide-int source: an aggregate reaching
+// `i128` / `u128` (or a newtype of one) shares no representation with it.
+
+use { println, Stdout } from "core:cli";
+
+type Money = i128;
+
+struct S {
+    a: i32,
+}
+
+export fn run() with Stdout {
+    let s = S { a: 1 };
+    let m = s as Money;
+    println(`${m}`);
+}
+
+__DATA__
+{"compile_error": "cannot cast 'S' to 'Money': the two types share no representation; `as` between aggregates is a newtype step"}

@@ -9141,7 +9141,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
+        // A newtype of a wide int shares its representation, so dispatch on
+        // the base; the built call still carries `target_type`.
+        let target_base = self
+            .tysys
+            .type_table
+            .borrow()
+            .get_ultimate_base_type(target_type);
+        let name = match self.tysys.type_table.borrow().get(target_base).clone() {
             crate::tir::ResolvedType::Struct { def, .. }
                 if matches!(
                     self.tysys
@@ -9155,7 +9162,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.tysys
                     .type_table
                     .borrow()
-                    .fq_base_type_name(target_type)
+                    .fq_base_type_name(target_base)
             }
             _ => return None,
         };
