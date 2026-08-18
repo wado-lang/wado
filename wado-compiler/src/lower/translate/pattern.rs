@@ -236,6 +236,27 @@ struct PatternLowerer<'a> {
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
 }
 
+/// The type a compound pattern's temp holds: the scrutinee's, with the
+/// match-ergonomic references peeled off.
+///
+/// Shared with the value-copy seed walk, which cannot see the temp — it is
+/// minted here, during lowering — and would otherwise spell the peel a second
+/// time to register the helper the temp's copy asks for.
+pub(crate) fn pattern_temp_type(
+    pattern: &TirPattern,
+    value_type: TypeId,
+    type_table: &TypeTable,
+) -> TypeId {
+    if !matches!(pattern, TirPattern::Tuple(_, _) | TirPattern::Struct { .. }) {
+        return value_type;
+    }
+    let mut current = value_type;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = *type_table.get(current) {
+        current = inner;
+    }
+    current
+}
+
 impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
@@ -1547,10 +1568,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: scrutinee_type,
                             value: hoisted,
-                            // A hoist, not a binding: the temp holds the very
-                            // expression that stood inline and nothing else
-                            // reaches it, so there is nothing to defend against.
-                            skip_value_copy: true,
+                            skip_value_copy: false,
                         },
                         stmt.span,
                     ));
@@ -1658,12 +1676,11 @@ impl<'a> PatternLowerer<'a> {
     /// Bind what a compound pattern destructures to a temp its projections
     /// read, and answer the temp's index and name.
     ///
-    /// A hoist, not a binding: the temp holds the very value that stood inline,
-    /// and the pattern's own bindings take their copies through
-    /// [`Self::emit_binding_let`] — so this one takes none. It is also minted
-    /// during lowering, after the seed walk that registers `$value_copy$`
-    /// helpers has run, so asking for a copy here names a helper that does not
-    /// exist.
+    /// This temp takes the destructure's only defensive copy. The per-binding
+    /// `Let`s that project out of it are immutable reads of an immutable local,
+    /// which `source_shares_immutable_storage` lets share storage rather than
+    /// copy — sound only because this copy already severed the tie to the
+    /// source.
     fn emit_pattern_temp_let(
         &mut self,
         value: TirExpr,
@@ -1681,7 +1698,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id,
                 value,
-                skip_value_copy: true,
+                skip_value_copy: false,
             },
             span,
         ));
@@ -1702,29 +1719,26 @@ impl<'a> PatternLowerer<'a> {
         let mut value = value;
         self.lower_expr(&mut value, type_table);
 
-        // Match ergonomics for let patterns: if the value is a reference type
-        // but the pattern is a compound (tuple/struct), deref the value first.
-        let value = match pattern {
-            TirPattern::Tuple(_, _) | TirPattern::Struct { .. } => {
-                let mut current = value;
-                loop {
-                    match type_table.get(current.type_id).clone() {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            current = TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Deref,
-                                    expr: Box::new(current),
-                                },
-                                inner,
-                                span,
-                            );
-                        }
-                        _ => break current,
-                    }
-                }
-            }
-            _ => value,
-        };
+        // Match ergonomics: a compound pattern against a reference reads
+        // through it, so deref down to the type its temp will hold.
+        let target = pattern_temp_type(pattern, value.type_id, type_table);
+        let mut value = value;
+        while value.type_id != target {
+            let (ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)) =
+                *type_table.get(value.type_id)
+            else {
+                unreachable!("pattern_temp_type peels references only")
+            };
+            value = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(value),
+                },
+                inner,
+                span,
+            );
+        }
+        let value = value;
 
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {

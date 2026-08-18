@@ -218,12 +218,27 @@ impl FunctionTranslator<'_, '_> {
         if !crate::lower::plan::value_copy::needs_value_copy(elem, self.type_table) {
             return None;
         }
+        // A value-typed element with no reachable helper is a hole upstream —
+        // synthesis, or DCE rooting the wrong one. Falling back to the bulk
+        // clone would answer with a shallow `array.copy`, aliasing every
+        // element instead of copying it.
         let helper = self
             .ctx
             .package
             .value_copy_helpers
-            .get(elem, self.type_table)?;
-        self.ctx.funcid_map.get(helper).cloned()
+            .get(elem, self.type_table)
+            .unwrap_or_else(|| {
+                panic!(
+                    "no value-copy helper for array element {}",
+                    self.type_table.mangle_type_arg_for_generic(elem)
+                )
+            });
+        Some(self.ctx.funcid_map.get(helper).cloned().unwrap_or_else(|| {
+            panic!(
+                "the value-copy helper for array element {} reached WIR build with no function",
+                self.type_table.mangle_type_arg_for_generic(elem)
+            )
+        }))
     }
 
     fn translate_array_ref_operand(

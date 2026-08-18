@@ -62,14 +62,12 @@ impl SeedWalker<'_> {
         self.record_wrap_target(expr, expr.type_id);
     }
 
-    /// The fold decides on the value's type but wraps the *destination*'s, and
-    /// the two differ where the destination is written: a `Let`'s declared type,
-    /// a deref-assign's referent. Seed what the fold will ask for, or the helper
-    /// it names does not exist.
+    /// Seed the helper for what the fold *writes*. The destination differs from
+    /// the value's own type wherever the site writes through something: a
+    /// `Let`'s declared type, a deref-assign's referent, a pattern temp read
+    /// out of a reference.
     fn record_wrap_target(&mut self, value: &TirExpr, dest: TypeId) {
-        if should_wrap(value, self.type_table, self.oracle)
-            && super::needs_value_copy(dest, self.type_table)
-        {
+        if should_wrap_into(value, dest, self.type_table, self.oracle) {
             self.out.insert(dest);
         }
     }
@@ -99,8 +97,28 @@ impl TirRefVisitor for SeedWalker<'_> {
                     self.record_wrap_target(value, *type_id);
                 }
             }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.record_if_wrap(value);
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
+                // The destructure's copy lands on the temp `lower_let_pattern`
+                // mints, so the helper it needs is the temp's — the value's
+                // type with match-ergonomic references peeled.
+                self.record_wrap_target(
+                    value,
+                    crate::lower::translate::pattern::pattern_temp_type(
+                        pattern,
+                        value.type_id,
+                        self.type_table,
+                    ),
+                );
+            }
+            // A statement-position `Match` over a non-`Local` scrutinee is
+            // hoisted into a temp during lowering, and that temp takes the
+            // copy. Nothing here sees the temp, so seed its type.
+            TirStmtKind::Expr(expr) => {
+                if let TirExprKind::Match { expr: scrutinee, .. } = &expr.kind
+                    && !matches!(scrutinee.kind, TirExprKind::Local { .. })
+                {
+                    self.record_if_wrap(scrutinee);
+                }
             }
             _ => {}
         }
@@ -174,7 +192,21 @@ impl TirRefVisitor for SeedWalker<'_> {
 /// (e.g. `skip_value_copy`, `is_source_immutable` for `Let`, the
 /// `Local`-target check for `Assign`) is the caller's job.
 pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) -> bool {
-    super::needs_value_copy(expr.type_id, type_table)
+    should_wrap_into(expr, expr.type_id, type_table, oracle)
+}
+
+/// [`should_wrap`] where the value lands in a destination of type `dest`.
+///
+/// The type test is the destination's: the fold copies what it *writes*, and a
+/// deref or a coercion can make that a different type from what it reads — a
+/// `let { x, y } = &p` writes a `Point` temp out of a `&Point`.
+pub fn should_wrap_into(
+    expr: &TirExpr,
+    dest: TypeId,
+    type_table: &TypeTable,
+    oracle: &OwnedCalls,
+) -> bool {
+    super::needs_value_copy(dest, type_table)
         && !is_copy_value_call(expr)
         && !is_fresh_value(expr, oracle, type_table)
 }

@@ -1,0 +1,42 @@
+// A destructure reads its scrutinee through a temp minted during lowering, and
+// that temp is where the copy lands: the per-binding `Let`s that project out of
+// it share its storage, because an immutable local's storage is assumed
+// unaliased. Skip the temp's copy and the bindings alias the source, so a later
+// write through the source is visible through them.
+//
+// The temp is minted after the seed walk that registers `$value_copy$` helpers,
+// so what keeps this working is the walk seeding the temp's type rather than
+// the scrutinee expression's.
+
+struct S {
+    items: List<i32>,
+}
+
+struct Holder {
+    s: S,
+}
+
+test "a let-destructure binding does not alias its source" {
+    let mut src = S { items: [1] };
+    let S { items } = src;
+    src.items.push(2);
+    assert items.len() == 1;
+}
+
+test "a match-arm binding does not alias its scrutinee" {
+    let mut h = Holder { s: S { items: [1] } };
+    match h.s {
+        S { items } => {
+            h.s.items.push(3);
+            assert items.len() == 1;
+        }
+    }
+}
+
+test "a tuple destructure binding does not alias its source" {
+    let mut src: [i32, List<i32>] = [1, [2]];
+    let [a, rest] = src;
+    src.1.push(9);
+    assert a == 1;
+    assert rest.len() == 1;
+}
