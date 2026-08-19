@@ -15,6 +15,9 @@
 // lowers directly to the matching `array.*` instruction.
 
 use {
+    Ordering,
+    Eq,
+    Ord,
     Ref,
     RefMut,
     IndexValue,
@@ -30,7 +33,7 @@ use {
 use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { i32_clamp } from "core:rt";
+use { i32_clamp, i32_min } from "core:rt";
 
 /// Fixed-length GC array — the builtin storage primitive. Declared
 /// definition-less; its storage and instructions live in the compiler.
@@ -171,6 +174,46 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 
     fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> with stores[self] {
         return self.slice(range.start, range.end + 1);
+    }
+}
+
+impl<T: Eq> Eq for Array<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len = builtin::array_len(self);
+        if len != builtin::array_len(other) {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if builtin::array_get(self, i) != builtin::array_get(other, i) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+impl<T: Ord> Ord for Array<T> {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        let len = builtin::array_len(self);
+        let other_len = builtin::array_len(other);
+        let min_len = i32_min(len, other_len);
+        for let mut i = 0; i < min_len; i += 1 {
+            let a = builtin::array_get(self, i);
+            let b = builtin::array_get(other, i);
+            if a < b {
+                return Ordering::Less;
+            }
+            if a > b {
+                return Ordering::Greater;
+            }
+        }
+        if len < other_len {
+            return Ordering::Less;
+        }
+        if len > other_len {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 
