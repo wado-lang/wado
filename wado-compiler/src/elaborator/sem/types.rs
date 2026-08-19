@@ -695,14 +695,19 @@ pub(crate) struct ClosureCaptureInfo {
 
 /// One power-assert capture slot — a sub-expression of the assert
 /// condition that the [`super::super::assert::CaptureScanner`] flagged
-/// for capture as `let __vK = …;` so the panic template can quote its
-/// value.
+/// for capture so the panic template can quote its value.
 #[derive(Clone)]
 pub(crate) struct AssertSlot {
     /// The flagged sub-expression's [`AstId`].
     pub(crate) ast_id: AstId,
     /// The user-facing label the panic template uses for this slot.
     pub(crate) capture_label: String,
+    /// True when a short-circuit lies between this sub-expression and the
+    /// condition root, so the run may never reach it. Such a slot is captured
+    /// where it sits instead of being hoisted ahead of the condition, which is
+    /// what keeps `&&` / `||` short-circuiting, and it renders
+    /// `<not evaluated>` when the run stopped before it.
+    pub(crate) conditional: bool,
 }
 
 /// Power-assert capture map recorded by

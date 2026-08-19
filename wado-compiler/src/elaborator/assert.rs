@@ -1,10 +1,15 @@
 //! Annotation pass for `assert`, where power-assert capture-slot discovery runs:
-//! a read-only AST scanner picks the sub-expressions deserving a `let __vK = …`,
-//! the capture hook on [`Elaborator::resolve_expr`] marks each `emitted` when it
-//! fires, and the recorded [`super::sem::types::AssertCaptureInfo`] carries that
-//! to reify, which rebuilds the whole expansion from the AST and the slot table.
+//! a read-only AST scanner picks the sub-expressions worth quoting on failure
+//! and marks each one conditional or not, the capture hook on
+//! [`Elaborator::resolve_expr`] keeps the local numbering in step with reify's,
+//! and the recorded [`super::sem::types::AssertCaptureInfo`] carries the slot
+//! table to reify, which rebuilds the whole expansion from it and the AST.
+//!
+//! An unconditional slot is bound ahead of the condition; a conditional one —
+//! anything below a `&&` / `||` — is written where the operand sits, so the
+//! short-circuit still decides whether it runs.
 
-use crate::ast::{AssertStmt, AstId, Expr, Literal, UnaryOp};
+use crate::ast::{AssertStmt, AstId, BinaryOp, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::TypeId;
@@ -46,6 +51,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // allocates `__cond` at this point in its own walk.
         let _cond_local_index = ctx.add_local("__cond".to_string(), cond_type, false, None);
 
+        // One rendered-text local per conditional slot, matching the cold-branch
+        // allocation in `reify_assert`.
+        let conditional_names: Vec<String> = ctx
+            .assert_capture_ctx
+            .as_ref()
+            .expect("assert_capture_ctx survives resolution")
+            .slots
+            .iter()
+            .filter(|c| c.conditional)
+            .map(|c| render_local_name(&c.name))
+            .collect();
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        for name in conditional_names {
+            ctx.add_local(name, string_type, false, None);
+        }
+
         // Walk the assert message for fact recording too.
         if let Some(msg) = &assert_stmt.message {
             self.resolve_expr(msg, ctx, None);
@@ -77,6 +102,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 slot_ast_ids[i].map(|ast_id| super::sem::types::AssertSlot {
                     ast_id,
                     capture_label: c.source.clone(),
+                    conditional: c.conditional,
                 })
             })
             .collect();
@@ -122,21 +148,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .in_progress
             .shift_remove(&ast_id);
 
-        let cap_name = ctx
-            .assert_capture_ctx
-            .as_ref()
-            .expect("assert_capture_ctx survives recursive resolve")
-            .slots[slot_idx]
-            .name
-            .clone();
+        let (cap_name, conditional) = {
+            let cap = &ctx
+                .assert_capture_ctx
+                .as_ref()
+                .expect("assert_capture_ctx survives recursive resolve")
+                .slots[slot_idx];
+            (cap.name.clone(), cap.conditional)
+        };
 
-        // `defining_ast_id = None` so the synthetic `__vK` locals do not
-        // enter `local_symbols` and pollute LSP hover / go-to-def lookups.
-        let _local_index = ctx.add_local(cap_name, type_id, false, None);
+        // `defining_ast_id = None` so the synthetic locals do not enter
+        // `local_symbols` and pollute LSP hover / go-to-def lookups. The
+        // allocation here is index accounting only — reify allocates the same
+        // locals in the same order and is the side that emits their bindings.
+        if conditional {
+            ctx.add_local(cap_name.clone(), type_id, true, None);
+            ctx.add_local(seen_local_name(&cap_name), crate::tir::TypeTable::BOOL, true, None);
+        } else {
+            ctx.add_local(cap_name, type_id, false, None);
+        }
 
         type_id
     }
 }
+
+/// Name of the flag recording whether a conditional slot's capture site ran.
+pub(super) fn seen_local_name(cap_name: &str) -> String {
+    format!("{cap_name}_seen")
+}
+
+/// Name of the cold-branch local holding a conditional slot's rendered text —
+/// the operand's `Inspect` output, or the not-evaluated marker.
+pub(super) fn render_local_name(cap_name: &str) -> String {
+    format!("{cap_name}_text")
+}
+
+/// The text a conditional slot renders when the run never reached it.
+pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {
@@ -144,6 +192,8 @@ struct Capture {
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
+    /// See [`super::sem::types::AssertSlot::conditional`].
+    conditional: bool,
 }
 
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
@@ -192,6 +242,9 @@ struct CaptureScanner {
     /// `let __vK = name;` would lose the coercion context and the
     /// inferencer would see `unknown` for the binding.
     in_call_arg: bool,
+    /// `true` once the walk has crossed a short-circuit, so every capture
+    /// below it may go unevaluated.
+    conditional: bool,
 }
 
 impl CaptureScanner {
@@ -201,6 +254,7 @@ impl CaptureScanner {
             ast_id_to_slot: IndexMap::default(),
             is_root: true,
             in_call_arg: false,
+            conditional: false,
         }
     }
 
@@ -214,7 +268,12 @@ impl CaptureScanner {
     fn add(&mut self, source: String, ast_id: AstId) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
-        self.slots.push(Capture { name, source });
+        let conditional = self.conditional;
+        self.slots.push(Capture {
+            name,
+            source,
+            conditional,
+        });
         self.ast_id_to_slot.insert(ast_id, idx);
     }
 
@@ -222,6 +281,7 @@ impl CaptureScanner {
         let ast_id = expr.id();
         let is_root = std::mem::replace(&mut self.is_root, false);
         let in_call_arg = std::mem::replace(&mut self.in_call_arg, false);
+        let conditional = self.conditional;
 
         match expr {
             Expr::Ident(ident) => {
@@ -233,7 +293,12 @@ impl CaptureScanner {
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
+                // The right operand of `&&` / `||` runs only when the left one
+                // does not decide the result.
+                self.conditional =
+                    conditional || matches!(b.op, BinaryOp::And | BinaryOp::Or);
                 self.scan(&b.right);
+                self.conditional = conditional;
                 if !is_root {
                     self.add(unparse_expr_simple(expr), ast_id);
                 }

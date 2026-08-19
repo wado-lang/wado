@@ -1,0 +1,20 @@
+// Test: the right operand of `||` does not run when the left operand is true.
+// The assert passes, so nothing but the program's own output is printed.
+
+use { println, Stdout } from "core:cli";
+
+fn boom() -> i32 with Stdout {
+    println("SIDE EFFECT RAN");
+    return 1;
+}
+
+export fn run() with Stdout {
+    let ok = true;
+    assert ok || boom() == 2, "guarded";
+    println("passed");
+}
+
+__DATA__
+{
+    "stdout": "passed\n"
+}

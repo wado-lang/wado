@@ -139,10 +139,31 @@ pub(super) struct ReifyAssertSlot {
     pub(super) name: String,
     pub(super) label: String,
     /// `false` when the sub-expression evaporated during reify and no
-    /// `let __vK = …;` was emitted; the template skips the slot.
+    /// binding was emitted; the template skips the slot.
     pub(super) emitted: bool,
     pub(super) local_index: Option<u32>,
     pub(super) type_id: Option<crate::tir::TypeId>,
+    /// See [`super::sem::types::AssertSlot::conditional`].
+    pub(super) conditional: bool,
+    /// Index of the `bool` recording whether the capture site ran. `Some`
+    /// exactly when `conditional`.
+    pub(super) seen_local_index: Option<u32>,
+}
+
+/// `target = value;` as a statement, for a synthesized write to a local.
+fn assign_stmt(target: TirExpr, value: TirExpr, span: crate::token::Span) -> TirStmt {
+    let type_id = value.type_id;
+    TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            crate::tir::TirExprKind::Assign {
+                target: Box::new(target),
+                value: Box::new(value),
+            },
+            type_id,
+            span,
+        )),
+        span,
+    )
 }
 
 pub(super) struct ReifyAssertCaptureContext {
@@ -3047,17 +3068,103 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let type_id = resolved.type_id;
         let cap_span = resolved.span;
-        let cap_name = ctx
-            .reify_assert_capture_ctx
-            .as_ref()
-            .expect("reify_assert_capture_ctx survives recursive reify")
-            .slots[slot_idx]
-            .name
-            .clone();
+        let (cap_name, conditional) = {
+            let slot = &ctx
+                .reify_assert_capture_ctx
+                .as_ref()
+                .expect("reify_assert_capture_ctx survives recursive reify")
+                .slots[slot_idx];
+            (slot.name.clone(), slot.conditional)
+        };
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
-        let local_index = ctx.add_local(cap_name.clone(), type_id, false, None);
+        let local_index = ctx.add_local(cap_name.clone(), type_id, conditional, None);
+        let seen_local_index = conditional.then(|| {
+            ctx.add_local(
+                super::assert::seen_local_name(&cap_name),
+                crate::tir::TypeTable::BOOL,
+                true,
+                None,
+            )
+        });
+
+        let local_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name: cap_name.clone(),
+            },
+            type_id,
+            cap_span,
+        );
+
+        // An unconditional slot is bound ahead of the condition. A conditional
+        // one takes its value where the operand sits, so the short-circuit
+        // above it still governs whether it runs; only the flag saying it did
+        // is bound ahead. The value local carries no binding of its own — the
+        // failure branch reads it under the flag, and until the capture site
+        // assigns it the local holds its Wasm default.
+        let (hoisted, in_place) = if let Some(seen_index) = seen_local_index {
+            let decls = vec![TirStmt::new(
+                TirStmtKind::Let {
+                    name: super::assert::seen_local_name(&cap_name),
+                    local_index: seen_index,
+                    is_mut: true,
+                    is_reactive: false,
+                    type_id: crate::tir::TypeTable::BOOL,
+                    value: TirExpr::new(
+                        TirExprKind::BoolLiteral(false),
+                        crate::tir::TypeTable::BOOL,
+                        cap_span,
+                    ),
+                    skip_value_copy: true,
+                },
+                cap_span,
+            )];
+            let capture_block = crate::tir::TirBlock::new(
+                vec![
+                    assign_stmt(local_ref.clone(), resolved, cap_span),
+                    assign_stmt(
+                        TirExpr::new(
+                            TirExprKind::Local {
+                                index: seen_index,
+                                name: super::assert::seen_local_name(&cap_name),
+                            },
+                            crate::tir::TypeTable::BOOL,
+                            cap_span,
+                        ),
+                        TirExpr::new(
+                            TirExprKind::BoolLiteral(true),
+                            crate::tir::TypeTable::BOOL,
+                            cap_span,
+                        ),
+                        cap_span,
+                    ),
+                    TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
+                ],
+                cap_span,
+            );
+            (
+                decls,
+                TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
+            )
+        } else {
+            (
+                vec![TirStmt::new(
+                    TirStmtKind::Let {
+                        name: cap_name,
+                        local_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id,
+                        value: resolved,
+                        skip_value_copy: false,
+                    },
+                    cap_span,
+                )],
+                local_ref,
+            )
+        };
 
         let cap_ctx = ctx
             .reify_assert_capture_ctx
@@ -3066,27 +3173,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         cap_ctx.slots[slot_idx].emitted = true;
         cap_ctx.slots[slot_idx].local_index = Some(local_index);
         cap_ctx.slots[slot_idx].type_id = Some(type_id);
-        cap_ctx.emitted_lets.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: cap_name.clone(),
-                local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id,
-                value: resolved,
-                skip_value_copy: false,
-            },
-            cap_span,
-        ));
+        cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
+        cap_ctx.emitted_lets.extend(hoisted);
 
-        TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name: cap_name,
-            },
-            type_id,
-            cap_span,
-        )
+        in_place
     }
 
     /// Reify `assert cond[, msg];` into the power-assert expansion.
@@ -3105,6 +3195,74 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirStmt::new(TirStmtKind::Expr(call), span)
     }
 
+    /// `let __vK_text = if __vK_seen { `${__vK:?}` } else { "<not evaluated>" };`
+    /// — a conditional slot's failure-message text, built in the cold branch so
+    /// an unreached slot says so instead of quoting its zero value.
+    #[allow(clippy::too_many_arguments)]
+    fn assert_slot_text_let(
+        &mut self,
+        render_index: u32,
+        render_name: String,
+        string_type: TypeId,
+        seen_index: u32,
+        seen_name: String,
+        value_ref: TirExpr,
+        inspect_spec: Option<crate::format_spec::TemplateFormatSpec>,
+        span: crate::token::Span,
+    ) -> TirStmt {
+        use crate::tir::TirTemplatePart;
+
+        let rendered = TirExpr::new(
+            TirExprKind::TemplateString {
+                parts: vec![TirTemplatePart::Interpolation {
+                    expr: Box::new(value_ref),
+                    format_spec: inspect_spec,
+                }],
+            },
+            string_type,
+            span,
+        );
+        let marker = TirExpr::new(
+            TirExprKind::StringLiteral(super::assert::NOT_EVALUATED.to_string()),
+            string_type,
+            span,
+        );
+        let choice = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(TirExpr::new(
+                    TirExprKind::Local {
+                        index: seen_index,
+                        name: seen_name,
+                    },
+                    TypeTable::BOOL,
+                    span,
+                )),
+                then_branch: TirBlock::new(
+                    vec![TirStmt::new(TirStmtKind::Expr(rendered), span)],
+                    span,
+                ),
+                else_branch: Some(TirBlock::new(
+                    vec![TirStmt::new(TirStmtKind::Expr(marker), span)],
+                    span,
+                )),
+            },
+            string_type,
+            span,
+        );
+        TirStmt::new(
+            TirStmtKind::Let {
+                name: render_name,
+                local_index: render_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: string_type,
+                value: choice,
+                skip_value_copy: false,
+            },
+            span,
+        )
+    }
+
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
@@ -3120,15 +3278,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
         let info = self.ann_assert_captures(assert_stmt.id);
-        let (slot_labels, ast_id_to_slot): (Vec<String>, IndexMap<AstId, usize>) =
+        let (slot_facts, ast_id_to_slot): (Vec<(String, bool)>, IndexMap<AstId, usize>) =
             if let Some(info) = info.as_ref() {
-                let mut labels: Vec<String> = Vec::with_capacity(info.slots.len());
+                let mut facts: Vec<(String, bool)> = Vec::with_capacity(info.slots.len());
                 let mut map: IndexMap<AstId, usize> = IndexMap::default();
                 for (i, s) in info.slots.iter().enumerate() {
-                    labels.push(s.capture_label.clone());
+                    facts.push((s.capture_label.clone(), s.conditional));
                     map.insert(s.ast_id, i);
                 }
-                (labels, map)
+                (facts, map)
             } else {
                 (Vec::new(), IndexMap::default())
             };
@@ -3136,15 +3294,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx.enter_scope();
 
         ctx.reify_assert_capture_ctx = Some(ReifyAssertCaptureContext {
-            slots: slot_labels
+            slots: slot_facts
                 .iter()
                 .enumerate()
-                .map(|(i, label)| ReifyAssertSlot {
+                .map(|(i, (label, conditional))| ReifyAssertSlot {
                     name: format!("__v{i}"),
                     label: label.clone(),
                     emitted: false,
                     local_index: None,
                     type_id: None,
+                    conditional: *conditional,
+                    seen_local_index: None,
                 })
                 .collect(),
             ast_id_to_slot,
@@ -3181,6 +3341,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
 
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        // One rendered-text local per conditional slot, allocated for every
+        // such slot (not only the emitted ones) so annotate's index accounting
+        // in `desugar_assert` stays in lockstep.
+        let render_locals: Vec<(usize, u32)> = actx
+            .slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.conditional)
+            .map(|(i, slot)| (i, super::assert::render_local_name(&slot.name)))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|(i, name)| (i, ctx.add_local(name, string_type, false, None)))
+            .collect();
+
         let cond_ref = TirExpr::new(
             TirExprKind::Local {
                 index: cond_local_index,
@@ -3201,11 +3380,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Panic template, mirroring `build_assert_panic_template`:
         // header + `condition: <source>` + one
         // `<label>: {__vK:?}` line per emitted slot.
-        let string_type = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
         let line = span.line as u64;
         let mut parts: Vec<TirTemplatePart> = vec![
             TirTemplatePart::Literal("Assertion failed in ".to_string()),
@@ -3253,7 +3427,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "\ncondition: {condition_source}\n"
         )));
 
-        for slot in &actx.slots {
+        // A conditional slot renders through its cold-branch text local, which
+        // carries the not-evaluated marker when the run never reached it.
+        let render_local_of: IndexMap<usize, u32> = render_locals.iter().copied().collect();
+        let mut text_lets: Vec<TirStmt> = Vec::new();
+        for (slot_idx, slot) in actx.slots.iter().enumerate() {
             if !slot.emitted {
                 continue;
             }
@@ -3269,12 +3447,40 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 span,
             );
-            parts.push(TirTemplatePart::Interpolation {
-                expr: Box::new(local_ref),
-                format_spec: Some(crate::format_spec::TemplateFormatSpec::of_kind(
-                    crate::format_spec::FormatKind::Inspect,
-                )),
-            });
+            let inspect_spec = Some(crate::format_spec::TemplateFormatSpec::of_kind(
+                crate::format_spec::FormatKind::Inspect,
+            ));
+            match slot.seen_local_index {
+                Some(seen_index) => {
+                    let render_index = render_local_of[&slot_idx];
+                    let render_name = super::assert::render_local_name(&slot.name);
+                    text_lets.push(self.assert_slot_text_let(
+                        render_index,
+                        render_name.clone(),
+                        string_type,
+                        seen_index,
+                        super::assert::seen_local_name(&slot.name),
+                        local_ref,
+                        inspect_spec,
+                        span,
+                    ));
+                    parts.push(TirTemplatePart::Interpolation {
+                        expr: Box::new(TirExpr::new(
+                            TirExprKind::Local {
+                                index: render_index,
+                                name: render_name,
+                            },
+                            string_type,
+                            span,
+                        )),
+                        format_spec: None,
+                    });
+                }
+                None => parts.push(TirTemplatePart::Interpolation {
+                    expr: Box::new(local_ref),
+                    format_spec: inspect_spec,
+                }),
+            }
             parts.push(TirTemplatePart::Literal("\n".to_string()));
         }
 
@@ -3301,13 +3507,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
 
-        let then_block = TirBlock::new(
-            vec![
-                self.make_cold_path_stmt(span),
-                TirStmt::new(TirStmtKind::Expr(panic_call), span),
-            ],
-            span,
-        );
+        let mut then_stmts = Vec::with_capacity(text_lets.len() + 2);
+        then_stmts.push(self.make_cold_path_stmt(span));
+        then_stmts.extend(text_lets);
+        then_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
+        let then_block = TirBlock::new(then_stmts, span);
         inner_stmts.push(TirStmt::new(
             TirStmtKind::If {
                 condition: neg_cond,

@@ -122,66 +122,65 @@ not silence. Where evaluation stopped is the answer to why the assert failed as
 often as any value is, and an omitted line would be indistinguishable from an
 operand the instrumentation cannot see — which rule 3 exists to forbid.
 
-This makes the failure message a sequence of per-slot statements rather than one
-template. That path is cold; the cost is irrelevant and the constraint that
-forced a single template goes away with it.
+Each conditional slot's text is chosen in the failure branch, from the flag
+saying its capture site ran, and the template interpolates that text. The
+choice is on the cold path, so it costs the passing assert nothing.
 
 ### 3. No silent degradation
 
-Every operand position in a condition is either captured, or named by the
-compiler as not captured with the reason. A form the scanner has not been taught
-must not reach an opaque-leaf arm by default.
+Every operand position in a condition is captured. There is no second
+outcome to report, because there is no type the diagnostic cannot render:
+`Inspect` is total (WEP-2026-06-25), so a `T: Inspect` obligation always holds
+and every operand has a rendering. An operand the compiler declines to inspect
+is a bug in `Inspect` derivation, at the priority every compiler bug carries —
+never a power-assert degradation to document.
 
-Two causes are distinguished, because they need different answers:
+The scanner's own comments claim otherwise, and that is what kept receivers
+uncaptured: they say `Fn<…>` and CM resource handles have no `Inspect`. The
+claim is stale — `${f:?}` on a closure prints `|i32| -> i32` today.
 
-- **Structural** — the scanner does not descend into the shape. This is a bug
-  against this WEP, closed by teaching the scanner, not by reporting.
-- **Type** — the operand's type has no `Inspect` (`Fn<…>`, a CM resource
-  handle). Nothing can be rendered, and rejecting the assert would be worse than
-  the missing line. The slot is dropped and an optimizer-style remark
-  (WEP-2026-06-03) names the operand, its type, and the trait that is missing.
-  A remark, not a diagnostic: the stdlib asserts on receivers routinely, and a
-  warning on every one of them would train the reader to stop looking.
-
-The enumeration in the table above is a compiler artefact, not folklore: the
-capture plan for a condition is dumpable, so the covered-forms list is a test
-rather than a paragraph that goes stale.
+So one cause remains: the scanner does not descend into a shape. That is a bug
+against this WEP, closed by teaching the scanner, not by reporting. The
+enumeration in the table above is a compiler artefact, not folklore: the capture
+plan for a condition is dumpable, so the covered-forms list is a test rather
+than a paragraph that goes stale.
 
 ### The `condition:` line is source, not a paraphrase
 
-It is rendered by a fidelity-preserving unparse — parentheses where the parse
-needed them, no statement punctuation invented inside an expression — separate
-from `unparse_expr_simple`, whose readability trade stays right for its own
-callers.
+It is rendered by the formatter's `Unparser`, not by `unparse_expr_simple`.
+The formatter already keeps the parentheses the simple path drops — it prints
+`(0..<5).contains(&i)` and `(a + b) * 3` intact — so the fix is to expose its
+expression path, not to write a third renderer. `unparse_expr_simple`'s
+readability trade stays right for its own callers.
+
+The formatter drops one paren the parse needs, on an `if` used as an operand
+(`(if a > 0 { a } else { b }) == 5`). That is a formatter round-trip bug and is
+fixed there, which fixes the `condition:` line with it.
 
 ## Roadmap
 
 Ordered by yield per cost, and rules 1–3 are why: a wrong-code bug outranks a
 missing line, and a missing line outranks a misrendered one.
 
-- [ ] **P0 — short-circuit preservation.** Conditional slots per rule 1, for
-      `&&` and `||`. Closes the wrong-code bug; nothing below is safe to build
-      on an expansion that moves operands. Fixture: the guarded-index assert
-      above must report the assertion, not trap in `List::index_value`.
+- [x] **P0 — short-circuit preservation.** Conditional slots per rule 1, for
+      `&&` and `||`. Closed the wrong-code bug; nothing below is safe to build
+      on an expansion that moves operands.
+- [x] **`<not evaluated>` rendering** (rule 2), landed with it: without it a
+      short-circuited slot would have quoted the value it never took.
 - [ ] **Comparison chains** ([#1855](https://github.com/wado-lang/wado/issues/1855)).
       Scan `first` and each comparison's `right`; operands after the first are
       conditional slots. Unblocks the uniform `0 <= index` bound on the index
       traits that WEP-2026-06-02 Phase D reverted.
-- [ ] **`<not evaluated>` rendering** (rule 2). Needed to read the output of the
-      two items above; folded in with them if the message rebuild lands first.
 - [ ] **Structural leaves that lose operands already in scope**: `Cast`,
       `TupleLiteral`, `StructLiteral`, `Matches` (the scrutinee), and the index
       operand of `Index`. Each is a recursion the scanner does not do; no new
       machinery.
-- [ ] **Condition-line fidelity.** A fidelity-preserving unparse for the
-      `condition:` line, with the parenthesised and block-expression cases as
-      format fixtures.
-- [ ] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. Deliberately
-      skipped today because capturing one forces `Inspect` on the receiver's
-      type; gated on the type-cause remark below, which is what makes the
-      skip visible instead of silent.
-- [ ] **Type-cause remark** (rule 3). Names the operand, its type and the
-      missing trait.
+- [ ] **Condition-line fidelity.** Render the line with the formatter's
+      `Unparser`, and fix the `if`-as-operand paren the formatter itself drops,
+      with both as format fixtures.
+- [ ] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. Skipped today on
+      a stale `Inspect` claim; the work is to capture them and fix whatever the
+      claim was really standing in for.
 - [ ] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`.
       Arms are conditional slots, so this rests on the P0 item.
 - [ ] **Dump the capture plan** so the covered-forms table is generated and
@@ -189,21 +188,24 @@ missing line, and a missing line outranks a misrendered one.
 
 ### Deliberately out of scope
 
-`Closure`, `WithHandler` and `Resume` capture nothing and stay that way: their
-children are not values in isolation, and a slot for one would report a
-sub-expression that never had a value at the moment the condition failed.
+The children of `Closure`, `WithHandler` and `Resume` are not captured: they
+are not values in isolation, and a slot for one would report a sub-expression
+that never had a value at the moment the condition failed. The closure itself is
+an operand like any other and is captured where it appears.
 
 ## Consequences
 
-Rule 1 costs an `Option<T>` slot and an in-place write per conditional capture.
-Unconditional captures — the whole of the stdlib's asserts, and most asserts
-anywhere — keep the hoisted `let` and pay nothing new. `-Os` still drops the
-whole expansion through `bare-asserts`.
+Rule 1 costs one `bool` flag per conditional capture, cleared ahead of the
+condition and set at the capture site. The captured value itself gets no
+binding: the failure branch reads its local under the flag, and until the
+capture site assigns it the local holds the Wasm default for its type — so
+nothing has to synthesize a zero value for an arbitrary `T`. Unconditional
+captures — the whole of the stdlib's asserts, and most asserts anywhere — keep
+the hoisted `let` and pay nothing new. `-Os` still drops the whole expansion
+through `bare-asserts`.
 
-Rule 2 replaces the single panic template with a statement sequence in the cold
-branch. That is more TIR per assert, all of it behind the failure branch that
-`builtin::cold_path()` already marks, and it is what makes conditional slots
-reportable at all.
+Rule 2 adds one `String` binding per conditional slot to the cold branch, behind
+the failure branch that `builtin::cold_path()` already marks.
 
 Rule 3 makes the covered-forms table a compiler artefact. The cost is a dump
 surface and its tests; the return is that the next unhandled AST shape is a test
