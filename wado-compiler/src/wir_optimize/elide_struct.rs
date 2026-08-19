@@ -3,9 +3,15 @@
 //! even for a heap-reading `inner`, the preceding ops all being pure and
 //! unconditional — targeting the `Box<T>` locals minted during NIR→WIR lowering,
 //! which NIR's own `elide_box_local` never sees.
+//!
+//! `unwrap_box_locals` is the fallback for the ones adjacency cannot reach: it
+//! moves nothing, retyping the local to the field it wraps, so the `StructNew`
+//! goes away even when a write sits between the def and its use. That is the
+//! by-reference `for` loop, whose box holds an element read at the very index
+//! the next statement bumps.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::wir::{WirInstr, WirPackage};
+use crate::wir::{WirInstr, WirPackage, WirType};
 use crate::wir_visitor::WirMutVisitor;
 
 #[derive(Default)]
@@ -503,5 +509,101 @@ mod adjacent_box_tests {
             panic!("expected call");
         };
         assert!(matches!(args[1], WirInstr::I32Const(42)));
+    }
+}
+
+/// Retype a single-field (`Box<T>`) struct local to its field, dropping the
+/// `StructNew`: one def, and every read through the same `StructGet` field.
+/// Nothing moves, so unlike [`elide_adjacent_box_locals`] an intervening write
+/// is no obstacle — the allocation goes, the local stays where it was.
+pub(super) fn unwrap_box_locals(module: &mut WirPackage) {
+    for func in &mut module.functions {
+        let params: IndexSet<String> = func.param_names.iter().cloned().collect();
+        let Some(body) = &mut func.body else {
+            continue;
+        };
+        let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
+        let mut candidates: IndexSet<String> = IndexSet::default();
+        for instr in body.iter() {
+            collect_stats(instr, &mut stats, &mut candidates);
+        }
+        let mut targets: IndexMap<String, (String, Option<WirType>)> = IndexMap::default();
+        for name in &candidates {
+            if params.contains(name) {
+                continue;
+            }
+            let Some(s) = stats.get(name) else { continue };
+            if s.defs != 1 || s.structget_uses == 0 || s.total_localgets != s.structget_uses {
+                continue;
+            }
+            if s.field_uses.len() != 1 {
+                continue;
+            }
+            let field = s.field_uses.keys().next().expect("one field").clone();
+            targets.insert(name.clone(), (field, None));
+        }
+        if targets.is_empty() {
+            continue;
+        }
+        let mut unwrapper = BoxUnwrapper { targets };
+        unwrapper.visit_body(body);
+        let mut retyper = BoxLocalRetyper {
+            targets: &unwrapper.targets,
+        };
+        retyper.visit_body(body);
+    }
+}
+
+/// Rewrites the def and the reads, recording each local's new type from the
+/// `StructGet` it replaces — the field's own `result_ty`, so the declaration
+/// the second walk rewrites needs no type lookup.
+struct BoxUnwrapper {
+    targets: IndexMap<String, (String, Option<WirType>)>,
+}
+
+impl WirMutVisitor for BoxUnwrapper {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        if let WirInstr::StructGet {
+            field_name,
+            expr,
+            result_ty,
+            ..
+        } = instr
+            && let WirInstr::LocalGet { name, .. } = expr.as_ref()
+            && let Some((field, ty)) = self.targets.get_mut(name)
+            && field == field_name
+        {
+            *ty = Some(result_ty.clone());
+            *instr = WirInstr::LocalGet {
+                name: name.clone(),
+                result_ty: result_ty.clone(),
+            };
+            return;
+        }
+        if let WirInstr::LocalSet { name, value } = instr
+            && self.targets.contains_key(name)
+            && let WirInstr::StructNew { fields, .. } = value.as_mut()
+            && fields.len() == 1
+        {
+            let inner = fields.remove(0);
+            *value = Box::new(inner);
+        }
+        self.walk_instr(instr);
+    }
+}
+
+/// Point each rewritten local's declaration at the field type.
+struct BoxLocalRetyper<'a> {
+    targets: &'a IndexMap<String, (String, Option<WirType>)>,
+}
+
+impl WirMutVisitor for BoxLocalRetyper<'_> {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        if let WirInstr::DeclareLocal { name, ty } = instr
+            && let Some((_, Some(new_ty))) = self.targets.get(name)
+        {
+            *ty = new_ty.clone();
+        }
+        self.walk_instr(instr);
     }
 }

@@ -8,6 +8,7 @@
 #[path = "../common.rs"]
 mod common;
 
+mod box_local_unwrap;
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;

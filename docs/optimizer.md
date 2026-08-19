@@ -105,7 +105,7 @@ NIR→WIR lowering avoids a few redundant shapes, firing once during the build a
 `wir_optimize.rs` mutates the `WirPackage` in place after WIR build; phases run in order and may iterate.
 
 1. Type representation — nullable-ref lowering; small-variant returns to multi-value.
-2. Box-local elimination — substitute the field read for a `Box<T>` local lowering minted.
+2. Box-local elimination — substitute the field read for a `Box<T>` local lowering minted, then, for the ones adjacency cannot reach, retype the local to the field it wraps in place. A by-reference `for` bumps the index between the box's definition and its use, so its initializer may not move; retyping needs no motion and drops the per-element allocation anyway.
 3. Data flow — forward constant struct fields for constant-index bounds-check elimination.
 4. Library rewrites — short-string append expansion; constant-array data promotion (only where packing encodes smaller than the inline `T.const` operands, since a data segment stores each element at full width while an operand is LEB128-compressed); large-literal splitting; elision of a whole-array zero fill on a fresh `array.new_default` (the `List::filled(n, 0)` shape).
 5. Peephole — Wasm instruction-selection rewrites with no NIR analogue, including `select` for a value-producing `if` whose arms are both cheap, pure and trap-free. That last one is `nir/select_lowering`'s dual for a shape NIR never holds: `&&` / `||` stay one node until `emit_binary_wir` lowers the short-circuit to a branch.
