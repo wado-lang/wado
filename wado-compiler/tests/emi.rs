@@ -1,32 +1,9 @@
-//! EMI (equivalence modulo inputs) harness for the optimizer.
+//! EMI (equivalence modulo inputs) harness for the optimizer: [`calibrate_corpus`]
+//! keeps the fixtures an injected `builtin::black_box(false)` guard leaves
+//! alone, and [`mutate_corpus`] reports the ones a payload behind it moves.
 //!
-//! `builtin::black_box(false)` is a condition no pass can decide: the NIR
-//! optimizer treats the call as opaque and `wir_build` emits the argument
-//! where the call stood, so a block behind such a guard is unreachable at run
-//! time, visible to every NIR pass, and absent from the emitted Wasm. Injecting
-//! one into a working program must therefore leave the program's output
-//! untouched — a difference is a wrong-code bug.
-//!
-//! [`calibrate_corpus`] carries the calibration stage. It injects an *empty*
-//! guard at every statement boundary of every fixture and keeps the ones whose
-//! observable behaviour survives. Guards are written on a single line, so the
-//! code after an injection keeps the line numbers it had and a fixture that
-//! prints an assertion diagnostic is not disturbed; what calibration still
-//! catches is a fixture that reads a column, an allocation address, or a
-//! generated test-export name, and one whose output moves between runs of the
-//! same program. Those cannot serve as an EMI oracle, and naming them here is
-//! what keeps a later divergence from being mistaken for one.
-//!
-//! The eligible names are written to `target/emi/corpus.txt` for the mutation
-//! stage to consume; every exclusion lands in `target/emi/calibration.txt`
-//! with its reason.
-//!
-//! [`mutate_corpus`] carries the mutation stage: each guard writes to every
-//! `let mut` in scope, so the dead region touches the live program and the
-//! alias and mod/ref analyses behind `licm`, `store_load_forward`,
-//! `field_scalarize`, `copy_prop` and `sroa` have to survive it. A moved output
-//! and a downed compiler are both delta-debugged back to the guards that
-//! caused them.
+//! The design and what is left to build are in
+//! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
 //!
 //! ```sh
 //! cargo test --test emi -- --ignored --nocapture
@@ -34,15 +11,6 @@
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_SHARD` (`k/n`),
 //! `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
-//!
-//! ## Next
-//!
-//! - [ ] Payload: statements harvested from elsewhere in the same function,
-//!   type-correct by construction wherever their free variables are in scope.
-//! - [ ] `while builtin::black_box(false) { … }` as a second guard shape, for
-//!   the loop passes.
-//! - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
-//!   `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
 
 mod common;
 

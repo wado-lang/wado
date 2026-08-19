@@ -1686,11 +1686,9 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(closure_id) = self.local_to_closure.get(&local_idx).copied() else {
             return;
         };
-        // Only where the receiver really is a `&__Closure_N`: a specializable
-        // closure, whose local `update_local_types` retypes after this walk, or
-        // a fn-param already declared as one. A closure that escapes keeps its
-        // canonical form, and pointing its format call at the per-functor impl
-        // would hand that impl a `CanonicalClosure_K`.
+        // Only where the receiver really is a `&__Closure_N`. A closure that
+        // escapes keeps its canonical form, and the per-functor impl would then
+        // be handed a `CanonicalClosure_K`.
         if !self.specializable.contains(&closure_id)
             && !self.functor_param_locals.contains(&local_idx)
         {

@@ -213,10 +213,9 @@ impl TypeBuilder {
     /// The `TypeId` a `Box` is keyed on: itself, or for a function type the
     /// first one seen with its `(arity, return type)`.
     ///
-    /// Every `Box<fn(...)>` holds one field whose WIR type is `ref struct`
-    /// whatever the signature, and the `Fn<N,Ret>^Inspect` stubs share one
-    /// receiver across a signature. Keying by the precise type mints a wrapper
-    /// per function type, and the stub's then matches only the first.
+    /// Every `Box<fn(...)>` holds one `ref struct` field whatever the
+    /// signature, and the `Fn<N,Ret>^Inspect` stubs share one receiver across
+    /// a signature, so one wrapper serves them all.
     fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
         let ResolvedType::Function {
             params,

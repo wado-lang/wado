@@ -1,7 +1,6 @@
 // Regression: `compute_ref_targets` recorded a reference's borrowed place from
-// its `Let` and never revisited it, so after `r = &b` the elider still believed
-// `r` pointed at `a` and dropped the copy `let y = r.xs` owes. `y` then aliased
-// live storage and saw the later `push`.
+// its `Let` and never revisited it, so after `r = &b` the elider dropped the
+// copy `let y = r.xs` owes and `y` aliased live storage.
 use { println, Stdout } from "core:cli";
 
 struct Holder {

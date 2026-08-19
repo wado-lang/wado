@@ -6089,10 +6089,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut deref_overrides: crate::hashmap::IndexMap<String, (String, TypeId)> =
             crate::hashmap::IndexMap::default();
         for mc in &cap_info.mut_captures {
-            // The slot is created by reify's own walk, but the `&mut` is
-            // written to the index `resolve_closure` reserved: that is what the
-            // capture list records, and the two walks agree only while nothing
-            // claims a slot between them.
+            // The slot comes from this walk; the `&mut` goes to the reserved
+            // index, which is the one the capture list records.
             ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
             let ref_index = mc.ref_index;
             ctx.address_taken_locals.insert(mc.outer_index);

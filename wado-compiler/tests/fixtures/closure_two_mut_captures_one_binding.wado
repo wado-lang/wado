@@ -1,7 +1,6 @@
 // Regression: each closure reserves its own `__ref_a` slot and the capture list
-// records that index, so reify has to write the `&mut` into the reserved slot
-// rather than one it picks by name — two closures over one binding otherwise
-// share a slot and the second reads what the first never wrote.
+// records that index, so reify writing to a slot it picked by name sent two
+// closures over one binding to the same slot.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {

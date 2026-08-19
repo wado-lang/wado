@@ -833,10 +833,8 @@ async fn compile_artifact(
     let compile_result = match panic_or_result {
         Ok(r) => r,
         Err(payload) => {
-            // A panic carries no `CompileResult`, so `is_todo_module` has to be
-            // read back off the source. An ICE is what a `#![TODO]` module is
-            // most likely to hit, and it belongs on the same pending axis as
-            // the expected compile error below.
+            // An ICE is what a `#![TODO]` module is most likely to hit, and it
+            // belongs on the same pending axis as the compile error below.
             if todo_module_at(&path) {
                 reporter.on_compile(&path, CompileEvent::TodoModule, compile_duration);
                 return CompileOutcome::TodoCompileError(TodoCompileError { path });
@@ -2331,9 +2329,6 @@ mod tests {
         parse_test_export(name).unwrap_or_else(|| panic!("expected `test-` prefix in {name:?}"))
     }
 
-    /// A panic carries no `CompileResult`, so the attribute is read back off
-    /// the source; a path that cannot be read must stay a hard failure rather
-    /// than be downgraded to pending.
     #[test]
     fn only_a_readable_todo_module_is_one() {
         let dir = std::env::temp_dir().join("wado-todo-module-at");
