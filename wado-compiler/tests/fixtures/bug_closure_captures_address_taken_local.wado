@@ -1,0 +1,19 @@
+// A capture field read the local raw, so a slot `lower::plan::boxing` promoted
+// handed the environment the box where the field holds the value.
+test "a closure captures a local whose address was taken" {
+    let mut c = 0;
+    let r = &mut c;
+    *r = 1;
+
+    let read = || {
+        return c;
+    };
+    assert read() == 1;
+
+    let mut bump = || {
+        c = c + 1;
+    };
+    bump();
+    assert c == 2;
+    assert *r == 2;
+}
