@@ -1,18 +1,9 @@
 #![no_prelude]
 #![stdlib("core:prelude/slice.wado")]
-// Zero-copy views over a backing `Array<T>`: the `Slice<T>` view and the
-// iterators `SliceValueIter<T>`, `SliceRefIter<T>`, `SliceWindows<T>`, and `SliceChunks<T>`.
+// Views that reference a backing `Array<T>`, and the iterators over them.
 //
-// Each view holds a reference to the whole backing array (`&Array<T>`) plus
-// integer offsets, so constructing one never copies elements. `&Array<T>`
-// lowers to the same Wasm reference as `Array<T>`, so the reference is
-// zero-cost. The backing array is shared: writing to the source through
-// another path is observable through the view, until the source replaces its
-// buffer (e.g. a `List` reallocates on growth), after which the view keeps
-// referring to the buffer it was created from.
-//
-// Element access is always a value copy (`s[i]` yields `T`, never `&T`),
-// because Wasm GC has no interior references.
+// A view holds `&Array<T>` plus offsets, so it aliases the source until the
+// source replaces its buffer, after which it keeps the one it was built from.
 
 use { Ref, IndexValue, IndexRef, Iterator, IntoIterator, Add, Eq, Ord, Ordering, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
@@ -32,21 +23,16 @@ use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 internal trait Sequence {
     type Elem;
 
-    /// Returns the number of elements.
     fn len(&self) -> i32;
 
-    /// Returns the element at `index` without bounds checking.
-    ///
     /// The caller must guarantee `0 <= index < len()`. Violating it yields an
     /// unspecified `Elem` or traps; it is never undefined behaviour.
     fn get_unchecked(&self, index: i32) -> Self::Elem;
 
-    /// Returns true if there are no elements.
     fn is_empty(&self) -> bool {
         return self.len() == 0;
     }
 
-    /// Returns the element at `index`, or None if out of bounds.
     fn get(&self, index: i32) -> Option<Self::Elem> {
         if index < 0 || index >= self.len() {
             return null;
@@ -54,17 +40,14 @@ internal trait Sequence {
         return Option::Some(self.get_unchecked(index));
     }
 
-    /// Returns the first element, or None if empty.
     fn first(&self) -> Option<Self::Elem> {
         return self.get(0);
     }
 
-    /// Returns the last element, or None if empty.
     fn last(&self) -> Option<Self::Elem> {
         return self.get(self.len() - 1);
     }
 
-    /// Returns the index of the first element satisfying `pred`, or None.
     fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32> {
         for let mut i = 0; i < self.len(); i += 1 {
             if pred(self.get_unchecked(i)) {
@@ -86,36 +69,28 @@ internal struct Slice<T> {
 }
 
 impl Slice<T> {
-    /// Internal: build a slice from a backing array reference and bounds.
     internal fn internal_new(repr: &Array<T>, start: i32, end: i32) -> Slice<T> with stores[repr] {
         return Slice { repr, start, end };
     }
 
-    /// Returns the number of elements in the slice.
-    ///
     /// Also the byte-length anchor for the synthesised `FieldSchema::lookup`
-    /// (on `Slice<u8>`), routed through `#[compiler_item]` so a rename
-    /// here cannot silently break code generation.
+    /// (on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
+    /// cannot silently break code generation.
     #[compiler_item("byte_slice_len")]
     pub fn len(&self) -> i32 {
         return self.end - self.start;
     }
 
-    /// Returns the element at `index` without bounds checking.
-    ///
-    /// The caller must guarantee `0 <= index < len()`; an out-of-range
-    /// `index` reads past the view into the backing array or traps.
-    ///
-    /// Also the byte-read anchor for the synthesised `FieldSchema::lookup`
-    /// (on `Slice<u8>`), routed through `#[compiler_item]` for the same
-    /// rename-safety reason as `len`.
+    /// The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+    /// reads past the view into the backing array or traps. Also the byte-read
+    /// anchor for `FieldSchema::lookup`, as `len` is for byte length.
     #[compiler_item("byte_slice_get_unchecked")]
     pub fn get_unchecked(&self, index: i32) -> T {
         return builtin::array_get_value(self.repr, self.start + index);
     }
 
-    /// Returns a sub-slice over `[start, end)` relative to this slice, clamped
-    /// to its bounds.
+    /// Sub-slice over `[start, end)` relative to this one, clamped to its
+    /// bounds.
     pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
         let len = self.end - self.start;
         let s = i32_clamp(start, 0, len);
@@ -127,30 +102,26 @@ impl Slice<T> {
         };
     }
 
-    /// Returns an iterator yielding each element by value.
     pub fn iter_value(&self) -> SliceValueIter<T> with stores[self] {
         return SliceValueIter::internal_new(self.repr, self.start, self.end);
     }
 
-    /// Returns an iterator yielding a reference to each element.
     pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self] {
         return SliceRefIter::internal_new(self.repr, self.start, self.end);
     }
 
-    /// Returns an iterator over overlapping windows of `size` consecutive
-    /// elements. Panics if `size` is not positive.
+    /// Overlapping windows of `size` consecutive elements. Panics if `size` is
+    /// not positive.
     pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self] {
         return SliceWindows::internal_new(self.repr, self.start, self.end, size);
     }
 
-    /// Returns an iterator over non-overlapping chunks of up to `size`
-    /// elements. The last chunk may be shorter. Panics if `size` is not
-    /// positive.
+    /// Non-overlapping chunks of up to `size` elements; the last may be
+    /// shorter. Panics if `size` is not positive.
     pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self] {
         return SliceChunks::internal_new(self.repr, self.start, self.end, size);
     }
 
-    /// Copies the slice's elements into a new `Array<T>`.
     pub fn to_array(&self) -> Array<T> {
         let len = self.end - self.start;
         let mut out: Array<T> = builtin::array_new(i32_max(len, 0));
@@ -160,20 +131,17 @@ impl Slice<T> {
         return out;
     }
 
-    /// Copies the slice's elements into a new `List<T>`.
     pub fn to_list(&self) -> List<T> {
         let len = i32_max(self.end - self.start, 0);
         return List::internal_from_raw(self.to_array(), len);
     }
 
-    /// Internal: the backing array this slice views. Paired with
-    /// `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
-    /// `array_copy` directly from the view without a temporary.
+    /// With `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
+    /// `array_copy` straight from the view without a temporary.
     internal fn internal_repr(&self) -> &Array<T> with stores[self] {
         return self.repr;
     }
 
-    /// Internal: the start offset of this slice within its backing array.
     internal fn internal_start(&self) -> i32 {
         return self.start;
     }
@@ -199,7 +167,6 @@ impl<T> AsSlice for Slice<T> {
 
 
 impl<T: Eq> Slice<T> {
-    /// Returns true if the slice contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         for let mut i = self.start; i < self.end; i += 1 {
             if builtin::array_get_value(self.repr, i) == *value {
@@ -214,6 +181,7 @@ impl IndexValue<i32> for Slice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
+        assert index >= 0, "index out of bounds";
         assert index < self.end - self.start, "index out of bounds";
         return builtin::array_get_value(self.repr, self.start + index);
     }
@@ -225,6 +193,7 @@ impl<T: Ref> IndexRef<i32> for Slice<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T {
+        assert index >= 0, "index out of bounds";
         assert index < self.end - self.start, "index out of bounds";
         return builtin::array_get_ref(self.repr, self.start + index);
     }
@@ -332,7 +301,6 @@ internal struct SliceValueIter<T> {
 }
 
 impl SliceValueIter<T> {
-    /// Internal: build an iterator over `[index, end)` of a backing array.
     internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceValueIter<T> with stores[repr] {
         return SliceValueIter { repr, index, end };
     }
@@ -361,8 +329,7 @@ impl<T> IntoIterator for SliceValueIter<T> {
 }
 
 impl SliceValueIter<T> {
-    /// Collects the remaining elements into a new `List<T>` with a single bulk
-    /// copy of the underlying range.
+    /// One bulk copy of the remaining range, not an element-at-a-time loop.
     pub fn collect(&mut self) -> List<T> {
         let remaining = i32_max(self.end - self.index, 0);
         let mut repr: Array<T> = builtin::array_new(remaining);
@@ -410,10 +377,9 @@ impl<T: Ord> SliceValueIter<T> {
     }
 }
 
-/// A by-reference forward iterator over a backing `Array<T>` range, yielding
-/// `&T`. The yielded reference points to a fresh copy of each element (Wasm GC
-/// has no interior references), so it is a read-only view and cannot mutate the
-/// backing array. Backs `for x of &list`.
+/// A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
+/// points to a fresh copy of the element — Wasm GC has no interior references —
+/// so it reads but never writes the backing array. Backs `for x of &list`.
 internal struct SliceRefIter<T> {
     repr: &Array<T>,
     index: i32,
@@ -421,14 +387,12 @@ internal struct SliceRefIter<T> {
 }
 
 impl SliceRefIter<T> {
-    /// Internal: build a by-reference iterator over `[index, end)`.
     internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceRefIter<T> with stores[repr] {
         return SliceRefIter { repr, index, end };
     }
 
-    /// The value iterator over the same remaining range: yields `T` where this
-    /// yields `&T`. Named for the axis rather than Rust's `copied()`, since
-    /// every element read in Wado is a copy already.
+    /// The same remaining range yielded by value. Named for the axis rather
+    /// than Rust's `copied()`: every element read in Wado is a copy already.
     pub fn iter_value(&self) -> SliceValueIter<T> {
         return SliceValueIter::internal_new(self.repr, self.index, self.end);
     }
@@ -454,7 +418,6 @@ internal struct SliceRefMutIter<T> {
 }
 
 impl SliceRefMutIter<T> {
-    /// Internal: build a by-mutable-reference iterator over `[index, end)`.
     internal fn internal_new(repr: &mut Array<T>, index: i32, end: i32) -> SliceRefMutIter<T> with stores[repr] {
         return SliceRefMutIter { repr, index, end };
     }
@@ -473,8 +436,7 @@ impl<T> Iterator for SliceRefMutIter<T> {
     }
 }
 
-/// An iterator over overlapping windows of `size` consecutive elements. Each
-/// item is a `Slice<T>` viewing the backing array.
+/// Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 internal struct SliceWindows<T> {
     repr: &Array<T>,
     index: i32,
@@ -483,7 +445,6 @@ internal struct SliceWindows<T> {
 }
 
 impl SliceWindows<T> {
-    /// Internal: build a windows iterator over `[index, end)` with window `size`.
     internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceWindows<T> with stores[repr] {
         assert size > 0, "window size must be positive";
         return SliceWindows { repr, index, end, size };
@@ -516,8 +477,7 @@ impl<T> IntoIterator for SliceWindows<T> {
     }
 }
 
-/// An iterator over non-overlapping chunks of up to `size` elements. The last
-/// chunk may be shorter. Each item is a `Slice<T>` viewing the backing array.
+/// Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 internal struct SliceChunks<T> {
     repr: &Array<T>,
     index: i32,
@@ -526,7 +486,6 @@ internal struct SliceChunks<T> {
 }
 
 impl SliceChunks<T> {
-    /// Internal: build a chunks iterator over `[index, end)` with chunk `size`.
     internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceChunks<T> with stores[repr] {
         assert size > 0, "chunk size must be positive";
         return SliceChunks { repr, index, end, size };
@@ -560,36 +519,33 @@ impl<T> IntoIterator for SliceChunks<T> {
     }
 }
 
-/// Zero-copy view over a contiguous sequence. Implemented by `Array<T>`,
+/// Reference view over a contiguous sequence. Implemented by `Array<T>`,
 /// `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
 /// carries the real bodies.
 internal trait AsSlice: Sequence {
     fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
 
-    /// Returns a sub-view over `[start, end)`, clamped to this sequence.
+    /// Sub-view over `[start, end)`, clamped to this sequence.
     fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> with stores[self] {
         return self.as_slice().slice(start, end);
     }
 
-    /// Returns an iterator yielding each element by value.
     fn iter_value(&self) -> SliceValueIter<Self::Elem> with stores[self] {
         return self.as_slice().iter_value();
     }
 
-    /// Returns an iterator yielding a reference to each element.
     fn iter_ref(&self) -> SliceRefIter<Self::Elem> with stores[self] {
         return self.as_slice().iter_ref();
     }
 
-    /// Returns an iterator over overlapping windows of `size` consecutive
-    /// elements. Panics if `size` is not positive.
+    /// Overlapping windows of `size` consecutive elements. Panics if `size` is
+    /// not positive.
     fn windows(&self, size: i32) -> SliceWindows<Self::Elem> with stores[self] {
         return self.as_slice().windows(size);
     }
 
-    /// Returns an iterator over non-overlapping chunks of up to `size`
-    /// elements. The last chunk may be shorter. Panics if `size` is not
-    /// positive.
+    /// Non-overlapping chunks of up to `size` elements; the last may be
+    /// shorter. Panics if `size` is not positive.
     fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> with stores[self] {
         return self.as_slice().chunks(size);
     }
