@@ -21,7 +21,7 @@ use wado_compiler::ast::{
     AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr, Module, Param,
     Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
 };
-use wado_compiler::hashmap::IndexSet;
+use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// Levels the calibration compares. `O0` is the reference the optimizer must
@@ -277,20 +277,31 @@ impl SiteCollector {
         collector.sites
     }
 
+    /// The bindings in scope, a shadowed name answered for by the one that
+    /// shadows it: an outer `let mut` an inner `let` shadows is not assignable
+    /// through that name.
+    fn visible(&self) -> IndexMap<&str, (usize, bool)> {
+        let mut visible = IndexMap::default();
+        for (depth, scope) in self.scopes.iter().enumerate() {
+            for binding in scope {
+                visible.insert(binding.name.as_str(), (depth, binding.is_mut));
+            }
+        }
+        visible
+    }
+
     fn visible_mutables(&self) -> Vec<String> {
-        self.scopes[self.capture_floor..]
+        self.visible()
             .iter()
-            .flatten()
-            .filter(|binding| binding.is_mut)
-            .map(|binding| binding.name.clone())
+            .filter(|(_, (depth, is_mut))| *is_mut && *depth >= self.capture_floor)
+            .map(|(name, _)| (*name).to_string())
             .collect()
     }
 
     fn visible_readables(&self) -> Vec<String> {
-        self.scopes
-            .iter()
-            .flatten()
-            .map(|binding| binding.name.clone())
+        self.visible()
+            .keys()
+            .map(|name| (*name).to_string())
             .collect()
     }
 
@@ -349,11 +360,9 @@ fn let_bindings(stmt: &Stmt) -> Vec<Binding> {
     bindings
 }
 
-/// A plain name in a refutable pattern is either a binding or a unit variant,
-/// and the parser cannot tell: the elaborator resolves it against the cases in
-/// scope. Wado spells a variant in `PascalCase`, so an initial capital is read as
-/// one — mistaking it for a binding would have the payload name a value that
-/// does not exist, and the whole fixture would leave the campaign.
+/// A plain name in a refutable pattern is either a binding or a unit variant
+/// and the parser cannot tell, so an initial capital is read as the variant
+/// Wado spells that way: naming one costs the payload the whole fixture.
 fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut Vec<Binding>) {
     let recurse = |pattern, out: &mut Vec<Binding>| {
         pattern_bindings(pattern, is_mut, refutable, out);
@@ -440,10 +449,9 @@ impl AstVisitor for SiteCollector {
         self.in_body(params_of(&func.params), |s| walk_function(s, func));
     }
 
-    /// A closure body reads its captures, so it keeps the enclosing scopes; the
-    /// write payload stops at its own parameters, since assigning to a capture
-    /// would promote the closure to `fn mut` and every call through a plain
-    /// `let` then stops compiling.
+    /// A closure body keeps the enclosing scopes: it may read a capture, while
+    /// assigning to one would promote it to `fn mut` and every call through a
+    /// plain `let` would stop compiling.
     fn visit_expr(&mut self, expr: &Expr) {
         let Expr::Closure(closure) = expr else {
             walk_expr(self, expr);
@@ -460,15 +468,10 @@ impl AstVisitor for SiteCollector {
         self.in_closure(params, |s| walk_expr(s, expr));
     }
 
-    /// The statements that scope a binding over a body, plus one that scopes
-    /// nothing but must not be walked by hand: `else if` is an `else` block
-    /// holding one `If`, and that `If`'s span starts at the `if` keyword.
-    /// Visiting the block would offer the keyword as a site, and a guard there
-    /// splits the chain into an `else` that takes the guard and a stray `if` —
-    /// so the nested statement is visited directly, contributing its interior
-    /// without the position in front of it. An `else { if … }` written with
-    /// braces has the same shape and loses that one site too; the interior
-    /// sites are unaffected.
+    /// The statements that scope a binding over a body, plus `else if`: it is
+    /// an `else` block holding one `If` whose span starts at the `if` keyword,
+    /// and a guard offered there splits the chain, so that `If` is visited
+    /// directly and only the position in front of it is lost.
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::If(if_stmt) => {
@@ -625,9 +628,8 @@ struct Payload {
     render: fn(&Site) -> String,
 }
 
-/// Ordered by the analysis family each attacks, not by reach: the write is what
-/// alias and mod/ref analysis answer for, the read is what liveness and escape
-/// analysis answer for.
+/// Ordered by the analysis family each attacks: alias and mod/ref for the
+/// write, liveness and escape for the read.
 const PAYLOADS: [Payload; 2] = [
     Payload {
         name: "write",
@@ -649,10 +651,8 @@ fn opaque_writes(site: &Site) -> String {
     })
 }
 
-/// An opaque read of every binding the dead region can name.
-///
-/// It demands no mutability, so it reaches sites [`opaque_writes`] leaves
-/// empty — most of the corpus.
+/// An opaque read of every binding the dead region can name. It demands no
+/// mutability, so it reaches sites [`opaque_writes`] leaves empty.
 fn opaque_reads(site: &Site) -> String {
     render(&site.readables, |name| {
         format!("builtin::black_box({name});")
@@ -941,10 +941,8 @@ fn is_finding(excluded: &Excluded) -> bool {
 /// Inject each payload at every site it reaches, and compare the result against
 /// the program it came from.
 ///
-/// A payload the compiler refuses does not take the fixture out of the
-/// campaign: the read payload names bindings the write payload never touches,
-/// so one can be rejected where the other is fine. A payload that is refused at
-/// a level is dropped, and the fixture stays a subject as long as one survives.
+/// A payload the compiler refuses is dropped rather than the fixture, which
+/// stays a subject as long as one payload survives.
 fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
     let name = fixture_name(path);
     let spec = Spec::parse(source)?;
@@ -1714,6 +1712,27 @@ fn a_site_sees_the_readable_bindings_in_scope() {
         (vec!["b".into()], vec!["n".into(), "a".into(), "b".into()]),
     ];
     assert_eq!(seen, expected);
+}
+
+/// A name reaches the binding that shadows it, so an outer `let mut` an inner
+/// `let` shadows is not assignable — writing to it would not compile.
+#[test]
+fn a_shadowed_binding_is_answered_for_by_the_one_that_shadows_it() {
+    let source = r#"fn f() -> i32 {
+    let mut x = 1;
+    if x > 0 {
+        let x = x + 10;
+        assert x == 11;
+    }
+    return x;
+}
+"#;
+    let site = injection_sites(source)
+        .into_iter()
+        .find(|site| site.kind == "assert")
+        .expect("the assert is a site");
+    assert!(site.mutables.is_empty(), "{:?}", site.mutables);
+    assert_eq!(site.readables, vec!["x"]);
 }
 
 /// A destructuring pattern binds names the same way a plain `let` does, and a
