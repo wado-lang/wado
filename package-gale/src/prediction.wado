@@ -211,10 +211,12 @@ fn strip_dead_consume(node: PredictionNode) -> PredictionNode {
             }
         },
         Dispatch(d) => {
-            let new_branches: List<PredictionBranch> = d.branches.iter_ref().map(|b: &PredictionBranch| PredictionBranch {
-                tokens: b.tokens,
-                child: strip_dead_consume(b.child),
-            }).collect();
+            let new_branches: List<PredictionBranch> = d.branches.iter_ref().map(
+                |b: &PredictionBranch| PredictionBranch {
+                    tokens: b.tokens,
+                    child: strip_dead_consume(b.child),
+                },
+            ).collect();
             PredictionNode::Dispatch(PredictionDispatch { depth: d.depth, branches: new_branches });
         },
         _ => node,
@@ -655,7 +657,8 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     let common = sll_find_common_terminal(&closed);
     if let Some(elem) = common {
         // Advance all configs past this shared terminal.
-        let advanced: List<SllConfig> = closed.iter_ref().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect();
+        let advanced: List<SllConfig> = closed.iter_ref().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect(
+        );
         let child = build_sll_node(&advanced, depth, max_depth, ctx);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }

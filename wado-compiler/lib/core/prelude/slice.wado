@@ -5,7 +5,21 @@
 // A view holds `&Array<T>` plus offsets, so it aliases the source until the
 // source replaces its buffer, after which it keeps the one it was built from.
 
-use { Ref, IndexValue, IndexRef, Iterator, IntoIterator, Add, Eq, Ord, Ordering, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
+use {
+    Ref,
+    IndexValue,
+    IndexRef,
+    Iterator,
+    IntoIterator,
+    Add,
+    Eq,
+    Ord,
+    Ordering,
+    Display,
+    DisplayAlt,
+    Inspect,
+    InspectAlt,
+} from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
@@ -225,9 +239,10 @@ impl<T: Eq> Eq for Slice<T> {
             return false;
         }
         for let mut i = 0; i < len; i += 1 {
-            if builtin::array_get_value(self.repr, self.start + i)
-                != builtin::array_get_value(other.repr, other.start + i)
-            {
+            if builtin::array_get_value(self.repr, self.start + i) != builtin::array_get_value(
+                other.repr,
+                other.start + i,
+            ) {
                 return false;
             }
         }

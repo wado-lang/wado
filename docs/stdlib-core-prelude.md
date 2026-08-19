@@ -3207,8 +3207,8 @@ anchor for `FieldSchema::lookup`, as `len` is for byte length.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
-Returns a sub-slice over `[start, end)` relative to this slice, clamped
-to its bounds.
+Sub-slice over `[start, end)` relative to this one, clamped to its
+bounds.
 
 #### `pub fn iter_value(&self) -> SliceValueIter<T> with stores[self]`
 
@@ -3292,8 +3292,7 @@ _Fields are private._
 
 #### `pub fn collect(&mut self) -> List<T>`
 
-Collects the remaining elements into a new `List<T>` with a single bulk
-copy of the underlying range.
+One bulk copy of the remaining range, not an element-at-a-time loop.
 
 #### `pub fn sum(&mut self) -> Option<T>`
 
@@ -3328,8 +3327,7 @@ than Rust's `copied()`: every element read in Wado is a copy already.
 
 ### `pub struct SliceWindows<T>`
 
-An iterator over overlapping windows of `size` consecutive elements. Each
-item is a `Slice<T>` viewing the backing array.
+Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 
 _Fields are private._
 
@@ -3343,8 +3341,7 @@ _Fields are private._
 
 ### `pub struct SliceChunks<T>`
 
-An iterator over non-overlapping chunks of up to `size` elements. The last
-chunk may be shorter. Each item is a `Slice<T>` viewing the backing array.
+Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 
 _Fields are private._
 

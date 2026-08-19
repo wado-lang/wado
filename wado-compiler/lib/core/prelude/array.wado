@@ -21,7 +21,16 @@ use {
     Inspect,
     InspectAlt,
 } from "core:prelude/traits.wado";
-use { AsSlice, Sequence, Slice, SliceValueIter, SliceRefIter, SliceRefMutIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
+use {
+    AsSlice,
+    Sequence,
+    Slice,
+    SliceValueIter,
+    SliceRefIter,
+    SliceRefMutIter,
+    SliceWindows,
+    SliceChunks,
+} from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { i32_clamp, i32_min } from "core:rt";
@@ -246,7 +255,14 @@ impl<T: Ord> Ord for Array<T> {
 // sequences (`Array<T>` itself; `List<T>` over its used prefix). `limit` is the
 // resolved element cap (negative = none); `marker` appends `, ...` when
 // elements are dropped.
-internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
+internal fn write_seq_inspect<T: Inspect>(
+    repr: &Array<T>,
+    start: i32,
+    end: i32,
+    f: &mut Formatter,
+    marker: bool,
+    limit: i32,
+) {
     f.write_char('[');
     let mut shown = 0;
     let mut truncated = false;
@@ -273,7 +289,14 @@ internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, start: i32, end: i32,
 
 /// Pretty-printed counterpart of [`write_seq_inspect`]: each element on its own
 /// indented line; `marker` appends a `...` line when elements are dropped.
-internal fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
+internal fn write_seq_inspect_alt<T: InspectAlt>(
+    repr: &Array<T>,
+    start: i32,
+    end: i32,
+    f: &mut Formatter,
+    marker: bool,
+    limit: i32,
+) {
     if start >= end {
         f.write_str(&"[]");
         return;
