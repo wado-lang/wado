@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787095243587,
+  "lastUpdate": 1787101602606,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49337,6 +49337,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/29673a201f916492e5917dd8929fd8b16475b29f"
         },
         "date": 1787095242758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d249ff27bd8b387e5145312cc5a960352359d036",
+          "message": "Merge pull request #1853 from wado-lang/claude/value-copy-helper-identity-36oxbx\n\nfix(lower): identify a value-copy helper once, and ask ownership about the storage",
+          "timestamp": "2026-08-19T09:55:55+09:00",
+          "tree_id": "88a60c13f606c36b42ea217cda96282ccae63680",
+          "url": "https://github.com/wado-lang/wado/commit/d249ff27bd8b387e5145312cc5a960352359d036"
+        },
+        "date": 1787101601892,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
