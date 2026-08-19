@@ -56,6 +56,11 @@ Payload decides what the dead region does to the live program:
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
+Each payload is its own subject, injected alone and judged against the same
+baseline. A fixture the compiler refuses one payload at — for a binding it will
+not let a dead region name — stays in the campaign under the others, rather
+than leaving it over the payload with the narrower reach.
+
 ### Calibration precedes mutation
 
 A fixture must be a valid oracle before it can be a subject. Calibration injects
@@ -97,7 +102,7 @@ Ordered by yield per cost. The corpus is 1571 fixtures and 23414 injection
 sites; the write payload reaches 568 fixtures and 5685 sites, so most of the
 corpus currently receives no payload at all.
 
-- [ ] Opaque read payload. Reaches every site and attacks a different analysis
+- [x] Opaque read payload. Reaches every site and attacks a different analysis
       family than the write.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
