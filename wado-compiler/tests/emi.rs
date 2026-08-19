@@ -49,8 +49,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wado_compiler::ast::{
-    AstVisitor, Block, Expr, Function, Item, Module, Pattern, Stmt, walk_block, walk_expr,
-    walk_function, walk_item, walk_stmt,
+    AstVisitor, Block, Expr, Function, Item, Module, Pattern, SelfKind, Stmt, walk_block,
+    walk_expr, walk_function, walk_item, walk_stmt,
 };
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::{CompilerOptions, OptLevel};
@@ -299,11 +299,12 @@ impl SiteCollector {
         self.scopes.iter().flatten().cloned().collect()
     }
 
-    /// Enter a body with its own scope stack, so a nested function does not
-    /// inherit bindings it cannot name.
-    fn in_body(&mut self, walk: impl FnOnce(&mut Self)) {
+    /// Enter a body with its own scope stack, seeded with its `mut`
+    /// parameters, so a nested body does not inherit bindings it cannot name.
+    fn in_body(&mut self, params: Vec<String>, walk: impl FnOnce(&mut Self)) {
         self.body_depth += 1;
         let outer = std::mem::take(&mut self.scopes);
+        self.scopes.push(params);
         walk(self);
         self.scopes = outer;
         self.body_depth -= 1;
@@ -339,25 +340,38 @@ impl AstVisitor for SiteCollector {
         // A `test` body is a function body in every way that matters here; the
         // rest reach their bodies through `visit_function`.
         if matches!(item, Item::Test(_)) {
-            self.in_body(|s| walk_item(s, item));
+            self.in_body(Vec::new(), |s| walk_item(s, item));
         } else {
             walk_item(self, item);
         }
     }
 
     fn visit_function(&mut self, func: &Function) {
-        self.in_body(|s| walk_function(s, func));
+        // A `self` receiver is not a name the body may assign to.
+        let params = func
+            .params
+            .iter()
+            .filter(|param| param.is_mut && param.self_kind == SelfKind::None)
+            .map(|param| param.name.clone())
+            .collect();
+        self.in_body(params, |s| walk_function(s, func));
     }
 
     /// A closure gets its own scope stack, not for hygiene but for typing: a
     /// payload writing to a binding the closure captured would promote it to
     /// `fn mut`, and every call through a plain `let` then stops compiling.
     fn visit_expr(&mut self, expr: &Expr) {
-        if matches!(expr, Expr::Closure(_)) {
-            self.in_body(|s| walk_expr(s, expr));
-        } else {
+        let Expr::Closure(closure) = expr else {
             walk_expr(self, expr);
-        }
+            return;
+        };
+        let params = closure
+            .params
+            .iter()
+            .filter(|param| param.is_mut)
+            .map(|param| param.name.clone())
+            .collect();
+        self.in_body(params, |s| walk_expr(s, expr));
     }
 
     /// `else if` is an `else` block holding one `If`, and that `If`'s span
@@ -1432,4 +1446,16 @@ fn reduction_keeps_only_the_sites_that_matter() {
         reduced.iter().map(|site| site.offset).collect::<Vec<_>>(),
         culprits
     );
+}
+
+/// A `mut` parameter is a binding the body can write to just as much as a
+/// `let mut`, and for a small function it is often the only one.
+#[test]
+fn a_mut_parameter_is_in_scope_from_the_first_site() {
+    let source = "fn f(mut n: i32, k: i32) -> i32 {\n    n = n + k;\n    return n;\n}\n";
+    let seen: Vec<Vec<String>> = injection_sites(source)
+        .iter()
+        .map(|site| site.mutables.clone())
+        .collect();
+    assert_eq!(seen, vec![vec!["n".to_string()], vec!["n".to_string()]]);
 }
