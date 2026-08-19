@@ -792,6 +792,14 @@ impl ParsedTest {
     }
 }
 
+/// Does the file at `path` carry a module-level `#![TODO]`?
+///
+/// A file that cannot be read or parsed is not one, so an unreadable path
+/// stays a hard failure rather than being downgraded to pending.
+fn todo_module_at(path: &str) -> bool {
+    std::fs::read_to_string(path).is_ok_and(|source| wado_compiler::parse(&source).ast.has_todo())
+}
+
 /// **Stage 1 worker** — run the wado compiler over one source file and
 /// emit the wasm bytes. No wasmtime touched here, so `--no-run` can cut
 /// the pipeline immediately after this stage and pay zero Cranelift cost.
@@ -825,6 +833,14 @@ async fn compile_artifact(
     let compile_result = match panic_or_result {
         Ok(r) => r,
         Err(payload) => {
+            // A panic carries no `CompileResult`, so `is_todo_module` has to be
+            // read back off the source. An ICE is what a `#![TODO]` module is
+            // most likely to hit, and it belongs on the same pending axis as
+            // the expected compile error below.
+            if todo_module_at(&path) {
+                reporter.on_compile(&path, CompileEvent::TodoModule, compile_duration);
+                return CompileOutcome::TodoCompileError(TodoCompileError { path });
+            }
             let message = format!("panicked: {}", format_panic_payload(&payload));
             reporter.on_compile(
                 &path,
