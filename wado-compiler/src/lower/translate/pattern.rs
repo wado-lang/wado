@@ -238,6 +238,23 @@ struct PatternLowerer<'a> {
     owned_temps: IndexSet<u32>,
 }
 
+/// A place: a projection chain rooted at a local, which the match arms read
+/// where it lies. Anything else is a temporary the match alone holds.
+fn is_place(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr: inner,
+        } => is_place(inner),
+        _ => false,
+    }
+}
+
 /// Such a binding aliases the place it reads, so it must read one nothing can
 /// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
@@ -1563,13 +1580,17 @@ impl<'a> PatternLowerer<'a> {
                 // Two reasons: `labeled_block_fusion` keys on the
                 // `(Let, Match)` pair and stops firing on an inline scrutinee,
                 // and an owning arm binding needs a scrutinee nothing can
-                // write.
+                // write. A place scrutinee needs neither: the arms project it
+                // where it lies, and fusion's producers are calls. Hoisting one
+                // asks the fold to defend a temp nobody writes, which is what
+                // made `match *r` deep-copy the aggregate `match r` reads in
+                // place.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,
                     ..
                 } = &mut expr.kind
-                    && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
+                    && (!is_place(scrutinee)
                         || self.needs_owned_scrutinee(scrutinee, arms, type_table))
                 {
                     let temp_let = self.bind_scrutinee_to_temp(scrutinee, type_table, stmt.span);

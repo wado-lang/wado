@@ -278,6 +278,15 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
+A `match` over a place needs no temp of its own. Pattern lowering hoists a
+non-`Local` scrutinee into one for `labeled_block_fusion`, which keys on the
+`(Let, Match)` pair; the fold then defends that temp, since a `let` bound from a
+projection is a copy. But the arms project a place where it lies and each
+binding asks the fold for itself, exactly as they do for a bare local — so the
+hoist applies only where the scrutinee is not a place, which is also where
+fusion's producers (calls) are. Hoisting one is what made `match *r` deep-copy
+the aggregate that `match r` reads in place.
+
 ### Which helpers exist
 
 `$value_copy$T` is additive synthesis, so the helpers are created in `plan` —
@@ -401,6 +410,8 @@ Verified against the tree.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
       deep-copying the error it propagates.
 - [x] A place repointed after a binding read it releases that binding.
+- [x] A place scrutinee is matched where it lies, so `match *r` stops
+      deep-copying the aggregate that `match r` reads in place.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
       kind).
