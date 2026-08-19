@@ -138,7 +138,7 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 
 `mise run emi-calibrate` runs the calibration stage: an empty guard goes in at every statement boundary of every e2e fixture, and the fixtures whose output is unmoved land in `target/emi/corpus.txt`. One that does move observes something an injection perturbs — a column, an allocation, a generated test-export name — and cannot serve as an oracle; `target/emi/calibration.txt` records it with the reason. A divergence re-runs the baseline, so a fixture that moves on its own is recorded as nondeterministic rather than charged to the guard. The mutation stage draws only on the calibrated corpus.
 
-`mise run emi-mutate` runs that stage: every guard writes to each `let mut` in scope, so the dead region touches the live program. A fixture whose output moves is a wrong-code finding, delta-debugged back to the guards responsible and written out as a reduced mutant under `target/emi/findings/`.
+`mise run emi-mutate` runs that stage: every guard writes to each `let mut` in scope, so the dead region touches the live program. A fixture whose output moves, or whose compiler goes down, is a finding: it is delta-debugged back to the guards responsible and written out as a reduced mutant under `target/emi/findings/`.
 
 `.github/workflows/emi.yml` runs both stages nightly over `WADO_EMI_SHARD=k/n` shards, merging their reports into one job summary.
 

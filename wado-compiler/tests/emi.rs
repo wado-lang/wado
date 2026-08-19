@@ -24,8 +24,9 @@
 //! [`mutate_corpus`] carries the mutation stage: each guard writes to every
 //! `let mut` in scope, so the dead region touches the live program and the
 //! alias and mod/ref analyses behind `licm`, `store_load_forward`,
-//! `field_scalarize`, `copy_prop` and `sroa` have to survive it. A divergence
-//! is delta-debugged back to the guards that caused it.
+//! `field_scalarize`, `copy_prop` and `sroa` have to survive it. A moved output
+//! and a downed compiler are both delta-debugged back to the guards that
+//! caused them.
 //!
 //! ```sh
 //! cargo test --test emi -- --ignored --nocapture
@@ -715,6 +716,22 @@ fn reduce(mut sites: Vec<Site>, diverges: &dyn Fn(&[Site]) -> bool) -> Vec<Site>
     sites
 }
 
+/// Delta-debug a finding's injection set and describe what is left.
+fn narrow(
+    canonical: &str,
+    sites: Vec<Site>,
+    reproduces: &dyn Fn(&[Site]) -> bool,
+) -> (Vec<Site>, String) {
+    let total = sites.len();
+    let reduced = reduce(sites, reproduces);
+    let detail = format!(
+        "reduced to {} of {total} sites at {}",
+        reduced.len(),
+        site_positions(canonical, &reduced)
+    );
+    (reduced, detail)
+}
+
 /// `line:column kind` for each site, on one line.
 fn site_positions(source: &str, sites: &[Site]) -> String {
     sites
@@ -727,6 +744,13 @@ fn site_positions(source: &str, sites: &[Site]) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// What a mutant did that an unreachable guard is not allowed to do.
+#[derive(Clone, Copy, PartialEq)]
+enum Misbehaviour {
+    Diverged,
+    Crashed,
 }
 
 /// Inject an opaque write to every binding in scope at every site, and compare
@@ -755,11 +779,14 @@ fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
                 return Err(Excluded::BaselineUnhealthy { level, detail });
             }
         };
-        let diverges = |subset: &[Site]| {
+        let reproduces = |subset: &[Site], what: Misbehaviour| {
             let mutant = inject_each(&canonical, subset, opaque_writes);
             match evaluate(path, &mutant, &spec, level) {
-                Evaluation::Ran(outcome) => !baseline.differences(&outcome).is_empty(),
-                Evaluation::CompileError(_) | Evaluation::Crashed(_) => false,
+                Evaluation::Ran(outcome) => {
+                    what == Misbehaviour::Diverged && !baseline.differences(&outcome).is_empty()
+                }
+                Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
+                Evaluation::CompileError(_) => false,
             }
         };
 
@@ -772,17 +799,13 @@ fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
                     {
                         return Err(Excluded::Nondeterministic { level, detail });
                     }
-                    let reduced = reduce(sites.clone(), &diverges);
+                    let (reduced, narrowed) = narrow(&canonical, sites, &|subset| {
+                        reproduces(subset, Misbehaviour::Diverged)
+                    });
                     write_finding(&name, &inject_each(&canonical, &reduced, opaque_writes));
                     return Err(Excluded::GuardChangedOutput {
                         level,
-                        detail: format!(
-                            "{} — reduced to {} of {} sites at {}",
-                            differences.join("; "),
-                            reduced.len(),
-                            sites.len(),
-                            site_positions(&canonical, &reduced)
-                        ),
+                        detail: format!("{narrowed} — {}", differences.join("; ")),
                     });
                 }
             }
@@ -790,7 +813,14 @@ fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
                 return Err(Excluded::GuardRejected { level, detail });
             }
             Evaluation::Crashed(detail) => {
-                return Err(Excluded::GuardCrashed { level, detail });
+                let (reduced, narrowed) = narrow(&canonical, sites, &|subset| {
+                    reproduces(subset, Misbehaviour::Crashed)
+                });
+                write_finding(&name, &inject_each(&canonical, &reduced, opaque_writes));
+                return Err(Excluded::GuardCrashed {
+                    level,
+                    detail: format!("{narrowed} — {detail}"),
+                });
             }
         }
     }
@@ -1458,4 +1488,28 @@ fn a_mut_parameter_is_in_scope_from_the_first_site() {
         .map(|site| site.mutables.clone())
         .collect();
     assert_eq!(seen, vec![vec!["n".to_string()], vec!["n".to_string()]]);
+}
+
+/// A finding arrives as a mutant carrying every site; the guards left after
+/// narrowing are the ones a person has to read.
+#[test]
+fn narrowing_names_the_guards_that_carry_a_finding() {
+    let source = "fn f() {\n    let a = 1;\n    let b = 2;\n    let c = 3;\n}\n";
+    let sites: Vec<Site> = [13, 28, 43]
+        .into_iter()
+        .map(|offset| Site {
+            offset,
+            kind: "let",
+            mutables: Vec::new(),
+        })
+        .collect();
+
+    let (reduced, detail) = narrow(source, sites, &|subset| {
+        subset.iter().any(|site| site.offset == 28)
+    });
+
+    assert_eq!(reduced.len(), 1);
+    assert_eq!(reduced[0].offset, 28);
+    assert!(detail.contains("1 of 3 sites"), "{detail}");
+    assert!(detail.contains("3:5 let"), "{detail}");
 }
