@@ -2287,7 +2287,7 @@ fn check_inherent_impl_collisions(
     // since an inherent `impl &Cw<i32>` defines on the pointee. The target's
     // *arguments* answer a different question, and that reading discards the
     // pointee telling `&Cw<i32>` from `&Dw<i32>` apart.
-    let mut minted: IndexMap<(String, &str), ()> = IndexMap::default();
+    let mut minted: IndexSet<(String, &str)> = IndexSet::default();
     for header in &instantiations {
         let peeled = match &header.ty {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
@@ -2295,14 +2295,14 @@ fn check_inherent_impl_collisions(
         };
         let receiver = written_type_arg(peeled, resolutions);
         for method in &header.methods {
-            if minted
-                .insert((receiver.to_mangled(), method.name.as_str()), ())
-                .is_some()
-            {
+            if !minted.insert((receiver.to_mangled(), method.name.as_str())) {
                 violations.push((
                     header.module.clone(),
                     TypeError::DuplicateInherentMethod {
-                        self_type_name: receiver.to_display(),
+                        // What this impl wrote, not the head both minted:
+                        // that spelling names neither impl and is the same
+                        // string for both.
+                        self_type_name: written_type_source(&header.ty),
                         method_name: method.name.clone(),
                         span: method.span,
                     },
@@ -2519,6 +2519,42 @@ pub(super) fn written_type_arg(
                 _ => head,
             }
         }
+    }
+}
+
+/// The written form of `ty`, for a diagnostic that must say what the programmer
+/// wrote (WEP 2026-08-12 §9).
+///
+/// A rendering of the *AST*, so nothing can read it back into a declaration —
+/// unlike a mangle, which spells a function type as `Fn<arity, return>` and so
+/// names two written types alike and neither of them as written.
+fn written_type_source(ty: &ast::Type) -> String {
+    let list = |args: &[ast::Type]| {
+        args.iter()
+            .map(written_type_source)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    match ty {
+        ast::Type::Named(named) => named.name.clone(),
+        ast::Type::Generic(g) => format!("{}<{}>", g.name, list(&g.args)),
+        ast::Type::NamespacedGeneric(ns) => {
+            format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
+        }
+        ast::Type::Function(ft) => {
+            let m = if ft.is_mut { " mut" } else { "" };
+            format!(
+                "fn{m}({}) -> {}",
+                list(&ft.params),
+                written_type_source(&ft.return_type)
+            )
+        }
+        ast::Type::Tuple(elems) => format!("[{}]", list(elems)),
+        ast::Type::Reference(inner) => format!("&{}", written_type_source(inner)),
+        ast::Type::MutReference(inner) => format!("&mut {}", written_type_source(inner)),
+        ast::Type::TypePackSpread(name, _) => format!("..{name}"),
+        ast::Type::Infer(_) => "_".to_string(),
+        ast::Type::Error(_) => "<error>".to_string(),
     }
 }
 

@@ -3187,7 +3187,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// Resolve a struct literal
     /// The struct declaration an unnamed literal's target names, or `None`
     /// where the target declares none — an anonymous shape, a map, no
     /// annotation at all — and the literal interns by its fields instead.

@@ -975,7 +975,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// recorded arguments and its bound parameters are numbered against one
     /// set of positions — `ns::Cell<T>` included.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
-        let Some(args) = super::method_lookup::impl_target_head_args(ty) else {
+        // Peeled as the frame peels it, or the claim above holds for every
+        // target but a reference one.
+        let inner = match ty {
+            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
+            other => other,
+        };
+        let Some(args) = super::method_lookup::impl_target_head_args(inner) else {
             return Vec::new();
         };
         args.to_vec()

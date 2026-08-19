@@ -309,10 +309,10 @@ impl TypeSystem {
     /// Whether `arg` pins its position — the receiver's argument must equal it —
     /// rather than standing for whatever the receiver supplies.
     ///
-    /// [`Self::arg_pins`], which is also what decides whether the impl's
-    /// methods are named per-instantiation. Which positions an impl fixes
-    /// decides both, and two functions deciding it is two functions minting one
-    /// name.
+    /// [`Self::arg_pins`] under the name the naming side asks it by: which
+    /// positions an impl fixes decides both whether its methods are named
+    /// per-instantiation and which receivers reach them, and two functions
+    /// deciding it is two functions minting one name.
     pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
         self.arg_pins(arg)
     }
