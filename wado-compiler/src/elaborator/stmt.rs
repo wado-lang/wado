@@ -264,10 +264,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .register_decl_type(struct_decl.id, type_id);
         let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
-        self.sem.decls.local_item_renders.insert(
-            (mangled_name.clone(), self.current_module_source.clone()),
-            def,
-        );
         self.sem
             .decls
             .fn_local_items
@@ -457,7 +453,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if base_type_id == crate::tir::TypeTable::UNKNOWN {
             return false;
         }
-        let mangled_name = crate::name::mangle_local_item_name(&newtype_decl.name, newtype_decl.id);
         // Same as the local struct: the head is this declaration's identity.
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return true;
@@ -479,10 +474,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return true;
         };
-        self.sem
-            .decls
-            .local_item_renders
-            .insert((mangled_name, self.current_module_source.clone()), def);
         self.sem.decls.local_newtypes.insert(def, type_id);
         self.sem
             .decls
@@ -584,76 +575,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
                     let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
+                    // `resolve_expr` decides what an unnamed literal against a
+                    // declared struct means. Deciding it a second time here is
+                    // how the two spellings came to check different things.
                     if let ResolvedType::Struct { .. } = target_resolved {
-                        let (name, module_source) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_head(target_type)
-                            .expect("a struct names a declaration");
-                        let struct_type = target_type;
-
-                        let struct_field_types: Vec<(String, TypeId)> = self
-                            .lookup_struct_fields(&name)
-                            .map(|info| {
-                                info.fields
-                                    .iter()
-                                    .map(|(n, t, _)| (n.clone(), *t))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-
-                        // Check field visibility for cross-module struct literal
-                        if module_source != self.current_module_source
-                            && let Some(struct_info) = self.lookup_struct_fields(&name)
-                        {
-                            let same_package =
-                                module_source.same_package(&self.current_module_source);
-                            for (fname, _, vis) in &struct_info.fields {
-                                if !vis.reachable_from(same_package)
-                                    && struct_lit.fields.iter().any(|f| f.name == *fname)
-                                {
-                                    let _ = self.emit(TypeError::PrivateFieldAccess {
-                                        struct_name: name.clone(),
-                                        field_name: fname.clone(),
-                                        visibility: *vis,
-                                        span: struct_lit.span,
-                                    });
-                                }
-                            }
-                        }
-
-                        for field in &struct_lit.fields {
-                            // Check field name exists in struct definition
-                            if !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                                && !struct_field_types.is_empty()
-                            {
-                                let _ = self.emit(TypeError::ExtraField {
-                                    struct_name: name.clone(),
-                                    field_name: field.name.clone(),
-                                    span: field.span,
-                                });
-                            }
-                            let expected_field_type = struct_field_types
-                                .iter()
-                                .find(|(n, _)| n == &field.name)
-                                .map(|(_, type_id)| *type_id);
-                            self.resolve_expr(&field.value, ctx, expected_field_type);
-                        }
-
-                        // Record the implicit struct literal's mangled name
-                        // (the target struct's name as the elaborator picks
-                        // it up) so reify reads it from
-                        // `GenericInstantiation` instead of taking the
-                        // anon-literal path that expects a synthesised
-                        // `__anon_{…}` name.
-                        self.record_generic_instantiation_with_mangle(
-                            struct_lit.id,
-                            vec![],
-                            struct_type,
-                            Some(name),
-                        );
-                        (struct_type, target_type)
+                        (
+                            self.resolve_expr(ast_value, ctx, Some(target_type)),
+                            target_type,
+                        )
                     } else if let Some(coerced) =
                         self.try_coerce_struct_to_map(ast_value, ctx, target_type)
                     {
@@ -2809,8 +2738,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Function { .. }
             | ResolvedType::Resource { .. } => true,
+            // The instance's own declaration, not its name looked up again.
             ResolvedType::GenericInstance { def, .. } => {
-                self.contains_variant(self.tysys.type_table.borrow().def_name(def))
+                self.lookup_variant_case_of_decl(def).is_some()
             }
             ResolvedType::Newtype { base_type, .. } => self.is_replace_on_assign_element(base_type),
             _ => false,

@@ -1,0 +1,11 @@
+// The green half of `impl_arg_ns_qualified_error`: the same
+// `impl<Tag> Slot<tag::Tag, Tag>` still applies to the type its first argument
+// names, so constraining that position does not over-constrain it.
+
+use { Slot } from "./sub/impl_arg_ns_qualified_holder.wado";
+use tag from "./sub/cross_module_same_name_impl_arg_tag_a.wado";
+
+test "namespace-qualified impl argument applies to its own type" {
+    let s = Slot { a: tag::Tag { n: 3 }, b: 7 };
+    assert s.n() == 3;
+}

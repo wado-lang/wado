@@ -1,0 +1,11 @@
+// The green half of `impl_arg_ns_target_error`: `impl c::Cell<i32>` still
+// applies to the instantiation it names, so reading a namespaced target's
+// arguments in the matching side does not over-constrain it.
+
+use { Cell } from "./sub/impl_arg_ns_target_cell.wado";
+use {} from "./sub/impl_arg_ns_target_holder.wado";
+
+test "a namespaced impl target applies to its own instantiation" {
+    let c = Cell { a: 5 };
+    assert c.get() == 5;
+}

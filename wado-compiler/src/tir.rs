@@ -1373,25 +1373,6 @@ impl TypeTable {
             .copied()
     }
 
-    /// Find the `module_source` where a type with the given name is defined.
-    /// Searches `struct_name_index` first, then falls back to scanning for
-    /// `GenericInstance` types (for generic struct base names like "`IterFilter`").
-    pub fn find_struct_module_source(&self, name: &str) -> Option<ModuleSource> {
-        // Try struct_name_index first (for concrete struct types)
-        if let Some((_, ms)) = self.struct_name_index.keys().find(|(n, _)| n == name) {
-            return Some(ms.clone());
-        }
-        // Fall back to scanning GenericInstance types (for generic templates)
-        for id in self.iter_type_ids() {
-            if let ResolvedType::GenericInstance { def, .. } = self.get(id)
-                && self.def_name(*def) == name
-            {
-                return Some(self.def_module(*def).clone());
-            }
-        }
-        None
-    }
-
     /// Remove all type entries whose `TypeId` is not in `keep`. Erased entries
     /// become `None` holes rather than being renumbered away, so surviving ids
     /// keep their indices, and the intern map and secondary indices are rebuilt.

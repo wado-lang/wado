@@ -1,0 +1,15 @@
+use { T as Item } from "./cross_module_same_name_impl_arg_binder_dep.wado";
+
+pub struct Pair<A, B> {
+    pub a: A,
+    pub b: B
+}
+
+// The first argument is written `Item` — an alias whose *declaration* is named
+// `T`, the same spelling as this header's own binder. It is concrete, so it
+// constrains; only the second position is free.
+impl<T> Pair<Item, T> {
+    pub fn tag(&self) -> i32 {
+        return self.a.n
+    }
+}

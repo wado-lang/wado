@@ -632,11 +632,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// unused rather than shifting the rest.
     fn bind_declared_target_params(
         &mut self,
-        generic: &ast::GenericType,
+        target_args: &[Type],
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<crate::tir::TirTypeParam> {
         let mut params = Vec::new();
-        for (index, arg) in generic.args.iter().enumerate() {
+        for (index, arg) in target_args.iter().enumerate() {
             let ast::Type::Named(named) = arg else {
                 continue;
             };
@@ -780,10 +780,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
             other => other,
         };
-        let impl_type_params = if let ast::Type::Generic(generic) = impl_type_inner
+        // However the head is spelled: `Cell<T>` and `ns::Cell<T>` write one
+        // target a namespace apart.
+        let head_args = super::method_lookup::impl_target_head_args(impl_type_inner);
+        let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
         {
-            self.bind_declared_target_params(generic, impl_declared_params)
+            self.bind_declared_target_params(args, impl_declared_params)
         } else {
             match impl_type {
                 ast::Type::Named(named) => {
@@ -964,15 +967,19 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         });
     }
 
-    /// The type arguments a generic type reference writes, resolved in the
-    /// current frame. A non-generic reference writes none.
+    /// The type arguments a head writes, resolved in the current frame — the
+    /// reading the impl frame binds through, so a block's recorded arguments
+    /// and its bound parameters share one set of positions.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
-        let Type::Generic(generic) = ty else {
+        // Peeled as the frame peels it.
+        let inner = match ty {
+            Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
+            other => other,
+        };
+        let Some(args) = super::method_lookup::impl_target_head_args(inner) else {
             return Vec::new();
         };
-        generic
-            .args
-            .clone()
+        args.to_vec()
             .iter()
             .map(|arg| self.resolve_type(arg))
             .collect()
@@ -1177,11 +1184,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         block.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
-        let impl_is_concrete = block.impl_is_concrete_instantiation(
-            &impl_block.ty,
-            &impl_block.type_params,
-            &block.current_module_source.clone(),
-        );
+        let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
 
         block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
@@ -2391,60 +2394,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Whether an impl type argument is a concrete (already-declared) type
-    /// rather than a free type parameter. `u8` / `MyStruct` are concrete; a
-    /// bare `T` is not — and neither is a name that, although it matches a
-    /// known type, was *declared as an impl type parameter* (e.g. the `i32`
-    /// in `impl<i32> Trait for Wrapper<i32>`, which shadows the primitive).
-    pub(super) fn is_concrete_type_arg(
-        &self,
-        arg: &ast::Type,
-        impl_params: &[ast::GenericParam],
-        impl_module: &ModuleSource,
-    ) -> bool {
-        match arg {
-            ast::Type::Named(named) => {
-                self.tysys.is_known_type_name_in(impl_module, &named.name)
-                    && !impl_params.iter().any(|p| p.name == named.name)
-            }
-            ast::Type::Generic(generic) => generic
-                .args
-                .iter()
-                .all(|a| self.is_concrete_type_arg(a, impl_params, impl_module)),
-            ast::Type::Tuple(elems) => elems
-                .iter()
-                .all(|e| self.is_concrete_type_arg(e, impl_params, impl_module)),
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                self.is_concrete_type_arg(inner, impl_params, impl_module)
-            }
-            _ => false,
-        }
-    }
-
     /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
     /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
     /// every argument is concrete. Its methods are per-instantiation functions
     /// named `List<u8>::method` and called directly. The tuple arm carries
     /// coherence Rule 1: the variadic template is skipped for that arity.
-    pub(super) fn impl_is_concrete_instantiation(
-        &self,
-        impl_ty: &ast::Type,
-        impl_type_params: &[ast::GenericParam],
-        impl_module: &ModuleSource,
-    ) -> bool {
-        let inner = match impl_ty {
-            ast::Type::Reference(i) | ast::Type::MutReference(i) => i.as_ref(),
-            other => other,
+    ///
+    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
+    /// nothing else: this names the method, matching decides which receivers
+    /// reach that name, and a second answer mints one name from two functions.
+    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
+        let Some(args) = super::method_lookup::impl_target_args(impl_ty) else {
+            return false;
         };
-        let args: &[ast::Type] = match inner {
-            ast::Type::Generic(g) => &g.args,
-            ast::Type::Tuple(elems) => elems,
-            _ => return false,
-        };
-        !args.is_empty()
-            && args
-                .iter()
-                .all(|a| self.is_concrete_type_arg(a, impl_type_params, impl_module))
+        !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully

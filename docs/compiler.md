@@ -246,10 +246,9 @@ read the `DefId` alone, and neither has a constructor that takes a spelling. A
 head that names no declaration — a closure environment, an anonymous literal's
 shape — is `TypeHead::Shape`, whose rendering _is_ its identity.
 
-A handful of functions still turn a name into a declaration; `defs.rs`'s
-`NAME_TO_IDENTITY` lists them with the reason each survives, and
-`no_reachable_function_turns_a_name_into_an_identity` fails on a new one. See
-WEP 2026-08-12 for what is left and why.
+A handful of functions still turn a name into a declaration. WEP 2026-08-12
+lists them with the reason each survives; adding one to that list is a design
+change, not a local convenience.
 
 A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
 and `{decl}` repeat whenever a type is implemented in the module declaring it —

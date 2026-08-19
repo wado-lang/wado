@@ -439,18 +439,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.class_of_type(ty);
         }
         let name = name.to_string();
-        self.synth_qualified_case(&name)
+        self.synth_qualified_case(id, &name)
     }
 
     /// `Color::Red`, `Flags::Bit`, and a payload-less case of a non-generic
     /// variant. A generic variant's type arguments come from the expected
     /// type, so it stays open.
-    fn synth_qualified_case(&mut self, name: &str) -> ArgClass {
-        let Some(pos) = name.find("::") else {
+    ///
+    /// The qualifier is a path segment the resolve walk answered for, so which
+    /// `Color` it names comes off that site rather than off the spelling.
+    fn synth_qualified_case(&mut self, id: &ast::IdentExpr, name: &str) -> ArgClass {
+        // The last `::`, so the split names the same segment `owner` does:
+        // in `ns::Color::Red` that is `Color`, not the `ns` prefix.
+        let Some(pos) = name.rfind("::") else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
         let (prefix, suffix) = (&name[..pos], &name[pos + 2..]);
-        if let Some(info) = self.lookup_variant_case(prefix) {
+        let owner = id.segments.len().checked_sub(2).map(|i| id.segments[i].id);
+        if let Some(info) = self.lookup_variant_cases_at(owner, prefix) {
             let declared_at = info.defined_at;
             let generic = !info.type_params.is_empty();
             if info.cases.iter().any(|c| c.name == suffix) {
@@ -460,13 +466,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.synth_decl_type(declared_at);
             }
         }
-        if let Some(info) = self.lookup_enum_case(prefix) {
+        if let Some(info) = self.type_lookup().enum_cases_at(owner, prefix) {
             let declared_at = info.defined_at;
             if info.find_case(suffix).is_some() {
                 return self.synth_decl_type(declared_at);
             }
         }
-        if let Some(info) = self.lookup_flags_case(prefix) {
+        if let Some(info) = self.lookup_flags_members_at(owner, prefix) {
             let type_id = info.type_id;
             if info.members.iter().any(|m| m.name == suffix) {
                 return self.class_of_type(type_id);

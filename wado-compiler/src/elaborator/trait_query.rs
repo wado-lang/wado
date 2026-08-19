@@ -1298,7 +1298,6 @@ impl TypeSystem {
         let trait_env = self.trait_env.clone();
         {
             for entry in trait_env.entries_by_receiver_vec(type_key) {
-                let (module_src, _) = &entry;
                 let Some(header) = trait_env.impl_headers.get(&entry) else {
                     continue;
                 };
@@ -1309,12 +1308,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_ref == Some(trait_)
-                    && self.inherent_impl_type_args_match(
-                        &header.ty,
-                        &header.type_params,
-                        type_args,
-                        module_src,
-                    )
+                    && self.inherent_impl_type_args_match(&header.ty, type_args)
                     && self.check_impl_block_bounds(
                         ctx,
                         scope,
@@ -1404,7 +1398,7 @@ impl TypeSystem {
         let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
             return false;
         };
-        let Some(def) = scope.declaration_or_render(type_name.as_decl_str()) else {
+        let Some(def) = scope.declaration(type_name.as_decl_str()) else {
             return false;
         };
         let subject = match on_bound {
@@ -2406,7 +2400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_def(base_type_id)
             .map_or_else(
-                || self.find_struct_module_source(struct_name),
+                || self.declaring_module_of(struct_name),
                 |def| self.tysys.resolutions.defs().module(def).clone(),
             );
         // The auto-derived trait is a compiler item, so it is named by the

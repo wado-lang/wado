@@ -1,0 +1,13 @@
+// A generic impl over a namespaced target: the header's own parameter is bound
+// from the head's argument list, and the block records that list, so the two
+// are numbered against one set of positions.
+
+use { GCell } from "./sub/impl_arg_ns_generic_cell.wado";
+use {} from "./sub/impl_arg_ns_generic_holder.wado";
+
+test "a generic namespaced impl target substitutes its parameter" {
+    let c = GCell { a: 5 };
+    assert c.get() == 5;
+    let d = GCell { a: "x" };
+    assert d.get() == "x";
+}

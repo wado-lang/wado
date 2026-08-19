@@ -1,0 +1,23 @@
+// Reference-ness is part of the shape on both sides. The receiver is read
+// through `fq_base_type_name`, which sees past a reference, so a by-value
+// impl argument matched a reference receiver and the call reached WIR build
+// as an unresolved `Call`. `arg_matches` compares reference-ness once, before
+// any arm can peel one side and not the other.
+
+struct Tag { n: i32 }
+struct Slot<T> { a: T }
+
+impl Slot<Tag> {
+    fn byval(self) -> i32 {
+        return 1
+    }
+}
+
+export fn run() {
+    let t = Tag { n: 1 };
+    let s = Slot { a: &t };
+    let _ = s.byval();
+}
+
+__DATA__
+{"compile_error": "no method 'byval' found"}

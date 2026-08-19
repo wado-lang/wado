@@ -1,0 +1,19 @@
+// `impl Slot<fn(i32) -> i32>` must not apply to a `Slot<fn(String) -> i32>`.
+//
+// A function type's mangled head is `Fn<arity, return>` — its parameter types
+// are not in it — so comparing renderings could not tell these apart. Comparing
+// structure can, without changing what the closure system spells.
+
+use { Slot } from "./sub/impl_arg_shapes_holder.wado";
+
+fn takes_string(s: String) -> i32 {
+    return 2
+}
+
+export fn run() {
+    let s = Slot { a: takes_string };
+    let _ = s.func();
+}
+
+__DATA__
+{"compile_error": "no method 'func' found"}
