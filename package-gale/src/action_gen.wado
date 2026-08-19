@@ -579,7 +579,7 @@ pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &GenContext) -> List<
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable
 /// alt-initial predicate.
 fn ambiguous_group_has_gate(amb_alts: &List<i32>, alts: &List<Alternative>, ctx: &GenContext) -> bool {
-    return amb_alts.iter().any(|idx| !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty());
+    return amb_alts.iter_ref().any(|idx| !alt_initial_gate_conditions(&alts[*idx], ctx).is_empty());
 }
 
 /// Whether every alt in an overlap group matches the same terminal sequence, so

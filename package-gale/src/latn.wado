@@ -63,7 +63,7 @@ pub struct LatnResult {
 /// non-greedy repeat whose body recurses into its owning rule). Gates the
 /// whole lexer-ATN path: builder, blob, runtime fragment.
 pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
-    return grammar.lexer_rules.iter().any(
+    return grammar.lexer_rules.iter_ref().any(
         |rule| !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules),
     );
 }
@@ -353,7 +353,7 @@ fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
     }
     let mut folded: List<CharRange> = [];
     fold_range_ci(lo, hi, &mut folded);
-    return folded.iter().map(|f: &CharRange| [f.start as i32, f.end as i32]).collect();
+    return folded.iter_ref().map(|f: &CharRange| [f.start as i32, f.end as i32]).collect();
 }
 
 fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {

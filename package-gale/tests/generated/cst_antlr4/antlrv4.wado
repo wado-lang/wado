@@ -698,7 +698,7 @@ pub struct ParseResult {
 
 impl ParseResult {
     pub fn has_errors(&self) -> bool {
-        return self.diagnostics.iter().any(|d| d.is_error());
+        return self.diagnostics.iter_ref().any(|d| d.is_error());
     }
 
     pub fn ok(&self) -> bool {
@@ -2047,7 +2047,7 @@ fn latn_closure(
             if target < 0 {
                 continue;
             }
-            if open.iter().any(|o: &i32| *o == target) {
+            if open.iter_ref().any(|o: &i32| *o == target) {
                 continue;
             }
             let mut ns: List<i32> = *stack;

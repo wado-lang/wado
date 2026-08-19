@@ -1937,7 +1937,7 @@ pub fn is_nullable(elem: &Element) -> bool {
 }
 
 pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
-    return a.iter().any(|x| b.contains(x));
+    return a.iter_ref().any(|x| b.contains(x));
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the
@@ -2032,5 +2032,5 @@ fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
         visiting.pop();
         return;
     }
-    *visiting = visiting.iter().copied().filter(|v: String| v != *name).collect();
+    *visiting = visiting.iter_value().filter(|v: String| v != *name).collect();
 }

@@ -340,6 +340,9 @@ The naming above is in place. The phases below are independent of each other.
       `IndexValue<RangeExclusive<i32>>` / `<RangeInclusive<i32>>` for `Slice`.
 - [ ] Reject structural derivation of `Eq` / `Ord` / `Inspect` for view types.
 - [ ] `assert 0 <= index < len` on every `List` and `Slice` index trait.
+- [ ] Put `TreeSet::iter` on the same axis. It is outside the sequence family,
+      but an unmarked `iter` yielding values is the drift this WEP removed
+      everywhere else, so leaving it is a standing invitation to reintroduce it.
 
 ### Phase E — Boundary and documentation
 

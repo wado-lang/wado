@@ -201,7 +201,7 @@ pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
 /// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
 /// carved out of the Java emit-actions rollout. See `action.md`.
 pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
-    return grammar.options.iter().any(|o| o.name == "superClass");
+    return grammar.options.iter_ref().any(|o| o.name == "superClass");
 }
 
 /// Whether java2wado can emit the grammar's non-superClass action bodies:
@@ -255,7 +255,7 @@ fn alt_has_actions(alt: &Alternative) -> bool {
     if !alt.actions.is_empty() {
         return true;
     }
-    return alt.elements.iter().any(|e| element_has_actions(e));
+    return alt.elements.iter_ref().any(|e| element_has_actions(e));
 }
 
 fn element_has_actions(elem: &Element) -> bool {
@@ -289,7 +289,7 @@ fn lexer_alt_has_actions(alt: &LexerAlternative) -> bool {
     if !alt.actions.is_empty() {
         return true;
     }
-    return alt.elements.iter().any(|e| lexer_element_has_actions(e));
+    return alt.elements.iter_ref().any(|e| lexer_element_has_actions(e));
 }
 
 fn lexer_element_has_actions(elem: &LexerElement) -> bool {

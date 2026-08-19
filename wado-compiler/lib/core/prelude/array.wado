@@ -30,7 +30,7 @@ use {
     Inspect,
     InspectAlt,
 } from "core:prelude/traits.wado";
-use { AsSlice, Sequence, Slice, SliceValueIter, SliceRefIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
+use { AsSlice, Sequence, Slice, SliceValueIter, SliceRefIter, SliceRefMutIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { i32_clamp, i32_min } from "core:rt";
@@ -76,9 +76,11 @@ impl Array<T> {
         builtin::array_copy(self, dst, src, src_off, len);
     }
 
-    /// Returns a by-value iterator over the array's elements.
-    pub fn iter(&self) -> SliceValueIter<T> with stores[self] {
-        return SliceValueIter::internal_new(self, 0, builtin::array_len(self));
+    /// Returns an iterator yielding a mutable reference to each element.
+    /// Available only where `T` is mutated in place; a scalar element has no
+    /// addressable cell, so a write through `&mut T` would be lost.
+    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
+        return SliceRefMutIter::internal_new(self, 0, builtin::array_len(self));
     }
 
 }

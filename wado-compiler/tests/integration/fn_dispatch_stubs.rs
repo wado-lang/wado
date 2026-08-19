@@ -22,7 +22,7 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 const SOURCE: &str = r#"
 export fn run() {
     let xs: List<i32> = [1, 2, 3];
-    let doubled: List<i32> = xs.iter().map(|x| *x * 2).collect();
+    let doubled: List<i32> = xs.iter_ref().map(|x| *x * 2).collect();
     assert doubled.len() == 3;
 }
 "#;

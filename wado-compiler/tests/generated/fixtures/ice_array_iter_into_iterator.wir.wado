@@ -141,8 +141,8 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     let collected: ref "core:prelude//List<u8>";
     let handle: i32;
     let packed: i64;
-    let rx_33: i32;
-    let tx_34: i32;
+    let rx_31: i32;
+    let tx_32: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:ice_array_iter_into_iterator.wado::__modules_initialized);
         cold_path;
@@ -157,10 +157,10 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: collected.repr, start: 0, end: collected.used });
     if __match_3_mv_0 == 0 {
         s = ref.as_non_null(__match_3_mv_1);
-        rx_33 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-        tx_34 = builtin::i32_wrap_i64(packed >> 32_i64);
-        handle = "ice_array_iter_into_iterator.wado/__cm_binding__Stdout_write_via_stream"(rx_33);
-        "core:cli/write_to_stream"(tx_34, s, 1);
+        rx_31 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+        tx_32 = builtin::i32_wrap_i64(packed >> 32_i64);
+        handle = "ice_array_iter_into_iterator.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
+        "core:cli/write_to_stream"(tx_32, s, 1);
         "wasi/future-drop-readable:transmission-cli"(handle);
     } else {
     }

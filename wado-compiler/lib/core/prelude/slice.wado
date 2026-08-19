@@ -124,13 +124,14 @@ impl Slice<T> {
         };
     }
 
-    /// Returns a by-value iterator over the slice.
-    pub fn iter(&self) -> SliceValueIter<T> {
-        return SliceValueIter {
-            repr: self.repr,
-            index: self.start,
-            end: self.end,
-        };
+    /// Returns an iterator yielding each element by value.
+    pub fn iter_value(&self) -> SliceValueIter<T> with stores[self] {
+        return SliceValueIter::internal_new(self.repr, self.start, self.end);
+    }
+
+    /// Returns an iterator yielding a reference to each element.
+    pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self] {
+        return SliceRefIter::internal_new(self.repr, self.start, self.end);
     }
 
     /// Returns an iterator over overlapping windows of `size` consecutive
@@ -237,7 +238,7 @@ impl<T> IntoIterator for Slice<T> {
     type Iter = SliceValueIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
-        return self.iter();
+        return self.iter_value();
     }
 }
 
@@ -343,10 +344,10 @@ impl SliceRefIter<T> {
         return SliceRefIter { repr, index, end };
     }
 
-    /// Value ("copied") view over the same backing: yields `T` instead of `&T`.
-    /// Mirrors Rust's `iter().copied()`, letting a reference iterator over a
-    /// primitive list read as values (`xs.iter().copied()`).
-    pub fn copied(&self) -> SliceValueIter<T> {
+    /// The value iterator over the same remaining range: yields `T` where this
+    /// yields `&T`. Named for the axis rather than Rust's `copied()`, since
+    /// every element read in Wado is a copy already.
+    pub fn iter_value(&self) -> SliceValueIter<T> {
         return SliceValueIter::internal_new(self.repr, self.index, self.end);
     }
 }
@@ -486,6 +487,16 @@ internal trait AsSlice: Sequence {
     /// Returns a sub-view over `[start, end)`, clamped to this sequence.
     fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> with stores[self] {
         return self.as_slice().slice(start, end);
+    }
+
+    /// Returns an iterator yielding each element by value.
+    fn iter_value(&self) -> SliceValueIter<Self::Elem> with stores[self] {
+        return self.as_slice().iter_value();
+    }
+
+    /// Returns an iterator yielding a reference to each element.
+    fn iter_ref(&self) -> SliceRefIter<Self::Elem> with stores[self] {
+        return self.as_slice().iter_ref();
     }
 
     /// Returns an iterator over overlapping windows of `size` consecutive

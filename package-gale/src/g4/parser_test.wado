@@ -1332,7 +1332,7 @@ NAME : [a-zA-Z]+ ;
 GT   : '>' -> popMode ;";
     let g = parse(input).unwrap();
     assert g.mode_names.contains(&"INTAG"), "INTAG mode should be registered";
-    let name_rule = g.lexer_rules.iter().find(|r: &LexerRule| r.name == "NAME").unwrap();
+    let name_rule = g.lexer_rules.iter_ref().find(|r: &LexerRule| r.name == "NAME").unwrap();
     assert g.mode_names[name_rule.mode as i32] == "INTAG", "NAME should live in INTAG mode";
 }
 

@@ -155,13 +155,13 @@ test "slice iterator combinators" {
     let arr: List<i32> = [10, 20, 30, 40, 50];
     let s = arr.slice(1, 4);
 
-    let doubled = s.iter().map(|x: i32| x * 2).collect();
+    let doubled = s.iter_value().map(|x: i32| x * 2).collect();
     assert doubled.len() == 3;
     assert doubled[0] == 40;
     assert doubled[1] == 60;
     assert doubled[2] == 80;
 
-    let total = s.iter().fold(0, |acc: i32, x: i32| acc + x);
+    let total = s.iter_value().fold(0, |acc: i32, x: i32| acc + x);
     assert total == 90;
 }
 
@@ -608,4 +608,34 @@ test "to_array copies the live prefix into a right-sized Array" {
     assert a[0] == 10;
     assert a[1] == 20;
     assert a[2] == 30;
+}
+
+test "the three iterators are named for what they yield" {
+    let xs: List<i32> = [1, 2, 3];
+
+    let mut vals = xs.iter_value();
+    assert vals.next() matches { Some(v) && v == 1 };
+
+    let mut refs = xs.iter_ref();
+    assert refs.next() matches { Some(r) && *r == 1 };
+
+    // A reference iterator hands back the value iterator over the same range.
+    let mut rest = xs.iter_ref();
+    let _ = rest.next();
+    assert rest.iter_value().sum() matches { Some(v) && v == 5 };
+}
+
+test "iter_ref_mut writes through to in-place elements" {
+    let mut names: List<String> = ["a", "b"];
+    for let n of names.iter_ref_mut() {
+        n.push_str(&"!");
+    }
+    assert names[0] == "a!";
+    assert names[1] == "b!";
+
+    for let n of &mut names {
+        n.push_str(&"?");
+    }
+    assert names[0] == "a!?";
+    assert names[1] == "b!?";
 }

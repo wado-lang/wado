@@ -3217,9 +3217,13 @@ rename-safety reason as `len`.
 Returns a sub-slice over `[start, end)` relative to this slice, clamped
 to its bounds.
 
-#### `pub fn iter(&self) -> SliceValueIter<T>`
+#### `pub fn iter_value(&self) -> SliceValueIter<T> with stores[self]`
 
-Returns a by-value iterator over the slice.
+Returns an iterator yielding each element by value.
+
+#### `pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self]`
+
+Returns an iterator yielding a reference to each element.
 
 #### `pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self]`
 
@@ -3300,11 +3304,11 @@ backing array. Backs `for x of &list`.
 
 _Fields are private._
 
-#### `pub fn copied(&self) -> SliceValueIter<T>`
+#### `pub fn iter_value(&self) -> SliceValueIter<T>`
 
-Value ("copied") view over the same backing: yields `T` instead of `&T`.
-Mirrors Rust's `iter().copied()`, letting a reference iterator over a
-primitive list read as values (`xs.iter().copied()`).
+The value iterator over the same remaining range: yields `T` where this
+yields `&T`. Named for the axis rather than Rust's `copied()`, since
+every element read in Wado is a copy already.
 
 #### `impl Iterator for SliceRefIter<T>`
 
@@ -3968,12 +3972,11 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 Returns true if the list contains the given value.
 
-#### `pub fn iter(&self) -> SliceRefIter<T>`
+#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self]`
 
-Returns an iterator over references to the list's elements (`&T`),
-mirroring Rust's `iter()`. For owned values use `into_iter()` or
-`for let x of list` (both yield `T`); to turn a reference iterator back
-into values, chain `copied()`.
+Returns an iterator yielding a mutable reference to each element.
+Available only where `T` is mutated in place; a scalar element has no
+addressable cell, so a write through `&mut T` would be lost.
 
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering)`
 

@@ -540,7 +540,7 @@ impl Serializer for ValueSerializer {
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
         // Preserve byte strings as `Value::Bytes`, not the default seq-of-u8
         // fallback that would yield `Value::List([Int, …])`.
-        let mut it = v.iter();
+        let mut it = v.iter_value();
         let bytes = it.collect() as ByteList;
         *self.out = Value::Bytes(bytes);
         return Result::Ok(());

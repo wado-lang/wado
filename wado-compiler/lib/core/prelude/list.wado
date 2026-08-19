@@ -402,12 +402,11 @@ impl<T: Ord> Ord for List<T> {
 }
 
 impl List<T> {
-    /// Returns an iterator over references to the list's elements (`&T`),
-    /// mirroring Rust's `iter()`. For owned values use `into_iter()` or
-    /// `for let x of list` (both yield `T`); to turn a reference iterator back
-    /// into values, chain `copied()`.
-    pub fn iter(&self) -> SliceRefIter<T> {
-        return SliceRefIter::internal_new(&self.repr, 0, self.used);
+    /// Returns an iterator yielding a mutable reference to each element.
+    /// Available only where `T` is mutated in place; a scalar element has no
+    /// addressable cell, so a write through `&mut T` would be lost.
+    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
+        return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
