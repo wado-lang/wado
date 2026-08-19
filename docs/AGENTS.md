@@ -155,3 +155,4 @@ history is the SSoT for how the design got here.
 - [`core:icu` — Internationalization as One Facade](./wep-2026-08-09-core-icu.md)
 - [Declaration Identity — One Identity, One Scope, One Answer](./wep-2026-08-12-declaration-identity.md)
 - [Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md)
+- [Bounded Iterator Terminals — `sum` / `product` / `min` / `max`](./wep-2026-08-19-bounded-iterator-terminals.md)

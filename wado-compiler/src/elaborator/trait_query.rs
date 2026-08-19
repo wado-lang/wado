@@ -8,7 +8,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, RefKind};
+use crate::name::{FqTypeName, Receiver, RefKind, TypeHead};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -1045,9 +1045,7 @@ impl TypeSystem {
                 return true;
             }
             // Numeric primitives implement arithmetic traits
-            if matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem")
-                && !matches!(prim, PrimitiveType::Bool | PrimitiveType::Char)
-            {
+            if primitive_name_has_arithmetic(prim.as_str(), trait_name) {
                 return true;
             }
             // For other traits, check the type name
@@ -1329,6 +1327,30 @@ impl TypeSystem {
         self.blanket_trait_impl_applies(ctx, scope, type_key, self.trait_spelling(trait_))
     }
 
+    /// [`Self::type_implements_trait_inner`]'s primitive arm, asked of a
+    /// receiver key. An impl-index lookup finds `impl Ord for i32` but not the
+    /// compiler-supplied `Add`, so a blanket bounded by one needs this.
+    fn primitive_satisfies_builtin_trait(
+        &self,
+        scope: &TypeLookup,
+        type_key: &Receiver,
+        trait_name: &str,
+    ) -> bool {
+        let Receiver::Type(fq) = type_key else {
+            return false;
+        };
+        let TypeHead::Builtin(name) = fq.head() else {
+            return false;
+        };
+        if !PrimitiveType::is_primitive_name(name) {
+            return false;
+        }
+        matches!(
+            self.classify_on_bound_trait(scope, trait_name),
+            Some(OnBoundTrait::Eq | OnBoundTrait::Ord)
+        ) || primitive_name_has_arithmetic(name, trait_name)
+    }
+
     fn blanket_trait_impl_applies(
         &self,
         ctx: &Scope,
@@ -1358,6 +1380,7 @@ impl TypeSystem {
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
+                    || self.primitive_satisfies_builtin_trait(scope, type_key, &bound.name)
                     || bound.decl_ref.is_some_and(|trait_| {
                         self.find_trait_impl_for_type(ctx, scope, type_key, trait_)
                     })
@@ -2424,4 +2447,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_variadic_impl: false,
         })
     }
+}
+
+/// Whether the compiler supplies `trait_name`'s operator for the primitive
+/// spelled `prim_name`.
+fn primitive_name_has_arithmetic(prim_name: &str, trait_name: &str) -> bool {
+    matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem")
+        && !matches!(prim_name, "bool" | "char")
 }

@@ -306,7 +306,8 @@ declaration, no overloading, no implicit conversion" binds hardest.
 ## Roadmap
 
 - [ ] `sum` / `min` / `max` are bounded inherent methods on `SliceValueIter`
-      alone, so `xs.iter_value().map(f).sum()` does not compile.
+      alone, so `xs.iter_value().map(f).sum()` does not compile. Designed in
+      [Bounded Iterator Terminals](./wep-2026-08-19-bounded-iterator-terminals.md).
 - [ ] Accept `Array<T>` in `cm_binding`, matching `wit_emit`.
 - [ ] Lower `Slice<T>` through the canonical ABI and map it in `wit_emit`, then
       narrow the definition-site error to lifting positions only.

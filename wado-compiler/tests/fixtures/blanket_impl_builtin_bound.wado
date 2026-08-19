@@ -1,0 +1,42 @@
+// A bound satisfied by a blanket whose own bound is an arithmetic trait. Only
+// `Eq` / `Ord` used to work: the prelude writes `impl Ord for i32` out, while
+// `Add` and `Mul` on a primitive are compiler-supplied and reach no impl index.
+use { println } from "core:cli";
+
+trait Doubler {
+    fn twice(&self) -> Self;
+}
+
+impl<T: Add> Doubler for T {
+    pub fn twice(&self) -> T {
+        return *self + *self;
+    }
+}
+
+trait Squarer {
+    fn squared(&self) -> Self;
+}
+
+impl<T: Mul> Squarer for T {
+    pub fn squared(&self) -> T {
+        return *self * *self;
+    }
+}
+
+fn doubled<D: Doubler>(x: D) -> D {
+    return x.twice();
+}
+
+fn squared<S: Squarer>(x: S) -> S {
+    return x.squared();
+}
+
+export fn run() with Stdout {
+    assert doubled(21) == 42;
+    assert doubled(1.5) == 3.0;
+    assert squared(7) == 49;
+    println(`${doubled(21)} ${squared(7)}`);
+}
+
+__DATA__
+{"stdout": "42 49\n"}

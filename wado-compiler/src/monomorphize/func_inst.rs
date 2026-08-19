@@ -3258,15 +3258,11 @@ impl Monomorphizer {
         let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
             None
         } else {
-            // Blanket impl: choose the right generic_name for lookup.
-            // For associated type projections (S::SeqSerializer^...), use new_func_name.
-            // Otherwise key by the blanket's own receiver param — the call
-            // site's param head (`old_func_name`) only matches it for a
-            // direct `T::method` call, not a call on another param. This
-            // and the receiver-derived impl args below apply only to a
-            // `ReflectStruct`-derived blanket (identified by the receiver's
-            // `Fields` pack); every other blanket keeps its original
-            // dispatch so serde / iterator blankets are untouched.
+            // Blanket impl: choose the right generic_name for lookup. An
+            // associated-type projection (`S::SeqSerializer^…`) keeps
+            // `new_func_name`; every other blanket is keyed by its own receiver
+            // param, since `old_func_name` carries the call site's instead. The
+            // receiver-derived impl args below stay `ReflectStruct`-only.
             let recv_inner = type_table.peel_refs(receiver_type_id);
             // Resolve the type packs a blanket keys on. The general form of the
             // former `ReflectStruct`-struct-only `[T, Fields]` keying: a blanket
@@ -3305,9 +3301,11 @@ impl Monomorphizer {
                 .collect::<Option<Vec<_>>>()
                 .unwrap_or_default();
             let has_projected = !projected_assocs.is_empty();
+            // Keyed by the blanket's own receiver param: the call site's param
+            // head matches it only when the two are spelled alike.
             let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()
-            } else if let (true, Some(param)) = (has_projected, blanket_param) {
+            } else if let Some(param) = blanket_param {
                 LocalMethodName::new(
                     FqTypeName::binder(&param),
                     new_info.trait_name.clone(),
