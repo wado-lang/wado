@@ -1,10 +1,8 @@
-//! `match *r` over a shared reference reads the referent in place.
+//! `match *r` reads the referent in place.
 //!
-//! Pattern lowering binds a non-`Local` scrutinee to a temp so
-//! `labeled_block_fusion` keeps firing. The share analysis counted the match as
-//! a consumption of that temp, so the fold defended it: `match *rule` deep-copied
-//! the whole variant — every string and list under it — to read one field, while
-//! the same body spelled `match rule` copied nothing.
+//! Pattern lowering hoisted every non-`Local` scrutinee into a temp the fold
+//! then defends, so `match *rule` deep-copied the whole variant to read one
+//! field while `match rule` copied nothing.
 
 use std::path::Path;
 
@@ -38,7 +36,7 @@ fn walk_body() -> String {
         ..Default::default()
     };
     let result = crate::common::compile_source_with_compiler_options(
-        Path::new("match_deref_share_test.wado"),
+        Path::new("match_place_scrutinee_test.wado"),
         SOURCE,
         options,
     )
@@ -47,7 +45,7 @@ fn walk_body() -> String {
     let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
 
     let start = wir_text
-        .find("fn \"match_deref_share_test.wado/walk\"")
+        .find("fn \"match_place_scrutinee_test.wado/walk\"")
         .expect("walk function in WIR");
     let rest = &wir_text[start..];
     let end = rest[1..].find("\nfn ").map(|i| i + 1).unwrap_or(rest.len());

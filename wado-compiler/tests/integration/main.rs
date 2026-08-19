@@ -34,7 +34,7 @@ mod lib_async_task_return_free;
 mod lib_sync_lift_post_return;
 mod literals;
 mod loader_canonical_identity;
-mod match_deref_share;
+mod match_place_scrutinee;
 mod niri;
 mod redundant_bce;
 mod remarks;

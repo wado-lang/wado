@@ -135,9 +135,6 @@ fn optimize_scoped(
     wir_pass(scope, "elide_adjacent_box_locals", module, profiler, |m| {
         elide_adjacent_box_locals(m);
     });
-    // The ones adjacency could not reach: retype the local to its field in
-    // place. A by-reference `for` bumps the index between the box's def and its
-    // use, so nothing may move — but nothing has to.
     wir_pass(scope, "unwrap_box_locals", module, profiler, |m| {
         unwrap_box_locals(m);
     });

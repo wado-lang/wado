@@ -278,14 +278,10 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
-A `match` over a place needs no temp of its own. Pattern lowering hoists a
-non-`Local` scrutinee into one for `labeled_block_fusion`, which keys on the
-`(Let, Match)` pair; the fold then defends that temp, since a `let` bound from a
-projection is a copy. But the arms project a place where it lies and each
-binding asks the fold for itself, exactly as they do for a bare local — so the
-hoist applies only where the scrutinee is not a place, which is also where
-fusion's producers (calls) are. Hoisting one is what made `match *r` deep-copy
-the aggregate that `match r` reads in place.
+A `match` over a place needs no temp of its own: the arms project the place
+where it lies and each binding asks the fold for itself. Only a non-place
+scrutinee is hoisted for `labeled_block_fusion`, since the fold defends that
+temp and the copy is the aggregate itself.
 
 ### Which helpers exist
 

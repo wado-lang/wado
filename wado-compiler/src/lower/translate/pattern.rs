@@ -238,8 +238,8 @@ struct PatternLowerer<'a> {
     owned_temps: IndexSet<u32>,
 }
 
-/// A place: a projection chain rooted at a local, which the match arms read
-/// where it lies. Anything else is a temporary the match alone holds.
+/// A projection chain rooted at a local. Anything else is a temporary the
+/// expression alone holds.
 fn is_place(expr: &TirExpr) -> bool {
     match &expr.kind {
         TirExprKind::Local { .. } => true,
@@ -1582,9 +1582,7 @@ impl<'a> PatternLowerer<'a> {
                 // and an owning arm binding needs a scrutinee nothing can
                 // write. A place scrutinee needs neither: the arms project it
                 // where it lies, and fusion's producers are calls. Hoisting one
-                // asks the fold to defend a temp nobody writes, which is what
-                // made `match *r` deep-copy the aggregate `match r` reads in
-                // place.
+                // made `match *r` deep-copy what `match r` reads in place.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,

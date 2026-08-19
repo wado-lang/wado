@@ -1,11 +1,9 @@
 //! A by-reference `for` over a `List` of a boxable element allocates nothing
 //! per iteration.
 //!
-//! `&variant` lowers to `Box<T>`, so the loop mints one per element. The
-//! adjacency elider cannot reach it — the box reads the very index the next
-//! statement bumps, so its initializer may not move to the use — while
-//! `unwrap_box_locals` needs no motion: the local is retyped to the field it
-//! wraps and the `struct.new` goes.
+//! `&variant` lowers to `Box<T>`, so the loop mints one per element, and the
+//! box reads the very index the next statement bumps — adjacency cannot move
+//! its initializer to the use, `unwrap_box_locals` does not have to.
 
 use std::path::Path;
 
