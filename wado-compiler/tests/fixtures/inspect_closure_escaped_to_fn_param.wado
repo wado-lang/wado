@@ -1,0 +1,17 @@
+// Regression: the format-trait redirect points a closure's `${g:?}` at the
+// per-functor impl, which takes `&__Closure_N`. A closure that also escapes to
+// an `fn(...)` parameter travels as a `CanonicalClosure_K`, so the redirect has
+// to stand down there and let the Fn-keyed dispatch stub run.
+use { println, Stdout } from "core:cli";
+
+fn apply(f: fn(i32) -> i32, v: i32) -> i32 {
+    return f(v);
+}
+
+export fn run() with Stdout {
+    let g = |x: i32| x + 1;
+    println(`${apply(g, 1)} ${g:?}`);
+}
+
+__DATA__
+{"stdout": "2 |i32| -> i32\n"}

@@ -239,6 +239,9 @@ struct ClosureLowerer {
     /// hold which closure. Read by Phase 2 (safety analysis) and Phase 3
     /// (IndirectCall→method call + `update_local_types`).
     local_to_closure: IndexMap<u32, u32>,
+    /// Locals that are fn-params already declared `&__Closure_N`. They hold a
+    /// bare functor without being `specializable`, which is keyed by closure.
+    functor_param_locals: IndexSet<u32>,
     /// Closure IDs safe for direct specialisation (the closure is stored
     /// in a local and only used by direct calls). Non-specialisable ones
     /// route through `ClosureToCanonical` instead.
@@ -262,6 +265,7 @@ impl ClosureLowerer {
             collected_closures: Vec::new(),
             functor_infos: Vec::new(),
             local_to_closure: IndexMap::default(),
+            functor_param_locals: IndexSet::default(),
             specializable: IndexSet::default(),
             generated_structs: Vec::new(),
             generated_functions: Vec::new(),
@@ -359,11 +363,13 @@ impl ClosureLowerer {
                 .collect();
             if let Some(body) = &mut func.body {
                 self.local_to_closure.clear();
+                self.functor_param_locals.clear();
                 let mut tt = flat.type_table.borrow_mut();
                 self.seed_local_to_closure_from_params(&param_locals, &tt);
                 ClosureCallSiteLowerer {
                     local_to_closure: &mut self.local_to_closure,
                     specializable: &self.specializable,
+                    functor_param_locals: &self.functor_param_locals,
                     functor_infos: &self.functor_infos,
                     fn_param_specializations: &self.fn_param_specializations,
                     module_source: &self.module_source,
@@ -448,6 +454,7 @@ impl ClosureLowerer {
                 if functor.struct_type_id == bare {
                     let closure_id = u32::try_from(idx).expect("functor id fits in u32");
                     self.local_to_closure.insert(*local_index, closure_id);
+                    self.functor_param_locals.insert(*local_index);
                     break;
                 }
             }
@@ -1549,6 +1556,7 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
 struct ClosureCallSiteLowerer<'a> {
     local_to_closure: &'a mut IndexMap<u32, u32>,
     specializable: &'a IndexSet<u32>,
+    functor_param_locals: &'a IndexSet<u32>,
     functor_infos: &'a [ClosureFunctor],
     fn_param_specializations: &'a IndexMap<FnParamSpecKey, String>,
     module_source: &'a ModuleSource,
@@ -1678,6 +1686,16 @@ impl ClosureCallSiteLowerer<'_> {
         let Some(closure_id) = self.local_to_closure.get(&local_idx).copied() else {
             return;
         };
+        // Only where the receiver really is a `&__Closure_N`: a specializable
+        // closure, whose local `update_local_types` retypes after this walk, or
+        // a fn-param already declared as one. A closure that escapes keeps its
+        // canonical form, and pointing its format call at the per-functor impl
+        // would hand that impl a `CanonicalClosure_K`.
+        if !self.specializable.contains(&closure_id)
+            && !self.functor_param_locals.contains(&local_idx)
+        {
+            return;
+        }
         let Some(functor) = self.functor_infos.get(closure_id as usize) else {
             return;
         };
