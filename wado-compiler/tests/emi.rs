@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wado_compiler::ast::{
-    AstVisitor, Block, Expr, Function, Item, Module, Pattern, SelfKind, Stmt, walk_block,
-    walk_expr, walk_function, walk_item, walk_stmt,
+    AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr, Module, Param,
+    Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
 };
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::{CompilerOptions, OptLevel};
@@ -320,6 +320,14 @@ impl SiteCollector {
         self.capture_floor = floor;
         self.body_depth -= 1;
     }
+
+    /// Walk what a binding construct — a loop, a `match` arm, an `if let` —
+    /// scopes its bindings over.
+    fn in_scope(&mut self, bindings: Vec<Binding>, walk: impl FnOnce(&mut Self)) {
+        self.scopes.push(bindings);
+        walk(self);
+        self.scopes.pop();
+    }
 }
 
 /// The bindings a statement introduces.
@@ -336,47 +344,75 @@ fn let_bindings(stmt: &Stmt) -> Vec<Binding> {
     // `let mut x` carries the `mut` on the statement; `MutIdent` is what a
     // nested pattern binds.
     let mut bindings = Vec::new();
-    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, &mut bindings);
+    let refutable = let_stmt.else_block.is_some();
+    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, refutable, &mut bindings);
     bindings
 }
 
-fn pattern_bindings(pattern: &Pattern, is_mut: bool, out: &mut Vec<Binding>) {
+/// A plain name in a refutable pattern is either a binding or a unit variant,
+/// and the parser cannot tell: the elaborator resolves it against the cases in
+/// scope. Wado spells a variant in `PascalCase`, so an initial capital is read as
+/// one — mistaking it for a binding would have the payload name a value that
+/// does not exist, and the whole fixture would leave the campaign.
+fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut Vec<Binding>) {
+    let recurse = |pattern, out: &mut Vec<Binding>| {
+        pattern_bindings(pattern, is_mut, refutable, out);
+    };
     match pattern {
-        Pattern::Ident { name, .. } => out.push(Binding {
-            name: name.clone(),
-            is_mut,
-        }),
+        Pattern::Ident { name, .. } => {
+            if !refutable || !name.starts_with(char::is_uppercase) {
+                out.push(Binding {
+                    name: name.clone(),
+                    is_mut,
+                });
+            }
+        }
         Pattern::MutIdent { name, .. } => out.push(Binding {
             name: name.clone(),
             is_mut: true,
         }),
         Pattern::Tuple(patterns, _) => {
             for pattern in patterns {
-                pattern_bindings(pattern, is_mut, out);
+                recurse(pattern, out);
             }
         }
         Pattern::Variant { bindings, .. } => {
             for pattern in bindings {
-                pattern_bindings(pattern, is_mut, out);
+                recurse(pattern, out);
             }
         }
         Pattern::Struct { fields, .. } => {
             for field in fields {
-                pattern_bindings(&field.pattern, is_mut, out);
+                recurse(&field.pattern, out);
             }
         }
         // An `|` alternative binds the same names in each branch, so the first
         // answers for all of them; the rest bind nothing new.
         Pattern::Or(patterns) => {
             if let Some(first) = patterns.first() {
-                pattern_bindings(first, is_mut, out);
+                recurse(first, out);
             }
         }
         Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
 }
 
-fn params_of(params: &[wado_compiler::ast::Param]) -> Vec<Binding> {
+/// What a `let` chain binds over the body it guards. A `mut` leaf carries its
+/// own mutability; the chain itself declares none.
+fn condition_bindings(condition: &Condition) -> Vec<Binding> {
+    let Condition::LetChain { elements, .. } = condition else {
+        return Vec::new();
+    };
+    let mut bindings = Vec::new();
+    for element in elements {
+        if let ConditionElement::Let { pattern, .. } = element {
+            pattern_bindings(pattern, false, true, &mut bindings);
+        }
+    }
+    bindings
+}
+
+fn params_of(params: &[Param]) -> Vec<Binding> {
     params
         .iter()
         // A `self` receiver is not a name a payload may write to, and reading
@@ -424,26 +460,71 @@ impl AstVisitor for SiteCollector {
         self.in_closure(params, |s| walk_expr(s, expr));
     }
 
-    /// `else if` is an `else` block holding one `If`, and that `If`'s span
-    /// starts at the `if` keyword. Visiting the block would offer the keyword
-    /// as a site, and a guard there splits the chain into an `else` that takes
-    /// the guard and a stray `if` — so the nested statement is visited
-    /// directly, contributing its interior without the position in front of it.
-    /// An `else { if … }` written with braces has the same shape and loses that
-    /// one site too; the interior sites are unaffected.
+    /// The statements that scope a binding over a body, plus one that scopes
+    /// nothing but must not be walked by hand: `else if` is an `else` block
+    /// holding one `If`, and that `If`'s span starts at the `if` keyword.
+    /// Visiting the block would offer the keyword as a site, and a guard there
+    /// splits the chain into an `else` that takes the guard and a stray `if` —
+    /// so the nested statement is visited directly, contributing its interior
+    /// without the position in front of it. An `else { if … }` written with
+    /// braces has the same shape and loses that one site too; the interior
+    /// sites are unaffected.
     fn visit_stmt(&mut self, stmt: &Stmt) {
-        let Stmt::If(if_stmt) = stmt else {
-            walk_stmt(self, stmt);
-            return;
-        };
-        self.visit_condition(&if_stmt.condition);
-        self.visit_block(&if_stmt.then_block);
-        let Some(else_block) = &if_stmt.else_block else {
-            return;
-        };
-        match else_block.stmts.as_slice() {
-            [nested @ Stmt::If(_)] => self.visit_stmt(nested),
-            _ => self.visit_block(else_block),
+        match stmt {
+            Stmt::If(if_stmt) => {
+                self.visit_condition(&if_stmt.condition);
+                let bound = condition_bindings(&if_stmt.condition);
+                self.in_scope(bound, |s| s.visit_block(&if_stmt.then_block));
+                let Some(else_block) = &if_stmt.else_block else {
+                    return;
+                };
+                match else_block.stmts.as_slice() {
+                    [nested @ Stmt::If(_)] => self.visit_stmt(nested),
+                    _ => self.visit_block(else_block),
+                }
+            }
+            Stmt::While(while_stmt) => {
+                self.visit_condition(&while_stmt.condition);
+                let bound = condition_bindings(&while_stmt.condition);
+                self.in_scope(bound, |s| s.visit_block(&while_stmt.body));
+            }
+            Stmt::For(for_stmt) => {
+                let bound = for_stmt.init.as_deref().map_or(Vec::new(), |init| {
+                    self.visit_stmt(init);
+                    let_bindings(init)
+                });
+                self.in_scope(bound, |s| {
+                    if let Some(condition) = &for_stmt.condition {
+                        s.visit_condition(condition);
+                    }
+                    if let Some(update) = &for_stmt.update {
+                        s.visit_expr(update);
+                    }
+                    s.visit_block(&for_stmt.body);
+                });
+            }
+            Stmt::ForOf(for_of) => {
+                self.visit_expr(&for_of.iterable);
+                let mut bound = Vec::new();
+                pattern_bindings(&for_of.binding, for_of.is_mut, false, &mut bound);
+                self.in_scope(bound, |s| s.visit_block(&for_of.body));
+            }
+            _ => walk_stmt(self, stmt),
+        }
+    }
+
+    /// An arm's pattern is in scope in its guard and its body, and nowhere else.
+    fn visit_match_expr(&mut self, match_expr: &MatchExpr) {
+        self.visit_expr(&match_expr.expr);
+        for arm in &match_expr.arms {
+            let mut bound = Vec::new();
+            pattern_bindings(&arm.pattern, false, true, &mut bound);
+            self.in_scope(bound, |s| {
+                if let Some(guard) = &arm.guard {
+                    s.visit_expr(guard);
+                }
+                s.visit_expr(&arm.body);
+            });
         }
     }
 
@@ -1649,6 +1730,41 @@ fn a_destructured_binding_is_named_by_its_leaves() {
         .expect("the return statement is a site");
     assert_eq!(last.mutables, vec!["b".to_string()]);
     assert_eq!(last.readables, vec!["p", "a", "b"]);
+}
+
+/// A loop, a `match` arm and an `if let` each bind over a body, and those
+/// bodies are where the passes the payloads attack do their work.
+#[test]
+fn a_binding_a_body_is_entered_with_is_in_scope_inside_it() {
+    let source = r#"fn f(l: List<i32>, o: Option<i32>) -> i32 {
+    for let x of l {
+        assert x >= 0;
+    }
+    match o {
+        Some(v) => { assert v >= 0; },
+        None => { assert true; },
+    }
+    if let Some(w) = o {
+        assert w >= 0;
+    }
+    return 0;
+}
+"#;
+    let inner: Vec<Vec<String>> = injection_sites(source)
+        .iter()
+        .filter(|site| site.kind == "assert")
+        .map(|site| site.readables.clone())
+        .collect();
+    assert_eq!(
+        inner,
+        vec![
+            vec!["l", "o", "x"],
+            vec!["l", "o", "v"],
+            // `None` parses as a plain name and is a variant, not a binding.
+            vec!["l", "o"],
+            vec!["l", "o", "w"],
+        ]
+    );
 }
 
 /// A closure may read what it captured — that is just a use — but assigning to
