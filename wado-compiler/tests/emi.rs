@@ -1088,7 +1088,7 @@ fn calibrate_corpus() {
 ///
 /// Reads `corpus.txt`, so the calibration runs first.
 #[test]
-#[ignore = "EMI campaign — hours over the calibrated corpus"]
+#[ignore = "EMI campaign — minutes to hours over the calibrated corpus"]
 fn mutate_corpus() {
     let paths = corpus_paths();
     let results = campaign(&paths, mutate, |excluded| {

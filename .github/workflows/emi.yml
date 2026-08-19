@@ -45,7 +45,10 @@ jobs:
     name: Calibrate (shard ${{ matrix.shard }})
     needs: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # A cold build, then both stages over this shard's slice. Measured at ~6
+    # minutes a stage for a quarter of the corpus; the margin is for a corpus
+    # that grows faster than the shard count.
+    timeout-minutes: 180
     permissions:
       contents: read
     strategy:

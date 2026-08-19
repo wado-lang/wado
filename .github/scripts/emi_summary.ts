@@ -62,6 +62,13 @@ function read(file: string): Stage {
 
 function render(title: string, stage: Stage): string[] {
   const out = [`## ${title}`, ''];
+  if (stage.missing.length > 0) {
+    out.push(
+      `> ${stage.missing.length} of ${dirs.length} shards reported nothing for this stage.`,
+      '> The totals below cover the rest.',
+      '',
+    );
+  }
   out.push('| Metric | Value |', '| --- | --- |');
   out.push(`| fixtures scanned | ${stage.total.scanned} |`);
   out.push(`| eligible | ${stage.total.eligible} (${stage.total.sites} injection sites) |`);

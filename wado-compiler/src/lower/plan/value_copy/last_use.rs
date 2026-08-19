@@ -570,14 +570,18 @@ impl ShareCollector<'_> {
                 pos,
             });
         } else {
+            // Re-rooted like the `place_path` branch above: a write through a
+            // deref roots at the reference, and a read of the same place roots
+            // at the referent, so leaving these bare makes the two never meet.
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
             for r in roots {
+                let path = self.resolve(AccessPath {
+                    root: r,
+                    selectors: Vec::new(),
+                });
                 self.mutated.push(Mutation {
-                    path: AccessPath {
-                        root: r,
-                        selectors: Vec::new(),
-                    },
+                    path,
                     rebinds_place: false,
                     pos,
                 });
