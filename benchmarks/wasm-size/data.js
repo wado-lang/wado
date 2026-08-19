@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787122524082,
+  "lastUpdate": 1787153005951,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49425,6 +49425,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/767e08f1ade68c815f4ecddc43fe6f9c9822ddee"
         },
         "date": 1787122523471,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cba408b1ee04b408b83bd81fd4e09f2ddcbcea93",
+          "message": "Merge pull request #1857 from wado-lang/emi/nondeterministic-fixtures\n\ntest(emi): mutate the calibrated corpus, and fix the compiler bugs it found",
+          "timestamp": "2026-08-20T00:09:48+09:00",
+          "tree_id": "7b5c595b20361804aef385586a17415a01ef5d09",
+          "url": "https://github.com/wado-lang/wado/commit/cba408b1ee04b408b83bd81fd4e09f2ddcbcea93"
+        },
+        "date": 1787153005358,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
