@@ -2264,10 +2264,8 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
 /// itself contain `/` and `<`, so no split is correct in general. Ask the fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTypeName {
-    /// The `&` / `&mut` this name stands behind, outermost first. `&&T` is two
-    /// references over one pointee, and a name that kept only the outer one
-    /// would spell `&T` — the same as the pointee's own name, which is how two
-    /// instantiations came to collide.
+    /// The `&` / `&mut` this name stands behind, outermost first. Keeping only
+    /// the outer one spells `&&T` as `&T`, which is a different instantiation.
     reference: Vec<RefKind>,
     head: TypeHead,
     /// Type arguments, already fq themselves.

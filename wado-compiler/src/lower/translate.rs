@@ -2160,13 +2160,9 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, seq_type_id, span)
     }
 
-    /// Build arena struct-field values for a closure's captures. Each field is
-    /// a `Local` reading the captured value from the outer scope at
-    /// `cap.outer_index`. Mirrors the TIR-side `build_capture_fields` that the
-    /// closure planner uses for specialized closures at `Let` bindings.
     /// Read a local, through the box when [`crate::lower::plan::boxing`]
     /// promoted its slot: the box *is* the storage, so the value stands one
-    /// field in. A local whose type has no box shape reads as itself.
+    /// field in.
     fn read_local(&self, index: u32, name: &str, type_id: tir::TypeId, span: Span) -> ExprId {
         let boxed = self
             .address_taken
@@ -2193,6 +2189,9 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
+    /// Arena struct-field values for a closure's captures. Mirrors the TIR-side
+    /// `build_capture_fields` the closure planner uses for specialized closures
+    /// at `Let` bindings.
     fn build_arena_capture_fields(
         &self,
         captures: &[TirCapture],

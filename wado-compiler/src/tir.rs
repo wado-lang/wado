@@ -3851,9 +3851,8 @@ impl TypeTable {
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Flags { def } => FqTypeName::declared(&self.defs, *def),
-            // A generic newtype's arguments are part of what it names, exactly
-            // as a struct's are: `MyArray<i32>` and `MyArray<String>` are two
-            // instantiations, and a head alone would name them the same.
+            // `MyArray<i32>` and `MyArray<String>` are two instantiations; the
+            // head alone names them the same.
             ResolvedType::Newtype { def, type_args, .. } => {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
