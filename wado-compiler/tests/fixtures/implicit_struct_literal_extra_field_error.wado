@@ -1,0 +1,16 @@
+// The field-name check reaches a function-local struct's fields, and names the
+// struct as the programmer wrote it — never by the `@AstId` storage rendering
+// that keeps two siblings' declarations apart.
+
+fn run() -> f64 {
+    struct P { v: f64 }
+    let p: P = { v: 1, bogus: 2 };
+    return p.v
+}
+
+test "extra field" {
+    assert run() == 1.0;
+}
+
+__DATA__
+{"compile_error": "struct 'P' has no field 'bogus'"}

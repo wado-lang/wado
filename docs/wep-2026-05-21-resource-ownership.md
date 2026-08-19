@@ -239,11 +239,54 @@ where it cannot prove move / share / fresh; no elision pass):
   from an `if let` over the matched route — needs both this and the
   indirect-call rule, or every later field read of the binding is deep-copied.
 - Confinement — `confine.rs` per-parameter escape fixpoint.
-- Read-only-share — a read-only binding whose storage is never mutated while live.
+- Read-only-share — a read-only binding whose storage is never mutated while
+  live. See _Sharing_ below.
 
 A recursive type's `$value_copy$T` is a true deep copy (a mutually-recursive
 helper), replacing an identity fallback that silently shared storage.
 `optimize::escape` and `optimize::value_copy_elide` are deleted.
+
+A function that calls itself is assumed to return owned while that is being
+proved: the fixpoint only adds, so its own call would otherwise read back the
+verdict being computed and pin it at borrowed. The returns that do not go through
+the recursive call are still checked on their own, and those base cases are what
+a recursive result is built from.
+
+### What a root owns
+
+Every rule above asks who owns the storage a place names, and answers from the
+place's root local. A `&` / `&mut` local is not that owner: its immutability says
+nothing about whether the storage is written, its death frees nothing, and a
+write the owner makes never mentions it. A root reached through a reference
+resolves to the place it borrows (`let r = &a.b` answers at `a.b`); one this body
+cannot resolve — a parameter, or a reference a call returned — names storage the
+body does not own and answers nothing, leaving it to sharing.
+
+### Sharing
+
+A read-only binding may alias its source's storage when nothing writes that
+storage _while the binding is live_. Both halves are readings of one backward
+walk: what is live at each point, and what each point writes. A write conflicts
+when the binding is live there and the two places may alias; the same write
+elsewhere in the body does not. Without liveness a deserializer deep-copies a
+field it read before any `&mut self` call runs.
+
+Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
+a reference already taken out of `p.f` keeps what it has, and only a write
+_inside_ that storage disturbs it. And a place repointed after a binding read it
+hands that binding the only reference to what the place held — the `take` /
+`drain` / `snapshot` idiom — so the binding may leave the function though it was
+read out of a place the caller still owns.
+
+### Which helpers exist
+
+`$value_copy$T` is additive synthesis, so the helpers are created in `plan` —
+before the fold that decides where to call them, and before pattern lowering
+mints the temps some of those calls land on (WEP 2026-05-11). The seed must
+therefore be complete without predicting what a later pass writes: it reads the
+types a program declares, since no expression rewrite introduces a type the
+program did not already name. Over-synthesis costs nothing — `dce` removes an
+unused helper — while a miss leaves the fold no helper to call.
 
 ### Known gap: a borrowed projection behind a variant
 
@@ -340,7 +383,7 @@ Verified against the tree.
 - [x] Compositional destructor for struct / tuple aggregates (field-projected
       drops; `Result` keeps its `match`); variant / `Option` / `List` deferred.
 
-### Value-copy client (done)
+### Value-copy client
 
 - [x] `$value_copy$T` at `copy` sites only; read-only-share; recursive-type deep
       copy; `optimize::escape` / `value_copy_elide` deleted.
@@ -351,7 +394,27 @@ Verified against the tree.
 - [x] Move through a newtype cast (`bytes as ByteArray`), which the freshness
       side already read through.
 - [x] A bytes literal counts as fresh, like a string literal.
-- [ ] Pin representative move / copy / share decisions as e2e fixtures.
+- [x] A reference root answers for the place it borrows — in the immutable-root
+      rule, in the freshness seed, and in path disjointness. Before, each read it
+      as an owner: a `let` out of a `&`- or `&mut`-held struct kept seeing the
+      source's later writes.
+- [x] A self-recursive function can prove it returns owned, so `?` on one stops
+      deep-copying the error it propagates.
+- [x] A place repointed after a binding read it releases that binding.
+- [x] Representative move / copy / share decisions pinned as e2e fixtures
+      (`pattern_temp_no_alias`, over syntactic position × writability × binding
+      kind).
+- [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
+      The share analysis is a forward walk with no liveness and no control flow,
+      so a write anywhere refuses the binding.
+- [ ] Drive the helper seed from declared types rather than from expressions.
+      Predicting the temps pattern lowering mints is what the current seed does,
+      and each shape it misses is a copy the fold cannot emit.
+- [ ] Decide a match arm's binding in the fold, by lowering it to an ordinary
+      projection of the scrutinee as `let`-destructure already is. Deciding it in
+      pattern lowering puts the copy on a temp that exists for
+      `labeled_block_fusion`, so which syntactic position a `match` sits in
+      changes whether the binding is defended.
 - [ ] Recognize a borrowed projection returned behind a variant construction, so
       a by-value `for` binding stops copying each element. It cost the
       json-canada deserialize benchmark ~37% before its tree walk was written

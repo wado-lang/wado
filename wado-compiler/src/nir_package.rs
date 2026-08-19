@@ -45,6 +45,9 @@ pub struct NirPackage {
     /// invalidated — the interner that keeps the "born resolved" invariant cheap
     /// (O(1) per synthesis site, no per-pass walk).
     pub func_index: IndexMap<crate::name::FunctionId, FuncId>,
+    /// Which `$value_copy$` helper copies each type — the one join, so a
+    /// consumer holding a `TypeId` asks here rather than re-deriving the key.
+    pub value_copy_helpers: crate::lower::plan::value_copy::ValueCopyHelpers<FuncId>,
     /// All struct declarations (each carries its own `module_source`)
     pub structs: Vec<NirStruct>,
     /// All enum declarations (each carries its own `module_source`)

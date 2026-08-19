@@ -650,7 +650,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => {
                     let name = self.tysys.type_table.borrow().type_name(self_ty);
-                    let module_source = self.find_struct_module_source(&name);
+                    let module_source = self.declaring_module_of(&name);
                     (name, module_source, Vec::new())
                 }
             };
@@ -1185,7 +1185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_def(self_ty)
             .map_or_else(
-                || self.find_struct_module_source(&self_name),
+                || self.declaring_module_of(&self_name),
                 |def| self.tysys.resolutions.defs().module(def).clone(),
             );
         let Some(return_type) =
@@ -1354,7 +1354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::TypeParam { .. }
         );
         if !subject_is_type_param {
-            return Some(self.scalar_concrete_members_ty(spec, self_ty, self_name));
+            return Some(self.scalar_concrete_members_ty(spec, self_ty));
         }
         let trait_name = self
             .tysys
@@ -1457,8 +1457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !spec.subject_matches(&subject_ty) {
             return None;
         }
-        let name = self.tysys.type_table.borrow().type_name(subject);
-        Some(self.scalar_concrete_members_ty(spec, subject, &name))
+        Some(self.scalar_concrete_members_ty(spec, subject))
     }
 
     /// The member tuple for a kind whose handle carries a payload type:
@@ -1480,28 +1479,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The concrete N-tuple `[M<Self>; N]` for `members()`, N being the
     /// subject's case / bit count.
-    fn scalar_concrete_members_ty(
-        &mut self,
-        spec: ScalarReflectSpec,
-        self_ty: TypeId,
-        self_name: &str,
-    ) -> TypeId {
-        let count = self.scalar_member_count(spec, self_name);
+    fn scalar_concrete_members_ty(&mut self, spec: ScalarReflectSpec, self_ty: TypeId) -> TypeId {
+        let count = self.scalar_member_count(spec, self_ty);
         let mut tt = self.tysys.type_table.borrow_mut();
         let def = tt.require_compiler_item_def(spec.member_struct_item);
         let member_type = tt.make_generic_instance(def, vec![self_ty]);
         tt.make_tuple(std::iter::repeat_n(member_type, count).collect())
     }
 
-    /// The subject's case (enum) / member (flags) count.
-    fn scalar_member_count(&self, spec: ScalarReflectSpec, self_name: &str) -> usize {
+    /// The subject's case (enum) / member (flags) count, off the declaration
+    /// its own type names rather than its rendered head.
+    fn scalar_member_count(&self, spec: ScalarReflectSpec, self_ty: TypeId) -> usize {
+        let Some(def) = self.tysys.type_table.borrow().nominal_def(self_ty) else {
+            return 0;
+        };
         let lookup = self.type_lookup();
         match spec.kind {
-            ScalarReflectKind::Enum => lookup
-                .enum_case(self_name)
-                .map_or(0, |info| info.cases.len()),
+            ScalarReflectKind::Enum => lookup.enum_cases_of(def).map_or(0, |info| info.cases.len()),
             ScalarReflectKind::Flags => lookup
-                .flags_case(self_name)
+                .flags_members_of(def)
                 .map_or(0, |info| info.members.len()),
         }
     }

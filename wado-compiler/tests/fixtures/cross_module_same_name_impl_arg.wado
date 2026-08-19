@@ -1,0 +1,17 @@
+// An inherent `impl Holder<Tag>` whose type argument is imported, while a
+// second, unrelated module also declares a `Tag`.
+//
+// A program-wide by-name scan declined whenever two modules declared the name,
+// leaving a bare spelling that never equals the receiver's qualified mangle.
+// The header's argument has a reference site; it answers.
+
+use { Holder } from "./sub/cross_module_same_name_impl_arg_holder.wado";
+use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";
+use { Tag as OtherTag } from "./sub/cross_module_same_name_impl_arg_tag_b.wado";
+
+test "inherent impl type argument named through an import" {
+    let h = Holder { value: Tag { n: 7 } };
+    assert h.n() == 7;
+    let other = OtherTag { label: "unrelated" };
+    assert other.label == "unrelated";
+}

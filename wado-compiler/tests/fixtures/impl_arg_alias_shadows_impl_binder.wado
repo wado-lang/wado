@@ -1,0 +1,13 @@
+// The green half of `impl_arg_alias_shadows_impl_binder_error`: the same
+// `impl<T> Pair<Item, T>` still applies when the first argument *is* the
+// declaration `Item` aliases. Dropping the constraint would pass this too, so
+// the error fixture is what proves it; this one guards the other direction —
+// a binder check that over-constrained would reject here.
+
+use { Pair } from "./sub/cross_module_same_name_impl_arg_binder_holder.wado";
+use { T as Item } from "./sub/cross_module_same_name_impl_arg_binder_dep.wado";
+
+test "an impl argument aliasing a declaration named like the header's binder" {
+    let p = Pair { a: Item { n: 5 }, b: 7 };
+    assert p.tag() == 5;
+}

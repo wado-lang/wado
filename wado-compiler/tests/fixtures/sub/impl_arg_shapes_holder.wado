@@ -1,0 +1,48 @@
+use { Tag } from "./cross_module_same_name_impl_arg_tag_a.wado";
+
+pub struct Slot<A> {
+    pub a: A
+}
+
+// Three concrete impl arguments that name no declaration of their own. Each is
+// still a shape the receiver either has or has not, so each constrains.
+impl Slot<[i32, Tag]> {
+    pub fn tup(&self) -> i32 {
+        return 1
+    }
+}
+
+impl Slot<&Tag> {
+    pub fn refr(&self) -> i32 {
+        return 2
+    }
+}
+
+impl Slot<fn(i32) -> i32> {
+    pub fn func(&self) -> i32 {
+        return 3
+    }
+}
+
+pub struct MSlot<A> {
+    pub a: A
+}
+
+// `&mut Tag`, not `&Tag`: the reference *kind* is part of the shape.
+impl MSlot<&mut Tag> {
+    pub fn refm(&self) -> i32 {
+        return 4
+    }
+}
+
+pub struct Nest<A> {
+    pub a: A
+}
+
+// A binder inside a tuple. The argument pins nothing, but it still requires a
+// two-element tuple whose first element is `i32`.
+impl<T> Nest<[i32, T]> {
+    pub fn pair(&self) -> i32 {
+        return 5
+    }
+}

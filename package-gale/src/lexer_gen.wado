@@ -3219,7 +3219,7 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
                     if kw.lowercase_text.chars().next().unwrap() != *fc {
                         continue;
                     }
-                    gen_keyword_check(w, *kw);
+                    gen_keyword_check(w, *kw, true);
                 }
             }
             w.end();
@@ -3256,11 +3256,18 @@ fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     return `${access} != ${char_lit(c)}`;
 }
 
-fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
+/// The caller's `chars[start]` dispatch guard is always case-insensitive, so
+/// an exact `char_ci[0] == false` check is stricter and stays.
+fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo, first_char_dispatched: bool = false) {
     let kw_chars: List<char> = kw.lowercase_text.chars().collect();
+    let start_at = if first_char_dispatched && kw.char_ci[0] { 1 } else { 0 };
+    if start_at >= kw_chars.len() {
+        w.line(&`return TK_${kw.rule_name};`);
+        return;
+    }
     w.write(&"if ");
-    for let mut kc = 0; kc < kw_chars.len(); kc += 1 {
-        if kc > 0 {
+    for let mut kc = start_at; kc < kw_chars.len(); kc += 1 {
+        if kc > start_at {
             w.write(&" && ");
         }
         let lower = kw_chars[kc];
@@ -4242,8 +4249,12 @@ fn gen_tokenize_fn(
     // An action's `lx.skip()` latches `best_act_skip`; OR it into the
     // command-derived skip decision so either route routes the token to trivia.
     let act_skip = if has_actions { " || best_act_skip" } else { "" };
+    // Without either, `is_skip` is a compile-time `false`.
+    let has_skip = !skip_names.is_empty() || has_actions;
     if skip_names.is_empty() {
-        w.line(&`let is_skip = false${act_skip};`);
+        if has_skip {
+            w.line(&`let is_skip = false${act_skip};`);
+        }
     } else {
         w.write(&"let is_skip = best_kind matches { ");
         for let mut i = 0; i < skip_names.len(); i += 1 {
@@ -4260,9 +4271,11 @@ fn gen_tokenize_fn(
         // position so the next non-`more` match covers the full span.
         w.begin(&"if best_more");
         w.line(&"if more_start < 0 { more_start = start; }");
-        w.else_begin(&"else if is_skip");
-        w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
-        w.line(&"more_start = -1;");
+        if has_skip {
+            w.else_begin(&"else if is_skip");
+            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
+            w.line(&"more_start = -1;");
+        }
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
@@ -4275,19 +4288,27 @@ fn gen_tokenize_fn(
         emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.line(&"more_start = -1;");
         w.end();
-    } else {
-        w.begin(&"if is_skip");
-        w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
+    } else if has_skip || has_channel_rules {
+        if has_skip {
+            w.begin(&"if is_skip");
+            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
+        }
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
-            w.else_begin(&"else if best_channel != 0");
+            if has_skip {
+                w.else_begin(&"else if best_channel != 0");
+            } else {
+                w.begin(&"if best_channel != 0");
+            }
             w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
         }
         w.else_begin(&"else");
         emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.end();
+    } else {
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
     }
 
     if use_modes {

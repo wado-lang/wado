@@ -149,16 +149,16 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 
 `lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` as planner + translator: the planner ([`lower::plan::plan`]) runs the TIR-mutating sub-passes and produces a `LowerPlan` of facts; the translator ([`lower::translate::translate`]) is a single fold from TIR to NIR. See `docs/wep-2026-05-11-nir.md`.
 
-| Sub-pass           | Stage      | File                     | What it does                                                                                                                                                                        |
-| ------------------ | ---------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pattern lowering   | planner    | `lower/plan/pattern.rs`  | `LetDestructure` / `IfLet` → explicit `Let` + `If`; dense integer `Match` → `Switch`                                                                                                |
-| Global extract     | planner    | `lower/plan/globals.rs`  | Extracts non-constant global initializers into a per-module `__initialize_module` function (one per source module; disambiguated by `module_source`)                                |
-| Boxing             | planner    | `lower/plan/boxing.rs`   | `&primitive` / `&mut primitive` → `Box<T>` struct operations                                                                                                                        |
-| Closure            | planner    | `lower/plan/closure.rs`  | Closures → `__Closure_N` functor structs with `__call` methods; produces fn-param specialized callees; emits `ClosurePlan { functor_infos }`                                        |
-| Initialize modules | planner    | `lower/plan/globals.rs`  | Combines per-module init functions into the top-level `__initialize_modules`                                                                                                        |
-| Value copy         | planner    | `lower/plan/value_copy/` | Decides move / copy / share per consumption site (freshness, last-use, confinement, read-only-share) and inserts `$value_copy$T` only at `copy` sites; synthesizes the helpers      |
-| String collection  | planner    | `lower/plan/string.rs`   | Collects literals and per-function DCE maps for the data section; emits `StringPlan`                                                                                                |
-| TIR → NIR          | translator | `lower/translate.rs`     | Single fold over TIR producing `NirPackage`. Special-cases that consume `LowerPlan`: wide-int `Match` → if-else chain, `Closure` → `ClosureToCanonical`, `copy_value::<T>` → helper |
+| Sub-pass           | Stage      | File                         | What it does                                                                                                                                                                        |
+| ------------------ | ---------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pattern lowering   | translator | `lower/translate/pattern.rs` | `LetDestructure` / `IfLet` → explicit `Let` + `If` over the scrutinee and destructure temps it mints; runs ahead of the fold                                                        |
+| Global extract     | planner    | `lower/plan/globals.rs`      | Extracts non-constant global initializers into a per-module `__initialize_module` function (one per source module; disambiguated by `module_source`)                                |
+| Boxing             | planner    | `lower/plan/boxing.rs`       | `&primitive` / `&mut primitive` → `Box<T>` struct operations                                                                                                                        |
+| Closure            | planner    | `lower/plan/closure.rs`      | Closures → `__Closure_N` functor structs with `__call` methods; produces fn-param specialized callees; emits `ClosurePlan { functor_infos }`                                        |
+| Initialize modules | planner    | `lower/plan/globals.rs`      | Combines per-module init functions into the top-level `__initialize_modules`                                                                                                        |
+| Value copy         | planner    | `lower/plan/value_copy/`     | Decides move / copy / share per consumption site (freshness, last-use, confinement, read-only-share) and inserts `$value_copy$T` only at `copy` sites; synthesizes the helpers      |
+| String collection  | planner    | `lower/plan/string.rs`       | Collects literals and per-function DCE maps for the data section; emits `StringPlan`                                                                                                |
+| TIR → NIR          | translator | `lower/translate.rs`         | Single fold over TIR producing `NirPackage`. Special-cases that consume `LowerPlan`: wide-int `Match` → if-else chain, `Closure` → `ClosureToCanonical`, `copy_value::<T>` → helper |
 
 ## Optimize
 
@@ -246,10 +246,9 @@ read the `DefId` alone, and neither has a constructor that takes a spelling. A
 head that names no declaration — a closure environment, an anonymous literal's
 shape — is `TypeHead::Shape`, whose rendering _is_ its identity.
 
-A handful of functions still turn a name into a declaration; `defs.rs`'s
-`NAME_TO_IDENTITY` lists them with the reason each survives, and
-`no_reachable_function_turns_a_name_into_an_identity` fails on a new one. See
-WEP 2026-08-12 for what is left and why.
+A handful of functions still turn a name into a declaration. WEP 2026-08-12
+lists them with the reason each survives; adding one to that list is a design
+change, not a local convenience.
 
 A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
 and `{decl}` repeat whenever a type is implemented in the module declaring it —

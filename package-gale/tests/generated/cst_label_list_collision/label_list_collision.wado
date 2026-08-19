@@ -590,7 +590,8 @@ impl CstStore {
             Open => ChildKind::Node,
             Miss => ChildKind::Missing,
             Skip => ChildKind::Skipped,
-            _ => ChildKind::Token,
+            Tok => ChildKind::Token,
+            Close => panic("CstStore::child_kind: Close is not a child row"),
         };
     }
 
@@ -678,7 +679,7 @@ fn cst_to_string_tree_impl(
                 out.push_str(&">");
                 c += 1;
             },
-            _ => c += 1,
+            Close => c += 1,
         }
     }
     out.push_str(&")");
@@ -1189,11 +1190,12 @@ pub global RK_STREAM: NodeKind = 0;
 pub global RK_LEADING_LIST: NodeKind = 1;
 pub global RK_TRAILING_LIST: NodeKind = 2;
 pub global RK_LIST_GROUP: NodeKind = 3;
-pub global RK_LAZY_PLUS: NodeKind = 4;
-pub global RK_LAZY_PLUS_AFTER: NodeKind = 5;
-pub global RK_LAZY_PLUS_LIST_AFTER: NodeKind = 6;
+pub global RK_NESTED_LIST: NodeKind = 4;
+pub global RK_LAZY_PLUS: NodeKind = 5;
+pub global RK_LAZY_PLUS_AFTER: NodeKind = 6;
+pub global RK_LAZY_PLUS_LIST_AFTER: NodeKind = 7;
 
-global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "lazy_plus", "lazy_plus_after", "lazy_plus_list_after"];
+global RULE_NAMES: List<String> = ["stream", "leading_list", "trailing_list", "list_group", "nested_list", "lazy_plus", "lazy_plus_after", "lazy_plus_list_after"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1261,11 +1263,6 @@ impl Parser {
         if let Some(e) = &mut self.pending {
             e.rule_stack.push(name);
         }
-    }
-
-    fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.full_message(); }
-        return String::from("");
     }
 
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
@@ -1406,22 +1403,13 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if k != TK_EOF {
-            let mut blocked = false;
-            for let x of excluded {
-                if x == k {
-                    blocked = true;
-                    break;
-                }
-            }
-            if !blocked {
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
-            }
+        if k != TK_EOF && !self.in_set(k, excluded) {
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
@@ -1432,31 +1420,29 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        for let x of included {
-            if x == k {
-                if k == TK_EOF {
-                    self.b.token(self.pos);
-                    return self.pos;
-                }
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
+        if self.in_set(k, included) {
+            if k == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
             }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            &included,
+            included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
 }
 
-fn scan_stream(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stream(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
     pos += 1;
@@ -1468,7 +1454,7 @@ fn scan_stream(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_leading_list(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_leading_list(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
     pos += 1;
@@ -1479,7 +1465,7 @@ fn scan_leading_list(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_trailing_list(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_trailing_list(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
     pos += 1;
@@ -1490,7 +1476,7 @@ fn scan_trailing_list(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_list_group(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_list_group(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
     pos += 1;
@@ -1520,7 +1506,16 @@ fn scan_list_group(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_lazy_plus(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_nested_list(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_lazy_plus(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG { return -1; }
     pos += 1;
@@ -1556,7 +1551,7 @@ fn scan_lazy_plus(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_lazy_plus_after(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lazy_plus_after(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     sg_3_done: {
         sg_3: {
@@ -1592,7 +1587,7 @@ fn scan_lazy_plus_after(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32
     return pos;
 }
 
-fn scan_lazy_plus_list_after(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_lazy_plus_list_after(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     sg_5_done: {
         sg_5: {
@@ -1629,7 +1624,7 @@ fn scan_lazy_plus_list_after(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -
 }
 
 fn _parse_stream__inner(p: &mut Parser) -> () {
-    let tag_item = p.expect(TK_TAG, &EMPTY_SYNC);
+    p.expect(TK_TAG, &EMPTY_SYNC);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1642,9 +1637,9 @@ fn _parse_stream__inner(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let tag = p.expect(TK_TAG, &EMPTY_SYNC);
+        p.expect(TK_TAG, &EMPTY_SYNC);
     }
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1660,9 +1655,9 @@ fn _parse_stream(p: &mut Parser) -> () {
 }
 
 fn _parse_leading_list__inner(p: &mut Parser) -> () {
-    let items_item = p.expect(TK_TAG, &EMPTY_SYNC);
-    let tag = p.expect(TK_TAG, &SYNC_0);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_TAG, &EMPTY_SYNC);
+    p.expect(TK_TAG, &SYNC_0);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1678,9 +1673,9 @@ fn _parse_leading_list(p: &mut Parser) -> () {
 }
 
 fn _parse_trailing_list__inner(p: &mut Parser) -> () {
-    let tag = p.expect(TK_TAG, &SYNC_1);
-    let items_item = p.expect(TK_TAG, &EMPTY_SYNC);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_TAG, &SYNC_1);
+    p.expect(TK_TAG, &EMPTY_SYNC);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1696,9 +1691,9 @@ fn _parse_trailing_list(p: &mut Parser) -> () {
 }
 
 fn _parse_list_group__inner(p: &mut Parser) -> () {
-    let tag_or_word = p.expect(TK_TAG, &SYNC_2);
-    let items_item = p.expect_set([TK_TAG, TK_WORD]);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_TAG, &SYNC_2);
+    p.expect_set(&SYNC_2);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1713,18 +1708,35 @@ fn _parse_list_group(p: &mut Parser) -> () {
     }
 }
 
+fn _parse_nested_list__inner(p: &mut Parser) -> () {
+    p.expect(TK_TAG, &EMPTY_SYNC);
+    p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_nested_list(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_NESTED_LIST, _start);
+    _parse_nested_list__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("nested_list");
+    }
+}
+
 fn _parse_lazy_plus__inner(p: &mut Parser) -> () {
-    let tag = p.expect(TK_TAG, &SYNC_1);
+    p.expect(TK_TAG, &SYNC_1);
     _first_iter: {
-        let tag = p.expect(TK_TAG, &SYNC_3);
-        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+        p.expect(TK_TAG, &SYNC_3);
+        p.expect(TK_WORD, &EMPTY_SYNC);
     }
     while !p.recovering && (p.peek_kind() == TK_TAG) {
-        let tag = p.expect(TK_TAG, &SYNC_3);
-        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+        p.expect(TK_TAG, &SYNC_3);
+        p.expect(TK_WORD, &EMPTY_SYNC);
     }
-    let end = p.expect(TK_END, &SYNC_0);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_END, &SYNC_0);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1741,16 +1753,16 @@ fn _parse_lazy_plus(p: &mut Parser) -> () {
 
 fn _parse_lazy_plus_after__inner(p: &mut Parser) -> () {
     _first_iter: {
-        let tag = p.expect(TK_TAG, &SYNC_3);
-        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+        p.expect(TK_TAG, &SYNC_3);
+        p.expect(TK_WORD, &EMPTY_SYNC);
     }
     while !p.recovering && (p.peek_kind() == TK_TAG) {
-        let tag = p.expect(TK_TAG, &SYNC_3);
-        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+        p.expect(TK_TAG, &SYNC_3);
+        p.expect(TK_WORD, &EMPTY_SYNC);
     }
-    let end = p.expect(TK_END, &SYNC_1);
-    let tag = p.expect(TK_TAG, &SYNC_0);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_END, &SYNC_1);
+    p.expect(TK_TAG, &SYNC_0);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1767,16 +1779,16 @@ fn _parse_lazy_plus_after(p: &mut Parser) -> () {
 
 fn _parse_lazy_plus_list_after__inner(p: &mut Parser) -> () {
     _first_iter: {
-        let tag = p.expect(TK_TAG, &SYNC_3);
-        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+        p.expect(TK_TAG, &SYNC_3);
+        p.expect(TK_WORD, &EMPTY_SYNC);
     }
     while !p.recovering && (p.peek_kind() == TK_TAG) {
-        let tag = p.expect(TK_TAG, &SYNC_3);
-        let word = p.expect(TK_WORD, &EMPTY_SYNC);
+        p.expect(TK_TAG, &SYNC_3);
+        p.expect(TK_WORD, &EMPTY_SYNC);
     }
-    let end = p.expect(TK_END, &SYNC_1);
-    let tag = p.expect(TK_TAG, &SYNC_0);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    p.expect(TK_END, &SYNC_1);
+    p.expect(TK_TAG, &SYNC_0);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1828,6 +1840,10 @@ pub fn parse_list_group(input: &String, max_errors: i32 = i32::MAX) -> ParseResu
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_list_group(p));
 }
 
+pub fn parse_nested_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_nested_list(p));
+}
+
 pub fn parse_lazy_plus(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lazy_plus(p));
 }
@@ -1840,19 +1856,19 @@ pub fn parse_lazy_plus_list_after(input: &String, max_errors: i32 = i32::MAX) ->
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_lazy_plus_list_after(p));
 }
 
-pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
+fn _token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(6);
     for let mut k = 0; k < 6; k += 1 {
-        token_names.push(token_kind_name(k));
+        v.push(token_kind_name(k));
     }
-    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
+    return v;
+}
+
+pub fn to_string_tree(result: &ParseResult) -> String {
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
-        token_names.push(token_kind_name(k));
-    }
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
         if RULE_NAMES[i] == *rule {
@@ -1860,9 +1876,10 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
             break;
         }
     }
+    if _kind < 0 { return String::new(); }
     let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
 }

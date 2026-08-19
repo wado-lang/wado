@@ -1576,17 +1576,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Handle flags type static methods: none() and all()
         {
-            let flags_name = match self.tysys.type_table.borrow().get(target_type_id).clone() {
-                ResolvedType::Flags { .. } => self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(target_type_id)
-                    .map(|(n, _)| n),
-                _ => None,
-            };
-            if let Some(ref name) = flags_name
-                && let Some(flags_info) = self.lookup_flags_case(name).cloned()
+            // The receiver's own declaration, not its head resolved again.
+            // Only a `flags` declaration has members, so this guards the kind.
+            if let Some(flags_info) = self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_def(target_type_id)
+                .and_then(|def| self.type_lookup().flags_members_of(def))
+                .cloned()
             {
                 match static_call.method.as_str() {
                     "none" => {
@@ -2172,7 +2170,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The selection covers trait impls only; an inherent static has none
         // and reaches the index instead.
         if let Some(method_ast_id) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
-            self.static_method_decl_id(Some(&struct_module), &struct_name, &static_call.method)
+            let receiver =
+                self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
+            self.static_method_decl_id(&receiver, &static_call.method)
         }) {
             self.record_reference_to_def(static_call.method_id, method_ast_id);
         }
@@ -2562,26 +2562,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // The resolved declaration is the key; the name-and-module search behind
-        // it prefers the caller's own frame and would answer with a same-named
-        // local `Type`. Only a receiver naming no declaration still needs it.
-        let static_keys = receiver.head().def().map_or_else(
-            || self.static_receiver_keys(Some(&method_ref.module), struct_name),
-            |def| {
-                vec![super::trait_env::ImplTargetKey::of_decl(
-                    self.tysys.resolutions.defs(),
-                    def,
-                )]
-            },
+        // The receiver's own declaration is the key. A head naming none falls
+        // to the frame derivation, which is one vantage; a second key tried
+        // when the first misses makes the order a silent tiebreak.
+        let static_key = receiver.head().def().map_or_else(
+            || self.impl_target(struct_name),
+            |def| super::trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
         );
         // The decl pass already resolved this signature in the impl's own
         // frame — impl and method type params interned, `Self` bound to the
         // impl target, the impl module's imports in scope. Re-deriving all of
         // that here is what the digest exists to avoid.
-        let indexed_return = static_keys
-            .iter()
-            .find_map(|key| self.agreed_static_method_return(key, method_name));
-        if let Some(return_type) = indexed_return {
+        if let Some(return_type) = self.agreed_static_method_return(&static_key, method_name) {
             return return_type;
         }
 
@@ -2589,18 +2581,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // key disambiguation as the inherent-impl path above. The decl pass
         // resolved these in the resource's own frame, so a generic resource's
         // `Option<T>` is already a `TypeParam` here.
-        let indexed_resource_return = static_keys.iter().find_map(|key| {
-            self.tysys
-                .trait_env
-                .resource_static_method_index
-                .get(key)?
-                .iter()
-                .find(|(name, ..)| name == method_name)
-                .and_then(|(name, _, item_id, _)| {
-                    let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
-                    Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-                })
-        });
+        let indexed_resource_return = self
+            .tysys
+            .trait_env
+            .resource_static_method_index
+            .get(&static_key)
+            .and_then(|entries| {
+                entries
+                    .iter()
+                    .find(|(name, ..)| name == method_name)
+                    .and_then(|(name, _, item_id, _)| {
+                        let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
+                        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
+                    })
+            });
         if let Some(return_type) = indexed_resource_return {
             return return_type;
         }
@@ -3359,7 +3353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow()
                 .compiler_trait_fq(crate::compiler_item::CompilerItem::Default);
-            let module_source = self.find_struct_module_source(struct_name);
+            let module_source = self.declaring_module_of(struct_name);
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -3616,7 +3610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let method_ref = resolved.unwrap_or_else(|| {
             StaticMethodRef::new(
-                self.find_struct_module_source(&actual_struct_name),
+                self.declaring_module_of(&actual_struct_name),
                 &actual_struct_name,
                 method_name,
                 None,

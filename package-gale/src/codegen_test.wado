@@ -185,7 +185,7 @@ test "generate wildcard element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"let wildcard = p.any();");
+    assert str_contains(&output, &"p.any();");
 }
 
 test "generate parser not element" {
@@ -218,7 +218,7 @@ test "generate parser not element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"let not_comma = p.expect_not([TK_COMMA]);");
+    assert str_contains(&output, &"p.expect_not(&SYNC_");
 }
 
 test "generate scalar-labeled group `t=(a | b)`" {
@@ -232,11 +232,15 @@ test "generate scalar-labeled group `t=(a | b)`" {
     // and the surface field name survives via the rebound op.
     let mut grammar = parse_grammar("grammar T; a : t=('x' | 'y') ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    // The generated parser must reference the hoisted anonymous tokens
-    // and produce a scalar `t` binding for the labeled group.
     assert str_contains(&output, &"TK_LIT_X");
     assert str_contains(&output, &"TK_LIT_Y");
-    assert str_contains(&output, &"let t = ");
+    assert str_contains(&output, &"p.expect_set(&SYNC_");
+    // A peel regression panics in `gen_op_group`; transparency is what is left.
+    let mut bare = parse_grammar("grammar T; a : ('x' | 'y') ;", "(test)");
+    let bare_output = generate(&mut bare, &DEFAULT_OPTIONS).source;
+    let labeled_body = extract_fn_body(&output, &"fn _parse_a__inner(");
+    let bare_body = extract_fn_body(&bare_output, &"fn _parse_a__inner(");
+    assert labeled_body == bare_body, `scalar label changed the emit:\nlabeled: ${labeled_body}\nbare:    ${bare_body}`;
 }
 
 test "generate scalar-labeled single-alt group `t=(A B)`" {
@@ -465,8 +469,10 @@ test "generate lexer channel" {
     assert str_contains(&output, &"best_channel = 2");
     // Non-default channels must be routed to trivia, not tokens — ANTLR4
     // hides channels other than DEFAULT from parser rules.
-    assert str_contains(&output, &"else if best_channel != 0");
+    assert str_contains(&output, &"if best_channel != 0");
     assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+    // No `-> skip` rule and no action to latch one, so `is_skip` never exists.
+    assert !str_contains(&output, &"let is_skip");
 }
 
 test "generate lexer hidden channel routes to trivia" {
@@ -488,8 +494,9 @@ ID : [a-z]+ ;";
     // != 0` matches to trivia via `Token::with_channel`, not to the tokens
     // stream.
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"else if best_channel != 0");
+    assert str_contains(&output, &"if best_channel != 0");
     assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+    assert !str_contains(&output, &"let is_skip");
 }
 
 test "generate left-associative LR alt passes own_prec+1 on right operand" {
@@ -771,7 +778,7 @@ test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
     // so any token at that position was silently consumed. Surfaced
     // by `ParserErrors/SingleTokenDeletionExpectingSet` and
     // `ParserErrors/SingleTokenDeletionBeforeAlt`. After the fix the
-    // emit routes through `p.expect_set([...])?` which fails when the
+    // emit routes through `p.expect_set(&SYNC_<id>)` which fails when the
     // current token is outside the set. Regression fixture:
     // `tests/grammars/parser_set_group_dispatch.g4`.
     let input = "grammar Test;
@@ -780,8 +787,8 @@ a : 'a' ('b' | 'c') 'd' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_a__inner(");
-    assert str_contains(&body, &"p.expect_set([");
-    assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();");
+    assert str_contains(&body, &"p.expect_set(&SYNC_");
+    assert !str_contains(&body, &"p.advance();");
 }
 
 fn extract_fn_body(output: &String, header: &String) -> String {
@@ -1090,7 +1097,8 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"p.expect_set([TK_INT, TK_FLOAT])");
+    assert str_contains(&body, &"p.expect_set(&SYNC_");
+    assert str_contains(&output, &"global SYNC_0: List<i32> = [TK_FLOAT, TK_INT];");
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {

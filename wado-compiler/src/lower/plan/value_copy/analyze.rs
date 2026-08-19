@@ -11,8 +11,8 @@ use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -59,8 +59,14 @@ struct SeedWalker<'a> {
 
 impl SeedWalker<'_> {
     fn record_if_wrap(&mut self, expr: &TirExpr) {
-        if should_wrap(expr, self.type_table, self.oracle) {
-            self.out.insert(expr.type_id);
+        self.record_wrap_target(expr, expr.type_id);
+    }
+
+    /// Seed the helper for what the fold *writes*, which differs from the
+    /// value's own type wherever the site writes through something.
+    fn record_wrap_target(&mut self, value: &TirExpr, dest: TypeId) {
+        if should_wrap_into(value, dest, self.type_table, self.oracle) {
+            self.out.insert(dest);
         }
     }
 
@@ -78,6 +84,7 @@ impl TirRefVisitor for SeedWalker<'_> {
         match &stmt.kind {
             TirStmtKind::Let {
                 value,
+                type_id,
                 skip_value_copy,
                 ..
             } => {
@@ -85,11 +92,20 @@ impl TirRefVisitor for SeedWalker<'_> {
                 // copy depends on per-function move analysis this walk cannot
                 // see. An unused helper is dead code `dce` removes.
                 if !*skip_value_copy {
-                    self.record_if_wrap(value);
+                    self.record_wrap_target(value, *type_id);
                 }
             }
-            TirStmtKind::LetDestructure { value, .. } => {
-                self.record_if_wrap(value);
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
+                // The copy lands on the temp `lower_let_pattern` mints, so
+                // the helper it needs is that temp's.
+                self.record_wrap_target(
+                    value,
+                    crate::lower::translate::pattern::pattern_temp_type(
+                        pattern,
+                        value.type_id,
+                        self.type_table,
+                    ),
+                );
             }
             _ => {}
         }
@@ -99,6 +115,11 @@ impl TirRefVisitor for SeedWalker<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         self.record_array_clone_element(expr);
         match &expr.kind {
+            // Lowering binds a `Match` scrutinee to a temp that takes the copy,
+            // in any position. Nothing here sees it, so seed its type.
+            TirExprKind::Match {
+                expr: scrutinee, ..
+            } => self.record_if_wrap(scrutinee),
             TirExprKind::Call { args, .. } => {
                 // Every by-value argument is copied — value semantics: passing
                 // a value to a function deep-copies it. `should_wrap` already
@@ -129,6 +150,9 @@ impl TirRefVisitor for SeedWalker<'_> {
                 );
                 if replaces_whole_value {
                     self.record_if_wrap(value);
+                    // `try_expand_deref_aggregate_assign` copies the RHS as
+                    // the referent's type, which a coercion can widen.
+                    self.record_wrap_target(value, target.type_id);
                 }
             }
             // An aggregate literal stores each element / field by value, so a
@@ -159,7 +183,19 @@ impl TirRefVisitor for SeedWalker<'_> {
 /// (e.g. `skip_value_copy`, `is_source_immutable` for `Let`, the
 /// `Local`-target check for `Assign`) is the caller's job.
 pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) -> bool {
-    super::needs_value_copy(expr.type_id, type_table)
+    should_wrap_into(expr, expr.type_id, type_table, oracle)
+}
+
+/// [`should_wrap`] where the value lands in a destination of type `dest`: the
+/// type test is the destination's, since `let { x, y } = &p` writes a `Point`
+/// temp out of a `&Point`.
+pub fn should_wrap_into(
+    expr: &TirExpr,
+    dest: TypeId,
+    type_table: &TypeTable,
+    oracle: &OwnedCalls,
+) -> bool {
+    super::needs_value_copy(dest, type_table)
         && !is_copy_value_call(expr)
         && !is_fresh_value(expr, oracle, type_table)
 }
@@ -489,19 +525,31 @@ fn scan_expr_for_breaks(
 }
 
 /// An immutable destination binding can alias an immutable-rooted
-/// source without a defensive copy. Mirrors
-/// `wir_build::value_copy::is_source_immutable`.
+/// source without a defensive copy.
 ///
 /// Immutability of the *binding* is not immutability of the storage, so the
 /// caller also checks the root against
 /// [`super::last_use::compute_moved_roots`].
-pub fn is_source_immutable(expr: &TirExpr, immutable_locals: &IndexSet<u32>) -> bool {
-    source_root(expr).is_some_and(|r| immutable_locals.contains(&r))
+pub fn is_source_immutable(
+    expr: &TirExpr,
+    immutable_locals: &IndexSet<u32>,
+    type_table: &TypeTable,
+    ref_targets: &super::last_use::RefTargets,
+) -> bool {
+    source_root(expr, type_table, ref_targets).is_some_and(|r| immutable_locals.contains(&r))
 }
 
 /// The local an immutable-source chain is rooted at, or `None` for a shape
 /// [`is_source_immutable`] does not accept.
-pub fn source_root(expr: &TirExpr) -> Option<u32> {
+///
+/// A projection through a reference continues at the place it borrows: the root
+/// local's immutability binds the reference, not the storage behind it. An
+/// unresolvable one names storage this body does not own, and answers nothing.
+pub fn source_root(
+    expr: &TirExpr,
+    type_table: &TypeTable,
+    ref_targets: &super::last_use::RefTargets,
+) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::FieldAccess { expr: inner, .. }
@@ -509,7 +557,15 @@ pub fn source_root(expr: &TirExpr) -> Option<u32> {
         | TirExprKind::TupleZip { expr: inner }
         | TirExprKind::TypePackExpansion {
             call_expr: inner, ..
-        } => source_root(inner),
+        } => {
+            if matches!(
+                type_table.get(inner.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            ) {
+                return ref_targets.referent_root(inner);
+            }
+            source_root(inner, type_table, ref_targets)
+        }
         _ => None,
     }
 }

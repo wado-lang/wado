@@ -35,7 +35,6 @@ use {
     single_token_first,
     rule_alts_labeled,
     follow_sep,
-    join_kinds,
     elements_match,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
@@ -173,6 +172,14 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
+    let mut lr_snakes: List<String> = [];
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        if let LeftRecursive(_) = &lowered.parser_rules[i] {
+            lr_snakes.push(grammar.parser_rules[i].snake_name);
+        }
+    }
+    ctx.set_lr_rule_snakes(&lr_snakes);
+
     let members = collect_parser_members(grammar, ctx);
     gen_parser_struct(
         w,
@@ -415,20 +422,14 @@ fn gen_scan_function_named(
         Option::<ScanAltPlan>::None;
     };
 
+    // Only a left-recursive rule climbs precedence, so only its `scan_X`
+    // declares `min_prec`.
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
-    // Accept (and ignore) min_prec so call sites pass it uniformly
-    // regardless of whether the target rule is left-recursive. See
-    // `GenContext.scan_ruleref_min_prec` for the alt-scan use case.
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.add_param_spec(ParamSpec {
-        name: "min_prec",
-        type_str: "i32",
-        default_value: Option::Some("0"),
-    });
     f.set_return_type(&"i32");
     f.emit_begin(w);
 
@@ -1377,10 +1378,15 @@ fn gen_scan_op_element(
             // `i32::MAX` for the trailing self-ref to short-circuit
             // any LR climb in the target rule; every other call site
             // leaves it at the default `0`.
-            let min_prec = if let Some(p) = rc.min_prec_arg {
-                p;
+            let min_prec_arg = if ctx.rule_takes_min_prec_arg(&rc.target_snake) {
+                let mp = if let Some(p) = rc.min_prec_arg {
+                    p;
+                } else {
+                    min_prec_override;
+                };
+                `, ${mp}`;
             } else {
-                min_prec_override;
+                String::new();
             };
             // ATN-class scan: bracket every rule-call scan with the scan caller
             // stack so the callee's LR loop yields the caller's mandatory
@@ -1389,12 +1395,13 @@ fn gen_scan_op_element(
             // never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
             let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             if push_ret >= 0 {
                 w.line(&`SCAN_STACK.push(${push_ret});`);
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
+                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
                 w.line(&"SCAN_STACK.pop();");
             } else {
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
+                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
             }
             w.line(&`if pos < 0 \{ ${*fail_stmt} \}`);
         },
@@ -1438,13 +1445,19 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             // from alt-scan's trailing-self-ref site, so `min_prec` here
             // is always the rule's default `0` (or whatever
             // `min_prec_arg` baked at lower time, e.g. LR self-refs).
-            let min_prec = if let Some(p) = rc.min_prec_arg {
-                p;
+            let min_prec_arg = if ctx.rule_takes_min_prec_arg(&rc.target_snake) {
+                let mp = if let Some(p) = rc.min_prec_arg {
+                    p;
+                } else {
+                    0;
+                };
+                `, ${mp}`;
             } else {
-                0;
+                String::new();
             };
             let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
-            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}, ${min_prec}${cont});`);
+            assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
+            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
         },
         Wildcard => {
             w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
@@ -2935,6 +2948,14 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
     w.line(&`p.atn_ret_pending = ${ret};`);
 }
 
+/// A label binding exists only for a semantic action to read.
+fn leaf_binding(ctx: &GenContext, field: &String) -> String {
+    if ctx.emit_actions() {
+        return `let ${*field} = `;
+    }
+    return String::new();
+}
+
 /// Emit a single leaf-op parse line, reading the deduped field name
 /// and resolved token / follow-arg / min-prec values straight from
 /// `Op`. Lower's `lower_alt_body` / `lower_label_op` / etc. have
@@ -2969,11 +2990,11 @@ fn gen_op_leaf(
     return match *op {
         Token(t) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(&`let ${t.field} = p.expect(${t.kind}, ${sync_ref});`);
+            w.line(&`${leaf_binding(ctx, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
         },
         Literal(l) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(&`let ${l.field} = p.expect(${l.kind}, ${sync_ref});`);
+            w.line(&`${leaf_binding(ctx, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
         },
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
@@ -2991,13 +3012,13 @@ fn gen_op_leaf(
             let argsfx = call_arg_suffix(&r, ctx);
             let cont = if r.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
+                w.line(&`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
             } else {
-                w.line(&`let ${r.field} = ${fn_name}(p${follow_arg_str}${argsfx});`);
+                w.line(&`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}${argsfx});`);
             }
         },
-        Wildcard(wop) => w.line(&`let ${wop.field} = p.any();`),
-        Excluded(eop) => w.line(&`let ${eop.field} = ${gen_op_excluded_call(&eop)};`),
+        Wildcard(wop) => w.line(&`${leaf_binding(ctx, &wop.field)}p.any();`),
+        Excluded(eop) => w.line(&`${leaf_binding(ctx, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
         // Non-leaf ops (Repeat / Group / ListLabel) are routed to
         // their own dispatchers by the caller; reaching here means
         // the caller's `op_is_leaf` gate was bypassed.
@@ -3047,7 +3068,7 @@ fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<String>> {
 
 fn gen_group_body(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        w.line(&`let _ = p.expect_set([${join_kinds(&kinds)}]);`);
+        w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
         return;
     }
     if g.alts.len() == 1 {
@@ -3113,7 +3134,7 @@ fn gen_alt_dispatch(
         gen_ops(w, &alt_by_index(alts, br.alt_index).ops, ctx, nc);
     }
     w.else_begin(&"else");
-    w.line(&`let _ = p.expect_set([${join_kinds(&all_first)}]);`);
+    w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
     w.end();
 }
 
@@ -3908,7 +3929,7 @@ fn gen_op_storable_group_inner(
         panic("gen_op_storable_group_inner: surface element is not Group");
     };
     return match &g_op.shape {
-        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
+        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
         SingleAlt(_) => gen_consume_single_alt_group_op(
             w,
             &g_op.alts[0],
@@ -4439,7 +4460,7 @@ fn gen_op_group(
     // the loop costs nothing.
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
-            TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
+            TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
             SingleAlt(_) => gen_consume_single_alt_group_op(
                 w,
                 &g_op.alts[0],
@@ -4502,27 +4523,22 @@ fn gen_consume_token_group_op(
     w: &mut CodeWriter,
     to: &TokenOnlyShape,
     alts: &List<Alternative>,
+    ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
     let _ = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(&`let ${to.field} = p.expect_set([${kinds}]);`);
+    w.line(&`${leaf_binding(ctx, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
-/// Render the comma-separated list of token-kind constants for a
-/// token-only group's alternatives. Each alt has exactly one element
-/// (a `TokenRef` or `Literal`), guaranteed by `is_token_only_group`.
-fn collect_token_only_kinds(alts: &List<Alternative>) -> String {
-    let mut out = String::with_capacity(32);
+fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
+    let mut out: List<String> = [];
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i > 0 {
-            out.push_str(&", ");
-        }
         let elem = &alts[i].elements[0];
         if let TokenRef(t) = elem {
-            out.push_str(&`TK_${t.name}`);
+            out.push(`TK_${t.name}`);
         } else if let Literal(l) = elem {
-            out.push_str(&literal_const_name(&l.text));
+            out.push(literal_const_name(&l.text));
         } else {
             panic("collect_token_only_kinds: token-only group alt is not TokenRef or Literal");
         }
@@ -4592,32 +4608,20 @@ fn gen_op_list_label(
     gen_op_leaf(w, &ll.inner, ctx, name_counts);
 }
 
-/// Render the `p.expect_not([…])` expression for an `Op::Excluded`.
-/// Lower interns multi-element exclusion sets via
-/// `ctx.intern_kind_set`; if a future slice routes those through the
-/// generated `_kind_set_<id>_expect_not` helper this is the
-/// single call site to update.
-fn gen_op_excluded_call(e: &ExcludedOp) -> String {
-    let mut list = String::with_capacity(32);
-    for let mut i = 0; i < e.kinds.len(); i += 1 {
-        if i > 0 {
-            list.push_str(&", ");
-        }
-        list.push_str(&e.kinds[i]);
-    }
-    return `p.expect_not([${list}])`;
+fn gen_op_excluded_call(e: &ExcludedOp, ctx: &mut GenContext) -> String {
+    return `p.expect_not(${sync_set_ref(ctx, &e.kinds)})`;
 }
 
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
     match elem {
         TokenRef(t) => {
             let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(&`let ${field_name} = p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+            w.line(&`${leaf_binding(ctx, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
         },
         Literal(l) => {
             let const_name = literal_const_name(&l.text);
             let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-            w.line(&`let ${field_name} = p.expect(${const_name}, &EMPTY_SYNC);`);
+            w.line(&`${leaf_binding(ctx, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
         },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
         // by lower and consumed by the op-driven walkers; this surface arm
@@ -4629,16 +4633,16 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         RuleRef(r) => {
             let field_name = dedup_name(&r.field_name, name_counts);
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
-            w.line(&`let ${field_name} = _parse_${r.snake_name}(p);`);
+            w.line(&`${leaf_binding(ctx, &field_name)}_parse_${r.snake_name}(p);`);
         },
         Wildcard(_) => {
             let field_name = dedup_name(&"wildcard", name_counts);
-            w.line(&`let ${field_name} = p.any();`);
+            w.line(&`${leaf_binding(ctx, &field_name)}p.any();`);
         },
         Not(ne) => {
             let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
-            let check = not_match_call(&ne.element);
-            w.line(&`let ${field_name} = ${check};`);
+            let check = not_match_call(&ne.element, ctx);
+            w.line(&`${leaf_binding(ctx, &field_name)}${check};`);
         },
         // After the Phase 2-G op-driven migration, only token-only groups
         // reach this surface walker — every other Group classification
@@ -4649,28 +4653,14 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             gen_consume_token_group(w, &g.alternatives, ctx, name_counts);
         },
         Label(lab) => {
-            if lab.list {
-                // Bare list label: allocate the array, parse the inner element
-                // once, and push. Repeats wrap this via gen_repeat below.
-                let inner_info = element_field_info(&lab.element);
-                let lab_name = dedup_name(&lab.field_name, name_counts);
-                w.line(&`let mut ${lab_name}: List<${inner_info.1}> = [];`);
-                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-                gen_element(w, &lab.element, ctx, name_counts);
-                w.line(&`${lab_name}.push(${predicted_inner});`);
-            } else {
-                // Scalar label `name = element`: parse the inner element with
-                // the shared `name_counts` so its emitted binding dedups
-                // against the outer alt's scope (otherwise `a=e ... b=e` would
-                // emit two top-level `let e = _parse_e(p);` and the second
-                // would fail compilation with "cannot redeclare e"). Then
-                // re-bind under the label name so the struct initializer
-                // resolves. Peek the dedup'd inner name before calling
-                // `gen_element`, which performs the actual increment.
-                let lab_name = dedup_name(&lab.field_name, name_counts);
-                let inner_info = element_field_info(&lab.element);
-                let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
-                gen_element(w, &lab.element, ctx, name_counts);
+            // The inner parse appends its match to the builder, so a label
+            // accumulates nothing. The inner shares `name_counts` so that
+            // `a=e ... b=e` cannot emit one shared binding.
+            let lab_name = dedup_name(&lab.field_name, name_counts);
+            let inner_info = element_field_info(&lab.element);
+            let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
+            gen_element(w, &lab.element, ctx, name_counts);
+            if !lab.list && ctx.emit_actions() {
                 w.line(&`let ${lab_name} = ${predicted_inner};`);
             }
         },
@@ -5493,28 +5483,22 @@ fn gen_scan_guard_with_prefix(
     return scan_pos_var;
 }
 
-/// literal that coerces to `List<i32>` at the call site.
-fn not_match_call(inner: &Element) -> String {
+/// Parser-side `~`. The excluded set is interned, so nothing is rebuilt here.
+fn not_match_call(inner: &Element, ctx: &mut GenContext) -> String {
     let unsupported = "not_match_call: unsupported inner element for parser-side ~";
-    return match inner {
-        TokenRef(t) => `p.expect_not([TK_${t.name}])`,
-        Literal(l) => `p.expect_not([${literal_const_name(&l.text)}])`,
+    let kinds = match inner {
+        TokenRef(t) => [`TK_${t.name}`] as List<String>,
+        Literal(l) => [literal_const_name(&l.text)] as List<String>,
         Group(g) => {
-            let mut kinds: List<String> = [];
-            if !collect_not_set_tokens(&g.alternatives, &mut kinds) {
+            let mut ks: List<String> = [];
+            if !collect_not_set_tokens(&g.alternatives, &mut ks) {
                 panic(unsupported);
             }
-            let mut list = String::with_capacity(32);
-            for let mut i = 0; i < kinds.len(); i += 1 {
-                if i > 0 {
-                    list.push_str(&", ");
-                }
-                list.push_str(&kinds[i]);
-            }
-            `p.expect_not([${list}])`;
+            ks;
         },
         RuleRef(_) | Label(_) | Repeat(_) | Wildcard(_) | Not(_) => panic(unsupported),
     };
+    return `p.expect_not(${sync_set_ref(ctx, &kinds)})`;
 }
 
 /// Collect terminal token constants from a `~ ( ... )` group's alternatives.
@@ -5594,7 +5578,9 @@ fn gen_scan_winner_tournament(
     w.line(&`let mut ${best_var}: i32 = -1;`);
     let tourney_label = dedup_name(&"gd_tourney", name_counts);
     w.begin(&`${tourney_label}:`);
-    for let ai of sorted_group.sorted() {
+    let order = sorted_group.sorted();
+    for let mut oi = 0; oi < order.len(); oi += 1 {
+        let ai = order[oi];
         let sb = &scan_alts[ai];
         if sb.elements.is_empty() {
             let epsilon = "p.pos";
@@ -5611,9 +5597,13 @@ fn gen_scan_winner_tournament(
             w.end();
             emit_argmax_update(w, &best_var, &winner_var, &end_var, ai);
         }
-        w.begin(&`if ${best_var} >= p.kinds.len()`);
-        w.line(&`break ${tourney_label};`);
-        w.end();
+        // The early exit skips the alts still to come; after the last one
+        // there are none.
+        if oi + 1 < order.len() {
+            w.begin(&`if ${best_var} >= p.kinds.len()`);
+            w.line(&`break ${tourney_label};`);
+            w.end();
+        }
     }
     w.end();
     return winner_var;
@@ -5633,7 +5623,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
         `p${follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
     };
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-    w.line(&`let ${local_var} = ${fn_name}(${call_args});`);
+    w.line(&`${leaf_binding(ctx, &local_var)}${fn_name}(${call_args});`);
 }
 
 fn gen_rule_ref_group_scan_dispatch(
@@ -5828,7 +5818,7 @@ fn gen_consume_token_group(
 ) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(&`let ${var_name} = p.expect_set([${kinds}]);`);
+    w.line(&`${leaf_binding(ctx, &var_name)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
@@ -6497,7 +6487,17 @@ fn gen_prediction_code_inner(
             }
         },
         Dispatch(d) => {
-            let check_var = if d.depth == 0 { "p.peek_kind()" } else { `p.peek_at(${d.depth})` };
+            // The caller's `kind` is the cursor token only while nothing has
+            // been consumed, so a `Consume` prefix re-reads.
+            let check_var = if d.depth == 0 {
+                if skip == 0 {
+                    String::from("kind");
+                } else {
+                    String::from("p.peek_kind()");
+                }
+            } else {
+                `p.peek_at(${d.depth})`;
+            };
             for let mut i = 0; i < d.branches.len(); i += 1 {
                 let branch = &d.branches[i];
                 let cond = ctx.kind_check_str(&branch.tokens, &check_var);

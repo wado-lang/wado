@@ -1094,16 +1094,33 @@ impl TypeTable {
         &self.anon_structs[id.0 as usize].0
     }
 
-    /// The spelling an anonymous struct renders to, derived from its fields —
-    /// the same `__anon_{x:i32,y:i32}` form the synthesized name used to be.
+    /// The spelling an anonymous struct shows a reader —
+    /// `__anon_{x:i32,y:i32}`. The declaration namespace;
+    /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
+        self.render_anon_struct(id, &|tt, ty| tt.type_name(ty))
+    }
+
+    /// [`Self::anon_struct_name`] in the mangled namespace: every field type is
+    /// module-qualified. A shape has no declaration, so its rendering *is* its
+    /// identity, and an unqualified one collapses two shapes onto one helper.
+    #[must_use]
+    pub fn anon_struct_mangle(&self, id: AnonStructId) -> String {
+        self.render_anon_struct(id, &|tt, ty| tt.mangle_type_arg_for_generic(ty))
+    }
+
+    fn render_anon_struct(
+        &self,
+        id: AnonStructId,
+        field_type: &dyn Fn(&Self, TypeId) -> String,
+    ) -> String {
         match &self.anon_structs[id.0 as usize].1 {
             AnonShape::Synthetic(name) => name.clone(),
             AnonShape::Fields(fields) => {
                 let parts: Vec<String> = fields
                     .iter()
-                    .map(|(n, ty)| format!("{n}:{}", self.type_name(*ty)))
+                    .map(|(n, ty)| format!("{n}:{}", field_type(self, *ty)))
                     .collect();
                 format!("__anon_{{{}}}", parts.join(","))
             }
@@ -1115,7 +1132,7 @@ impl TypeTable {
     pub fn struct_head_name(&self, head: StructDef) -> String {
         match head {
             StructDef::Decl(def) => self.decl_render_name(def),
-            StructDef::Anon(id) => self.anon_struct_name(id),
+            StructDef::Anon(id) => self.anon_struct_mangle(id),
         }
     }
 
@@ -1127,7 +1144,7 @@ impl TypeTable {
             StructDef::Decl(def) => crate::name::FqTypeName::declared(&self.defs, def),
             StructDef::Anon(id) => crate::name::FqTypeName::shape(
                 self.anon_struct_module(id),
-                &self.anon_struct_name(id),
+                &self.anon_struct_mangle(id),
             ),
         }
     }
@@ -1354,25 +1371,6 @@ impl TypeTable {
         self.decl_name_index
             .get(&(name.to_string(), module_source.clone()))
             .copied()
-    }
-
-    /// Find the `module_source` where a type with the given name is defined.
-    /// Searches `struct_name_index` first, then falls back to scanning for
-    /// `GenericInstance` types (for generic struct base names like "`IterFilter`").
-    pub fn find_struct_module_source(&self, name: &str) -> Option<ModuleSource> {
-        // Try struct_name_index first (for concrete struct types)
-        if let Some((_, ms)) = self.struct_name_index.keys().find(|(n, _)| n == name) {
-            return Some(ms.clone());
-        }
-        // Fall back to scanning GenericInstance types (for generic templates)
-        for id in self.iter_type_ids() {
-            if let ResolvedType::GenericInstance { def, .. } = self.get(id)
-                && self.def_name(*def) == name
-            {
-                return Some(self.def_module(*def).clone());
-            }
-        }
-        None
     }
 
     /// Remove all type entries whose `TypeId` is not in `keep`. Erased entries

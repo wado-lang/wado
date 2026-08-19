@@ -1,0 +1,12 @@
+// `impl Slot<&Tag>` / `impl Slot<fn(i32) -> i32>` must not apply to a
+// `Slot<i32>` — see `impl_arg_shape_tuple_error` for the shared cause.
+
+use { Slot } from "./sub/impl_arg_shapes_holder.wado";
+
+export fn run() {
+    let s = Slot { a: 7 };
+    let _ = s.func();
+}
+
+__DATA__
+{"compile_error": "no method 'func' found"}

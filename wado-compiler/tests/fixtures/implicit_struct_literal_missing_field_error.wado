@@ -1,0 +1,17 @@
+// The omitted-field check reaches the unnamed spelling too. Before one body
+// decided both, the unnamed form checked only *extra* fields and claimed the
+// target type regardless, so a literal short of a field built a struct short of
+// an operand and died at Wasm validation.
+
+struct Point { x: i32, y: i32 }
+
+fn take(p: Point) -> i32 {
+    return p.x
+}
+
+export fn run() {
+    let _ = take({ x: 1 });
+}
+
+__DATA__
+{"compile_error": "missing field 'y' in struct literal 'Point'"}

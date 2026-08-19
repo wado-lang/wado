@@ -1,0 +1,15 @@
+// `impl<T> Pair<Item, T>` where `Item` aliases a struct *declared* `T`.
+//
+// A binder shadows by the name as written: the header wrote `Item`, which its
+// `<T>` does not shadow, so the position constrains. Testing the resolved
+// declaration's name instead reads the alias as the binder and drops it.
+
+use { Pair } from "./sub/cross_module_same_name_impl_arg_binder_holder.wado";
+
+export fn run() {
+    let p = Pair { a: "not an Item", b: 7 };
+    let _ = p.tag();
+}
+
+__DATA__
+{"compile_error": "no method 'tag' found"}

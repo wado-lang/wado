@@ -293,7 +293,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
             local_variant_cases: &self.sem.decls.local_variant_cases,
             anon_struct_fields: &self.sem.decls.anon_struct_fields,
-            local_item_renders: &self.sem.decls.local_item_renders,
             fn_local_items: &self.sem.decls.fn_local_items,
             decls: Some(&self.tysys.trait_env),
         }
@@ -308,20 +307,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.imports.strip_ns_prefix(name)
     }
 
-    pub(super) fn lookup_struct_fields(&self, name: &str) -> Option<&StructFieldInfo> {
-        self.type_lookup().struct_fields(name)
+    /// The cases of the variant a written qualifier names — see
+    /// [`super::types::TypeLookup::variant_cases_at`].
+    pub(super) fn lookup_variant_cases_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&VariantInfo> {
+        self.type_lookup().variant_cases_at(site, name)
     }
 
-    pub(super) fn lookup_variant_case(&self, name: &str) -> Option<&VariantInfo> {
-        self.type_lookup().variant_case(name)
-    }
-
-    pub(super) fn lookup_enum_case(&self, name: &str) -> Option<&EnumInfo> {
-        self.type_lookup().enum_case(name)
-    }
-
-    pub(super) fn lookup_flags_case(&self, name: &str) -> Option<&FlagsInfo> {
-        self.type_lookup().flags_case(name)
+    pub(super) fn lookup_flags_members_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&FlagsInfo> {
+        self.type_lookup().flags_members_at(site, name)
     }
 
     pub(super) fn lookup_newtype(&self, name: &str) -> Option<TypeId> {
@@ -365,10 +366,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
     ) -> Option<crate::defs::DefId> {
         self.type_lookup().declaration_at(site, name)
-    }
-
-    pub(super) fn contains_variant(&self, name: &str) -> bool {
-        self.lookup_variant_case(name).is_some()
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and
@@ -520,61 +517,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// The receiver keys a static-method lookup may be filed under, in the order
-    /// to try them. Neither vantage answers alone: the call site's frame
-    /// resolves a name it declares, but one that arrived through a namespace
-    /// prefix lost its qualifier, and canonicalising *that* from the call site
-    /// finds the caller's own `Pair` for `helper::Pair::new`.
-    pub(super) fn static_receiver_keys(
-        &self,
-        receiver_module: Option<&ModuleSource>,
-        written_name: &str,
-    ) -> Vec<trait_env::ImplTargetKey> {
-        let defs = self.tysys.resolutions.defs();
-        let mut keys = vec![self.impl_target(written_name)];
-        if let Some(module) = receiver_module {
-            // From the receiver's own vantage, not the call site's: what that
-            // module imported under the spelling, else what it declares under
-            // it. Two recorded facts, neither of them a scope walk.
-            let by_receiver = self
-                .tysys
-                .resolutions
-                .imported_as(module, written_name)
-                .or_else(|| {
-                    self.tysys
-                        .trait_env
-                        .decls_named(written_name)
-                        .find(|def| defs.module(*def) == module)
-                })
-                .map(|def| trait_env::ImplTargetKey::of_decl(defs, def));
-            if let Some(by_receiver) = by_receiver
-                && keys[0] != by_receiver
-            {
-                keys.push(by_receiver);
-            }
-        }
-        keys
-    }
-
-    /// The declaring node of the static method `Type::method`, from the
-    /// static-method index.
+    /// The declaring node of the static method `receiver::method_name`, from
+    /// the static-method index.
+    ///
+    /// The receiver is a key the caller resolved from its own reference site.
+    /// A second key from another vantage makes the order a silent tiebreak.
     pub(super) fn static_method_decl_id(
         &self,
-        receiver_module: Option<&ModuleSource>,
-        type_name: &str,
+        receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<crate::ast::AstId> {
-        self.static_receiver_keys(receiver_module, type_name)
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(receiver)?
             .iter()
-            .find_map(|key| {
-                self.tysys
-                    .trait_env
-                    .static_method_index
-                    .get(key)?
-                    .iter()
-                    .find(|e| e.name == method_name)
-                    .map(|e| e.method_id)
-            })
+            .find(|e| e.name == method_name)
+            .map(|e| e.method_id)
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
@@ -1315,9 +1274,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// Asks the type for its declaration instead of reading a `(name, module)`
     /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
-    /// was spelled from, so there is no separate generic arm and no
-    /// `contains_variant` spelling check deciding whether the pair means a
-    /// variant at all.
+    /// was spelled from, so there is no separate generic arm and no spelling
+    /// check deciding whether the pair means a variant at all.
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
         let def = self.tysys.type_def(type_id)?;
         self.tysys.all_variant_cases.get(&def)
@@ -2006,22 +1964,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<crate::name::FqTypeName> = if scope
-                .impl_is_concrete_instantiation(
-                    &impl_block.ty,
-                    &impl_block.type_params,
-                    &scope.current_module_source,
-                ) {
-                let tt = scope.tysys.type_table.borrow();
-                let peeled = tt.peel_refs(self_type);
-                matches!(
-                    tt.get(peeled),
-                    crate::tir::ResolvedType::GenericInstance { .. }
-                )
-                .then(|| tt.fq_type_name(peeled))
-            } else {
-                None
-            };
+            let concrete_owner: Option<crate::name::FqTypeName> =
+                if scope.impl_is_concrete_instantiation(&impl_block.ty) {
+                    let tt = scope.tysys.type_table.borrow();
+                    let peeled = tt.peel_refs(self_type);
+                    matches!(
+                        tt.get(peeled),
+                        crate::tir::ResolvedType::GenericInstance { .. }
+                    )
+                    .then(|| tt.fq_type_name(peeled))
+                } else {
+                    None
+                };
             scope.record_impl_facts(
                 impl_block.id,
                 sem::types::ImplFacts {
@@ -2040,11 +1994,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let provided_method_names: Vec<String> =
             impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
-        let impl_is_concrete = scope.impl_is_concrete_instantiation(
-            &impl_block.ty,
-            &impl_block.type_params,
-            &scope.current_module_source,
-        );
+        let impl_is_concrete = scope.impl_is_concrete_instantiation(&impl_block.ty);
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.

@@ -7,6 +7,8 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 
 - `codegen.rs` emits the `Package` as is; it knows nothing of the earlier phases.
 - Name mangling and monomorphization go through `name.rs`. No other component knows a name format.
+- A declaration is identified by its `DefId`, never by its name — see
+  [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, not by hand.
 - Escalate the test scope as the work matures: `cargo check` while iterating,
   `mise run test` during development, `mise run test-wado` when wrapping up.

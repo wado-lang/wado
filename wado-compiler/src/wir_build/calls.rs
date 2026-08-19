@@ -201,14 +201,11 @@ impl FunctionTranslator<'_, '_> {
         crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
     }
 
-    /// Translate a builtin intrinsic call to a WIR instruction.
     /// For `builtin::array_clone::<T>(arr)` whose `arr` is typed as
-    /// `BuiltinArray(elem)`, return the helper-name suffix to invoke on
-    /// every element when `elem` is itself a value-typed struct (i.e.
-    /// has a `$value_copy$` synthesized for it). Returns `None`
-    /// for primitive elements where Wasm GC's plain `array.set` is
-    /// already a deep copy.
-    fn array_element_copy_mangle(&self, src_type_id: TypeId) -> Option<String> {
+    /// `BuiltinArray(elem)`, the `$value_copy$` helper to invoke on every
+    /// element when `elem` is itself value-typed. `None` for a primitive
+    /// element, where Wasm GC's plain `array.set` is already a deep copy.
+    fn array_element_copy(&self, src_type_id: TypeId) -> Option<crate::wir::WirFuncId> {
         use crate::tir::ResolvedType;
         let mut ty = src_type_id;
         while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.type_table.get(ty) {
@@ -221,7 +218,25 @@ impl FunctionTranslator<'_, '_> {
         if !crate::lower::plan::value_copy::needs_value_copy(elem, self.type_table) {
             return None;
         }
-        Some(self.type_table.mangle_type_arg_for_generic(elem))
+        // Falling back to the bulk clone would answer a deep copy with a
+        // shallow `array.copy`, aliasing every element.
+        let helper = self
+            .ctx
+            .package
+            .value_copy_helpers
+            .get(elem, self.type_table)
+            .unwrap_or_else(|| {
+                panic!(
+                    "no value-copy helper for array element {}",
+                    self.type_table.mangle_type_arg_for_generic(elem)
+                )
+            });
+        Some(self.ctx.funcid_map.get(helper).cloned().unwrap_or_else(|| {
+            panic!(
+                "the value-copy helper for array element {} reached WIR build with no function",
+                self.type_table.mangle_type_arg_for_generic(elem)
+            )
+        }))
     }
 
     fn translate_array_ref_operand(
@@ -563,11 +578,11 @@ impl FunctionTranslator<'_, '_> {
             }
             "builtin::array_clone" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
-                match self.array_element_copy_mangle(src_type_id) {
-                    Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
+                match self.array_element_copy(src_type_id) {
+                    Some(element_copy) => Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
-                        element_copy_mangle,
+                        element_copy,
                         len: None,
                     }),
                     None => Some(self.build_bulk_array_clone(type_id, src, None)),
@@ -576,11 +591,11 @@ impl FunctionTranslator<'_, '_> {
             "builtin::array_clone_prefix" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
                 let len = self.translate_operand(args[1].expr);
-                match self.array_element_copy_mangle(src_type_id) {
-                    Some(element_copy_mangle) => Some(WirInstr::ArrayClone {
+                match self.array_element_copy(src_type_id) {
+                    Some(element_copy) => Some(WirInstr::ArrayClone {
                         type_id,
                         src: Box::new(src),
-                        element_copy_mangle,
+                        element_copy,
                         len: Some(Box::new(len)),
                     }),
                     None => Some(self.build_bulk_array_clone(type_id, src, Some(len))),

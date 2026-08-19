@@ -298,6 +298,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.tysys.resolutions.declared(ident.segments[owner].id)
     }
 
+    /// The reference site of a qualified path's *owner* segment — `Color` in
+    /// `Color::Red`, `Color` in `ns::Color::Red`. `None` for a bare name, which
+    /// qualifies nothing.
+    fn qualified_owner_site(&self, ident: &ast::IdentExpr) -> Option<crate::ast::AstId> {
+        let owner = ident.segments.len().checked_sub(2)?;
+        Some(ident.segments[owner].id)
+    }
+
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -470,11 +478,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_variant_cases: &self.sem.decls.local_variant_cases,
             anon_struct_fields: &self.sem.decls.anon_struct_fields,
             // A function-local item is reached through the `local_*` tables
-            // above, by the declaration `local_item_renders` recovers from its
-            // mangled storage name — not through the per-function tier below,
-            // which annotate clears between functions and reify never
-            // repopulates.
-            local_item_renders: &self.sem.decls.local_item_renders,
+            // above, keyed by declaration — not the per-function tier below,
+            // which annotate clears and reify never repopulates.
             fn_local_items: &self.sem.decls.fn_local_items,
             decls: Some(&self.tysys.trait_env),
         }
@@ -4946,26 +4951,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
         }
 
-        let Some(struct_name) = struct_lit.name.clone() else {
-            // Anonymous struct literal `{ x: 1, y: 2 }` — annotate
-            // synthesised the struct from the field shape and
-            // registered it via `make_struct` + populated
-            // `local_struct_fields` / `pending_anonymous_structs`.
-            // Reify reproduces the deterministic naming scheme and
-            // reads the already-registered type back from the type
-            // table.
-            return self.reify_anonymous_struct_literal(struct_lit, ctx, recorded_type);
-        };
-
         // Resolve the decl's canonical (name, module) from `recorded_type` —
         // the struct type annotate already resolved — instead of re-resolving
-        // the source-written `struct_name`, which may be an import alias or
-        // `ns::Type`. A second by-name lookup could pick a same-named struct
-        // from another module (issue #1416); `recorded_type` carries the
-        // definer directly.
+        // the source-written name, which may be an import alias or `ns::Type`.
+        // A second by-name lookup could pick a same-named struct from another
+        // module (issue #1416); `recorded_type` carries the definer directly.
         let struct_head =
             super::expr::peel_to_struct(&self.tysys.type_table.borrow(), recorded_type)
                 .map(|(head, _)| head);
+
+        // What the literal *is*, which annotate recorded on the type — not
+        // how it was spelled. Dispatching on the spelling made reify disagree
+        // with the pass that decided.
+        if struct_lit.name.is_none() && !matches!(struct_head, Some(crate::tir::StructDef::Decl(_)))
+        {
+            return self.reify_anonymous_struct_literal(struct_lit, ctx, recorded_type);
+        }
+        // The storage name the WIR struct registry is keyed by.
+        let struct_name = struct_lit.name.clone().unwrap_or_else(|| {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_head(recorded_type)
+                .map(|(n, _)| n)
+                .unwrap_or_default()
+        });
         let struct_module = match struct_head {
             Some(crate::tir::StructDef::Decl(def)) => {
                 self.tysys.resolutions.defs().module(def).clone()
@@ -7637,8 +7647,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
             if !suffix.contains("::") {
+                let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
-                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -8152,7 +8163,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            let flags = self.type_lookup().flags_case(prefix).cloned();
+            let owner = self.qualified_owner_site(ident);
+            let flags = self.type_lookup().flags_members_at(owner, prefix).cloned();
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
             {
@@ -8978,10 +8990,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // a further `::` is `ns::Type::Case` (namespace path) —
             // defer to a later branch.
             if !suffix.contains("::") {
+                let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
 
                 // Variant case.
-                if let Some(variant_info) = lookup.variant_case(prefix).cloned()
+                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9016,7 +9029,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Enum case.
-                if let Some(enum_info) = lookup.enum_case(prefix).cloned()
+                if let Some(enum_info) = lookup.enum_cases_at(owner, prefix).cloned()
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9036,7 +9049,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Flags member.
-                if let Some(flags_info) = lookup.flags_case(prefix).cloned()
+                if let Some(flags_info) = lookup.flags_members_at(owner, prefix).cloned()
                     && let Some(member) = flags_info
                         .members
                         .iter()
@@ -9129,19 +9142,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// Replay an `expr as i128/u128` cast. Literal and negated-literal
-    /// operands construct the value directly; a general numeric operand
-    /// becomes `name::from_u64/from_i64(operand as u64/i64)`. Returns
-    /// `None` for non-128-bit targets (normal cast) and for non-numeric
-    /// operands (the caller's bare-cast fallback handles those). Mirrors
-    /// `Elaborator::resolve_cast`.
+    /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
+    /// any other target; a non-numeric operand yields the bare cast.
     fn try_reify_int128_cast(
         &mut self,
         cast: &ast::CastExpr,
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
+        let target_base = self
+            .tysys
+            .type_table
+            .borrow()
+            .get_ultimate_base_type(target_type);
+        let name = match self.tysys.type_table.borrow().get(target_base).clone() {
             crate::tir::ResolvedType::Struct { def, .. }
                 if matches!(
                     self.tysys
@@ -9155,7 +9169,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.tysys
                     .type_table
                     .borrow()
-                    .fq_base_type_name(target_type)
+                    .fq_base_type_name(target_base)
             }
             _ => return None,
         };
