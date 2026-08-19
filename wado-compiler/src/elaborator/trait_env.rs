@@ -1096,10 +1096,8 @@ impl TraitEnv {
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site));
                 // Implementing a trait is naming it, so the header's own
-                // reference site answers and only it. A position that reaches
-                // no declaration is the "trait not in scope" error, and the key
-                // it gets carries a spelling no query can mistake for an
-                // identity — never another module's same-named trait.
+                // site answers and a position reaching nothing is an error —
+                // never another module's same-named trait.
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
                     trait_ref.map_or_else(
                         || impl_target_key_at(trait_type, module_source, resolutions),
@@ -2283,10 +2281,8 @@ fn check_inherent_impl_collisions(
 
     // Two inherent impls minting one function name are one definition
     // downstream, which monomorphization asserts away with a panic. Keyed on
-    // what the *definition* side mints — the whole target, references peeled,
-    // since an inherent `impl &Cw<i32>` defines on the pointee. The target's
-    // *arguments* answer a different question, and that reading discards the
-    // pointee telling `&Cw<i32>` from `&Dw<i32>` apart.
+    // what the definition side mints, since the target's *arguments* answer a
+    // different question and discard the pointee of a reference target.
     let mut minted: IndexSet<(String, &str)> = IndexSet::default();
     for header in &instantiations {
         let peeled = match &header.ty {
@@ -2299,9 +2295,8 @@ fn check_inherent_impl_collisions(
                 violations.push((
                     header.module.clone(),
                     TypeError::DuplicateInherentMethod {
-                        // What this impl wrote, not the head both minted:
-                        // that spelling names neither impl and is the same
-                        // string for both.
+                        // What this impl wrote: the minted head is one
+                        // string for both, so it names neither.
                         self_type_name: written_type_source(&header.ty),
                         method_name: method.name.clone(),
                         span: method.span,
@@ -2489,8 +2484,7 @@ pub(super) fn written_type_arg(
             name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-        // A function type is spelled by the closure system's own head — arity
-        // and return type, the identity `TypeTable::fq_type_name` gives the
+        // The closure system's head: arity and return type, matching the
         // resolved form. Parameter types are not part of it on either side.
         ast::Type::Function(ft) => name::FqTypeName::builtin(&name::mangle_fn_type(
             ft.params.len(),
@@ -2522,12 +2516,10 @@ pub(super) fn written_type_arg(
     }
 }
 
-/// The written form of `ty`, for a diagnostic that must say what the programmer
+/// The written form of `ty`, for a diagnostic saying what the programmer
 /// wrote (WEP 2026-08-12 §9).
 ///
-/// A rendering of the *AST*, so nothing can read it back into a declaration —
-/// unlike a mangle, which spells a function type as `Fn<arity, return>` and so
-/// names two written types alike and neither of them as written.
+/// Renders the AST, so nothing reads it back into a declaration.
 fn written_type_source(ty: &ast::Type) -> String {
     let list = |args: &[ast::Type]| {
         args.iter()

@@ -2191,9 +2191,7 @@ impl<'a> TypeLookup<'a> {
     /// The cases of the variant a *written* qualifier names — the `Color` of
     /// `Color::Red`, read off the site the resolve walk answered for.
     ///
-    /// [`Self::declaration_at`] for a case lookup, and the form every site with
-    /// a path segment uses: the spelling answers only where no walk saw the
-    /// node.
+    /// The spelling answers only where no walk saw the node.
     pub(super) fn variant_cases_at(
         &self,
         site: Option<crate::ast::AstId>,

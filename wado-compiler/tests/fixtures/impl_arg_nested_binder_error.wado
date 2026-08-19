@@ -1,14 +1,8 @@
 // `impl<T> Nest<[i32, T]>` must not apply to a `Nest<i32>`.
 //
-// "Names a binder" was read as "matches anything", which threw away the shape
-// the header did write, so the impl applied to every `Nest` and the call
-// reached WIR build unresolved.
-//
 // A binder is a wildcard only where the header can bind it, which is as a bare
-// argument — `bind_target_param` registers nothing deeper. `[i32, T]` gives `T`
-// no slot, so no receiver can instantiate this impl and it is selected for
-// none. Supporting the form would mean binding a target parameter at any depth;
-// until then this is a diagnostic rather than a panic.
+// argument. `[i32, T]` gives `T` no slot, so no receiver can instantiate this
+// impl and it is selected for none — a diagnostic rather than a panic.
 
 use { Nest } from "./sub/impl_arg_shapes_holder.wado";
 

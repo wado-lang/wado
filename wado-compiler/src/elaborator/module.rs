@@ -596,9 +596,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 format!("{}<{}>", generic.name, args.join(", "))
             }
-            // What the programmer wrote, prefix and arguments both: this
-            // renders for diagnostics, where `get_type_name`'s `ns$Name`
-            // registry key is not a spelling anyone typed.
+            // What the programmer wrote: this renders for diagnostics, where
+            // `get_type_name`'s `ns$Name` registry key is not a spelling.
             Type::NamespacedGeneric(g) => {
                 let args: Vec<String> = g.args.iter().map(|a| self.get_type_name_full(a)).collect();
                 format!("{}::{}<{}>", g.namespace, g.name, args.join(", "))

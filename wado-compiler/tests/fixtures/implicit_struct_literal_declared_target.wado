@@ -1,13 +1,10 @@
 // An implicit struct literal — `{ … }` with no name — against a target that
-// declares a struct *is* that struct, at every depth. One body decides what a
-// struct literal means and how its declaration was reached is the only
-// difference between the two spellings, so the unnamed form gets field
-// defaults, omitted-field checking, visibility and spreads for free. A second
-// body only ever implements less of them.
+// declares a struct *is* that struct, at every depth, so it gets field
+// defaults, omitted-field checking, visibility and spreads from the one body
+// that decides what a struct literal means.
 //
-// A function-local struct is the case that proves the target is read as an
-// identity: its storage name carries `@AstId`, so a lookup by rendering finds
-// nothing and the literal loses its field types.
+// The function-local struct proves the target is read as an identity: its
+// storage name carries `@AstId`, which a lookup by rendering never finds.
 
 struct Inner { a: i32 }
 struct Outer { i: Inner, n: f64 }

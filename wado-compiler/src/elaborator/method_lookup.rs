@@ -109,15 +109,9 @@ pub(super) struct MethodInferenceInput<'a> {
     pub span: Span,
 }
 
-/// The type arguments an `impl` target writes, or `None` for a target that
-/// takes none (`impl i32`, `impl Foo`) and so constrains nothing here.
-///
-/// The one place the target's shape is read. Which positions an impl pins
-/// decides both how its methods are *named*
-/// (`Elaborator::impl_is_concrete_instantiation`) and which receivers reach that
-/// name (`TypeSystem::inherent_impl_type_args_match`); reading the shape twice
-/// is how `impl ns::Cell<i32>` came to be named as an instantiation while every
-/// `Cell` matched it.
+/// The positions an `impl` target writes, `None` for a target writing none.
+/// Naming and matching both read it here, so neither pins a position the
+/// other leaves free (WEP 2026-08-12).
 pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
     let inner = match impl_ty {
         Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
@@ -129,13 +123,9 @@ pub(super) fn impl_target_args(impl_ty: &Type) -> Option<&[Type]> {
     }
 }
 
-/// The arguments a target's *head* writes — `Cell<T>` and `ns::Cell<T>` alike,
-/// since a namespace says which module declares the head and not what the
-/// argument list holds.
-///
-/// Narrower than [`impl_target_args`] by exactly one form: a tuple target's
-/// elements are its arguments for matching, but binding reads them as the
-/// variadic pack they are, through its own path.
+/// The head's own argument list — `Cell<T>` and `ns::Cell<T>` alike.
+/// [`impl_target_args`] minus the tuple target, which binds as a variadic
+/// pack through its own path.
 pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
     match impl_ty {
         Type::Generic(g) => Some(&g.args),
@@ -170,14 +160,9 @@ impl TypeSystem {
             let Some(&recv) = args.get(i) else {
                 return false;
             };
-            // `bind_target_param` binds a target parameter from a bare
-            // argument and reaches nothing deeper, so `impl<T> Nest<[i32, T]>`
-            // gives `T` no slot: a receiver it matched would have nothing to
-            // instantiate it with and would reach WIR build unresolved.
-            // Declining makes that a diagnostic. A pack is not this — `[..T]`
-            // binds through the variadic path — and the question is asked of
-            // the site, so a namespaced `ns::Tag` is not mistaken for a binder
-            // that happens to be spelled `Tag`.
+            // `bind_target_param` reaches only a bare argument, so a nested
+            // binder gets no slot and a receiver matching it would have
+            // nothing to instantiate. Declining makes that a diagnostic.
             if self.nests_a_binder(arg) {
                 return false;
             }
@@ -188,25 +173,10 @@ impl TypeSystem {
         true
     }
 
-    /// Whether the receiver's argument `recv` is what the header wrote at this
-    /// position, with the header's own type parameters standing for anything.
-    ///
-    /// A match, not an equality, and structural rather than rendered. Two
-    /// declarations are compared as declarations (WEP 2026-08-12 §4); every
-    /// other shape is compared as the shape it is, so a reference matches a
-    /// reference of the same kind and a tuple matches a tuple of the same
-    /// arity. Nothing is spelled.
-    ///
-    /// Spelling it was the mistake this replaces. The header side is an AST and
-    /// the receiver side a `TypeId`, so a comparison by name needs two
-    /// renderers to agree on every shape at every depth, and each way they
-    /// disagreed was a bug: `&mut` written without the separator its counterpart
-    /// carries, a tuple's elements spelled in a different form than the tuple
-    /// around them, `&Tag` and `Tag` rendering alike because the top-level
-    /// renderer drops a reference. Structure has no spelling to get wrong.
-    ///
-    /// A binder matches anything, but only where it stands: `impl<T> Slot<[i32, T]>`
-    /// still requires a two-element tuple whose first element is `i32`.
+    /// Whether `recv` is what the header wrote at this position, the header's
+    /// own type parameters standing for anything. Structural, never rendered
+    /// (WEP 2026-08-12 §4); a binder is free only where it stands, so
+    /// `impl<T> Slot<[i32, T]>` still wants a pair.
     fn arg_matches(&self, written: &Type, recv: TypeId) -> bool {
         use crate::tir::ResolvedType;
         let tt = self.type_table.borrow();
@@ -237,9 +207,8 @@ impl TypeSystem {
                         .zip(recv_elems)
                         .all(|(e, r)| self.arg_matches(e, r))
             }
-            // Parameters are part of the shape even though the mangled `Fn`
-            // head spells only arity and return type, so comparing structure
-            // separates `fn(i32) -> i32` from `fn(String) -> i32`.
+            // Parameters are part of the shape, though the mangled `Fn` head
+            // spells only arity and return type.
             Type::Function(ft) => match resolved {
                 ResolvedType::Function {
                     params,
@@ -258,11 +227,9 @@ impl TypeSystem {
             },
             // A pack, an `_`, a parse error: nothing written to match against.
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => true,
-            // Written is not a reference, and the arms below read the receiver
-            // through `fq_base_type_name` / `generic_type_args`, both of which
-            // see past one. Reference-ness is compared here so that no arm can
-            // peel one side and not the other: a reference receiver is reached
-            // only by an argument that pins nothing.
+            // The arms below read the receiver through readers that see past a
+            // reference, so reference-ness is settled here instead: a reference
+            // receiver is reached only by an argument pinning nothing.
             _ if matches!(resolved, ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => {
                 !self.arg_pins(written)
             }
@@ -277,12 +244,9 @@ impl TypeSystem {
                     return true;
                 };
                 let tt = self.type_table.borrow();
-                // `TypeHead` is the comparison this design provides: `Declared`
-                // compares by `DefId`, and a shape no module declares — `i32`,
-                // `()`, the raw `Array` — by the rendering that is all it has.
-                // Asking `nominal_def` instead answers `None` for every one of
-                // those, because a primitive is not a nominal type even though
-                // `i32` is a declaration.
+                // `TypeHead` compares a declaration by `DefId` and an
+                // undeclared shape by its rendering, which is all it has.
+                // `nominal_def` answers `None` for `i32` and `()`.
                 let written_head = crate::name::FqTypeName::of_head(self.resolutions.defs(), def);
                 if *written_head.head() != *tt.fq_base_type_name(recv).head() {
                     return false;
@@ -306,23 +270,15 @@ impl TypeSystem {
         }
     }
 
-    /// Whether `arg` pins its position — the receiver's argument must equal it —
-    /// rather than standing for whatever the receiver supplies.
-    ///
-    /// [`Self::arg_pins`] under the name the naming side asks it by: which
-    /// positions an impl fixes decides both whether its methods are named
-    /// per-instantiation and which receivers reach them, and two functions
-    /// deciding it is two functions minting one name.
+    /// [`Self::arg_pins`] under the name the naming side asks it by — one
+    /// predicate, so a position pinned for naming is pinned for matching.
     pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
         self.arg_pins(arg)
     }
 
-    /// Whether a binder appears *inside* `arg` rather than as `arg` itself —
-    /// the position the header can bind.
-    ///
-    /// Asked of each head's reference site, never of its spelling: a
-    /// namespace-qualified `ns::Tag` beside an `impl<Tag>` binder is a
-    /// declaration, and a name-based test reads it as the binder.
+    /// Whether a binder appears *inside* `arg` rather than as `arg` itself,
+    /// the only position the header can bind. Asked of each head's reference
+    /// site, so `ns::Tag` beside an `impl<Tag>` binder stays a declaration.
     fn nests_a_binder(&self, arg: &Type) -> bool {
         fn walk(this: &TypeSystem, ty: &Type, inside: bool) -> bool {
             let is_binder = crate::resolve::head_site(ty).is_some_and(|site| {
@@ -355,13 +311,7 @@ impl TypeSystem {
 
     /// Whether every head inside `arg` names a declaration, so the argument
     /// stands for one type rather than for whatever the receiver supplies.
-    ///
-    /// Rendering cannot answer this. `written_type_arg` spells a head that
-    /// reached nothing as a bare `Builtin`, which is right for a mangle — the
-    /// spelling is all such a head has — and wrong here, where it would read as
-    /// a pin: a prelude `impl<T> Array<T>` whose binder the walk answered for
-    /// would stop registering its own type parameter. So the site decides, as
-    /// it does everywhere else in this design, and the renderer only renders.
+    /// The site decides: a mangle spells an unresolved head as `Builtin`.
     fn arg_pins(&self, arg: &Type) -> bool {
         let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a));
         match arg {
@@ -633,14 +583,8 @@ impl TypeSystem {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The module declaring the type a rendered head names, for a caller whose
-    /// preferred identity path — the receiver's own `ResolvedType` — carries no
-    /// declaration.
-    ///
-    /// The frame derivation and nothing wider (WEP 2026-08-12): what this
-    /// module imported under the name, what it declares under it, what the
-    /// prelude gives it. A head naming a declaration this module cannot see is
-    /// attributed here, where the walk stands — never to the first module in
-    /// build order that happens to declare something spelled the same.
+    /// receiver carries no declaration. The frame derivation and nothing wider
+    /// (WEP 2026-08-12), so an unseen declaration lands where the walk stands.
     pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
         // Primitive impl blocks live in `core:prelude/primitive.wado`. i128 /
         // u128 are structs in `prelude/int128.wado`, not primitives.

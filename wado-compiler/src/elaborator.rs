@@ -520,10 +520,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaring node of the static method `receiver::method_name`, from
     /// the static-method index.
     ///
-    /// The receiver is a key the caller resolved from its own reference site —
-    /// the path segment that wrote it. Filing the lookup under a second key
-    /// built from another vantage and taking whichever hit first is what let a
-    /// `helper::Pair::new` call land on the caller's own `Pair`.
+    /// The receiver is a key the caller resolved from its own reference site.
+    /// A second key from another vantage makes the order a silent tiebreak.
     pub(super) fn static_method_decl_id(
         &self,
         receiver: &trait_env::ImplTargetKey,

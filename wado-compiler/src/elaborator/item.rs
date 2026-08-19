@@ -780,9 +780,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
             other => other,
         };
-        // The head's arguments however the head is spelled: `impl<T> Cell<T>`
-        // and `impl<T> ns::Cell<T>` write one target a namespace apart, and
-        // reading only the first left the second's parameter unregistered.
+        // However the head is spelled: `Cell<T>` and `ns::Cell<T>` write one
+        // target a namespace apart.
         let head_args = super::method_lookup::impl_target_head_args(impl_type_inner);
         let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
@@ -968,15 +967,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         });
     }
 
-    /// The type arguments a type reference's head writes, resolved in the
-    /// current frame. A head with no argument list writes none.
-    ///
-    /// The same reading the impl frame binds through, so an `impl` block's
-    /// recorded arguments and its bound parameters are numbered against one
-    /// set of positions — `ns::Cell<T>` included.
+    /// The type arguments a head writes, resolved in the current frame — the
+    /// reading the impl frame binds through, so a block's recorded arguments
+    /// and its bound parameters share one set of positions.
     pub(super) fn resolve_written_type_args(&mut self, ty: &Type) -> Vec<TypeId> {
-        // Peeled as the frame peels it, or the claim above holds for every
-        // target but a reference one.
+        // Peeled as the frame peels it.
         let inner = match ty {
             Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
             other => other,
@@ -2405,14 +2400,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// named `List<u8>::method` and called directly. The tuple arm carries
     /// coherence Rule 1: the variadic template is skipped for that arity.
     ///
-    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and nothing
-    /// else. This decides how a method is *named* and
-    /// `inherent_impl_type_args_match` decides which receivers *reach* that
-    /// name, so a second answer here is two functions minting one name — the
-    /// hazard WEP 2026-08-12 §8 states. They had drifted: neither a
-    /// namespace-qualified argument nor a function type counted as concrete
-    /// here, so `impl Slot<ns::Tag>` was named as a template while its call
-    /// site named an instantiation, and the call reached WIR build unresolved.
+    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
+    /// nothing else: this names the method, matching decides which receivers
+    /// reach that name, and a second answer mints one name from two functions.
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
         let Some(args) = super::method_lookup::impl_target_args(impl_ty) else {
             return false;

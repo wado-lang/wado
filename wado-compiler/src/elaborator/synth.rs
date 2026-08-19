@@ -449,9 +449,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The qualifier is a path segment the resolve walk answered for, so which
     /// `Color` it names comes off that site rather than off the spelling.
     fn synth_qualified_case(&mut self, id: &ast::IdentExpr, name: &str) -> ArgClass {
-        // The last `::`, so the split names the same segment `owner` does: for
-        // `ns::Color::Red` the owner is `Color`, and splitting at the first
-        // would pair that site with the prefix `ns`.
+        // The last `::`, so the split names the same segment `owner` does:
+        // in `ns::Color::Red` that is `Color`, not the `ns` prefix.
         let Some(pos) = name.rfind("::") else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };

@@ -1576,9 +1576,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Handle flags type static methods: none() and all()
         {
-            // The receiver's own declaration, not its rendered head resolved a
-            // second time. Only a `flags` declaration has members, so this is
-            // also the kind guard.
+            // The receiver's own declaration, not its head resolved again.
+            // Only a `flags` declaration has members, so this guards the kind.
             if let Some(flags_info) = self
                 .tysys
                 .type_table
@@ -2563,11 +2562,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // The receiver's own declaration is the key. A head that names none —
-        // an instantiation's fused spelling, an anonymous shape — falls to the
-        // frame derivation over the base name, which is one vantage: filing the
-        // lookup under a second key built from the impl's module and taking
-        // whichever hit is what mis-routed a namespace-qualified receiver.
+        // The receiver's own declaration is the key. A head naming none falls
+        // to the frame derivation, which is one vantage; a second key tried
+        // when the first misses makes the order a silent tiebreak.
         let static_key = receiver.head().def().map_or_else(
             || self.impl_target(struct_name),
             |def| super::trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),

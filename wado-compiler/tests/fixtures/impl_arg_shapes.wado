@@ -1,12 +1,10 @@
-// The green half of the `impl_arg_shape_*_error` fixtures: constraining an
-// argument that names no declaration must not over-constrain it, so the impl
-// still applies to the receiver whose argument is its own shape.
+// The green half of the `impl_arg_shape_*_error` fixtures: an argument naming
+// no declaration must not over-constrain, so the impl still applies to the
+// receiver whose argument is its own shape.
 //
-// The gate is only half of it. What makes a position concrete also decides how
-// the impl's methods are *named*, so the same predicate has to answer both or
-// the definition and the call site mint two names — see `impl_target_args`.
-// These calls are what proves they agree: each reached WIR build as an
-// unresolved `Call` when they did not.
+// What makes a position concrete also decides how the methods are *named*, so
+// one predicate answers both. These calls are what proves it: each reached WIR
+// build as an unresolved `Call` when two answered.
 
 use { Slot, MSlot } from "./sub/impl_arg_shapes_holder.wado";
 use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";

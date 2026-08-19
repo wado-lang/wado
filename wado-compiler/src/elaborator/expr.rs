@@ -3188,8 +3188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The struct declaration an unnamed literal's target names, or `None`
-    /// where the target declares none — an anonymous shape, a map, no
-    /// annotation at all — and the literal interns by its fields instead.
+    /// where it declares none and the literal interns by its fields.
     fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<crate::defs::DefId> {
         match *self.tysys.type_table.borrow().get(expected_type?) {
             ResolvedType::Struct {
@@ -3207,11 +3206,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         // A literal with no name is a shape — unless the target declares a
-        // struct, in which case `{ x: 1 }` *is* `Point { x: 1 }` and everything
-        // below applies to it unchanged: field defaults, omitted fields,
-        // visibility, spreads. One body decides what a struct literal means;
-        // how its declaration was reached is the only difference between the
-        // two spellings, and a second body only ever implements less.
+        // struct, in which case `{ x: 1 }` *is* `Point { x: 1 }`. One body
+        // decides that; how the declaration was reached is the only difference.
         let implicit_decl = if struct_lit.name.is_some() {
             None
         } else {
@@ -3260,8 +3256,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // in WIR build, which used to surface as a downstream
             // `StructLiteral expected Ref WirType` panic. The best-effort pair
             // is still returned so later passes have something.
-            // Reachable only for a *written* name: an implicit literal got its
-            // declaration from the target's own head, which has fields.
+            // Reachable only for a written name: an implicit literal took its
+            // declaration from the target's head, which has fields.
             let written = name.clone().unwrap_or_default();
             let _ = self.emit(TypeError::UnknownType {
                 name: written.clone(),
@@ -3269,10 +3265,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             (written, self.current_module_source.clone())
         };
-        // `struct_name` is the *storage* name — a function-local `struct`
-        // carries its `@AstId` there, which is what makes its `TypeId` its own.
-        // A diagnostic says what the programmer wrote (§9), so it reads the
-        // declared name off the declaration instead.
+        // `struct_name` is the storage name, carrying a local struct's
+        // `@AstId`. A diagnostic says what the programmer wrote (§9).
         let display_name = struct_decl
             .map(|def| self.tysys.resolutions.defs().name(def).to_string())
             .unwrap_or_else(|| struct_name.clone());

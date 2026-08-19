@@ -1,12 +1,8 @@
 // `impl<T> Pair<Item, T>` where `Item` aliases a struct *declared* `T`.
 //
-// Whether the first argument is concrete is the binder question, and a binder
-// shadows by the name as written: the header wrote `Item`, which its `<T>`
-// binder does not shadow, so the position constrains. Testing the resolved
-// declaration's own name instead answers "binder" for an alias whose target
-// happens to be spelled like one, drops the constraint, and lets the impl apply
-// to any first argument — here a `String`, which then reaches WIR build as a
-// type mismatch rather than a diagnostic.
+// A binder shadows by the name as written: the header wrote `Item`, which its
+// `<T>` does not shadow, so the position constrains. Testing the resolved
+// declaration's name instead reads the alias as the binder and drops it.
 
 use { Pair } from "./sub/cross_module_same_name_impl_arg_binder_holder.wado";
 

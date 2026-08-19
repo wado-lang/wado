@@ -150,8 +150,7 @@ struct Def {
     /// functions may each declare a `struct Point`, and the mangled namespaces
     /// downstream are name-keyed, so a renderer applies
     /// [`crate::name::mangle_local_item_name`] to keep the two spellings apart.
-    /// This tells it to. Nothing reads that spelling back — which declaration a
-    /// name means is this table's question, never a rendering's.
+    /// This tells it to. Nothing reads that spelling back.
     function_local: bool,
 }
 

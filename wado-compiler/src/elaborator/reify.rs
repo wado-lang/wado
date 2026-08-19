@@ -478,9 +478,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_variant_cases: &self.sem.decls.local_variant_cases,
             anon_struct_fields: &self.sem.decls.anon_struct_fields,
             // A function-local item is reached through the `local_*` tables
-            // above, which are keyed by declaration — not through the
-            // per-function tier below, which annotate clears between functions
-            // and reify never repopulates.
+            // above, keyed by declaration — not the per-function tier below,
+            // which annotate clears and reify never repopulates.
             fn_local_items: &self.sem.decls.fn_local_items,
             decls: Some(&self.tysys.trait_env),
         }
@@ -4961,17 +4960,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             super::expr::peel_to_struct(&self.tysys.type_table.borrow(), recorded_type)
                 .map(|(head, _)| head);
 
-        // What the literal *is*, which annotate decided and recorded on the
-        // type — not how it was spelled. An unnamed literal against a declared
-        // target is that struct, so dispatching on the spelling here made reify
-        // disagree with the pass that decided, and the shape path then looked
-        // for a synthesised name nothing had recorded.
+        // What the literal *is*, which annotate recorded on the type — not
+        // how it was spelled. Dispatching on the spelling made reify disagree
+        // with the pass that decided.
         if struct_lit.name.is_none() && !matches!(struct_head, Some(crate::tir::StructDef::Decl(_)))
         {
             return self.reify_anonymous_struct_literal(struct_lit, ctx, recorded_type);
         }
-        // The storage name the WIR struct registry is keyed by, for the
-        // instantiation slot's fallback below.
+        // The storage name the WIR struct registry is keyed by.
         let struct_name = struct_lit.name.clone().unwrap_or_else(|| {
             self.tysys
                 .type_table
