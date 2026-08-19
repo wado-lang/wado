@@ -7,7 +7,7 @@ use { Eq, Ord, Iterator, IntoIterator, Add, Default, From, Ordering } from "core
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option, Result } from "core:prelude/types.wado";
-use { ArraySlice } from "core:prelude/slice.wado";
+use { Slice } from "core:prelude/slice.wado";
 use { Array } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
@@ -458,9 +458,9 @@ impl String {
         self.repr[index] = value;
     }
 
-    /// Read-only view of the string's UTF-8 bytes as an `ArraySlice<u8>` over `[0, len())`.
+    /// Read-only view of the string's UTF-8 bytes as an `Slice<u8>` over `[0, len())`.
     pub fn as_bytes(&self) -> ByteSlice with stores[self] {
-        return ArraySlice::internal_new(&self.repr as &Array<u8>, 0, self.used) as ByteSlice;
+        return Slice::internal_new(&self.repr as &Array<u8>, 0, self.used) as ByteSlice;
     }
 
     /// Internal: shared reference to the string's bytes (stdlib use only).

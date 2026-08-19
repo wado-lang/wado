@@ -30,8 +30,8 @@ internal trait IndexValue<IndexType> {
 
 /// Write by value: `c[i] = v`.
 internal trait IndexAssign<IndexType> {
-    type Input;
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+    type Output;
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 
 /// Read by reference: `&c[i]` -> &Output.
@@ -41,22 +41,22 @@ internal trait IndexRef<IndexType> {
 }
 
 /// Mutable reference: `c[i].mutating_method()` -> &mut Output.
-internal trait IndexMutRef<IndexType> {
+internal trait IndexRefMut<IndexType> {
     type Output: RefMut;
-    fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
 }
 ```
 
 The traits are independent — a container implements only the behaviors it
 supports. `IndexValue` / `IndexAssign` carry no bound (reads copy out, writes copy
 in). `IndexRef` returns a shared reference, so its `Output` must be `Ref`;
-`IndexMutRef` returns a mutable reference, so its `Output` must additionally be
+`IndexRefMut` returns a mutable reference, so its `Output` must additionally be
 mutated in place, `RefMut`. A container of value-typed elements cannot implement
 the reference traits; its `[i]` is read by value.
 
 A use site dispatches on the traits provided: `&c[i]` and a `&self` receiver take
 `IndexRef` when available, else a value copy; a `&mut self` receiver takes
-`IndexMutRef`; a bare read binds a copy (`IndexValue`); assignment writes
+`IndexRefMut`; a bare read binds a copy (`IndexValue`); assignment writes
 (`IndexAssign`). `c[i].mutating_method()` on a value-only container is a compile
 error — a copy cannot be mutated in place.
 
@@ -102,9 +102,9 @@ user `impl Ref` / `impl RefMut` (a user's own same-named `trait` owns that name)
 
 ## The markers gate the trait `Output`, not the `&` operator
 
-`type Output: Ref` on `IndexRef` and `type Output: RefMut` on `IndexMutRef` are
+`type Output: Ref` on `IndexRef` and `type Output: RefMut` on `IndexRefMut` are
 enforced: a container whose `Output` is a value type cannot declare `IndexRef`,
-and one whose `Output` is replace-on-assign cannot declare `IndexMutRef` — either
+and one whose `Output` is replace-on-assign cannot declare `IndexRefMut` — either
 promises a reference the element cannot back. It exposes `IndexValue` instead, so
 `impl IndexRef<i32> for C { type Output = i32 }` is a compile error.
 
@@ -119,13 +119,13 @@ by these markers.
 ## Container coverage
 
 - `List<T>` and `Array<T>`: all four — `IndexValue` / `IndexAssign` for every
-  element, `IndexRef` for `T: Ref`, `IndexMutRef` for `T: RefMut`.
+  element, `IndexRef` for `T: Ref`, `IndexRefMut` for `T: RefMut`.
 - `TreeMap<K, V>`: all four keyed by `K` — value read / write for every `V`,
-  `IndexRef` for `V: Ref`, `IndexMutRef` for `V: RefMut`.
-- `ArraySlice<T>`: `IndexValue` and `IndexRef` (`T: Ref`) only — a shared view
+  `IndexRef` for `V: Ref`, `IndexRefMut` for `V: RefMut`.
+- `Slice<T>`: `IndexValue` and `IndexRef` (`T: Ref`) only — a shared view
   holds no `&mut` to hand out.
 
-So a `List<Struct>` gets all four; a `List<Variant>` gets all but `IndexMutRef`;
+So a `List<Struct>` gets all four; a `List<Variant>` gets all but `IndexRefMut`;
 a `List<i32>` gets only the value traits, and `&nums[i]` on it is a value-copy
 reference from the language's reference model.
 

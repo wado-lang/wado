@@ -1811,7 +1811,7 @@ fn any_overlap(first_sets: &List<List<String>>) -> bool {
 /// first-element check (ANTLR4 only rewrites direct LR; deep LR is
 /// out of contract — see `vendor/antlr4/doc/left-recursion.md`).
 fn has_left_recursive_alt(rule: &ParserRule) -> bool {
-    return rule.alternatives.iter().any(|alt| alt_is_left_recursive(alt, &rule.name));
+    return rule.alternatives.iter_ref().any(|alt| alt_is_left_recursive(alt, &rule.name));
 }
 
 /// FieldDecl for the leading self-reference element of an LR alt
@@ -2278,12 +2278,12 @@ fn lower_alt_scan_element(
 /// wrapped in a `Label`). Drives the scan-side OptionalLookahead
 /// trigger via `surface_is_optional_repeat`.
 fn has_nested_optional_in_alt(alt: &Alternative) -> bool {
-    return alt.elements.iter().any(|elem| surface_is_optional_repeat(elem));
+    return alt.elements.iter_ref().any(|elem| surface_is_optional_repeat(elem));
 }
 
 /// True when any element of `alt` contains a variable-length repeat.
 fn alt_has_variable_repeat(alt: &Alternative) -> bool {
-    return alt.elements.iter().any(|elem| surface_contains_variable_repeat(elem));
+    return alt.elements.iter_ref().any(|elem| surface_contains_variable_repeat(elem));
 }
 
 fn surface_is_optional_repeat(elem: &Element) -> bool {

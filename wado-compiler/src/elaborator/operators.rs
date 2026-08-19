@@ -230,6 +230,11 @@ impl TypeSystem {
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Reactive(_)
             | ResolvedType::AssocTypeProjection { .. } => true,
+            // `Array<T>` is a GC array reference: `i32.eq` against it produces
+            // invalid core Wasm, and `wir_build` panics before that ("no scalar
+            // lowering for BuiltinArray"). Its comparison dispatches through the
+            // element-wise `Eq` / `Ord` impls in `core:prelude/array.wado`.
+            ResolvedType::BuiltinArray(_) => true,
             // `v128` (and its SIMD type aliases) is a 128-bit vector with no
             // scalar binary-op semantics: Wasm has no `v128`-to-bool `==`, and
             // a fall-through to `i32.eq` produces invalid core Wasm
@@ -333,7 +338,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }
-                | ResolvedType::Variant { .. } => Some(
+                | ResolvedType::Variant { .. }
+                // `fq_base_type_name` spells a raw GC array `Array`, the name its
+                // `Eq` / `Ord` impls attach to.
+                | ResolvedType::BuiltinArray(_) => Some(
                     self.tysys
                         .type_table
                         .borrow()

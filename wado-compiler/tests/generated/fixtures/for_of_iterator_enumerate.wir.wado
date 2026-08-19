@@ -33,12 +33,12 @@ struct tuple//[i32, i32] {  // TypeId(5)
 
 array Array<i32> (mut i32);  // TypeId(6)
 
-struct core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>> {  // TypeId(7)
-    mut inner: ref "core:prelude/slice.wado//ArrayIter<i32>",
+struct core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>> {  // TypeId(7)
+    mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut count: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(8)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(8)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -113,9 +113,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>") -> ref null "tuple//[i32, i32]";  // TypeId(42)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>>") -> ref null "tuple//[i32, i32]";  // TypeId(42)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(43)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(43)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
 
@@ -150,7 +150,7 @@ fn "for_of_iterator_enumerate.wado/run"() with Stdout {
     let arr: ref "core:prelude//List<i32>";
     let sum: i32;
     let count: i32;
-    let __iter_4: ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>";
+    let __iter_4: ref "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>>";
     let i: i32;
     let v_6: i32;
     let __local_11: ref "core:prelude/string.wado//String";
@@ -161,17 +161,17 @@ fn "for_of_iterator_enumerate.wado/run"() with Stdout {
     let __local_16: ref "core:prelude/format.wado//Formatter";
     let __match_17: ref null "tuple//[i32, i32]";
     let handle: i32;
-    let f_41: ref "core:prelude/format.wado//Formatter";
-    let new_used_49: i32;
-    let start_50: i32;
-    let new_used_63: i32;
-    let start_64: i32;
-    let f_74: ref "core:prelude/format.wado//Formatter";
+    let f_40: ref "core:prelude/format.wado//Formatter";
+    let new_used_48: i32;
+    let start_49: i32;
+    let new_used_62: i32;
+    let start_63: i32;
+    let f_73: ref "core:prelude/format.wado//Formatter";
     let packed: i64;
-    let rx_78: i32;
-    let tx_79: i32;
+    let rx_77: i32;
+    let tx_78: i32;
     let __sroa_v_repr: ref Array<i32>;
-    let __sroa_v_inner: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let __sroa_v_inner: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:for_of_iterator_enumerate.wado::__modules_initialized);
         cold_path;
@@ -182,11 +182,11 @@ fn "for_of_iterator_enumerate.wado/run"() with Stdout {
     sum = 0;
     count = 0;
     __sroa_v_repr = arr.repr;
-    __sroa_v_inner = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __sroa_v_repr, index: 0, end: 3 };
-    __iter_4 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>" { inner: struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: __sroa_v_inner.repr, index: 0, end: 3 }, count: 0 };
+    __sroa_v_inner = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: __sroa_v_repr, index: 0, end: 3 };
+    __iter_4 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: __sroa_v_inner.repr, index: 0, end: 3 }, count: 0 };
     b0: block {
         l1: loop {
-            __match_17 = "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>^core:prelude/traits.wado/Iterator::next"(__iter_4);
+            __match_17 = "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(__iter_4);
             if ref.is_null(__match_17) == 0 {
                 let __variant_payload_1: ref "tuple//[i32, i32]";
                 __variant_payload_1 = ref.as_non_null(__match_17);
@@ -196,31 +196,31 @@ fn "for_of_iterator_enumerate.wado/run"() with Stdout {
                 count = count + 1;
                 __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
                 __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 };
-                f_41 = __local_12;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(i, f_41);
-                new_used_49 = __local_11.used + 1;
-                if @unlikely(new_used_49 > builtin::array_len(__local_11.repr)) {
+                f_40 = __local_12;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(i, f_40);
+                new_used_48 = __local_11.used + 1;
+                if @unlikely(new_used_48 > builtin::array_len(__local_11.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_11, new_used_49);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_11, new_used_48);
                 }
-                start_50 = __local_11.used;
-                __local_11.used = new_used_49;
-                builtin::array_set_u8(__local_11.repr, start_50, 58);
-                new_used_63 = __local_11.used + 1;
-                if @unlikely(new_used_63 > builtin::array_len(__local_11.repr)) {
+                start_49 = __local_11.used;
+                __local_11.used = new_used_48;
+                builtin::array_set_u8(__local_11.repr, start_49, 58);
+                new_used_62 = __local_11.used + 1;
+                if @unlikely(new_used_62 > builtin::array_len(__local_11.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_11, new_used_63);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_11, new_used_62);
                 }
-                start_64 = __local_11.used;
-                __local_11.used = new_used_63;
-                builtin::array_set_u8(__local_11.repr, start_64, 32);
+                start_63 = __local_11.used;
+                __local_11.used = new_used_62;
+                builtin::array_set_u8(__local_11.repr, start_63, 32);
                 __local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_11 };
-                f_74 = __local_12;
-                "core:prelude/primitive.wado/i32::fmt_decimal"(v_6, f_74);
-                rx_78 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_79 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "for_of_iterator_enumerate.wado/__cm_binding__Stdout_write_via_stream"(rx_78);
-                "core:cli/write_to_stream"(tx_79, __local_11, 1);
+                f_73 = __local_12;
+                "core:prelude/primitive.wado/i32::fmt_decimal"(v_6, f_73);
+                rx_77 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_78 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "for_of_iterator_enumerate.wado/__cm_binding__Stdout_write_via_stream"(rx_77);
+                "core:cli/write_to_stream"(tx_78, __local_11, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b0;
@@ -344,7 +344,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b14: block {
         l15: loop {
             break_if b14 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l15;
         };
@@ -738,11 +738,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/ArrayIter<i32>>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next"(self) {
     let idx: i32;
     let __match_3_mv_0: i32;
     let __match_3_mv_1: i32;
-    multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self.inner);
+    multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self.inner);
     if __match_3_mv_0 == 0 {
         idx = self.count;
         self.count = self.count + 1;
@@ -752,14 +752,14 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterEnumerate<core:prelude
     return ref.null none;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

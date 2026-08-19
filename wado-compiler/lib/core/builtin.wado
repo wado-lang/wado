@@ -71,7 +71,7 @@ fn struct_field_get<T, F>(v: &T, index: i32) -> F;
 fn array_len<T>(arr: &Array<T>) -> i32;
 
 /// Returns a byte from a u8 array at the given index.
-fn array_get_u8(arr: &Array<u8>, idx: i32) -> u8;
+fn array_get_value_u8(arr: &Array<u8>, idx: i32) -> u8;
 
 /// Sets a byte in a u8 array at the given index.
 fn array_set_u8(arr: &mut Array<u8>, idx: i32, value: u8);
@@ -80,7 +80,7 @@ fn array_set_u8(arr: &mut Array<u8>, idx: i32, value: u8);
 fn array_new<T>(len: i32) -> Array<T>;
 
 /// Returns an element from a Array<T> at the given index.
-fn array_get<T>(arr: &Array<T>, idx: i32) -> T;
+fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 
 /// Returns a reference to the element at `idx`. A `Ref` element is aliased in
 /// place; a scalar yields a read-only boxed snapshot (the `&T` read model), so
@@ -90,7 +90,7 @@ fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 /// Returns a mutable reference to the element at `idx`, for in-place mutation.
 /// Bounded `T: RefMut`: a `&mut` to a scalar would box a copy with no write-back,
 /// so only in-place-mutable elements can be handed out mutably.
-fn array_get_mut_ref<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
+fn array_get_ref_mut<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
 
 /// Sets an element in a Array<T> at the given index.
 fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);

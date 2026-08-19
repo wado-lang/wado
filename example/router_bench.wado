@@ -83,9 +83,9 @@ fn maps_equal(a: &TreeMap<String, String>, b: &TreeMap<String, String>) -> bool 
         return false;
     }
     for let [k, v] of a.entries() {
-        match b.get(k) {
+        match b.get(*k) {
             Some(bv) => {
-                if bv != v {
+                if bv != *v {
                     return false;
                 }
             },

@@ -324,7 +324,7 @@ fn needs_copy_in_env(
         // `synthesize::build_copy_body`), the same intrinsic that
         // deep-copies the `repr` field of `List<T>` / `String`. This
         // is the only thing that makes `Array<T>` value-semantic
-        // rather than reference-semantic (WEP-2026-06-02 Phase 2).
+        // rather than reference-semantic (WEP-2026-06-02).
         ResolvedType::BuiltinArray(_) => true,
         // `&T` / `&mut T` are reference types: assignment copies the
         // pointer, not the pointee. This is intentional — a struct

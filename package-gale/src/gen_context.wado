@@ -1582,7 +1582,7 @@ impl GenContext {
     /// All interned kind sets in helper-ID order (i.e. insertion order).
     /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
     pub fn kind_sets(&self) -> List<KindSetEntry> {
-        return self.kind_set_registry.values();
+        return self.kind_set_registry.values().iter_value().collect();
     }
 
     pub fn kind_set_is_used(&self, id: i32) -> bool {
@@ -1619,7 +1619,7 @@ impl GenContext {
     /// All interned sync sets in `SYNC_<id>` order. Consumed by the
     /// global-emit pass.
     pub fn sync_sets(&self) -> List<KindSetEntry> {
-        return self.sync_set_registry.values();
+        return self.sync_set_registry.values().iter_value().collect();
     }
 
     /// Intern a runtime FOLLOW-continuation mask. The same canonical mask
@@ -1662,7 +1662,7 @@ impl GenContext {
     /// All interned FOLLOW masks in `FOLLOW_MASK_<id>` order (insertion
     /// order). Consumed by the global-emit pass.
     pub fn follow_masks(&self) -> List<FollowMaskEntry> {
-        return self.follow_mask_registry.values();
+        return self.follow_mask_registry.values().iter_value().collect();
     }
 
     /// Render a token-set membership check on `expr`.
@@ -1937,7 +1937,7 @@ pub fn is_nullable(elem: &Element) -> bool {
 }
 
 pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
-    return a.iter().any(|x| b.contains(x));
+    return a.iter_ref().any(|x| b.contains(x));
 }
 
 /// Append-and-dedup union of two token-kind arrays, preserving the
@@ -2032,5 +2032,5 @@ fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
         visiting.pop();
         return;
     }
-    *visiting = visiting.iter().copied().filter(|v: String| v != *name).collect();
+    *visiting = visiting.iter_value().filter(|v: String| v != *name).collect();
 }

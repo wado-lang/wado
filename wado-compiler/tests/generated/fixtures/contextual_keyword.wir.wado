@@ -191,7 +191,7 @@ fn "contextual_keyword.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 __sroa___iter_8_index >= 3;
-            item_151 = builtin::array_get<i32>(__sroa___iter_8_repr, __sroa___iter_8_index);
+            item_151 = builtin::array_get_value<i32>(__sroa___iter_8_repr, __sroa___iter_8_index);
             __sroa___iter_8_index = __sroa___iter_8_index + 1;
             __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_20, global:contextual_keyword.wado::__const_obj_1);
@@ -210,7 +210,7 @@ fn "contextual_keyword.wado/run"() with Stdout {
     b2: block {
         l3: loop {
             break_if b2 __sroa___iter_10_index >= 3;
-            item_153 = builtin::array_get<i32>(__sroa___iter_10_repr, __sroa___iter_10_index);
+            item_153 = builtin::array_get_value<i32>(__sroa___iter_10_repr, __sroa___iter_10_index);
             __sroa___iter_10_index = __sroa___iter_10_index + 1;
             __local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(28), used: 0 };
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_22, global:contextual_keyword.wado::__const_obj_0);
@@ -307,7 +307,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };

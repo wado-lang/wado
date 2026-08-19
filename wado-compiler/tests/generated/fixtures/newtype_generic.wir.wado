@@ -274,7 +274,7 @@ fn "newtype_generic.wado/run"() with Stdout {
     __local_8.used = new_used_204;
     builtin::array_set_u8(__local_8.repr, start_205, 32);
     __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_223(builtin::array_get<i32>(global:newtype_generic.wado::__const_obj_11.repr, 0)), __local_9);
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_223(builtin::array_get_value<i32>(global:newtype_generic.wado::__const_obj_11.repr, 0)), __local_9);
     rx_226 = builtin::i32_wrap_i64(local.tee packed_225("wasi/stream-new"()));
     tx_227 = builtin::i32_wrap_i64(packed_225 >> 32_i64);
     handle_112 = "newtype_generic.wado/__cm_binding__Stdout_write_via_stream"(rx_226);
@@ -430,7 +430,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b22: block {
         l23: loop {
             break_if b22 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l23;
         };

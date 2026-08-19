@@ -134,7 +134,7 @@ fn "opt_array_data_promotion_profitability.wado/run"() with Stdout {
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     f_620 = __local_5_5;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_628(block {
-    }; builtin::array_get<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_18.repr, 3)), f_620);
+    }; builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_18.repr, 3)), f_620);
     new_used = __local_4_4.used + 1;
     if @unlikely(new_used > builtin::array_len(__local_4_4.repr)) {
         cold_path;
@@ -146,7 +146,7 @@ fn "opt_array_data_promotion_profitability.wado/run"() with Stdout {
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     f_646 = __local_5_5;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_654(block {
-    }; builtin::array_get<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_17.repr, 3)), f_646);
+    }; builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_17.repr, 3)), f_646);
     rx_657 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_658 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_array_data_promotion_profitability.wado/__cm_binding__Stdout_write_via_stream"(rx_657);
@@ -258,7 +258,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b11: block {
         l12: loop {
             break_if b11 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l12;
         };

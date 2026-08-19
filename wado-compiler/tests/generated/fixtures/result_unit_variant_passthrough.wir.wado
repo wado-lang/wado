@@ -269,7 +269,7 @@ fn "result_unit_variant_passthrough.wado/__test_2_ok_arm_with_body_still_preserv
             b13: block {
                 l14: loop {
                     break_if b13 __sroa___iter_4_index_60 >= 0;
-                    item_56 = builtin::array_get<u8>(__array_clone_dst_3, __sroa___iter_4_index_60);
+                    item_56 = builtin::array_get_value<u8>(__array_clone_dst_3, __sroa___iter_4_index_60);
                     __sroa___iter_4_index_60 = __sroa___iter_4_index_60 + 1;
                     total_35 = total_35 + item_56;
                     continue l14;
@@ -380,7 +380,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b25: block {
         l26: loop {
             break_if b25 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l26;
         };

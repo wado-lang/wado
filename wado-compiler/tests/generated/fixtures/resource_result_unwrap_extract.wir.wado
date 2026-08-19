@@ -1081,7 +1081,7 @@ fn "resource_result_unwrap_extract.wado/__cm_binding__Fields_from_list"(entries)
         l92: loop {
             break_if b91 __entries_i >= __entries_len;
             __entries_addr = __entries_base + (__entries_i * 16);
-            v_22 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(_licm_repr_48, __entries_i);
+            v_22 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(_licm_repr_48, __entries_i);
             v_32 = v_22.0;
             let __array_clone_src_7: ref Array<u8>;
             __array_clone_src_7 = v_32.repr;
@@ -1113,7 +1113,7 @@ fn "resource_result_unwrap_extract.wado/__cm_binding__Fields_from_list"(entries)
                 l94: loop {
                     break_if b93 __list_i >= __sroa___sroa___entries_elem_1_used;
                     __list_addr = __list_base + (__list_i * 1);
-                    __list_elem = builtin::array_get<u8>(__sroa___sroa___entries_elem_1_repr, __list_i);
+                    __list_elem = builtin::array_get_value<u8>(__sroa___sroa___entries_elem_1_repr, __list_i);
                     builtin::store_u8(__list_addr, __list_elem);
                     __list_i = __list_i + 1;
                     continue l94;
@@ -1662,7 +1662,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b182: block {
         l183: loop {
             break_if b182 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l183;
         };
@@ -1799,28 +1799,28 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
     __inline_decode_char_at_0: block {
         repr = self.repr;
         pos = self.byte_index;
-        b0 = builtin::array_get<u8>(repr, pos);
+        b0 = builtin::array_get_value<u8>(repr, pos);
         if b0 <u 128 {
             __sroa_slot_28 = b0;
             __sroa_slot_29 = 1;
             break __inline_decode_char_at_0;
         }
         if b0 <u 224 {
-            b1_7 = builtin::array_get<u8>(repr, pos + 1);
+            b1_7 = builtin::array_get_value<u8>(repr, pos + 1);
             __sroa_slot_28 = ((b0 & 31) << 6) | (b1_7 & 63);
             __sroa_slot_29 = 2;
             break __inline_decode_char_at_0;
         }
         if b0 <u 240 {
-            b1_8 = builtin::array_get<u8>(repr, pos + 1);
-            b2_9 = builtin::array_get<u8>(repr, pos + 2);
+            b1_8 = builtin::array_get_value<u8>(repr, pos + 1);
+            b2_9 = builtin::array_get_value<u8>(repr, pos + 2);
             __sroa_slot_28 = (((b0 & 15) << 12) | ((b1_8 & 63) << 6)) | (b2_9 & 63);
             __sroa_slot_29 = 3;
             break __inline_decode_char_at_0;
         }
-        b1_10 = builtin::array_get<u8>(repr, pos + 1);
-        b2_11 = builtin::array_get<u8>(repr, pos + 2);
-        b3 = builtin::array_get<u8>(repr, pos + 3);
+        b1_10 = builtin::array_get_value<u8>(repr, pos + 1);
+        b2_11 = builtin::array_get_value<u8>(repr, pos + 2);
+        b3 = builtin::array_get_value<u8>(repr, pos + 3);
         __sroa_slot_28 = ((((b0 & 7) << 18) | ((b1_10 & 63) << 12)) | ((b2_11 & 63) << 6)) | (b3 & 63);
         __sroa_slot_29 = 4;
         break __inline_decode_char_at_0;

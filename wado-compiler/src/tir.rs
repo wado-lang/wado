@@ -128,8 +128,31 @@ impl SubstitutionContext {
                 bounds,
                 assoc_type_bindings,
             } => {
-                // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
+                // A projection that knows its trait is answered by identity:
+                // the entry is keyed by the declaring `DefId`, so two traits
+                // declaring the same associated-type name on one implementor
+                // stay apart (WEP-2026-08-12). The name-keyed chain below gives
+                // up on exactly that case, so it must not be reached first.
+                if let Some(trait_key) = &owning_trait {
+                    if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                        concrete_id,
+                        trait_key,
+                        &assoc_name,
+                    ) {
+                        return resolved;
+                    }
+                    let base_id = type_table.get_ultimate_base_type(concrete_id);
+                    if base_id != concrete_id
+                        && let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                            base_id,
+                            trait_key,
+                            &assoc_name,
+                        )
+                    {
+                        return resolved;
+                    }
+                }
                 if let Some(resolved) =
                     type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
                 {
@@ -1292,6 +1315,16 @@ impl TypeTable {
         if let Some(key) = self.symbol_by_type.get(type_id) {
             return Some(*key);
         }
+        // `Array<T>` is declared definitionless (`type Array<T>;`), so an
+        // instantiation is a `BuiltinArray` that carries no `def` and that
+        // `symbol_by_type` does not key. The `array` compiler item names its
+        // declaration by identity — a primitive needs no such step because its
+        // declaration and its instantiation are the same type.
+        if matches!(self.get(type_id), ResolvedType::BuiltinArray(_)) {
+            return self
+                .compiler_items
+                .decl(crate::compiler_item::CompilerItem::Array);
+        }
         // An instantiation records the declaration it came from, so the
         // answer is read off the type rather than re-derived from a spelling
         // whose base may already have been pruned.
@@ -2442,6 +2475,25 @@ impl TypeTable {
         }
     }
 
+    /// The type arguments a nominal instantiation binds to its declaration's
+    /// parameters — the companion to [`Self::decl_of_type`], which names the
+    /// declaration. Every query that reasons "declaration plus arguments" asks
+    /// here, so a shape that is not a `GenericInstance` is handled once.
+    ///
+    /// `Array<T>` is the shape that is not: it is declared definitionless, so
+    /// it interns as a `BuiltinArray` carrying its element type alone.
+    pub fn nominal_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::BuiltinArray(elem) => Some(vec![*elem]),
+            // A monomorphized `Struct` is deliberately absent: it keeps no type
+            // args, and its associated types are registered against the
+            // instance itself by `register_monomorphized_assoc_types`.
+            _ => None,
+        }
+    }
+
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.
     /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
     /// then substitutes using the instance's `type_args` to get `i32`.
@@ -2450,10 +2502,7 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let type_args = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            _ => return None,
-        };
+        let type_args = self.nominal_type_args(concrete_id)?;
         let (_, def_type_id) =
             self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
         match self.get(def_type_id).clone() {
@@ -2504,10 +2553,7 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let type_args = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            _ => return None,
-        };
+        let type_args = self.nominal_type_args(concrete_id)?;
         let (_, def_type_id) =
             self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
         let subst: IndexMap<u32, TypeId> = type_args
@@ -2596,10 +2642,7 @@ impl TypeTable {
         if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
             return Some(resolved);
         }
-        let type_args = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            _ => return None,
-        };
+        let type_args = self.nominal_type_args(concrete_id)?;
         let def_key = (
             self.decl_of_type(concrete_id)?,
             *trait_key,
@@ -2842,6 +2885,20 @@ impl TypeTable {
                     // projecting: a `D` inferred as `&mut MyDe` still projects
                     // `D::Acc` to `MyDe`'s associated type.
                     let concrete = self.peel_refs(substituted_base);
+                    // Identity before spelling: a projection that names its
+                    // trait is answered exactly, so two traits declaring the
+                    // same associated-type name on one implementor stay apart
+                    // (WEP-2026-08-12). The name-keyed forms below give up on
+                    // that case rather than choosing.
+                    if let Some(trait_key) = &owning_trait
+                        && let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
+                            concrete,
+                            trait_key,
+                            &assoc_name,
+                        )
+                    {
+                        return resolved;
+                    }
                     if let Some(resolved) =
                         self.resolve_assoc_type_qualified(concrete, &owning_trait, &assoc_name)
                     {
@@ -3973,9 +4030,9 @@ impl FunctionRef {
             .map(|i| i.generic_name.as_str())?;
 
         match generic_name {
-            "array_get" | "array_get_ref" | "array_get_mut_ref" | "array_set" | "array_new"
-            | "array_len" | "array_copy" | "array_fill" | "array_clone" | "array_clone_prefix"
-            | "select" | "copy_value" | "is_uninitialized" | "black_box" => {
+            "array_get_value" | "array_get_ref" | "array_get_ref_mut" | "array_set"
+            | "array_new" | "array_len" | "array_copy" | "array_fill" | "array_clone"
+            | "array_clone_prefix" | "select" | "copy_value" | "is_uninitialized" | "black_box" => {
                 Some(format!("builtin::{generic_name}"))
             }
             _ => None,

@@ -30,12 +30,12 @@ struct iterator_generic_map_cross_module.wado//__Closure_2 {  // TypeId(5)}
 
 array Array<i32> (mut i32);  // TypeId(6)
 
-struct ./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32> {  // TypeId(7)
-    mut inner: ref "core:prelude/slice.wado//ArrayIter<i32>",
+struct ./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32> {  // TypeId(7)
+    mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut f: ref struct,
 }
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(8)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(8)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -109,9 +109,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(39)
 
-type "functype//./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> [i32, i32];  // TypeId(40)
+type "functype//./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>") -> [i32, i32];  // TypeId(40)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(41)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(41)
 
 type "functype//iterator_generic_map_cross_module.wado/iterator_generic_map_cross_module.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(42)
 
@@ -149,7 +149,7 @@ global global:iterator_generic_map_cross_module.wado::__const_obj_14: ref null "
 
 fn "iterator_generic_map_cross_module.wado/run"() {
     let arr: ref "core:prelude//List<i32>";
-    let iter: ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>";
+    let iter: ref "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>";
     let __cond_4: bool;
     let __cond_6: bool;
     let __cond_8: bool;
@@ -169,10 +169,10 @@ fn "iterator_generic_map_cross_module.wado/run"() {
         global:iterator_generic_map_cross_module.wado::__modules_initialized = 1;
     };
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    iter = struct.new "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>" { inner: struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: arr.repr, index: 0, end: 3 }, f: struct.new "canonical//CanonicalClosure_0" { env: struct.new "iterator_generic_map_cross_module.wado//__Closure_2" {  }, func: ref.func "closure/iterator_generic_map_cross_module.wado/__closure_wrapper_0" } };
+    iter = struct.new "./sub/iterator_generic_map_lib.wado//GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: arr.repr, index: 0, end: 3 }, f: struct.new "canonical//CanonicalClosure_0" { env: struct.new "iterator_generic_map_cross_module.wado//__Closure_2" {  }, func: ref.func "closure/iterator_generic_map_cross_module.wado/__closure_wrapper_0" } };
     let a_mv_0: i32;
     let a_mv_1: i32;
-    multivalue_bind [a_mv_0, a_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
+    multivalue_bind [a_mv_0, a_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
     __cond_4 = (if select i32(a_mv_0 == 0, a_mv_1 == 10, 0) -> bool {
         1;
     } else {
@@ -185,7 +185,7 @@ fn "iterator_generic_map_cross_module.wado/run"() {
     }
     let b_mv_0: i32;
     let b_mv_1: i32;
-    multivalue_bind [b_mv_0, b_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
+    multivalue_bind [b_mv_0, b_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
     __cond_6 = (if select i32(b_mv_0 == 0, b_mv_1 == 20, 0) -> bool {
         1;
     } else {
@@ -198,7 +198,7 @@ fn "iterator_generic_map_cross_module.wado/run"() {
     }
     let c_mv_0: i32;
     let c_mv_1: i32;
-    multivalue_bind [c_mv_0, c_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
+    multivalue_bind [c_mv_0, c_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
     __cond_8 = (if select i32(c_mv_0 == 0, c_mv_1 == 30, 0) -> bool {
         1;
     } else {
@@ -211,7 +211,7 @@ fn "iterator_generic_map_cross_module.wado/run"() {
     }
     let d_mv_0: i32;
     let d_mv_1: i32;
-    multivalue_bind [d_mv_0, d_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
+    multivalue_bind [d_mv_0, d_mv_1] = "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(iter);
     __cond_10 = d_mv_0 == 1;
     if @unlikely(__cond_10 == 0) {
         cold_path;
@@ -280,7 +280,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b13: block {
         l14: loop {
             break_if b13 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l14;
         };
@@ -670,10 +670,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/GenericMapIter<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let __match_2_mv_0: i32;
     let __match_2_mv_1: i32;
-    multivalue_bind [__match_2_mv_0, __match_2_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self.inner);
+    multivalue_bind [__match_2_mv_0, __match_2_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self.inner);
     if __match_2_mv_0 == 0 {
         return 0, block -> i32 {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
@@ -685,14 +685,14 @@ fn "./sub/iterator_generic_map_lib.wado/./sub/iterator_generic_map_lib.wado/Gene
     return 1, 0;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

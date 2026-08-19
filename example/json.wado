@@ -1307,7 +1307,7 @@ pub fn stringify(value: &JsonValue) -> String {
         Obj(map) => {
             let mut result = String::with_capacity(32);
             result.push('{');
-            let entries = map.entries();
+            let entries = map.entries().iter_value().collect();
             for let mut i = 0; i < entries.len(); i += 1 {
                 if i > 0 {
                     result.push(',');
@@ -1358,7 +1358,7 @@ fn stringify_at_level(value: &JsonValue, level: i32, indent_size: i32) -> String
             }
         },
         Obj(map) => {
-            let entries = map.entries();
+            let entries = map.entries().iter_value().collect();
             if entries.len() == 0 {
                 "{}";
             } else {

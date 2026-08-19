@@ -33,7 +33,7 @@ struct hfs_letdestructure_loop_local.wado//Acc {  // TypeId(5)
 
 array Array<[hfs_letdestructure_loop_local.wado/Acc,i32]> (mut ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]");  // TypeId(6)
 
-struct core:prelude/slice.wado//ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]> {  // TypeId(7)
+struct core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]> {  // TypeId(7)
     mut repr: ref "Array<[hfs_letdestructure_loop_local.wado/Acc,i32]>",
     mut index: i32,
     mut end: i32,
@@ -82,7 +82,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(27)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>") -> ref null "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";  // TypeId(28)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>") -> ref null "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";  // TypeId(28)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[hfs_letdestructure_loop_local.wado/Acc,i32]>::push" = fn(ref "core:prelude//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>", ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]");  // TypeId(29)
 
@@ -117,7 +117,7 @@ global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude
 fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     let pairs: ref "core:prelude//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let total: i32;
-    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
+    let __iter_3: ref "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let a: ref "hfs_letdestructure_loop_local.wado//Acc";
     let n: i32;
     let __local_6: ref "core:prelude/string.wado//String";
@@ -137,10 +137,10 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     "core:prelude/list.wado/core:prelude/list.wado/List<[hfs_letdestructure_loop_local.wado/Acc,i32]>::push"(pairs, struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: 0 }, 1: 1 });
     "core:prelude/list.wado/core:prelude/list.wado/List<[hfs_letdestructure_loop_local.wado/Acc,i32]>::push"(pairs, struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: 0 }, 1: 10 });
     total = 0;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: pairs.repr, index: 0, end: pairs.used };
+    __iter_3 = struct.new "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: pairs.repr, index: 0, end: pairs.used };
     b0: block {
         l1: loop {
-            __match_8 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next"(__iter_3);
+            __match_8 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next"(__iter_3);
             if ref.is_null(__match_8) == 0 {
                 let __variant_payload_1: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
                 __variant_payload_1 = ref.as_non_null(__match_8);
@@ -247,7 +247,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };
@@ -325,7 +325,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start_8, other.repr, 0, other_len);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
     let v_2: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
     let v_3: ref "hfs_letdestructure_loop_local.wado//Acc";
@@ -334,7 +334,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[hfs_letdestructur
     if _av_4 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">(self.repr, _av_4);
+    v_2 = builtin::array_get_value<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">(self.repr, _av_4);
     item = struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: ref.as_non_null(v_3 = v_2.0; struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: v_3.sum }), 1: v_2.1 };
     self.index = _av_4 + 1;
     return item;

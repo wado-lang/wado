@@ -246,13 +246,13 @@ fn "value_copy_variant_in_aggregate.wado/__test_3_list_of_options_copies_indepen
     one = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
     a = struct.new "core:prelude//List<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { repr: array.new_fixed<ref null "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<i32>; __array_clone_src_13 = one.repr; let __array_clone_dst_13: ref Array<i32>; __array_clone_dst_13 = builtin::array_new<i32>(1); builtin::array_copy<i32>(__array_clone_dst_13, 0, __array_clone_src_13, 0, 1); __array_clone_dst_13), used: 1 }), used: 1 };
     __sroa_b_repr = builtin::array_clone_deep_prefix<ref null "core:prelude//List<i32>">(a.repr, 1);
-    __sroa___match_16_value = builtin::array_get<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0);
+    __sroa___match_16_value = builtin::array_get_value<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0);
     if ref.is_null(__sroa___match_16_value) == 0 {
         v_5 = ref.as_non_null(__sroa___match_16_value);
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(v_5, 2);
     } else {
     }
-    __sroa___match_17_value = builtin::array_get<ref null "core:prelude//List<i32>">(a.repr, 0);
+    __sroa___match_17_value = builtin::array_get_value<ref null "core:prelude//List<i32>">(a.repr, 0);
     if ref.is_null(__sroa___match_17_value) == 0 {
         v_6 = ref.as_non_null(__sroa___match_17_value);
         __v0_7 = v_6.used;
@@ -263,7 +263,7 @@ fn "value_copy_variant_in_aggregate.wado/__test_3_list_of_options_copies_indepen
         }
     } else {
     }
-    __sroa___match_18_value = builtin::array_get<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0);
+    __sroa___match_18_value = builtin::array_get_value<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0);
     if ref.is_null(__sroa___match_18_value) == 0 {
         v_9 = ref.as_non_null(__sroa___match_18_value);
         __v0_10 = v_9.used;
@@ -295,13 +295,13 @@ fn "value_copy_variant_in_aggregate.wado/__test_4_list_of_structs_with_variant_f
     one = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
     a = struct.new "core:prelude//List<value_copy_variant_in_aggregate.wado/Item>" { repr: array.new_fixed<ref "value_copy_variant_in_aggregate.wado//Item">(struct.new "value_copy_variant_in_aggregate.wado//Item" { tag: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_13: ref Array<i32>; __array_clone_src_13 = one.repr; let __array_clone_dst_13: ref Array<i32>; __array_clone_dst_13 = builtin::array_new<i32>(1); builtin::array_copy<i32>(__array_clone_dst_13, 0, __array_clone_src_13, 0, 1); __array_clone_dst_13), used: 1 } }), used: 1 };
     __sroa_b_repr = builtin::array_clone_deep_prefix<ref "value_copy_variant_in_aggregate.wado//Item">(a.repr, 1);
-    __sroa___match_16_value = builtin::array_get<ref "value_copy_variant_in_aggregate.wado//Item">(__sroa_b_repr, 0).tag;
+    __sroa___match_16_value = builtin::array_get_value<ref "value_copy_variant_in_aggregate.wado//Item">(__sroa_b_repr, 0).tag;
     if ref.is_null(__sroa___match_16_value) == 0 {
         v_5 = ref.as_non_null(__sroa___match_16_value);
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(v_5, 2);
     } else {
     }
-    __sroa___match_17_value = builtin::array_get<ref "value_copy_variant_in_aggregate.wado//Item">(a.repr, 0).tag;
+    __sroa___match_17_value = builtin::array_get_value<ref "value_copy_variant_in_aggregate.wado//Item">(a.repr, 0).tag;
     if ref.is_null(__sroa___match_17_value) == 0 {
         v_6 = ref.as_non_null(__sroa___match_17_value);
         __v0_7 = v_6.used;
@@ -314,7 +314,7 @@ fn "value_copy_variant_in_aggregate.wado/__test_4_list_of_structs_with_variant_f
         }
     } else {
     }
-    __sroa___match_18_value = builtin::array_get<ref "value_copy_variant_in_aggregate.wado//Item">(__sroa_b_repr, 0).tag;
+    __sroa___match_18_value = builtin::array_get_value<ref "value_copy_variant_in_aggregate.wado//Item">(__sroa_b_repr, 0).tag;
     if ref.is_null(__sroa___match_18_value) == 0 {
         v_9 = ref.as_non_null(__sroa___match_18_value);
         __v0_10 = v_9.used;
@@ -506,7 +506,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b30: block {
         l31: loop {
             break_if b30 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l31;
         };

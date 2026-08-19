@@ -89,13 +89,13 @@ array Array<./sub/variant_deref_helper.wado/Elem> (mut ref "./sub/variant_deref_
 
 array Array<./sub/variant_deref_helper.wado/Alt> (mut ref "./sub/variant_deref_helper.wado//Alt");  // TypeId(17)
 
-struct core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem> {  // TypeId(18)
+struct core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Elem> {  // TypeId(18)
     mut repr: ref "Array<./sub/variant_deref_helper.wado/Elem>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt> {  // TypeId(19)
+struct core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Alt> {  // TypeId(19)
     mut repr: ref "Array<./sub/variant_deref_helper.wado/Alt>",
     mut index: i32,
     mut end: i32,
@@ -189,9 +189,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>") -> ref null "./sub/variant_deref_helper.wado//Elem";  // TypeId(61)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<./sub/variant_deref_helper.wado/Elem>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Elem>") -> ref null "./sub/variant_deref_helper.wado//Elem";  // TypeId(61)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>") -> ref null "./sub/variant_deref_helper.wado//Alt";  // TypeId(62)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<./sub/variant_deref_helper.wado/Alt>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Alt>") -> ref null "./sub/variant_deref_helper.wado//Alt";  // TypeId(62)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(63)
 
@@ -233,7 +233,7 @@ fn "variant_deref_cross_module.wado/process"(elem, out) {
     let name_4: ref "core:prelude/string.wado//String";
     let rep: ref "./sub/variant_deref_helper.wado//RepeatElem";
     let alts: ref "core:prelude//List<./sub/variant_deref_helper.wado/Alt>";
-    let __iter_7: ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>";
+    let __iter_7: ref "core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Alt>";
     let alt: ref "./sub/variant_deref_helper.wado//Alt";
     let lab: ref "./sub/variant_deref_helper.wado//LabelElem";
     let __match_10: ref "./sub/variant_deref_helper.wado//Elem";
@@ -274,10 +274,10 @@ fn "variant_deref_cross_module.wado/process"(elem, out) {
     __match_14 = "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(elem);
     if ref.test "./sub/variant_deref_helper.wado//Elem::Group"(__match_14) {
         alts = ref.cast "./sub/variant_deref_helper.wado//Elem::Group"(__match_14).payload_0;
-        __iter_7 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Alt>" { repr: alts.repr, index: 0, end: alts.used };
+        __iter_7 = struct.new "core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Alt>" { repr: alts.repr, index: 0, end: alts.used };
         b5: block {
             l6: loop {
-                __local_15 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^core:prelude/traits.wado/Iterator::next"(__iter_7);
+                __local_15 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<./sub/variant_deref_helper.wado/Alt>^core:prelude/traits.wado/Iterator::next"(__iter_7);
                 if ref.is_null(__local_15) == 0 {
                     alt = ref.as_non_null(__local_15);
                     "variant_deref_cross_module.wado/process_all"(alt, out);
@@ -300,12 +300,12 @@ fn "variant_deref_cross_module.wado/process"(elem, out) {
 }
 
 fn "variant_deref_cross_module.wado/process_all"(alt, out) {
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Elem>";
     let __match_4: ref null "./sub/variant_deref_helper.wado//Elem";
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<./sub/variant_deref_helper.wado/Elem>" { repr: alt.elements.repr, index: 0, end: alt.elements.used };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<./sub/variant_deref_helper.wado/Elem>" { repr: alt.elements.repr, index: 0, end: alt.elements.used };
     b9: block {
         l10: loop {
-            __match_4 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            __match_4 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<./sub/variant_deref_helper.wado/Elem>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if ref.is_null(__match_4) == 0 {
                 "variant_deref_cross_module.wado/process"(ref.as_non_null(__match_4), out);
             } else {
@@ -510,7 +510,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b37: block {
         l38: loop {
             break_if b37 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l38;
         };
@@ -664,28 +664,28 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
     __inline_decode_char_at_0: block {
         repr = self.repr;
         pos = self.byte_index;
-        b0 = builtin::array_get<u8>(repr, pos);
+        b0 = builtin::array_get_value<u8>(repr, pos);
         if b0 <u 128 {
             __sroa_slot_28 = b0;
             __sroa_slot_29 = 1;
             break __inline_decode_char_at_0;
         }
         if b0 <u 224 {
-            b1_7 = builtin::array_get<u8>(repr, pos + 1);
+            b1_7 = builtin::array_get_value<u8>(repr, pos + 1);
             __sroa_slot_28 = ((b0 & 31) << 6) | (b1_7 & 63);
             __sroa_slot_29 = 2;
             break __inline_decode_char_at_0;
         }
         if b0 <u 240 {
-            b1_8 = builtin::array_get<u8>(repr, pos + 1);
-            b2_9 = builtin::array_get<u8>(repr, pos + 2);
+            b1_8 = builtin::array_get_value<u8>(repr, pos + 1);
+            b2_9 = builtin::array_get_value<u8>(repr, pos + 2);
             __sroa_slot_28 = (((b0 & 15) << 12) | ((b1_8 & 63) << 6)) | (b2_9 & 63);
             __sroa_slot_29 = 3;
             break __inline_decode_char_at_0;
         }
-        b1_10 = builtin::array_get<u8>(repr, pos + 1);
-        b2_11 = builtin::array_get<u8>(repr, pos + 2);
-        b3 = builtin::array_get<u8>(repr, pos + 3);
+        b1_10 = builtin::array_get_value<u8>(repr, pos + 1);
+        b2_11 = builtin::array_get_value<u8>(repr, pos + 2);
+        b3 = builtin::array_get_value<u8>(repr, pos + 3);
         __sroa_slot_28 = ((((b0 & 7) << 18) | ((b1_10 & 63) << 12)) | ((b2_11 & 63) << 6)) | (b3 & 63);
         __sroa_slot_29 = 4;
         break __inline_decode_char_at_0;
@@ -785,7 +785,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
         b58: block {
             l59: loop {
                 break_if b58 j >= len;
-                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
+                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;
@@ -1055,19 +1055,19 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Elem>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<./sub/variant_deref_helper.wado/Elem>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "./sub/variant_deref_helper.wado//Elem";
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return ref.null none;
     }
-    item = "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(builtin::array_get<ref "./sub/variant_deref_helper.wado//Elem">(self.repr, _av_2));
+    item = "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Elem">(self.repr, _av_2));
     self.index = _av_2 + 1;
     return item;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_deref_helper.wado/Alt>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<./sub/variant_deref_helper.wado/Alt>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "./sub/variant_deref_helper.wado//Alt";
     let v_2: ref "./sub/variant_deref_helper.wado//Alt";
     let v_3: ref null "core:prelude/string.wado//String";
@@ -1078,7 +1078,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<./sub/variant_dere
     if _av_7 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "./sub/variant_deref_helper.wado//Alt">(self.repr, _av_7);
+    v_2 = builtin::array_get_value<ref "./sub/variant_deref_helper.wado//Alt">(self.repr, _av_7);
     item = struct.new "./sub/variant_deref_helper.wado//Alt" { label: v_3 = v_2.label; (if ref.is_null(v_3) == 0 -> ref null "core:prelude/string.wado//String" {
         __vc_payload_0 = ref.as_non_null(v_3);
         struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_6: ref Array<u8>; __array_clone_src_6 = __vc_payload_0.repr; let __array_clone_len_6: i32; __array_clone_len_6 = __vc_payload_0.used; let __array_clone_dst_6: ref Array<u8>; __array_clone_dst_6 = builtin::array_new<u8>(__array_clone_len_6); builtin::array_copy<u8>(__array_clone_dst_6, 0, __array_clone_src_6, 0, __array_clone_len_6); __array_clone_dst_6), used: __vc_payload_0.used };

@@ -62,23 +62,23 @@ value element is read through `IndexValue`.
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexMutRef<IndexType>`
+### `pub trait IndexRefMut<IndexType>`
 
 Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
+#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
 
 ### `pub trait IndexAssign<IndexType>`
 
 Value-assignment indexing: `container[i] = value`.
-Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
+#### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
 Assigns a value to the element at the given index.
 
@@ -402,23 +402,23 @@ value element is read through `IndexValue`.
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexMutRef<IndexType>`
+### `pub trait IndexRefMut<IndexType>`
 
 Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
+#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
 
 ### `pub trait IndexAssign<IndexType>`
 
 Value-assignment indexing: `container[i] = value`.
-Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
+#### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
 Assigns a value to the element at the given index.
 
@@ -703,11 +703,11 @@ Trait for creating a collection from any iterator of `Elem`.
 
 ### `pub trait AsByteSlice`
 
-Zero-copy conversion to a `ByteSlice`.
+Conversion to a `ByteSlice` that copies no bytes.
 
 Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
-`core:json` `from_bytes`) accept any of them without copying.
+`core:json` `from_bytes`) accept any of them.
 
 #### `fn as_byte_slice(&self) -> ByteSlice with stores[self]`
 
@@ -795,12 +795,12 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
-#### `fn write_raw(&self, data: ArraySlice<T>)`
+#### `fn write_raw(&self, data: Slice<T>)`
 
 Write a byte view directly to the stream, without the deep copy that
-value-semantics `write` makes. The slice is a zero-copy window over a
-backing array (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`),
-so only the CM lowering copy remains.
+value-semantics `write` makes. The slice references its backing array
+(`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
+only the CM lowering copy remains.
 
 #### `fn cancel_write(&self)`
 
@@ -914,7 +914,7 @@ An owned, fixed-length byte buffer.
 
 ### `pub type ByteList = List<u8>`
 
-### `pub type ByteSlice = ArraySlice<u8>`
+### `pub type ByteSlice = Slice<u8>`
 
 ## Primitive Types
 
@@ -3185,7 +3185,7 @@ Error returned by float parsing.
 
 Returns the kind of this error.
 
-### `pub struct ArraySlice<T>`
+### `pub struct Slice<T>`
 
 A contiguous view into a backing `Array<T>` over the half-open range
 `[start, end)`. Holds a reference to the whole array, so creating a slice
@@ -3195,61 +3195,96 @@ _Fields are private._
 
 #### `pub fn len(&self) -> i32`
 
-Returns the number of elements in the slice.
-
 Also the byte-length anchor for the synthesised `FieldSchema::lookup`
-(on `ArraySlice<u8>`), routed through `#[compiler_item]` so a rename
-here cannot silently break code generation.
-
-#### `pub fn is_empty(&self) -> bool`
-
-Returns true if the slice has no elements.
-
-#### `pub fn get(&self, index: i32) -> Option<T>`
-
-Returns a copy of the element at `index`, or None if out of bounds.
+(on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
+cannot silently break code generation.
 
 #### `pub fn get_unchecked(&self, index: i32) -> T`
 
-Returns the element at `index` without bounds checking.
+The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+reads past the view into the backing array or traps. Also the byte-read
+anchor for `FieldSchema::lookup`, as `len` is for byte length.
 
-The caller must guarantee `0 <= index < len()`; an out-of-range
-`index` reads past the view into the backing array or traps.
+#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
-Also the byte-read anchor for the synthesised `FieldSchema::lookup`
-(on `ArraySlice<u8>`), routed through `#[compiler_item]` for the same
-rename-safety reason as `len`.
+Sub-slice over `[start, end)` relative to this one, clamped to its
+bounds.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
+#### `pub fn iter_value(&self) -> SliceValueIter<T> with stores[self]`
 
-Returns a sub-slice over `[start, end)` relative to this slice, clamped
-to its bounds.
+#### `pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self]`
 
-#### `pub fn iter(&self) -> ArrayIter<T>`
+#### `pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self]`
 
-Returns a by-value iterator over the slice.
+Overlapping windows of `size` consecutive elements. Panics if `size` is
+not positive.
+
+#### `pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self]`
+
+Non-overlapping chunks of up to `size` elements; the last may be
+shorter. Panics if `size` is not positive.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
-Copies the slice's elements into a new `Array<T>`.
-
 #### `pub fn to_list(&self) -> List<T>`
 
-Copies the slice's elements into a new `List<T>`.
+#### `pub fn contains(&self, value: &T) -> bool`
 
-#### `impl IndexValue<i32> for ArraySlice<T>`
+#### `impl Sequence for Slice<T>`
+
+##### `fn len(&self) -> i32`
+
+##### `fn get_unchecked(&self, index: i32) -> T`
+
+#### `impl AsSlice for Slice<T>`
+
+##### `fn as_slice(&self) -> Slice<T> with stores[self]`
+
+#### `impl IndexValue<i32> for Slice<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
 
-#### `impl IndexRef<i32> for ArraySlice<T>`
+#### `impl IndexRef<i32> for Slice<T>`
 
 ##### `fn index_ref(&self, index: i32) -> &T`
 
-#### `impl IntoIterator for ArraySlice<T>`
+#### `impl IndexValue<RangeExclusive<i32>> for Slice<T>`
+
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self]`
+
+#### `impl IndexValue<RangeInclusive<i32>> for Slice<T>`
+
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self]`
+
+#### `impl Eq for Slice<T>`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for Slice<T>`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Inspect for Slice<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Display for Slice<T>`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for Slice<T>`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for Slice<T>`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
+#### `impl IntoIterator for Slice<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
 
-### `pub struct ArrayIter<T>`
+### `pub struct SliceValueIter<T>`
 
 A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
 
@@ -3257,8 +3292,7 @@ _Fields are private._
 
 #### `pub fn collect(&mut self) -> List<T>`
 
-Collects the remaining elements into a new `List<T>` with a single bulk
-copy of the underlying range.
+One bulk copy of the remaining range, not an element-at-a-time loop.
 
 #### `pub fn sum(&mut self) -> Option<T>`
 
@@ -3266,62 +3300,58 @@ copy of the underlying range.
 
 #### `pub fn max(&mut self) -> Option<T>`
 
-#### `impl Iterator for ArrayIter<T>`
+#### `impl Iterator for SliceValueIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayIter<T>`
+#### `impl IntoIterator for SliceValueIter<T>`
 
-##### `fn into_iter(&self) -> ArrayIter<T>`
+##### `fn into_iter(&self) -> SliceValueIter<T>`
 
-### `pub struct ArrayRefIter<T>`
+### `pub struct SliceRefIter<T>`
 
-A by-reference forward iterator over a backing `Array<T>` range, yielding
-`&T`. The yielded reference points to a fresh copy of each element (Wasm GC
-has no interior references), so it is a read-only view and cannot mutate the
-backing array. Backs `for x of &list`.
+A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
+points to a fresh copy of the element — Wasm GC has no interior references —
+so it reads but never writes the backing array. Backs `for x of &list`.
 
 _Fields are private._
 
-#### `pub fn copied(&self) -> ArrayIter<T>`
+#### `pub fn iter_value(&self) -> SliceValueIter<T>`
 
-Value ("copied") view over the same backing: yields `T` instead of `&T`.
-Mirrors Rust's `iter().copied()`, letting a reference iterator over a
-primitive list read as values (`xs.iter().copied()`).
+The same remaining range yielded by value. Named for the axis rather
+than Rust's `copied()`: every element read in Wado is a copy already.
 
-#### `impl Iterator for ArrayRefIter<T>`
+#### `impl Iterator for SliceRefIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-### `pub struct ArrayWindows<T>`
+### `pub struct SliceWindows<T>`
 
-An iterator over overlapping windows of `size` consecutive elements. Each
-item is a `ArraySlice<T>` viewing the backing array.
+Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 
 _Fields are private._
 
-#### `impl Iterator for ArrayWindows<T>`
+#### `impl Iterator for SliceWindows<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayWindows<T>`
+#### `impl IntoIterator for SliceWindows<T>`
 
-##### `fn into_iter(&self) -> ArrayWindows<T>`
+##### `fn into_iter(&self) -> SliceWindows<T>`
 
-### `pub struct ArrayChunks<T>`
+### `pub struct SliceChunks<T>`
 
-An iterator over non-overlapping chunks of up to `size` elements. The last
-chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
+Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 
 _Fields are private._
 
-#### `impl Iterator for ArrayChunks<T>`
+#### `impl Iterator for SliceChunks<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayChunks<T>`
+#### `impl IntoIterator for SliceChunks<T>`
 
-##### `fn into_iter(&self) -> ArrayChunks<T>`
+##### `fn into_iter(&self) -> SliceChunks<T>`
 
 ### `pub struct String`
 
@@ -3364,7 +3394,7 @@ Write the byte at `index` without bounds or UTF-8 checks.
 
 #### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
 
-Read-only view of the string's UTF-8 bytes as an `ArraySlice<u8>` over `[0, len())`.
+Read-only view of the string's UTF-8 bytes as an `Slice<u8>` over `[0, len())`.
 
 #### `pub fn grow(&mut self, min_capacity: i32)`
 
@@ -3865,8 +3895,6 @@ Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 #### `pub fn len(&self) -> i32`
 
-#### `pub fn is_empty(&self) -> bool`
-
 #### `pub fn capacity(&self) -> i32`
 
 Returns the total number of elements the list can hold without reallocating.
@@ -3884,19 +3912,6 @@ instead of one per element. The Wasm array bounds check still guards the
 store, so an under-reserved call traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
-
-#### `pub fn first(&self) -> Option<T>`
-
-Returns the first element, or None if empty.
-
-#### `pub fn last(&self) -> Option<T>`
-
-#### `pub fn get(&self, index: i32) -> Option<T>`
-
-#### `pub fn get_unchecked(&self, index: i32) -> T`
-
-Element at `index` without the `[]` power-assert. The caller must
-guarantee `0 <= index < len()`; out of range reads a stale slot or traps.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
@@ -3940,13 +3955,13 @@ Shrinks the capacity to match the current length.
 
 Extends this list with elements from another list.
 
-#### `pub fn extend_from_slice(&mut self, other: ArraySlice<T>)`
+#### `pub fn extend_from_slice(&mut self, other: Slice<T>)`
 
 Extends this list with the elements of a slice in a single bulk copy
 (one `array_copy`, no per-element bounds checks). The slice may view a
 different backing array than this list. Taken by value because a slice is
 a cheap view (a backing reference plus two offsets), which also lets a
-newtype view (e.g. `ByteSlice`) coerce to `ArraySlice<T>` at the call.
+newtype view (e.g. `ByteSlice`) coerce to `Slice<T>` at the call.
 
 #### `pub fn reverse(&mut self)`
 
@@ -3964,33 +3979,10 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
-Returns true if the list contains the given value.
+#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self]`
 
-#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
-
-Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
-
-#### `pub fn as_slice(&self) -> ArraySlice<T>`
-
-Returns a view over the whole list.
-
-#### `pub fn iter(&self) -> ArrayRefIter<T>`
-
-Returns an iterator over references to the list's elements (`&T`),
-mirroring Rust's `iter()`. For owned values use `into_iter()` or
-`for let x of list` (both yield `T`); to turn a reference iterator back
-into values, chain `copied()`.
-
-#### `pub fn windows(&self, size: i32) -> ArrayWindows<T>`
-
-Returns an iterator over overlapping windows of `size` consecutive
-elements. Panics if `size` is not positive.
-
-#### `pub fn chunks(&self, size: i32) -> ArrayChunks<T>`
-
-Returns an iterator over non-overlapping chunks of up to `size`
-elements. The last chunk may be shorter. Panics if `size` is not
-positive.
+Yields `&mut T` only where `T: RefMut`: a scalar element has no
+addressable cell, so a write through the reference would be lost.
 
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering)`
 
@@ -4012,15 +4004,25 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexAssign<i32> for List<T>`
 
-##### `fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value]`
+##### `fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value]`
 
 #### `impl IndexRef<i32> for List<T>`
 
 ##### `fn index_ref(&self, index: i32) -> &T`
 
-#### `impl IndexMutRef<i32> for List<T>`
+#### `impl IndexRefMut<i32> for List<T>`
 
-##### `fn index_mut_ref(&mut self, index: i32) -> &mut T`
+##### `fn index_ref_mut(&mut self, index: i32) -> &mut T`
+
+#### `impl Sequence for List<T>`
+
+##### `fn len(&self) -> i32`
+
+##### `fn get_unchecked(&self, index: i32) -> T`
+
+#### `impl AsSlice for List<T>`
+
+##### `fn as_slice(&self) -> Slice<T> with stores[self]`
 
 #### `impl Eq for List<T>`
 
@@ -4032,11 +4034,11 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexValue<RangeExclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T>`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
 
 #### `impl IndexValue<RangeInclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T>`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
 #### `impl IntoIterator for List<T>`
 

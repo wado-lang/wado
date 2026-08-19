@@ -234,7 +234,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };
@@ -348,7 +348,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
         b14: block {
             l15: loop {
                 break_if b14 __sroa___iter_3_index >= end;
-                ref_val = struct.new "core:prelude/types.wado//Box<./sub/cross_module_variant_iter_helper.wado/Choice>" { value: builtin::array_get<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(__sroa___iter_3_repr, __sroa___iter_3_index) };
+                ref_val = struct.new "core:prelude/types.wado//Box<./sub/cross_module_variant_iter_helper.wado/Choice>" { value: builtin::array_get_value<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(__sroa___iter_3_repr, __sroa___iter_3_index) };
                 __sroa___iter_3_index = __sroa___iter_3_index + 1;
                 "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>"(h, ref_val.value);
                 continue l15;

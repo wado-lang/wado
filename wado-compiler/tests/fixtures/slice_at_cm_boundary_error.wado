@@ -1,0 +1,15 @@
+// A slice is a reference view with no Component Model representation, so it is
+// rejected at the definition site of anything crossing the CM boundary.
+//
+// Regression for a silent-degradation bug: the signature type-checked, and the
+// failure surfaced only in `wit_emit`, whose error made the CLI skip the
+// component-type section for the *whole* component with a warning. That broke
+// the static "an `export` appears in WIT" guarantee of
+// WEP-2026-06-25 (visibility). The check now runs at the definition site.
+
+export fn takes_slice(a: Slice<i32>) -> i32 {
+    return a.len();
+}
+
+__DATA__
+{"compile_error": "slice is a reference view with no Component Model representation"}

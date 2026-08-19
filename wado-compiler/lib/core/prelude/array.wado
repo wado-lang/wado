@@ -1,36 +1,39 @@
 #![no_prelude]
 #![stdlib("core:prelude/array.wado")]
-// The raw fixed-length GC array `Array<T>` — the builtin storage primitive
-// behind `String` and `List<T>`, now exposed as a first-class value type.
-//
-// `Array<T>` is a value type: assigning it, passing it by value, or
-// returning it deep-copies the backing GC array (see WEP-2026-06-02). Its
-// length is a runtime value (`array.len`), not part of the type. `arr[i]`
-// copies (`T`, via the direct `array.get` path); `IndexRef` / `IndexMutRef` hand
-// out element references for `Ref` / `RefMut` elements, backed by the
-// `builtin::array_get_ref` / `array_get_mut_ref` intrinsics. In-place mutation
-// goes through `set` / `[i] = v`.
-//
-// Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
-// lowers directly to the matching `array.*` instruction.
+// The fixed-length GC array behind `String` and `List<T>`, and a value type in
+// its own right: assignment deep-copies it, and its length is a runtime value
+// (`array.len`), not part of the type. See WEP-2026-06-02.
 
 use {
+    Ordering,
+    Default,
+    Eq,
+    Ord,
     Ref,
     RefMut,
     IndexValue,
     IndexAssign,
     IndexRef,
-    IndexMutRef,
+    IndexRefMut,
     IntoIterator,
     Display,
     DisplayAlt,
     Inspect,
     InspectAlt,
 } from "core:prelude/traits.wado";
-use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
+use {
+    AsSlice,
+    Sequence,
+    Slice,
+    SliceValueIter,
+    SliceRefIter,
+    SliceRefMutIter,
+    SliceWindows,
+    SliceChunks,
+} from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { i32_clamp } from "core:rt";
+use { i32_clamp, i32_min } from "core:rt";
 
 /// Fixed-length GC array — the builtin storage primitive. Declared
 /// definition-less; its storage and instructions live in the compiler.
@@ -56,12 +59,6 @@ impl Array<T> {
         return builtin::array_len(self);
     }
 
-    /// Returns a copy of the element at `index` (`array.get`).
-    /// Traps if `index` is out of bounds.
-    pub fn get(&self, index: i32) -> T {
-        return builtin::array_get(self, index);
-    }
-
     /// Sets the element at `index` to `value` (`array.set`).
     /// Traps if `index` is out of bounds.
     pub fn set(&mut self, index: i32, value: T) with stores[value] {
@@ -79,50 +76,90 @@ impl Array<T> {
         builtin::array_copy(self, dst, src, src_off, len);
     }
 
-    /// Returns a zero-copy view over `[start, end)`, clamped to the array's
-    /// bounds.
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> with stores[self] {
-        let len = builtin::array_len(self);
-        let s = i32_clamp(start, 0, len);
-        let e = i32_clamp(end, s, len);
-        return ArraySlice::internal_new(self, s, e);
+    /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
+    /// addressable cell, so a write through the reference would be lost.
+    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
+        return SliceRefMutIter::internal_new(self, 0, builtin::array_len(self));
+    }
+}
+
+impl Default for Array<T> {
+    pub fn default() -> Array<T> {
+        return builtin::array_new(0);
+    }
+}
+
+// `[e0, e1, …]` fills an `Array<T>` of exactly the literal's length. A fixed
+// array cannot be its own builder — it has no cursor to append at — so the
+// builder carries one and hands back the finished array.
+internal struct ArrayLiteralBuilder<T> {
+    repr: Array<T>,
+    used: i32,
+}
+
+impl SequenceLiteralBuilder for ArrayLiteralBuilder<T> {
+    type Element = T;
+    type Output = Array<T>;
+
+    fn new_literal(capacity: i32) -> ArrayLiteralBuilder<T> {
+        return ArrayLiteralBuilder { repr: builtin::array_new(capacity), used: 0 };
     }
 
-    /// Returns a by-value iterator over the array's elements.
-    pub fn iter(&self) -> ArrayIter<T> with stores[self] {
-        return ArrayIter::internal_new(self, 0, builtin::array_len(self));
+    fn push_literal(&mut self, value: T) with stores[value] {
+        builtin::array_set(&mut self.repr, self.used, value);
+        self.used += 1;
     }
 
-    /// Returns an iterator over overlapping windows of `size` consecutive
-    /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> ArrayWindows<T> with stores[self] {
-        return ArrayWindows::internal_new(self, 0, builtin::array_len(self), size);
+    fn build(&self) -> Array<T> {
+        return self.repr;
+    }
+}
+
+impl SequenceLiteral for Array<T> {
+    type Element = T;
+    type Builder = ArrayLiteralBuilder<T>;
+}
+
+impl<T> Sequence for Array<T> {
+    type Elem = T;
+
+    fn len(&self) -> i32 {
+        return builtin::array_len(self);
     }
 
-    /// Returns an iterator over non-overlapping chunks of up to `size`
-    /// elements. The last chunk may be shorter. Panics if `size` is not
-    /// positive.
-    pub fn chunks(&self, size: i32) -> ArrayChunks<T> with stores[self] {
-        return ArrayChunks::internal_new(self, 0, builtin::array_len(self), size);
+    fn get_unchecked(&self, index: i32) -> T {
+        return builtin::array_get_value(self, index);
+    }
+}
+
+impl<T> AsSlice for Array<T> {
+    fn as_slice(&self) -> Slice<T> with stores[self] {
+        return Slice::internal_new(self, 0, builtin::array_len(self));
+    }
+}
+
+impl<T: Eq> Array<T> {
+    pub fn contains(&self, value: &T) -> bool {
+        return self.as_slice().contains(value);
     }
 }
 
 impl<T> IntoIterator for Array<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = SliceValueIter<T>;
 
     fn into_iter(&self) -> Self::Iter with stores[self] {
-        return ArrayIter::internal_new(self, 0, builtin::array_len(self));
+        return SliceValueIter::internal_new(self, 0, builtin::array_len(self));
     }
 }
 
 impl<T> IntoIterator for &Array<T> {
     type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Iter = SliceRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let arr = *self;
-        return ArrayRefIter::internal_new(arr, 0, builtin::array_len(arr));
+        return SliceRefIter::internal_new(arr, 0, builtin::array_len(arr));
     }
 }
 
@@ -130,14 +167,14 @@ impl IndexValue<i32> for Array<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        return builtin::array_get(self, index);
+        return builtin::array_get_value(self, index);
     }
 }
 
 impl IndexAssign<i32> for Array<T> {
-    type Input = T;
+    type Output = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
         builtin::array_set(self, index, value);
     }
 }
@@ -150,27 +187,67 @@ impl<T: Ref> IndexRef<i32> for Array<T> {
     }
 }
 
-impl<T: RefMut> IndexMutRef<i32> for Array<T> {
+impl<T: RefMut> IndexRefMut<i32> for Array<T> {
     type Output = T;
 
-    fn index_mut_ref(&mut self, index: i32) -> &mut T {
-        return builtin::array_get_mut_ref(self, index);
+    fn index_ref_mut(&mut self, index: i32) -> &mut T {
+        return builtin::array_get_ref_mut(self, index);
     }
 }
 
 impl IndexValue<RangeExclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+    type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> with stores[self] {
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
         return self.slice(range.start, range.end);
     }
 }
 
 impl IndexValue<RangeInclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+    type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> with stores[self] {
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {
         return self.slice(range.start, range.end + 1);
+    }
+}
+
+impl<T: Eq> Eq for Array<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len = builtin::array_len(self);
+        if len != builtin::array_len(other) {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if builtin::array_get_value(self, i) != builtin::array_get_value(other, i) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+impl<T: Ord> Ord for Array<T> {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        let len = builtin::array_len(self);
+        let other_len = builtin::array_len(other);
+        let min_len = i32_min(len, other_len);
+        for let mut i = 0; i < min_len; i += 1 {
+            let a = builtin::array_get_value(self, i);
+            let b = builtin::array_get_value(other, i);
+            if a < b {
+                return Ordering::Less;
+            }
+            if a > b {
+                return Ordering::Greater;
+            }
+        }
+        if len < other_len {
+            return Ordering::Less;
+        }
+        if len > other_len {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 
@@ -178,11 +255,18 @@ impl IndexValue<RangeInclusive<i32>> for Array<T> {
 // sequences (`Array<T>` itself; `List<T>` over its used prefix). `limit` is the
 // resolved element cap (negative = none); `marker` appends `, ...` when
 // elements are dropped.
-internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
+internal fn write_seq_inspect<T: Inspect>(
+    repr: &Array<T>,
+    start: i32,
+    end: i32,
+    f: &mut Formatter,
+    marker: bool,
+    limit: i32,
+) {
     f.write_char('[');
     let mut shown = 0;
     let mut truncated = false;
-    for let mut i = 0; i < len; i += 1 {
+    for let mut i = start; i < end; i += 1 {
         if limit >= 0 && shown >= limit {
             truncated = true;
             break;
@@ -205,15 +289,22 @@ internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, len: i32, f: &mut For
 
 /// Pretty-printed counterpart of [`write_seq_inspect`]: each element on its own
 /// indented line; `marker` appends a `...` line when elements are dropped.
-internal fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if len == 0 {
+internal fn write_seq_inspect_alt<T: InspectAlt>(
+    repr: &Array<T>,
+    start: i32,
+    end: i32,
+    f: &mut Formatter,
+    marker: bool,
+    limit: i32,
+) {
+    if start >= end {
         f.write_str(&"[]");
         return;
     }
     f.open_brace("[");
     let mut shown = 0;
     let mut truncated = false;
-    for let mut i = 0; i < len; i += 1 {
+    for let mut i = start; i < end; i += 1 {
         if limit >= 0 && shown >= limit {
             truncated = true;
             break;
@@ -232,26 +323,26 @@ internal fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, len: i32, f: &
 
 impl<T: Inspect> Inspect for Array<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        write_seq_inspect(self, builtin::array_len(self), f, true, f.resolved_seq_limit());
+        write_seq_inspect(self, 0, builtin::array_len(self), f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: Inspect> Display for Array<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
-        write_seq_inspect(self, builtin::array_len(self), f, false, f.precision);
+        write_seq_inspect(self, 0, builtin::array_len(self), f, false, f.precision);
     }
 }
 
 impl<T: InspectAlt> InspectAlt for Array<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self, builtin::array_len(self), f, true, f.resolved_seq_limit());
+        write_seq_inspect_alt(self, 0, builtin::array_len(self), f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: InspectAlt> DisplayAlt for Array<T> {
     pub fn fmt_alt(&self, f: &mut Formatter) {
         // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(self, builtin::array_len(self), f, false, f.precision);
+        write_seq_inspect_alt(self, 0, builtin::array_len(self), f, false, f.precision);
     }
 }

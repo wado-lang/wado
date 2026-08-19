@@ -302,7 +302,7 @@ pub trait DeserializeMap {
 /// from `DeserializeStruct::next_field` with the key's bytes; non-self-describing
 /// formats ignore the schema and stay positional.
 ///
-/// The key is a borrowed byte view (`ArraySlice<u8>`, i.e. `ByteSlice`), not a
+/// The key is a byte view (`Slice<u8>`, i.e. `ByteSlice`), not a
 /// `String`: deserializer input is bytes (UTF-8 for JSON, a byte string for
 /// CBOR), so a bytes key avoids a `String` round-trip and is shared identically
 /// by every format.
@@ -606,7 +606,7 @@ impl<T: Serialize> Serialize for List<T> {
 
 // Byte buffers serialize as a byte string (`serialize_bytes`), not as a
 // sequence of integers. These explicit impls override the `List<u8>` /
-// `Array<u8>` / `ArraySlice<u8>` sequence impls that the newtypes would
+// `Array<u8>` / `Slice<u8>` sequence impls that the newtypes would
 // otherwise inherit.
 impl Serialize for ByteList {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {

@@ -1,4 +1,4 @@
-// Tests for the raw GC array `Array<T>` (WEP-2026-06-02 Phase 2).
+// Tests for the raw GC array `Array<T>` (WEP-2026-06-02).
 
 test "new initialises to default" {
     let a: Array<i32> = Array::new(3);
@@ -20,9 +20,9 @@ test "get and set" {
     a.set(0, 10);
     a.set(1, 20);
     a.set(2, 30);
-    assert a.get(0) == 10;
-    assert a.get(1) == 20;
-    assert a.get(2) == 30;
+    assert a[0] == 10;
+    assert a[1] == 20;
+    assert a[2] == 30;
 }
 
 test "index operators" {
@@ -204,4 +204,48 @@ test "pretty-print truncates at precision limit" {
   2,
   ...
 ]";
+}
+
+test "Array carries the Sequence surface" {
+    let a: Array<i32> = Array::filled(3, 5);
+    assert !a.is_empty();
+    assert a.get(1) matches { Some(v) && v == 5 };
+    assert a.get(9) matches { None };
+    assert a.get_unchecked(0) == 5;
+    assert a.first() matches { Some(v) && v == 5 };
+    assert a.last() matches { Some(v) && v == 5 };
+    assert a.contains(&5);
+    assert !a.contains(&6);
+
+    let e: Array<i32> = Array::new(0);
+    assert e.is_empty();
+    assert e.first() matches { None };
+}
+
+test "Array views as a Slice" {
+    let a: Array<i32> = Array::filled(4, 2);
+    assert a.as_slice().len() == 4;
+    assert a.slice(1, 3).len() == 2;
+    assert a.windows(2).count() == 3;
+    assert a.chunks(3).count() == 2;
+}
+
+test "an Array takes a sequence literal" {
+    let a: Array<i32> = [1, 2, 3];
+    assert a.len() == 3;
+    assert a[0] == 1;
+    assert a[2] == 3;
+
+    let s: Array<String> = ["x", "y"];
+    assert s.len() == 2;
+    assert s[1] == "y";
+
+    let empty: Array<i32> = [];
+    assert empty.len() == 0;
+}
+
+test "Array has a default" {
+    let d: Array<i32> = Array::default();
+    assert d.len() == 0;
+    assert d.is_empty();
 }

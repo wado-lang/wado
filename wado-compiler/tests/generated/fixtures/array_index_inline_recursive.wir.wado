@@ -294,7 +294,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b11: block {
         l12: loop {
             break_if b11 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l12;
         };
@@ -384,7 +384,7 @@ fn "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<cor
         b20: block {
             l21: loop {
                 break_if b20 i >= _licm_children_12.used;
-                "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(_licm_children_12.repr, i), _licm_arith_11);
+                "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get_value<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(_licm_children_12.repr, i), _licm_arith_11);
                 _licm_children_12 = self.children;
                 i = i + 1;
                 continue l21;
@@ -404,7 +404,7 @@ fn "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<cor
     b22: block {
         l23: loop {
             break_if b22 i >= _licm_children_12.used;
-            "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(_licm_children_12.repr, i), _licm_arith_11);
+            "array_index_inline_recursive.wado/array_index_inline_recursive.wado/Node<core:prelude/string.wado/String>::traverse"(builtin::array_get_value<ref "array_index_inline_recursive.wado//Node<core:prelude/string.wado/String>">(_licm_children_12.repr, i), _licm_arith_11);
             _licm_children_12 = self.children;
             i = i + 1;
             continue l23;

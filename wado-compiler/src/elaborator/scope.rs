@@ -38,6 +38,10 @@ pub(super) struct TraitContext {
     pub(super) assoc_type_bindings: IndexMap<String, TypeId>,
     /// Current `Self` type in scope (the type being implemented in an impl block).
     pub(super) self_type: Option<TypeId>,
+    /// The trait `Self` is being elaborated against — the trait an `impl` block
+    /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
+    /// there is no `Self` bound to read the declaring trait off.
+    pub(super) self_trait: Option<crate::defs::DefId>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
     /// `EffectRef::Param` and to record its use→def edge.

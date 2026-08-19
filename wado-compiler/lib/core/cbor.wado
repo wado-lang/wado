@@ -142,12 +142,12 @@ fn push_be(buf: &mut ByteList, value: u64, nbytes: i32) {
 /// Append the UTF-8 bytes of `s` (a `String` is already valid UTF-8, so the
 /// text string is emitted verbatim — RFC 8949 §3.1).
 fn push_text_bytes(buf: &mut ByteList, s: &String) {
-    buf.extend_from_slice(s.as_bytes() as ArraySlice<u8>);
+    buf.extend_from_slice(s.as_bytes() as Slice<u8>);
 }
 
 /// Append a byte string's contents.
 fn push_byte_slice(buf: &mut ByteList, v: ByteSlice) {
-    buf.extend_from_slice(v as ArraySlice<u8>);
+    buf.extend_from_slice(v as Slice<u8>);
 }
 
 /// Emit a non-negative `u128` magnitude as a CBOR bignum (RFC 8949 §3.4.3):
@@ -1034,7 +1034,7 @@ impl CborDeserializer {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let n = len as i32;
-        out.extend_from_slice(self.input.slice(self.pos, self.pos + n) as ArraySlice<u8>);
+        out.extend_from_slice(self.input.slice(self.pos, self.pos + n) as Slice<u8>);
         self.pos += n;
         return Result::Ok(());
     }
@@ -1178,7 +1178,7 @@ impl CborDeserializer {
 
     fn slice_to_bytelist(&self, start: i32, end: i32) -> ByteList {
         let mut out: ByteList = [];
-        out.extend_from_slice(self.input.slice(start, end) as ArraySlice<u8>);
+        out.extend_from_slice(self.input.slice(start, end) as Slice<u8>);
         return out;
     }
 

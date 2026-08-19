@@ -923,9 +923,9 @@ trait Default { fn default() -> Self; }
 
 // For [] operators
 trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
-trait IndexMutRef<I> { type Output: RefMut; fn index_mut_ref(&mut self, index: I) -> &mut Self::Output; }
+trait IndexRefMut<I> { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
-trait IndexAssign<I> { type Input; fn index_assign(&mut self, index: I, value: Self::Input); }
+trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers

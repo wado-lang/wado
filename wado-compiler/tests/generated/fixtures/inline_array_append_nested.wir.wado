@@ -249,7 +249,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -357,7 +357,7 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     b18: block {
         l19: loop {
             break_if b18 i >= _licm_used_27;
-            val = builtin::array_get<i32>(_licm_repr_28, i);
+            val = builtin::array_get_value<i32>(_licm_repr_28, i);
             if (val % 2) == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(temp, val);
             }
@@ -371,7 +371,7 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     b21: block {
         l22: loop {
             break_if b21 j >= _licm_used_29;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, builtin::array_get<i32>(_licm_repr_30, j) + 100);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, builtin::array_get_value<i32>(_licm_repr_30, j) + 100);
             j = j + 1;
             continue l22;
         };

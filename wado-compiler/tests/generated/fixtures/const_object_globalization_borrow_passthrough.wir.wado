@@ -111,7 +111,7 @@ fn "const_object_globalization_borrow_passthrough.wado/total"(s) {
     b0: block {
         l1: loop {
             break_if b0 i >= _licm_used_6;
-            sum = sum + builtin::array_get<u8>(_licm_repr_7, i);
+            sum = sum + builtin::array_get_value<u8>(_licm_repr_7, i);
             i = i + 1;
             continue l1;
         };
@@ -285,7 +285,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b12: block {
         l13: loop {
             break_if b12 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l13;
         };

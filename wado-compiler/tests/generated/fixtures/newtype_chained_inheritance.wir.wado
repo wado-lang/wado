@@ -165,7 +165,7 @@ fn "newtype_chained_inheritance.wado/run"() {
     }
     repr_26 = builtin::array_new<u8>(2);
     builtin::array_fill<u8>(repr_26, 0, 9, 2);
-    __v0_6 = builtin::array_get<u8>(repr_26, 0);
+    __v0_6 = builtin::array_get_value<u8>(repr_26, 0);
     if @unlikely(__v0_6 != 9) {
         cold_path;
         "core:rt/panic"(__local_17 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(156); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_17, global:newtype_chained_inheritance.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_17, global:newtype_chained_inheritance.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 58); __local_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:newtype_chained_inheritance.wado::__const_obj_7, __local_18); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_17, global:newtype_chained_inheritance.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_17, global:newtype_chained_inheritance.wado::__const_obj_5); __local_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_17); "core:prelude/primitive.wado/u8^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<u8>" { value: __v0_6 }, __local_18); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_17, 10); __local_17);
@@ -178,7 +178,7 @@ fn "newtype_chained_inheritance.wado/run"() {
     b2: block {
         l3: loop {
             break_if b2 __sroa___iter_9_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<u8>" { value: builtin::array_get<u8>(__sroa___iter_9_repr, __sroa___iter_9_index) };
+            ref_val = struct.new "core:prelude/types.wado//Box<u8>" { value: builtin::array_get_value<u8>(__sroa___iter_9_repr, __sroa___iter_9_index) };
             __sroa___iter_9_index = __sroa___iter_9_index + 1;
             sum = sum + ref_val.value;
             continue l3;
@@ -251,7 +251,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b11: block {
         l12: loop {
             break_if b11 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l12;
         };

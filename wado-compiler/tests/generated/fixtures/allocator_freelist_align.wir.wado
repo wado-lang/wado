@@ -154,7 +154,7 @@ fn "allocator_freelist_align.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 __sroa___iter_2_index >= 7;
-            item = builtin::array_get<i32>(__sroa___iter_2_repr, __sroa___iter_2_index);
+            item = builtin::array_get_value<i32>(__sroa___iter_2_repr, __sroa___iter_2_index);
             __sroa___iter_2_index = __sroa___iter_2_index + 1;
             __v0 = local.tee p("mem/realloc"(0, 0, 16, item)) & 15;
             if @unlikely((__v0 == 0) == 0) {
@@ -276,7 +276,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b10: block {
         l11: loop {
             break_if b10 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l11;
         };

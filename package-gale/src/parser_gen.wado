@@ -703,7 +703,7 @@ fn gen_lr_suffix_dispatch_atn(
 }
 
 fn lr_atn_has_overlap_group(lr_dispatch: &LrDispatchData) -> bool {
-    return lr_dispatch.groups.iter().any(|group| group.len() >= 2);
+    return lr_dispatch.groups.iter_ref().any(|group| group.len() >= 2);
 }
 
 /// `let mut` only where `emit_lr_atn_group_repick` will overwrite `_atn_alt`,
@@ -1736,7 +1736,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
 /// first token enter longest-match commit), lenient gate, and the
 /// `sg_<gc>_done` / `sg_<gc>` block structure.
 fn is_wildcard_alt(indices: &List<i32>, alt_index: i32) -> bool {
-    return indices.iter().any(|idx| *idx == alt_index);
+    return indices.iter_ref().any(|idx| *idx == alt_index);
 }
 
 fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenContext, fail_stmt: &String, lenient: bool) {

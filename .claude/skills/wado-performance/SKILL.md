@@ -55,7 +55,7 @@ element** in a loop:
   through the `match`; a missed copy shows up here and is removable.
 
 Also: a `Trait::method(…)` call left in a hot loop (the inliner declined it), and
-`array_set_u8` / `array_get` (bounds-checked; one per element is the store floor
+`array_set_u8` / `array_get_value` (bounds-checked; one per element is the store floor
 for `Array<T>`-backed `String` / `List`).
 
 ## 3. WasmGC cost facts

@@ -157,12 +157,12 @@ pub fn resolve_kind_ids(grammar: &mut Grammar, kinds: &TokenKinds) {
 }
 
 fn resolve_alts(alts: &List<Alternative>, kinds: &TokenKinds) -> List<Alternative> {
-    return alts.iter().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect(
+    return alts.iter_ref().map(|a: &Alternative| Alternative { ..*a, elements: resolve_elements(&a.elements, kinds) }).collect(
     );
 }
 
 fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Element> {
-    return elements.iter().map(|e: &Element| resolve_element(e, kinds)).collect();
+    return elements.iter_ref().map(|e: &Element| resolve_element(e, kinds)).collect();
 }
 
 fn resolve_element(elem: &Element, kinds: &TokenKinds) -> Element {

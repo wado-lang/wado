@@ -207,7 +207,7 @@ key against the wire-form field names. Self-describing formats invoke it
 from `DeserializeStruct::next_field` with the key's bytes; non-self-describing
 formats ignore the schema and stay positional.
 
-The key is a borrowed byte view (`ArraySlice<u8>`, i.e. `ByteSlice`), not a
+The key is a byte view (`Slice<u8>`, i.e. `ByteSlice`), not a
 `String`: deserializer input is bytes (UTF-8 for JSON, a byte string for
 CBOR), so a bytes key avoids a `String` round-trip and is shared identically
 by every format.

@@ -1,0 +1,112 @@
+// Two traits may declare the same associated-type name and bind it to
+// different types on one implementor. `Self::Item` means the one its own
+// trait declares.
+//
+// Regression: the associated-type lookup filtered `assoc_type_resolutions` by
+// name alone and discarded the trait `DefId` the entry is keyed by, returning
+// None when two entries disagreed. `Self::Item` then never normalized and every
+// use reported `Cell<i32>::Item` against the concrete type — the
+// spelling-as-identity class WEP-2026-08-12 covers.
+
+trait Elems {
+    type Item;
+
+    fn at(&self, index: i32) -> Self::Item;
+
+    fn head(&self) -> Option<Self::Item> {
+        return Option::Some(self.at(0));
+    }
+}
+
+// Same associated-type name, deliberately a different type.
+trait Spanned {
+    type Item;
+
+    fn span(&self) -> Self::Item;
+
+    fn span_or_empty(&self) -> Self::Item {
+        return self.span();
+    }
+}
+
+struct Cell<T> {
+    x: T,
+}
+
+impl<T> Elems for Cell<T> {
+    type Item = T;
+
+    fn at(&self, index: i32) -> T {
+        return self.x;
+    }
+}
+
+impl<T> Spanned for Cell<T> {
+    type Item = List<T>;
+
+    fn span(&self) -> List<T> {
+        return [self.x];
+    }
+}
+
+test "each trait's default body sees its own associated type" {
+    let c: Cell<i32> = Cell { x: 7 };
+    assert c.head() matches { Some(v) && v == 7 };
+    assert c.span_or_empty().len() == 1;
+    assert c.span_or_empty()[0] == 7;
+}
+
+test "the same holds for a different element type" {
+    let s: Cell<String> = Cell { x: "wado" };
+    assert s.head() matches { Some(v) && v == "wado" };
+    assert s.span_or_empty()[0] == "wado";
+}
+
+// The same must hold when the associated type is inherited: `Derived`'s default
+// body names `Base::Elem`, and `Cell` also implements `Other`, which declares
+// `Elem` as a different type. Qualification has to follow the supertrait.
+trait Base {
+    type Elem;
+
+    fn one(&self) -> Self::Elem;
+}
+
+trait Other {
+    type Elem;
+
+    fn other(&self) -> Self::Elem;
+}
+
+trait Derived: Base {
+    fn twice(&self) -> Self::Elem {
+        return self.one();
+    }
+}
+
+impl<T> Base for Cell<T> {
+    type Elem = T;
+
+    fn one(&self) -> T {
+        return self.x;
+    }
+}
+
+impl<T> Other for Cell<T> {
+    type Elem = List<T>;
+
+    fn other(&self) -> List<T> {
+        return [self.x];
+    }
+}
+
+impl<T> Derived for Cell<T> {
+}
+
+test "an inherited associated type is qualified by its declaring supertrait" {
+    let c: Cell<i32> = Cell { x: 9 };
+    assert c.twice() == 9;
+    assert c.other()[0] == 9;
+}
+
+__DATA__
+{"test": {}}

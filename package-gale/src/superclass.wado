@@ -302,12 +302,12 @@ fn alt_actions_are_base_calls(alt: &LexerAlternative, base_name: &String) -> boo
             return false;
         }
     }
-    return alt.elements.iter().all(|e| elem_actions_are_base_calls(e, base_name));
+    return alt.elements.iter_ref().all(|e| elem_actions_are_base_calls(e, base_name));
 }
 
 fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool {
     return match elem {
-        Group(alts) => alts.iter().all(|a| alt_actions_are_base_calls(a, base_name)),
+        Group(alts) => alts.iter_ref().all(|a| alt_actions_are_base_calls(a, base_name)),
         Repeat(rep) => elem_actions_are_base_calls(&rep.element, base_name),
         Not(nn) => elem_actions_are_base_calls(&nn.element, base_name),
         _ => true,
@@ -356,11 +356,11 @@ fn rule_calls_super(
     actions: bool,
     visited: &mut List<String>,
 ) -> bool {
-    if visited.iter().any(|v: &String| *v == rule.name) {
+    if visited.iter_ref().any(|v: &String| *v == rule.name) {
         return false;
     }
     visited.push(rule.name);
-    return rule.body.iter().any(|alt| alt_calls_super(alt, all_rules, needle, actions, visited));
+    return rule.body.iter_ref().any(|alt| alt_calls_super(alt, all_rules, needle, actions, visited));
 }
 
 fn alt_calls_super(
@@ -378,7 +378,7 @@ fn alt_calls_super(
             return true;
         }
     }
-    return alt.elements.iter().any(|e| elem_calls_super(e, all_rules, needle, actions, visited));
+    return alt.elements.iter_ref().any(|e| elem_calls_super(e, all_rules, needle, actions, visited));
 }
 
 fn elem_calls_super(

@@ -252,7 +252,7 @@ pub struct Engine<'a> {
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
     panic_callee_ids: Option<&'a IndexSet<crate::nir::FuncId>>,
-    /// [`FuncId`]s of pure builtin intrinsics (`array_get`, `array_len`, …),
+    /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
     /// supplied by a value-graph pass so the builder knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
     /// `None` (the default) is conservative: every call is a heap write. Set via

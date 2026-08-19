@@ -230,7 +230,7 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
 /// the shared `build_group_prediction_tree_from_order`) inline.
 fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
-    let surface = grammar.parser_rules.iter().find(|r| r.name == header.name);
+    let surface = grammar.parser_rules.iter_ref().find(|r| r.name == header.name);
     let surface = match surface {
         Some(r) => r,
         None => {

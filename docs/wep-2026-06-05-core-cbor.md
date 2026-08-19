@@ -84,7 +84,7 @@ gap, mirroring Rust's `[u8; N]` / `&[u8]` / `Vec<u8>`:
 // in core:prelude
 type ByteArray = Array<u8>;       // owned, fixed length (hashes, keys)
 type ByteList  = List<u8>;        // owned, growable
-type ByteSlice = ArraySlice<u8>;  // borrowed view (no copy)
+type ByteSlice = Slice<u8>;  // reference view (no byte copy)
 ```
 
 Letting `from_*` accept any of the three without copying needs a byte-slice
@@ -97,7 +97,7 @@ or slice-view trait), so this is part of the WEP's groundwork:
 pub trait AsByteSlice {
     fn as_byte_slice(&self) -> ByteSlice;
 }
-// impl for ByteArray, ByteList, and ByteSlice (identity) — each a zero-copy view.
+// impl for ByteArray, ByteList, and ByteSlice (identity) — each references its bytes.
 ```
 
 `from_*` accepts any `B: AsByteSlice`.
@@ -112,8 +112,8 @@ Convention, applied to both `core:cbor` and `core:json`:
 `Serialize` is implemented for all three (each encodes as a byte string).
 `Deserialize` is implemented for `ByteList` (primary) and `ByteArray` (sized to
 the decoded byte count — a fixed-length array's length is a runtime value, so
-there is nothing to check at compile time); `ByteSlice` is a borrowed view and so
-has no owned deserialize, exactly like Rust's `&[u8]: !DeserializeOwned`.
+there is nothing to check at compile time); `ByteSlice` is a reference view and
+so has no owned deserialize, exactly like Rust's `&[u8]: !DeserializeOwned`.
 
 ### serde framework changes (groundwork)
 
@@ -435,11 +435,11 @@ remaining item is lossy CBOR→JSON conversion.
 - [x] serde: `serialize_bytes`/`deserialize_bytes`; `visit_i64`/`u64`/`i128`/
       `u128`/`bytes`/`unknown` with defaults; `FieldSchema::lookup(ByteSlice)`
 - [x] compiler: emit the new `lookup` signature from the struct-deserialize
-      synthesizer (reads the key via the generic `ArraySlice<u8>` ops,
+      synthesizer (reads the key via the generic `Slice<u8>` ops,
       monomorphized at `u8`)
 - [x] `core:json`/`core:json_nsd`: bytes-primary API
       (`from_bytes`/`to_bytes`/`to_bytes_pretty`/`to_bytes_canonical`); the
-      deserializer scans a borrowed `ByteSlice` (zero-copy, UTF-8 validation
+      deserializer scans a `ByteSlice` view (no byte copy, UTF-8 validation
       localized to string tokens); `core:router` shares the bytes `FieldSchema`.
       The string entries (`from_string`/`to_string`/`to_string_pretty`) are kept
       as thin convenience wrappers rather than removed.

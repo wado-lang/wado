@@ -153,7 +153,7 @@ struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Res
 
 array Array<core:prelude/list.wado/List<u8>> (mut ref "core:prelude//List<u8>");  // TypeId(23)
 
-struct core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>> {  // TypeId(24)
+struct core:prelude/slice.wado//SliceValueIter<core:prelude/list.wado/List<u8>> {  // TypeId(24)
     mut repr: ref "Array<core:prelude/list.wado/List<u8>>",
     mut index: i32,
     mut end: i32,
@@ -305,7 +305,7 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(67)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>") -> ref null "core:prelude//List<u8>";  // TypeId(68)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<core:prelude/list.wado/List<u8>>") -> ref null "core:prelude//List<u8>";  // TypeId(68)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::push" = fn(ref "core:prelude//List<core:prelude/list.wado/List<u8>>", ref "core:prelude//List<u8>");  // TypeId(69)
 
@@ -353,7 +353,7 @@ fn "stream_http_echo.wado/handle"(request) {
     let chunk_7: ref "core:prelude//List<u8>";
     let headers: i32;
     let response: i32;
-    let __iter_15: ref "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>";
+    let __iter_15: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/list.wado/List<u8>>";
     let chunk_16: ref "core:prelude//List<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_0: i32;
@@ -975,10 +975,10 @@ fn "stream_http_echo.wado/handle"(request) {
             }
         }
     }
-    __iter_15 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/list.wado/List<u8>>" { repr: chunks.repr, index: 0, end: chunks.used };
+    __iter_15 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/list.wado/List<u8>>" { repr: chunks.repr, index: 0, end: chunks.used };
     b92: block {
         l93: loop {
-            __match_191 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Iterator::next"(__iter_15);
+            __match_191 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Iterator::next"(__iter_15);
             if ref.is_null(__match_191) == 0 {
                 chunk_16 = ref.as_non_null(__match_191);
                 block {
@@ -1432,7 +1432,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b161: block {
         l162: loop {
             break_if b161 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l162;
         };
@@ -1491,7 +1491,7 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/list.wado/List<u8>>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "core:prelude//List<u8>";
     let v: ref "core:prelude//List<u8>";
     let _av_3: i32;
@@ -1499,7 +1499,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/list.
     if _av_3 >= self.end {
         return ref.null none;
     }
-    v = builtin::array_get<ref "core:prelude//List<u8>">(self.repr, _av_3);
+    v = builtin::array_get_value<ref "core:prelude//List<u8>">(self.repr, _av_3);
     item = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v.repr; let __array_clone_len_1: i32; __array_clone_len_1 = v.used; let __array_clone_dst_1: ref Array<u8>; __array_clone_dst_1 = builtin::array_new<u8>(__array_clone_len_1); builtin::array_copy<u8>(__array_clone_dst_1, 0, __array_clone_src_1, 0, __array_clone_len_1); __array_clone_dst_1), used: v.used };
     self.index = _av_3 + 1;
     return item;

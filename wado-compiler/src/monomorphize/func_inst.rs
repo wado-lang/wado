@@ -760,14 +760,10 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
             self.type_table.get(arg_type),
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } | ResolvedType::Unknown
         );
-        let receiver_impl_type_args = {
-            let base = self.type_table.peel_refs(receiver.type_id);
-            match self.type_table.get(base) {
-                ResolvedType::GenericInstance { type_args: ta, .. } => ta.clone(),
-                ResolvedType::BuiltinArray(elem) => vec![*elem],
-                _ => vec![],
-            }
-        };
+        let receiver_impl_type_args = self
+            .type_table
+            .nominal_type_args(self.type_table.peel_refs(receiver.type_id))
+            .unwrap_or_default();
         let is_impl_type_arg = receiver_impl_type_args.contains(&arg_type);
         if is_concrete && !is_impl_type_arg {
             type_args.push(arg_type);

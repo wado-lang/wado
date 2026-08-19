@@ -2877,7 +2877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.visit_expr(expr);
     }
 
-    /// The method replacing a rejected `ArraySlice<T>` ↔ `List<T>` cast.
+    /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
     fn slice_list_conversion(
         tt: &TypeTable,
         source_type: TypeId,
@@ -2887,7 +2887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_base = tt.get_ultimate_base_type(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
-                if tt.compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice)
+                if tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
                     == Some(*def)
                     && type_args.len() == 1 =>
             {

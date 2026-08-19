@@ -155,7 +155,7 @@ impl NirPackage {
     }
 
     /// The [`FuncId`]s of pure builtin / monomorphized-builtin intrinsics
-    /// (`array_get`, `array_len`, `select`, every `core:builtin` / wasm-asset
+    /// (`array_get_value`, `array_len`, `select`, every `core:builtin` / wasm-asset
     /// function, …). The value-graph builder reads this to know a call writes no
     /// heap, so a field version forwards across a loop body that only calls such
     /// intrinsics. Resolved by `func_id` off the callee's arena record now that

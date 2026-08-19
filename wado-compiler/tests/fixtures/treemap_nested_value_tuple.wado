@@ -27,7 +27,7 @@ test "TreeMap-valued TreeMap iterates entries" {
     outer["m"] = inner;
     let mut count = 0;
     for let [k, v] of outer.entries() {
-        assert k == "m";
+        assert *k == "m";
         assert v.len() == 2;
         count += 1;
     }
@@ -39,7 +39,7 @@ test "TreeMap with recursive-struct value iterates entries" {
     m["a"] = LNode { val: 7, next: null };
     let mut count = 0;
     for let [k, v] of m.entries() {
-        assert k == "a";
+        assert *k == "a";
         assert v.val == 7;
         count += 1;
     }

@@ -1,0 +1,16 @@
+// A slice offsets by `start`, so a negative index lands on a valid backing slot
+// outside the view and returns it silently — unlike `List`, whose negative
+// index traps in `array.get`. Hence the lower-bound check.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let xs: List<i32> = [10, 20, 30, 40];
+    let view = xs.slice(2, 4);
+    assert view[0] == 30;
+    assert view[1] == 40;
+
+    println(`${builtin::black_box(view)[-1]}`);
+}
+
+__DATA__
+{"stderr_contains": ["index out of bounds"], "trapped": true}

@@ -154,9 +154,9 @@ pub enum CompilerItem {
     /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
-    /// `ArraySlice<T>` — the borrowed array view the byte-slice methods and
+    /// `Slice<T>` — the array reference view the byte-slice methods and
     /// the synthesised `FieldSchema::lookup` signature are written against.
-    ArraySlice,
+    Slice,
     /// `AsyncCall<T>` — the subtask handle a `task`-returning call yields.
     AsyncCall,
 
@@ -174,7 +174,7 @@ pub enum CompilerItem {
     /// `ByteList` — `type ByteList = List<u8>`, the owned byte buffer the CM
     /// binding and the digest / encoding modules pass around.
     ByteList,
-    /// `ByteSlice` — `type ByteSlice = ArraySlice<u8>`, the borrowed byte view
+    /// `ByteSlice` — `type ByteSlice = Slice<u8>`, the byte reference view
     /// `FieldSchema::lookup` takes.
     ByteSlice,
 
@@ -217,7 +217,7 @@ pub enum CompilerItem {
     Ref,
     /// `RefMut` — sealed marker for in-place-mutable reference types (`Ref`
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
-    /// bound gates `IndexMutRef`.
+    /// bound gates `IndexRefMut`.
     RefMut,
     /// `IndexValue<I>` — the value-copy indexing trait the CM list adapters
     /// call through. Registered so a synthesis site names the declaration
@@ -439,12 +439,12 @@ pub enum CompilerItem {
     /// through this item so renames in the stdlib do not silently
     /// break code generation. See issue #1077.
     StringGetByteUnchecked,
-    /// `ByteSlice::get_unchecked` (`ArraySlice<u8>`) — the unchecked byte
+    /// `ByteSlice::get_unchecked` (`Slice<u8>`) — the unchecked byte
     /// read used by synthesised deserializers (`serde_synth`) when comparing
     /// a wire key against a struct's `FieldSchema`. Routed through this item
     /// for the same rename-safety reason as [`Self::StringGetByteUnchecked`].
     ByteSliceGetUnchecked,
-    /// `ByteSlice::len` (`ArraySlice<u8>`) — the byte-length accessor the
+    /// `ByteSlice::len` (`Slice<u8>`) — the byte-length accessor the
     /// synthesised `FieldSchema::lookup` uses to size the wire key. Routed
     /// through a compiler item for the same rename-safety reason as
     /// [`Self::ByteSliceGetUnchecked`].
@@ -572,7 +572,7 @@ impl CompilerItem {
         Self::ReflectStructField,
         Self::ReflectEnumCase,
         Self::ReflectFlagsBit,
-        Self::ArraySlice,
+        Self::Slice,
         Self::AsyncCall,
         Self::Future,
         Self::FutureWritable,
@@ -736,7 +736,7 @@ impl CompilerItem {
             Self::ReflectStructField => "struct_field",
             Self::ReflectEnumCase => "enum_case",
             Self::ReflectFlagsBit => "flags_bit",
-            Self::ArraySlice => "array_slice",
+            Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
@@ -904,7 +904,7 @@ impl CompilerItem {
             | Self::ReflectStructField
             | Self::ReflectEnumCase
             | Self::ReflectFlagsBit
-            | Self::ArraySlice
+            | Self::Slice
             | Self::AsyncCall
             | Self::Future
             | Self::FutureWritable
@@ -1069,7 +1069,7 @@ impl CompilerItem {
             | Self::ReflectStructField
             | Self::ReflectEnumCase
             | Self::ReflectFlagsBit
-            | Self::ArraySlice
+            | Self::Slice
             | Self::AsyncCall => CompilerItemKind::Struct,
             Self::Future | Self::FutureWritable | Self::Stream | Self::StreamWritable => {
                 CompilerItemKind::Resource

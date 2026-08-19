@@ -1,8 +1,8 @@
 // The reference index traits across the container family: `TreeMap` and
-// `ArraySlice` hand out element references for `Ref` / `RefMut` elements.
+// `Slice` hand out element references for `Ref` / `RefMut` elements.
 // `TreeMap` is a plain struct, so it dispatches these traits for concrete
 // access (`m[k].method()`, `&mut m[k]`); a slice is a shared view, so it offers
-// `IndexRef` but not `IndexMutRef`.
+// `IndexRef` but not `IndexRefMut`.
 
 use { TreeMap } from "core:collections";
 
@@ -28,12 +28,12 @@ test "TreeMap hands out &mut V for RefMut values" {
     let mut m: TreeMap<String, Bag> = TreeMap::new();
     m["a"] = Bag { items: [] };
 
-    // IndexMutRef: mutating method mutates in place.
+    // IndexRefMut: mutating method mutates in place.
     m["a"].add(1);
     m["a"].add(2);
     assert m["a"].total() == 3;
 
-    // IndexMutRef: `&mut m[k]` alias writes through.
+    // IndexRefMut: `&mut m[k]` alias writes through.
     let r = &mut m["a"];
     r.add(3);
     assert m["a"].items.len() == 3;
@@ -43,7 +43,7 @@ test "TreeMap hands out &mut V for RefMut values" {
     assert ref_bag.total() == 6;
 }
 
-test "ArraySlice offers IndexRef into the backing array" {
+test "Slice offers IndexRef into the backing array" {
     let xs: List<Bag> = [Bag { items: [1, 2] }, Bag { items: [3] }];
     let s = xs.as_slice();
     assert s[0].total() == 3;

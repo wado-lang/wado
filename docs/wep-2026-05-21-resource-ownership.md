@@ -292,14 +292,14 @@ unused helper — while a miss leaves the fold no helper to call.
 
 `is_projection_of_param` matches a syntactic deref / field / index / payload /
 cast chain rooted at the first parameter, so `build(&self) -> List { return
-*self }` is self-projecting but `ArrayIter<T>::next` is not:
+*self }` is self-projecting but `SliceValueIter<T>::next` is not:
 
 ```wado
-let item = builtin::array_get(self.repr, self.index);
+let item = builtin::array_get_value(self.repr, self.index);
 return Option::Some(item);
 ```
 
-`array_get` is already a container alias read, and `Option<T>` over a reference
+`array_get_value` is already a container alias read, and `Option<T>` over a reference
 type lowers to a bare nullable ref, so the borrowed element could be returned as
 it stands. Two things hide it: the projection is behind a `let` binding, and it
 is wrapped in a variant construction. So `next` returns owned, and the fold

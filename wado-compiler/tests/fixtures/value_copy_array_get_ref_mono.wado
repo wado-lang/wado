@@ -1,7 +1,7 @@
 // `for x of &list` yields references via `array_get_ref`, and dereferencing one
 // to an owned value copies. Monomorphizing `array_get_ref<T>` (which returns a
 // reference, never a copied value) must not disturb the element copies that a
-// generic `array_get` still performs for `list[i]`.
+// generic `array_get_value` still performs for `list[i]`.
 
 struct Cell { v: i32 }
 
@@ -40,7 +40,7 @@ test "deref of array_get_ref copies to an owned value" {
     builtin::array_set(&mut arr, 0, Cell { v: 1 });
     let mut owned = *builtin::array_get_ref(&arr, 0);
     owned.v = 99;
-    assert builtin::array_get(&arr, 0).v == 1;
+    assert builtin::array_get_value(&arr, 0).v == 1;
     assert owned.v == 99;
 }
 

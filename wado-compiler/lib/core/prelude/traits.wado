@@ -580,21 +580,21 @@ internal trait IndexRef<IndexType> {
 /// Mutable reference indexing: `container[i].mutating_method()`.
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
-internal trait IndexMutRef<IndexType> {
+internal trait IndexRefMut<IndexType> {
     type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
-    fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
 }
 
 /// Value-assignment indexing: `container[i] = value`.
-/// Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+/// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
 internal trait IndexAssign<IndexType> {
-    type Input;
+    type Output;
 
     /// Assigns a value to the element at the given index.
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 
 /// Value-copy indexing: `container[i]` yields a copy of the element.
@@ -607,6 +607,7 @@ internal trait IndexValue<IndexType> {
     /// Returns a copy of the element at the given index.
     fn index_value(&self, index: IndexType) -> Self::Output;
 }
+
 /// Trait for the `+` operator.
 /// Types implementing this trait can use the `+` operator for addition.
 internal trait Add<Rhs = Self> {

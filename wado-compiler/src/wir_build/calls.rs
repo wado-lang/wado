@@ -488,7 +488,7 @@ impl FunctionTranslator<'_, '_> {
                     len: Box::new(len),
                 })
             }
-            "builtin::array_get_u8" => {
+            "builtin::array_get_value_u8" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 self.ctx
@@ -515,7 +515,7 @@ impl FunctionTranslator<'_, '_> {
                         value: Box::new(val),
                     })
             }
-            "builtin::array_get" => {
+            "builtin::array_get_value" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
@@ -526,7 +526,7 @@ impl FunctionTranslator<'_, '_> {
                     index: Box::new(idx),
                 })
             }
-            "builtin::array_get_ref" | "builtin::array_get_mut_ref" => {
+            "builtin::array_get_ref" | "builtin::array_get_ref_mut" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));

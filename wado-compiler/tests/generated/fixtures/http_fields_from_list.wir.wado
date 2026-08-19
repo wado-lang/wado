@@ -1086,7 +1086,7 @@ fn "http_fields_from_list.wado/__cm_binding__Fields_from_list"(entries) with Fie
         l93: loop {
             break_if b92 __entries_i >= __entries_len;
             __entries_addr = __entries_base + (__entries_i * 16);
-            v_22 = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(_licm_repr_48, __entries_i);
+            v_22 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(_licm_repr_48, __entries_i);
             v_32 = v_22.0;
             let __array_clone_src_4: ref Array<u8>;
             __array_clone_src_4 = v_32.repr;
@@ -1118,7 +1118,7 @@ fn "http_fields_from_list.wado/__cm_binding__Fields_from_list"(entries) with Fie
                 l95: loop {
                     break_if b94 __list_i >= __sroa___sroa___entries_elem_1_used;
                     __list_addr = __list_base + (__list_i * 1);
-                    __list_elem = builtin::array_get<u8>(__sroa___sroa___entries_elem_1_repr, __list_i);
+                    __list_elem = builtin::array_get_value<u8>(__sroa___sroa___entries_elem_1_repr, __list_i);
                     builtin::store_u8(__list_addr, __list_elem);
                     __list_i = __list_i + 1;
                     continue l95;
@@ -1638,7 +1638,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b174: block {
         l175: loop {
             break_if b174 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l175;
         };

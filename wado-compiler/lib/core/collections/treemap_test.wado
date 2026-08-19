@@ -72,7 +72,7 @@ test "entries returns key-value pairs in insertion order" {
     map["first"] = 1;
     map["second"] = 2;
     map["third"] = 3;
-    let pairs = map.entries();
+    let pairs = map.entries().iter_value().collect();
     assert pairs.len() == 3;
     assert pairs[0].0 == "first";
     assert pairs[0].1 == 1;
@@ -88,7 +88,7 @@ test "entries after update" {
     map["second"] = 2;
     map["third"] = 3;
     map["second"] = 200;
-    let pairs = map.entries();
+    let pairs = map.entries().iter_value().collect();
     assert pairs[1].0 == "second";
     assert pairs[1].1 == 200;
 }
@@ -99,7 +99,7 @@ test "entries after remove" {
     map["second"] = 2;
     map["third"] = 3;
     map.remove("second");
-    let pairs = map.entries();
+    let pairs = map.entries().iter_value().collect();
     assert pairs.len() == 2;
     assert pairs[0].0 == "first";
     assert pairs[1].0 == "third";
@@ -116,7 +116,7 @@ test "keys in insertion order" {
     map["foxtrot"] = 6;
     map["bravo"] = 2;
     map["hotel"] = 8;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys[0] == "echo";
     assert keys[1] == "charlie";
     assert keys[2] == "golf";
@@ -135,7 +135,7 @@ test "values in insertion order" {
     map["golf"] = 7;
     map["alpha"] = 1;
     map["india"] = 9;
-    let values = map.values();
+    let values = map.values().iter_value().collect();
     assert values[0] == 5;
     assert values[1] == 3;
     assert values[2] == 7;
@@ -188,7 +188,7 @@ test "remove from middle preserves order" {
     map["fourth"] = 4;
     map["fifth"] = 5;
     assert map.remove("third");
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys.len() == 4;
     assert keys[0] == "first";
     assert keys[1] == "second";
@@ -202,7 +202,7 @@ test "remove from beginning preserves order" {
     map["second"] = 2;
     map["third"] = 3;
     assert map.remove("first");
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys[0] == "second";
     assert keys[1] == "third";
 }
@@ -213,7 +213,7 @@ test "remove from end preserves order" {
     map["second"] = 2;
     map["third"] = 3;
     assert map.remove("third");
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys.len() == 2;
     assert keys[0] == "first";
     assert keys[1] == "second";
@@ -226,7 +226,7 @@ test "reinsert goes to end" {
     map["c"] = 3;
     assert map.remove("b");
     map["b"] = 999;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys.len() == 3;
     assert keys[0] == "a";
     assert keys[1] == "c";
@@ -242,7 +242,7 @@ test "multiple removes and reinserts" {
     map["b"] = 999;
     map.remove("a");
     map["a"] = 111;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys[0] == "c";
     assert keys[1] == "b";
     assert keys[2] == "a";
@@ -255,11 +255,11 @@ test "update does not change position" {
     map["c"] = 3;
     map["a"] = 100;
     map["b"] = 200;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys[0] == "a";
     assert keys[1] == "b";
     assert keys[2] == "c";
-    let values = map.values();
+    let values = map.values().iter_value().collect();
     assert values[0] == 100;
     assert values[1] == 200;
     assert values[2] == 3;
@@ -285,13 +285,13 @@ test "compact after many deletions preserves order" {
     map.remove("h");
     map.remove("i");
     assert map.len() == 4;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys.len() == 4;
     assert keys[0] == "a";
     assert keys[1] == "d";
     assert keys[2] == "f";
     assert keys[3] == "j";
-    let values = map.values();
+    let values = map.values().iter_value().collect();
     assert values[0] == 1;
     assert values[1] == 4;
     assert values[2] == 6;
@@ -317,7 +317,7 @@ test "insert after compact" {
     map.remove("h");
     map.remove("i");
     map["new"] = 100;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys.len() == 5;
     assert keys[4] == "new";
     assert map["d"] == 4;
@@ -352,7 +352,7 @@ test "key-value literal coercion" {
 
 test "key-value literal preserves insertion order" {
     let m: TreeMap<String, i32> = { echo: 5, charlie: 3, alpha: 1 };
-    let keys = m.keys();
+    let keys = m.keys().iter_value().collect();
     assert keys[0] == "echo";
     assert keys[1] == "charlie";
     assert keys[2] == "alpha";
@@ -389,8 +389,8 @@ test "for-of over entries" {
     let mut ks: List<String> = [];
     let mut vs: List<i32> = [];
     for let [k, v] of map.entries() {
-        ks.push(k);
-        vs.push(v);
+        ks.push(*k);
+        vs.push(*v);
     }
     assert ks.len() == 3;
     assert ks[0] == "a" && vs[0] == 1;
@@ -404,7 +404,7 @@ test "for-of over keys" {
     map["y"] = 20;
     let mut result: List<String> = [];
     for let k of map.keys() {
-        result.push(k);
+        result.push(*k);
     }
     assert result.len() == 2;
     assert result[0] == "x";
@@ -417,7 +417,7 @@ test "for-of over values" {
     map["y"] = 20;
     let mut sum = 0;
     for let v of map.values() {
-        sum = sum + v;
+        sum = sum + *v;
     }
     assert sum == 30;
 }
@@ -438,7 +438,7 @@ test "i32 key insertion order" {
     map[30] = 300;
     map[10] = 100;
     map[20] = 200;
-    let keys = map.keys();
+    let keys = map.keys().iter_value().collect();
     assert keys[0] == 30;
     assert keys[1] == 10;
     assert keys[2] == 20;

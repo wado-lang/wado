@@ -62,17 +62,19 @@ Returns the value corresponding to the key, or null if not found.
 Removes a key from the map and returns true if the key was present.
 Preserves insertion order of remaining elements.
 
-#### `pub fn keys(&self) -> List<K>`
+#### `pub fn keys(&self) -> TreeMapKeysRefIter<K, V> with stores[self]`
 
-Returns all keys in insertion order.
+The keys, in insertion order. A map traversal yields references and
+carries no axis suffix: `keys` already says what it yields, and a
+caller wanting owned keys takes `iter_value()` off the result.
 
-#### `pub fn values(&self) -> List<V>`
+#### `pub fn values(&self) -> TreeMapValuesRefIter<K, V> with stores[self]`
 
-Returns all values in insertion order.
+The values, in insertion order.
 
-#### `pub fn entries(&self) -> List<[K, V]>`
+#### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self]`
 
-Returns all key-value pairs in insertion order.
+The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
@@ -80,7 +82,7 @@ Removes all key-value pairs from the map.
 
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
-##### `fn index_assign(&mut self, key: K, value: Self::Input)`
+##### `fn index_assign(&mut self, key: K, value: Self::Output)`
 
 #### `impl IndexValue<K> for TreeMap<K, V>`
 
@@ -90,9 +92,9 @@ Removes all key-value pairs from the map.
 
 ##### `fn index_ref(&self, key: K) -> &V`
 
-#### `impl IndexMutRef<K> for TreeMap<K, V>`
+#### `impl IndexRefMut<K> for TreeMap<K, V>`
 
-##### `fn index_mut_ref(&mut self, key: K) -> &mut V`
+##### `fn index_ref_mut(&mut self, key: K) -> &mut V`
 
 #### `impl KeyValueLiteralBuilder for TreeMap<String, V>`
 
@@ -170,13 +172,17 @@ Returns true if the value was present, false otherwise.
 
 Removes all elements from the set.
 
-#### `pub fn iter(&self) -> TreeSetIter<T>`
+#### `pub fn iter_ref(&self) -> TreeSetRefIter<T> with stores[self]`
 
-Returns an iterator over the elements in insertion order.
+The elements, in insertion order.
+
+#### `pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self]`
+
+The elements, in insertion order.
 
 #### `impl IntoIterator for TreeSet<T>`
 
-##### `fn into_iter(&self) -> TreeSetIter<T>`
+##### `fn into_iter(&self) -> TreeSetValueIter<T> with stores[self]`
 
 #### `impl SequenceLiteralBuilder for TreeSet<T>`
 

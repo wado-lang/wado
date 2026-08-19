@@ -1,9 +1,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/list.wado")]
-// List type for Wado: a growable sequence backed by an `Array<T>`. Its views
-// and iterators (`ArraySlice`, `ArrayIter`, `ArrayRefIter`, `ArrayWindows`, `ArrayChunks`) are
-// the shared types from `core:prelude/slice.wado`.
-
+// A growable sequence backed by an `Array<T>`. Its views and iterators are the
+// shared `Slice*` types from `core:prelude/slice.wado`.
 
 use {
     Ordering,
@@ -12,7 +10,7 @@ use {
     Ref,
     RefMut,
     IndexRef,
-    IndexMutRef,
+    IndexRefMut,
     IndexValue,
     IndexAssign,
     IntoIterator,
@@ -27,7 +25,16 @@ use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
-use { ArraySlice, ArrayIter, ArrayRefIter, ArrayRefMutIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
+use {
+    AsSlice,
+    Sequence,
+    Slice,
+    SliceValueIter,
+    SliceRefIter,
+    SliceRefMutIter,
+    SliceWindows,
+    SliceChunks,
+} from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 
 #[compiler_item("list")]
@@ -80,10 +87,6 @@ impl List<T> {
         return self.used;
     }
 
-    pub fn is_empty(&self) -> bool {
-        return self.used == 0;
-    }
-
     /// Returns the total number of elements the list can hold without reallocating.
     pub fn capacity(&self) -> i32 {
         return self.repr.len();
@@ -133,34 +136,6 @@ impl List<T> {
         }
         self.used -= 1;
         return Option::Some(self.repr[self.used]);
-    }
-
-    /// Returns the first element, or None if empty.
-    pub fn first(&self) -> Option<T> {
-        if self.used == 0 {
-            return null;
-        }
-        return Option::Some(self.repr[0]);
-    }
-
-    pub fn last(&self) -> Option<T> {
-        if self.used == 0 {
-            return null;
-        }
-        return Option::Some(self.repr[self.used - 1]);
-    }
-
-    pub fn get(&self, index: i32) -> Option<T> {
-        if index < 0 || index >= self.used {
-            return null;
-        }
-        return Option::Some(self.repr[index]);
-    }
-
-    /// Element at `index` without the `[]` power-assert. The caller must
-    /// guarantee `0 <= index < len()`; out of range reads a stale slot or traps.
-    pub fn get_unchecked(&self, index: i32) -> T {
-        return self.repr[index];
     }
 
     /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
@@ -259,8 +234,8 @@ impl List<T> {
     /// (one `array_copy`, no per-element bounds checks). The slice may view a
     /// different backing array than this list. Taken by value because a slice is
     /// a cheap view (a backing reference plus two offsets), which also lets a
-    /// newtype view (e.g. `ByteSlice`) coerce to `ArraySlice<T>` at the call.
-    pub fn extend_from_slice(&mut self, other: ArraySlice<T>) {
+    /// newtype view (e.g. `ByteSlice`) coerce to `Slice<T>` at the call.
+    pub fn extend_from_slice(&mut self, other: Slice<T>) {
         let other_len = other.len();
         if other_len == 0 {
             return;
@@ -335,18 +310,6 @@ impl List<T> {
     }
 }
 
-impl<T: Eq> List<T> {
-    /// Returns true if the list contains the given value.
-    pub fn contains(&self, value: &T) -> bool {
-        for let mut i = 0; i < self.used; i += 1 {
-            if self.repr[i] == *value {
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
 impl IndexValue<i32> for List<T> {
     type Output = T;
 
@@ -357,9 +320,9 @@ impl IndexValue<i32> for List<T> {
 }
 
 impl IndexAssign<i32> for List<T> {
-    type Input = T;
+    type Output = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
         assert index < self.used, "index out of bounds";
         self.repr[index] = value;
     }
@@ -374,12 +337,36 @@ impl<T: Ref> IndexRef<i32> for List<T> {
     }
 }
 
-impl<T: RefMut> IndexMutRef<i32> for List<T> {
+impl<T: RefMut> IndexRefMut<i32> for List<T> {
     type Output = T;
 
-    fn index_mut_ref(&mut self, index: i32) -> &mut T {
+    fn index_ref_mut(&mut self, index: i32) -> &mut T {
         assert index < self.used, "index out of bounds";
-        return builtin::array_get_mut_ref(&mut self.repr, index);
+        return builtin::array_get_ref_mut(&mut self.repr, index);
+    }
+}
+
+impl<T> Sequence for List<T> {
+    type Elem = T;
+
+    fn len(&self) -> i32 {
+        return self.used;
+    }
+
+    fn get_unchecked(&self, index: i32) -> T {
+        return self.repr[index];
+    }
+}
+
+impl<T> AsSlice for List<T> {
+    fn as_slice(&self) -> Slice<T> with stores[self] {
+        return Slice::internal_new(&self.repr, 0, self.used);
+    }
+}
+
+impl<T: Eq> List<T> {
+    pub fn contains(&self, value: &T) -> bool {
+        return self.as_slice().contains(value);
     }
 }
 
@@ -421,37 +408,10 @@ impl<T: Ord> Ord for List<T> {
 }
 
 impl List<T> {
-    /// Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
-        let s = i32_clamp(start, 0, self.used);
-        let e = i32_clamp(end, s, self.used);
-        return ArraySlice::internal_new(&self.repr, s, e);
-    }
-
-    /// Returns a view over the whole list.
-    pub fn as_slice(&self) -> ArraySlice<T> {
-        return ArraySlice::internal_new(&self.repr, 0, self.used);
-    }
-
-    /// Returns an iterator over references to the list's elements (`&T`),
-    /// mirroring Rust's `iter()`. For owned values use `into_iter()` or
-    /// `for let x of list` (both yield `T`); to turn a reference iterator back
-    /// into values, chain `copied()`.
-    pub fn iter(&self) -> ArrayRefIter<T> {
-        return ArrayRefIter::internal_new(&self.repr, 0, self.used);
-    }
-
-    /// Returns an iterator over overlapping windows of `size` consecutive
-    /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> ArrayWindows<T> {
-        return ArrayWindows::internal_new(&self.repr, 0, self.used, size);
-    }
-
-    /// Returns an iterator over non-overlapping chunks of up to `size`
-    /// elements. The last chunk may be shorter. Panics if `size` is not
-    /// positive.
-    pub fn chunks(&self, size: i32) -> ArrayChunks<T> {
-        return ArrayChunks::internal_new(&self.repr, 0, self.used, size);
+    /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
+    /// addressable cell, so a write through the reference would be lost.
+    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
+        return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
@@ -507,47 +467,47 @@ impl List<T> {
 }
 
 impl IndexValue<RangeExclusive<i32>> for List<T> {
-    type Output = ArraySlice<T>;
+    type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
     }
 }
 
 impl IndexValue<RangeInclusive<i32>> for List<T> {
-    type Output = ArraySlice<T>;
+    type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }
 
 impl<T> IntoIterator for List<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = SliceValueIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
-        return ArrayIter::internal_new(&self.repr, 0, self.used);
+        return SliceValueIter::internal_new(&self.repr, 0, self.used);
     }
 }
 
 impl<T> IntoIterator for &List<T> {
     type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Iter = SliceRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return ArrayRefIter::internal_new(&list.repr, 0, list.used);
+        return SliceRefIter::internal_new(&list.repr, 0, list.used);
     }
 }
 
 impl<T> IntoIterator for &mut List<T> {
     type Item = &mut T;
-    type Iter = ArrayRefMutIter<T>;
+    type Iter = SliceRefMutIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return ArrayRefMutIter::internal_new(&mut list.repr, 0, list.used);
+        return SliceRefMutIter::internal_new(&mut list.repr, 0, list.used);
     }
 }
 
@@ -624,26 +584,26 @@ impl Default for List<T> {
 
 impl<T: Inspect> Inspect for List<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        write_seq_inspect(&self.repr, self.used, f, true, f.resolved_seq_limit());
+        write_seq_inspect(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: Inspect> Display for List<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
-        write_seq_inspect(&self.repr, self.used, f, false, f.precision);
+        write_seq_inspect(&self.repr, 0, self.used, f, false, f.precision);
     }
 }
 
 impl<T: InspectAlt> InspectAlt for List<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(&self.repr, self.used, f, true, f.resolved_seq_limit());
+        write_seq_inspect_alt(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: InspectAlt> DisplayAlt for List<T> {
     pub fn fmt_alt(&self, f: &mut Formatter) {
         // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(&self.repr, self.used, f, false, f.precision);
+        write_seq_inspect_alt(&self.repr, 0, self.used, f, false, f.precision);
     }
 }

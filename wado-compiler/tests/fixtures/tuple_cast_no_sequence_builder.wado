@@ -1,13 +1,22 @@
-// `Array<T>` builds no sequence from a literal, so the annotated form is a type
-// mismatch. The `as` form skipped that check and handed codegen a tuple
-// `StructNew` typed as the target, tripping the module validator.
+// A tuple casts to a sequence only where the target builds one from a literal.
+// `Array<T>` and `List<T>` do; a plain struct does not, and the `as` form must
+// report that rather than hand codegen a tuple `StructNew` typed as the target,
+// which trips the module validator.
+//
+// `Array<T>` gained its builder in WEP-2026-06-02 Phase D, so the case this
+// fixture guards moved to a type that has none.
 
 use { println, Stdout } from "core:cli";
 
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
 export fn run() with Stdout {
-    let n = [1, 2] as Array<i32>;
-    println(`${n.len()}`);
+    let n = [1, 2] as Pair;
+    println(`${n.a}`);
 }
 
 __DATA__
-{"compile_error": "cannot cast '[i32, i32]' to 'Array<i32>'"}
+{"compile_error": "cannot cast '[i32, i32]' to 'Pair'"}

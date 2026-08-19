@@ -33,7 +33,7 @@ struct tuple//[i32, i32] {  // TypeId(5)
 
 array Array<i32> (mut i32);  // TypeId(6)
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(7)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(7)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -110,7 +110,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(42)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(42)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
@@ -143,13 +143,13 @@ global global:opt_labeled_block_fusion.wado::__const_obj_6: ref null "core:prelu
 global mut global:opt_labeled_block_fusion.wado::__const_obj_9: ref null "tuple//[i32, i32]" = ref.null none;
 
 fn "opt_labeled_block_fusion.wado/first_positive"(arr) {
-    let __iter_1: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
     b0: block {
         l1: loop {
             let __match_3_mv_0: i32;
             let __match_3_mv_1: i32;
-            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
             if __match_3_mv_0 == 0 {
                 if __match_3_mv_1 > 0 {
                     return struct.new "tuple//[i32, i32]" { 0: 0, 1: __match_3_mv_1 };
@@ -318,7 +318,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b15: block {
         l16: loop {
             break_if b15 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l16;
         };
@@ -712,14 +712,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

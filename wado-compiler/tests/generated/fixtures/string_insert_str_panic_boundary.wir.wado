@@ -195,7 +195,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };
@@ -422,7 +422,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary"(
     if select i32(byte_index < 0, 1, byte_index > _av_5) {
         return 0;
     }
-    b = builtin::array_get<u8>(self.repr, byte_index);
+    b = builtin::array_get_value<u8>(self.repr, byte_index);
     return select i32(b <u 128, 1, b >=u 192);
 }
 

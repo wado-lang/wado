@@ -32,7 +32,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 
 array Array<u32> (mut u32);  // TypeId(6)
 
-struct core:prelude/slice.wado//ArrayIter<u32> {  // TypeId(7)
+struct core:prelude/slice.wado//SliceValueIter<u32> {  // TypeId(7)
     mut repr: ref Array<u32>,
     mut index: i32,
     mut end: i32,
@@ -103,7 +103,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//assoc_projection_impl_binding_no_leak.wado/assoc_projection_impl_binding_no_leak.wado/Counter::count_of<core:prelude/list.wado/List<u32>>" = fn(ref "core:prelude//List<u32>") -> u32;  // TypeId(38)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u32>") -> [i32, u32];  // TypeId(39)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u32>") -> [i32, u32];  // TypeId(39)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
@@ -199,7 +199,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };
@@ -622,15 +622,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "assoc_projection_impl_binding_no_leak.wado/assoc_projection_impl_binding_no_leak.wado/Counter::count_of<core:prelude/list.wado/List<u32>>"(xs) {
-    let it: ref "core:prelude/slice.wado//ArrayIter<u32>";
+    let it: ref "core:prelude/slice.wado//SliceValueIter<u32>";
     let n: u32;
-    it = struct.new "core:prelude/slice.wado//ArrayIter<u32>" { repr: xs.repr, index: 0, end: xs.used };
+    it = struct.new "core:prelude/slice.wado//SliceValueIter<u32>" { repr: xs.repr, index: 0, end: xs.used };
     n = 0;
     b57: block {
         l58: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: u32;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u32>^core:prelude/traits.wado/Iterator::next"(it);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u32>^core:prelude/traits.wado/Iterator::next"(it);
             if __match_4_mv_0 == 0 {
                 n = n + 1;
             } else {
@@ -642,14 +642,14 @@ fn "assoc_projection_impl_binding_no_leak.wado/assoc_projection_impl_binding_no_
     return n;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u32>(self.repr, _av_2);
+    item = builtin::array_get_value<u32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

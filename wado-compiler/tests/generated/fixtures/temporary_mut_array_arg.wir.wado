@@ -122,8 +122,8 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     b0: block {
         l1: loop {
             break_if b0 i >= _licm_used_54;
-            if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_55, i).0, name) {
-                prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_55, i).1;
+            if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_55, i).0, name) {
+                prev = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_55, i).1;
                 value_23 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null(struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = name.repr; let __array_clone_len_3: i32; __array_clone_len_3 = name.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: name.used }), 1: prev + 1 };
                 builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_55, i, value_23);
                 return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4, name), new_used = __local_4.used + 1, if @unlikely(new_used > builtin::array_len(__local_4.repr)) {
@@ -242,7 +242,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -336,7 +336,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
         b17: block {
             l18: loop {
                 break_if b17 j >= len;
-                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
+                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;

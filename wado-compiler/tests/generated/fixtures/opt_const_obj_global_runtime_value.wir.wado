@@ -109,7 +109,7 @@ fn "opt_const_obj_global_runtime_value.wado/sum"(xs) {
     b0: block {
         l1: loop {
             break_if b0 i >= _licm_used_11;
-            s = s + builtin::array_get<i32>(_licm_repr_12, i);
+            s = s + builtin::array_get_value<i32>(_licm_repr_12, i);
             i = i + 1;
             continue l1;
         };
@@ -234,7 +234,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };

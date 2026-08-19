@@ -192,7 +192,7 @@ fn "./sub/cross_module_type_identity_util.wado/sum_shapes"(shapes) {
     b1: block {
         l2: loop {
             break_if b1 __sroa___iter_2_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<cross_module_type_identity.wado/Shape>" { value: builtin::array_get<ref "cross_module_type_identity.wado//Shape">(__sroa___iter_2_repr, __sroa___iter_2_index) };
+            ref_val = struct.new "core:prelude/types.wado//Box<cross_module_type_identity.wado/Shape>" { value: builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">(__sroa___iter_2_repr, __sroa___iter_2_index) };
             __sroa___iter_2_index = __sroa___iter_2_index + 1;
             let __match_scrut_0: ref "cross_module_type_identity.wado//Shape";
             __match_scrut_0 = ref_val.value;
@@ -258,7 +258,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b10: block {
         l11: loop {
             break_if b10 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l11;
         };

@@ -1,0 +1,13 @@
+// The rejection must see through composites: a nested slice reaching `wit_emit`
+// drops the component-type section for the whole component, the same silent
+// degradation `slice_at_cm_boundary_error` pins for the direct case.
+
+export fn returns_nested_slice() -> [i32, Slice<i32>] {
+    let xs: List<i32> = [1, 2, 3];
+    return [0, xs.as_slice()];
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "slice is a reference view with no Component Model representation"}

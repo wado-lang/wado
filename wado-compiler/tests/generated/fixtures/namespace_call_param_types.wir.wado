@@ -28,7 +28,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
 
 array Array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -101,7 +101,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(39)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(39)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
@@ -169,14 +169,14 @@ condition: acc::Acc::sum([1, 2, 3]) == 6
 
 fn "./sub/ns_param_types_helper.wado/sum_free"(xs) {
     let t: i32;
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     t = 0;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: xs.repr, index: 0, end: xs.used };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: xs.repr, index: 0, end: xs.used };
     b2: block {
         l3: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if __match_4_mv_0 == 0 {
                 t = t + __match_4_mv_1;
             } else {
@@ -237,7 +237,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b11: block {
         l12: loop {
             break_if b11 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l12;
         };
@@ -339,14 +339,14 @@ fn "core:prelude/fpfmt.wado/__initialize_module"() {
 
 fn "./sub/ns_param_types_helper.wado/./sub/ns_param_types_helper.wado/Acc::sum"(xs) {
     let t: i32;
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     t = 0;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: xs.repr, index: 0, end: xs.used };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: xs.repr, index: 0, end: xs.used };
     b17: block {
         l18: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if __match_4_mv_0 == 0 {
                 t = t + __match_4_mv_1;
             } else {
@@ -652,14 +652,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

@@ -112,7 +112,7 @@ array Array<wasi:filesystem/types.wado/DirectoryEntry> (mut ref "wasi:filesystem
 
 array Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]> (mut ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]");  // TypeId(16)
 
-struct core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry> {  // TypeId(17)
+struct core:prelude/slice.wado//SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry> {  // TypeId(17)
     mut repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>",
     mut index: i32,
     mut end: i32,
@@ -279,7 +279,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<wasi:filesyst
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::push" = fn(ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>", ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]");  // TypeId(81)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>") -> ref null "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(82)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry>") -> ref null "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(82)
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>") -> ref null "wasi:filesystem/types.wado//ErrorCode";  // TypeId(83)
 
@@ -349,7 +349,7 @@ global global:wasi_filesystem_dir_ops.wado::__const_obj_13: ref null "core:prelu
 global global:wasi_filesystem_dir_ops.wado::__const_obj_14: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
 global global:wasi_filesystem_dir_ops.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:wasi_filesystem_dir_ops.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:wasi_filesystem_dir_ops.wado::__const_obj_17: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 354 };
+global global:wasi_filesystem_dir_ops.wado::__const_obj_17: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 308 };
 global global:wasi_filesystem_dir_ops.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:wasi_filesystem_dir_ops.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:wasi_filesystem_dir_ops.wado::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
@@ -376,7 +376,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
     let found_newdir: bool;
     let entry_count: i32;
     let entries: ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";
-    let __iter_14: ref "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>";
+    let __iter_14: ref "core:prelude/slice.wado//SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry>";
     let entry: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let rmdir_result: ref null "wasi:filesystem/types.wado//ErrorCode";
     let rmdir_again: ref null "wasi:filesystem/types.wado//ErrorCode";
@@ -519,7 +519,7 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
         cold_path;
         "core:rt/panic"(__local_5 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:wasi_filesystem_dir_ops.wado::__const_obj_20); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:wasi_filesystem_dir_ops.wado::__const_obj_19); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:wasi_filesystem_dir_ops.wado::__const_obj_18); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); __local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:wasi_filesystem_dir_ops.wado::__const_obj_17, __local_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:wasi_filesystem_dir_ops.wado::__const_obj_16); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:wasi_filesystem_dir_ops.wado::__const_obj_15); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 105); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 100); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 101); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 120); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); __local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(global:wasi_filesystem_dir_ops.wado::__const_obj_14, __local_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5, global:wasi_filesystem_dir_ops.wado::__const_obj_13); __local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 10); __local_5);
         unreachable;
-    }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha.txt"), used: 9 }, 9, 3));
+    }; builtin::array_get_value<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha.txt"), used: 9 }, 9, 3));
     file_result = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_47) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
         __vc_payload_0 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_47).payload_0;
         struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: __vc_payload_0 };
@@ -632,10 +632,10 @@ fn "wasi_filesystem_dir_ops.wado/run"() with Stdout, Stderr, Preopens {
     found_newdir = 0;
     entry_count = 0;
     entries = "wasi_filesystem_dir_ops.wado/__cm_stream_read_DirectoryEntry"(dir_stream, 100);
-    __iter_14 = struct.new "core:prelude/slice.wado//ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, index: 0, end: entries.used };
+    __iter_14 = struct.new "core:prelude/slice.wado//SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry>" { repr: entries.repr, index: 0, end: entries.used };
     b14: block {
         l15: loop {
-            __match_29 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Iterator::next"(__iter_14);
+            __match_29 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Iterator::next"(__iter_14);
             if ref.is_null(__match_29) == 0 {
                 entry = ref.as_non_null(__match_29);
                 entry_count = entry_count + 1;
@@ -1493,7 +1493,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b206: block {
         l207: loop {
             break_if b206 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l207;
         };
@@ -1735,7 +1735,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
         b223: block {
             l224: loop {
                 break_if b223 j >= len;
-                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
+                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;
@@ -1949,7 +1949,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     self.used = used + 1;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<wasi:filesystem/types.wado/DirectoryEntry>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let v_2: ref "wasi:filesystem/types.wado//DirectoryEntry";
     let v_3: ref "wasi:filesystem/types.wado//DescriptorType";
@@ -1961,7 +1961,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<wasi:filesystem/ty
     if _av_9 >= self.end {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, _av_9);
+    v_2 = builtin::array_get_value<ref "wasi:filesystem/types.wado//DirectoryEntry">(self.repr, _av_9);
     item = struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: ref.as_non_null(v_3 = v_2.type; (if v_3.discriminant == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
         v_3;
     } else if v_3.discriminant == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {

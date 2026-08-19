@@ -150,7 +150,7 @@ fn "array_literal_side_effect_element.wado/run"() with Stdout {
     __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 };
     f_45 = __local_6_6;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_53(block {
-    }; builtin::array_get<i32>(arr.repr, 0)), f_45);
+    }; builtin::array_get_value<i32>(arr.repr, 0)), f_45);
     new_used_60 = __local_5_5.used + 1;
     if @unlikely(new_used_60 > builtin::array_len(__local_5_5.repr)) {
         cold_path;
@@ -162,7 +162,7 @@ fn "array_literal_side_effect_element.wado/run"() with Stdout {
     __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 };
     f_71 = __local_6_6;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_79(block {
-    }; builtin::array_get<i32>(arr.repr, 1)), f_71);
+    }; builtin::array_get_value<i32>(arr.repr, 1)), f_71);
     new_used_86 = __local_5_5.used + 1;
     if @unlikely(new_used_86 > builtin::array_len(__local_5_5.repr)) {
         cold_path;
@@ -285,7 +285,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b12: block {
         l13: loop {
             break_if b12 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l13;
         };

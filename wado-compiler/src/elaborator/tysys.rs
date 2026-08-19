@@ -301,6 +301,11 @@ impl TypeSystem {
                 .borrow()
                 .nominal_head(type_id)
                 .map(|(n, _)| n),
+            // `Array<T>` is declared definitionless, so it has no nominal head
+            // to read; its declaration names it `Array` and carries its impls.
+            ResolvedType::BuiltinArray(_) => {
+                Some(crate::tir::TypeTable::ARRAY_TYPE_NAME.to_string())
+            }
             _ => None,
         }
     }

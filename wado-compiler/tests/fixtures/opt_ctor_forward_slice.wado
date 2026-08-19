@@ -1,5 +1,5 @@
 // Regression: `list.as_slice()` inlines to a block-tailed struct-literal
-// binding — `let x = { let end = list.used; ArraySlice { repr, start, end } }`.
+// binding — `let x = { let end = list.used; Slice { repr, start, end } }`.
 // The in-loop construction-forward (scalar_forward's aggregate-only subset)
 // folds `end` into the field, so `const_branch_prune` collapses the block and
 // `sroa` sees a direct literal and scalarizes it: the write lowers straight to
@@ -19,5 +19,5 @@ __DATA__
 {
     "stderr": "Hello",
     "wir_expect:O2": ["core:rt/gc_array_to_memory"],
-    "wir_not_expect:O2": ["struct.new \"core:prelude/slice.wado//ArraySlice<u8>\""]
+    "wir_not_expect:O2": ["struct.new \"core:prelude/slice.wado//Slice<u8>\""]
 }

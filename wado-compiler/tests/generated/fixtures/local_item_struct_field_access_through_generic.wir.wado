@@ -33,7 +33,7 @@ struct local_item_struct_field_access_through_generic.wado//Point@37 {  // TypeI
 
 array Array<local_item_struct_field_access_through_generic.wado/Point@37> (mut ref "local_item_struct_field_access_through_generic.wado//Point@37");  // TypeId(6)
 
-struct core:prelude/slice.wado//ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37> {  // TypeId(7)
+struct core:prelude/slice.wado//SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37> {  // TypeId(7)
     mut repr: ref "Array<local_item_struct_field_access_through_generic.wado/Point@37>",
     mut index: i32,
     mut end: i32,
@@ -102,7 +102,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(37)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37>") -> ref null "local_item_struct_field_access_through_generic.wado//Point@37";  // TypeId(38)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37>") -> ref null "local_item_struct_field_access_through_generic.wado//Point@37";  // TypeId(38)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
@@ -189,13 +189,13 @@ fn "local_item_struct_field_access_through_generic.wado/__cm_export____test_0_fi
 }
 
 fn "local_item_struct_field_access_through_generic.wado/local_item_struct_field_access_through_generic.wado/first<local_item_struct_field_access_through_generic.wado/Point@37>"(values) {
-    let __iter_1: ref "core:prelude/slice.wado//ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37>";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37>";
     let v: ref "local_item_struct_field_access_through_generic.wado//Point@37";
     let __match_3: ref null "local_item_struct_field_access_through_generic.wado//Point@37";
-    __iter_1 = struct.new "core:prelude/slice.wado//ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37>" { repr: values.repr, index: 0, end: values.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37>" { repr: values.repr, index: 0, end: values.used };
     b6: block {
         l7: loop {
-            __match_3 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            __match_3 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Iterator::next"(__iter_1);
             if ref.is_null(__match_3) == 0 {
                 v = ref.as_non_null(__match_3);
                 return v;
@@ -257,7 +257,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b15: block {
         l16: loop {
             break_if b15 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l16;
         };
@@ -647,7 +647,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<local_item_struct_field_access_through_generic.wado/Point@37>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: ref "local_item_struct_field_access_through_generic.wado//Point@37";
     let v: ref "local_item_struct_field_access_through_generic.wado//Point@37";
     let _av_3: i32;
@@ -655,7 +655,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<local_item_struct_
     if _av_3 >= self.end {
         return ref.null none;
     }
-    v = builtin::array_get<ref "local_item_struct_field_access_through_generic.wado//Point@37">(self.repr, _av_3);
+    v = builtin::array_get_value<ref "local_item_struct_field_access_through_generic.wado//Point@37">(self.repr, _av_3);
     item = struct.new "local_item_struct_field_access_through_generic.wado//Point@37" { x: v.x, y: v.y };
     self.index = _av_3 + 1;
     return item;

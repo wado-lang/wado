@@ -1,0 +1,68 @@
+// `Array<T>` can implement a trait carrying an associated type, like any other
+// declared type.
+//
+// Regression: `Array<T>` is declared definitionless (`type Array<T>;`, the
+// `array` compiler item) and every instantiation resolves to a `BuiltinArray`,
+// which `decl_of_type` did not name back to that declaration and
+// `resolve_generic_assoc_type_mono` did not accept. `Self::Elem` on an
+// `Array<T>` receiver therefore never resolved, so no trait with an associated
+// type was implementable for it. `type i32;` is the same shape and worked,
+// because a primitive's declaration and its instantiation are one type.
+
+trait Sized2 {
+    type Elem;
+
+    fn count(&self) -> i32;
+    fn at(&self, index: i32) -> Self::Elem;
+
+    fn head(&self) -> Option<Self::Elem> {
+        if self.count() == 0 {
+            return null;
+        }
+        return Option::Some(self.at(0));
+    }
+}
+
+impl<T> Sized2 for Array<T> {
+    type Elem = T;
+
+    fn count(&self) -> i32 {
+        return self.len();
+    }
+
+    fn at(&self, index: i32) -> T {
+        return builtin::array_get_value(self, index);
+    }
+}
+
+test "an Array implements a trait with an associated type" {
+    let a: Array<i32> = Array::filled(3, 7);
+    assert a.count() == 3;
+    assert a.at(1) == 7;
+    assert a.head() matches { Some(v) && v == 7 };
+}
+
+test "the associated type follows the element type" {
+    let s: Array<String> = Array::filled(2, "wado");
+    assert s.head() matches { Some(v) && v == "wado" };
+}
+
+test "an empty Array takes the default's early return" {
+    let e: Array<i32> = Array::new(0);
+    assert e.head() matches { None };
+}
+
+test "reachable through a bound" {
+    let a: Array<i32> = Array::filled(2, 4);
+    assert total(&a) == 4;
+}
+
+fn total<S: Sized2<Elem = i32>>(s: &S) -> i32 {
+    if let Some(v) = s.head() {
+        return v;
+    }
+    return 0;
+}
+
+__DATA__
+{"test": {}}
