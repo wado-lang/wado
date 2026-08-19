@@ -1,0 +1,15 @@
+// Regression: two closure types differing only in their parameter types both
+// mangled to `Fn<1,i32>`, so a generic instantiated at each landed two
+// functions under one name and `monomorphize`'s duplicate check fired.
+use { println, Stdout } from "core:cli";
+
+fn count<T>(v: T) -> i32 {
+    return 1;
+}
+
+export fn run() with Stdout {
+    println(`${count(|x: i32| x + 1) + count(|s: bool| 2)}`);
+}
+
+__DATA__
+{"stdout": "2\n"}

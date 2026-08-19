@@ -1,0 +1,106 @@
+name: EMI
+
+# A campaign, not a gate — hence no PR trigger.
+on:
+  schedule:
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: 'Number of parallel shards'
+        default: '4'
+      filter:
+        description: 'WADO_EMI_FILTER — substring a fixture path must contain'
+        default: ''
+
+# Nothing downstream consumes a superseded run.
+concurrency:
+  group: emi
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  plan:
+    name: Plan shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - id: plan
+        env:
+          SHARDS: ${{ inputs.shards || '4' }}
+        run: |
+          set -euo pipefail
+          echo "shards=[$(seq -s, 0 "$((SHARDS - 1))")]" >> "$GITHUB_OUTPUT"
+          echo "count=$SHARDS" >> "$GITHUB_OUTPUT"
+
+  calibrate:
+    name: Calibrate (shard ${{ matrix.shard }})
+    needs: plan
+    runs-on: ubuntu-latest
+    # A cold build, then both stages over this shard's slice — measured at ~6
+    # minutes a stage for a quarter of the corpus. The margin is for growth.
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    strategy:
+      # A finding in one shard says nothing about the others; the report needs all.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          save-if: false
+      - name: Calibrate
+        env:
+          WADO_EMI_SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.count }}
+          WADO_EMI_FILTER: ${{ inputs.filter }}
+        run: cargo test --locked -p wado-compiler --test emi -- --ignored --nocapture calibrate_corpus
+      # Same job as the calibration it consumes: the corpus this shard wrote is
+      # already its slice, and the mutation stage takes that file whole.
+      - name: Mutate
+        if: always()
+        run: cargo test --locked -p wado-compiler --test emi -- --ignored --nocapture mutate_corpus
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: emi-shard-${{ matrix.shard }}
+          path: target/emi/
+
+  report:
+    name: Report
+    needs: calibrate
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 'lts/*'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: emi-shard-*
+          path: shards
+      # The corpus is not committed: rebuilt here, it always matches this run.
+      - name: Merge shards
+        run: |
+          set -euo pipefail
+          cat shards/*/corpus.txt | sort > corpus.txt
+          node .github/scripts/emi_summary.ts shards >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: emi-corpus
+          path: corpus.txt

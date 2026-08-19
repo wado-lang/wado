@@ -659,6 +659,10 @@ pub(crate) struct MutCapture {
     /// `FunctionContext::locals` walk-order invariant); this field is the
     /// cross-check.
     pub(crate) outer_index: u32,
+    /// Local index `resolve_closure` reserved for `ref_name`. The capture list
+    /// records it, so reify writes the `&mut` here rather than into a slot of
+    /// its own — two closures over one binding reserve two.
+    pub(crate) ref_index: u32,
 }
 
 /// One entry in the closure's capture list. Mirrors

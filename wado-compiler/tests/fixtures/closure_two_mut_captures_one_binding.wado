@@ -1,0 +1,20 @@
+// Regression: each closure reserves its own `__ref_a` slot and the capture list
+// records that index, so reify writing to a slot it picked by name sent two
+// closures over one binding to the same slot.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut a = 0;
+    let mut f = || {
+        a += 1;
+    };
+    let mut g = || {
+        a += 1;
+    };
+    f();
+    g();
+    println(`${a}`);
+}
+
+__DATA__
+{"stdout": "2\n"}

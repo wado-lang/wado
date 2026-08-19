@@ -792,6 +792,14 @@ impl ParsedTest {
     }
 }
 
+/// Does the file at `path` carry a module-level `#![TODO]`?
+///
+/// A file that cannot be read or parsed is not one, so an unreadable path
+/// stays a hard failure rather than being downgraded to pending.
+fn todo_module_at(path: &str) -> bool {
+    std::fs::read_to_string(path).is_ok_and(|source| wado_compiler::parse(&source).ast.has_todo())
+}
+
 /// **Stage 1 worker** — run the wado compiler over one source file and
 /// emit the wasm bytes. No wasmtime touched here, so `--no-run` can cut
 /// the pipeline immediately after this stage and pay zero Cranelift cost.
@@ -825,6 +833,12 @@ async fn compile_artifact(
     let compile_result = match panic_or_result {
         Ok(r) => r,
         Err(payload) => {
+            // An ICE is what a `#![TODO]` module is most likely to hit, and it
+            // belongs on the same pending axis as the compile error below.
+            if todo_module_at(&path) {
+                reporter.on_compile(&path, CompileEvent::TodoModule, compile_duration);
+                return CompileOutcome::TodoCompileError(TodoCompileError { path });
+            }
             let message = format!("panicked: {}", format_panic_payload(&payload));
             reporter.on_compile(
                 &path,
@@ -2313,6 +2327,22 @@ mod tests {
 
     fn parse(name: &str) -> TestExportName {
         parse_test_export(name).unwrap_or_else(|| panic!("expected `test-` prefix in {name:?}"))
+    }
+
+    #[test]
+    fn only_a_readable_todo_module_is_one() {
+        let dir = std::env::temp_dir().join("wado-todo-module-at");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let todo = dir.join("todo.wado");
+        let plain = dir.join("plain.wado");
+        std::fs::write(&todo, "#![TODO]\ntest \"t\" {\n    assert false;\n}\n").expect("write");
+        std::fs::write(&plain, "test \"t\" {\n    assert true;\n}\n").expect("write");
+
+        assert!(todo_module_at(todo.to_str().expect("utf-8 path")));
+        assert!(!todo_module_at(plain.to_str().expect("utf-8 path")));
+        assert!(!todo_module_at(
+            dir.join("absent.wado").to_str().expect("utf-8 path")
+        ));
     }
 
     #[test]
