@@ -1,0 +1,30 @@
+// Regression: a mangle spelled a function type as `Fn<arity, return>`, so these
+// two impls minted one name for two bodies and coherence rejected the second as
+// a duplicate. The spelling carries the parameter types now, so they are two
+// instantiations and each dispatches to its own body.
+use { println, Stdout } from "core:cli";
+
+struct Slot<T> {
+    a: T,
+}
+
+impl Slot<fn(i32) -> i32> {
+    fn tag(self) -> i32 {
+        return 1;
+    }
+}
+
+impl Slot<fn(String) -> i32> {
+    fn tag(self) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() with Stdout {
+    let i = Slot { a: |x: i32| x + 1 };
+    let s = Slot { a: |v: String| v.len() };
+    println(`${i.tag()} ${s.tag()}`);
+}
+
+__DATA__
+{"stdout": "1 2\n"}

@@ -3784,6 +3784,20 @@ impl TypeTable {
         }
     }
 
+    /// An effect as a `with` clause member.
+    ///
+    /// A concrete effect carries its declaring module: two modules may declare
+    /// one name, and dropping it would collapse two function types onto one.
+    fn mangle_effect_ref(&self, effect: &EffectRef) -> String {
+        match effect {
+            EffectRef::Concrete {
+                name,
+                module_source,
+            } => format!("{module_source}/{name}"),
+            EffectRef::Param { name } => name.clone(),
+        }
+    }
+
     fn get_type_name_info(&self, id: TypeId) -> TypeNameInfo {
         match self.get(id) {
             ResolvedType::Primitive(prim) => TypeNameInfo::Primitive(prim.as_str().to_string()),
@@ -3827,13 +3841,26 @@ impl TypeTable {
                 }
             }
             ResolvedType::Function {
+                is_mut,
                 params,
                 return_type,
-                ..
-            } => TypeNameInfo::Function {
-                param_count: params.len(),
-                return_type: self.mangle_type_name(*return_type),
-            },
+                effects,
+                stores,
+            } => {
+                let mut with_clause: Vec<String> =
+                    effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
+                with_clause.extend(stores.iter().map(|i| crate::name::mangle_stores_member(*i)));
+                TypeNameInfo::Function {
+                    is_mut: *is_mut,
+                    params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
+                    return_type: self.mangle_type_name(*return_type),
+                    return_is_function: matches!(
+                        self.get(*return_type),
+                        ResolvedType::Function { .. }
+                    ),
+                    with_clause,
+                }
+            }
             ResolvedType::BuiltinArray(elem) => {
                 TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
             }

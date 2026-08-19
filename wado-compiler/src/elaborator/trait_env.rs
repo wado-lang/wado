@@ -2484,12 +2484,38 @@ pub(super) fn written_type_arg(
             name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
-        // The closure system's head: arity and return type, matching the
-        // resolved form. Parameter types are not part of it on either side.
-        ast::Type::Function(ft) => name::FqTypeName::builtin(&name::mangle_fn_type(
-            ft.params.len(),
-            &written_type_arg(&ft.return_type, resolutions).to_mangled(),
-        )),
+        // Spelled by the whole shape, matching the resolved form: the two
+        // sides of a lookup have to render one type one way.
+        ast::Type::Function(ft) => {
+            let params: Vec<String> = ft
+                .params
+                .iter()
+                .map(|param| written_type_arg(param, resolutions).to_mangled())
+                .collect();
+            // An effect written here is a name like any other: resolved to its
+            // declaration, or kept as a spelling when it reaches none.
+            let mut with_clause: Vec<String> = ft
+                .effect_ids
+                .iter()
+                .map(|(id, _)| match resolutions.get(*id) {
+                    crate::resolve::Resolution::Def(def) => {
+                        name::FqTypeName::of_head(resolutions.defs(), def).to_mangled()
+                    }
+                    crate::resolve::Resolution::Binder(_)
+                    | crate::resolve::Resolution::Unresolved => String::new(),
+                })
+                .collect();
+            for (index, _) in ft.stores.iter().enumerate() {
+                with_clause.push(name::mangle_stores_member(index as u32));
+            }
+            name::FqTypeName::builtin(&name::mangle_fn_type(
+                ft.is_mut,
+                &params,
+                &written_type_arg(&ft.return_type, resolutions).to_mangled(),
+                matches!(ft.return_type, ast::Type::Function(_)),
+                &with_clause,
+            ))
+        }
         _ => {
             let head = match crate::resolve::head_site(ty).map(|site| resolutions.get(site)) {
                 Some(crate::resolve::Resolution::Def(def)) => {

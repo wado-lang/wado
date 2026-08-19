@@ -1434,8 +1434,16 @@ pub enum TypeNameInfo {
     Option(String),
     /// A function type with param count and return type name
     Function {
-        param_count: usize,
+        params: Vec<String>,
         return_type: String,
+        /// Whether the return is itself a function type. `fn()->fn()with(E)`
+        /// reads two ways — the effects on the inner type or on the outer — so
+        /// a function-typed return is parenthesised and the two spellings part.
+        return_is_function: bool,
+        /// `with (...)` members: the effects, then any `stores[i]`. Always
+        /// parenthesised, so a single member cannot run into what follows it.
+        with_clause: Vec<String>,
+        is_mut: bool,
     },
     /// `Array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
     BuiltinArray(String),
@@ -1461,9 +1469,18 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
         TypeNameInfo::Function {
-            param_count,
+            params,
             return_type,
-        } => mangle_fn_type(param_count, &return_type),
+            return_is_function,
+            with_clause,
+            is_mut,
+        } => mangle_fn_type(
+            is_mut,
+            &params,
+            &return_type,
+            return_is_function,
+            &with_clause,
+        ),
         TypeNameInfo::BuiltinArray(elem) => mangle_builtin_array_type(&elem),
         TypeNameInfo::Reactive(inner) => mangle_generic_name("Reactive", &[inner]),
         TypeNameInfo::Ref(inner) => inner,
@@ -1659,20 +1676,56 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
     format!("{mangled_struct}::{method_name}")
 }
 
-/// Build a function type name from parameter count and return type name.
+/// Spell a function type the way source does, minus the optional whitespace.
+///
+/// A function type names no declaration, so the rendering *is* the identity
+/// and owes injectivity over everything `ResolvedType::Function` interns on —
+/// which `Fn<N,Ret>`, spelling two of the five, did not.
 ///
 /// Examples:
-/// - `mangle_fn_type(2, "i32")` → `"Fn<2,i32>"`
-/// - `mangle_fn_type(0, "String")` → `"Fn<0,String>"`
-pub fn mangle_fn_type(param_count: usize, ret_type: &str) -> String {
-    format!("Fn<{param_count},{ret_type}>")
+/// - `mangle_fn_type(false, &["i32"], "i32", false, &[])` → `"fn(i32)->i32"`
+/// - `mangle_fn_type(true, &[], "()", false, &["wasi:cli/Stdout".into()])`
+///   → `"fn mut()->()with(wasi:cli/Stdout)"`
+pub fn mangle_fn_type(
+    is_mut: bool,
+    params: &[String],
+    ret_type: &str,
+    return_is_function: bool,
+    with_clause: &[String],
+) -> String {
+    let mut out = String::from(if is_mut { "fn mut(" } else { "fn(" });
+    out.push_str(&params.join(","));
+    out.push_str(")->");
+    if return_is_function {
+        out.push('(');
+        out.push_str(ret_type);
+        out.push(')');
+    } else {
+        out.push_str(ret_type);
+    }
+    if !with_clause.is_empty() {
+        out.push_str("with(");
+        out.push_str(&with_clause.join(","));
+        out.push(')');
+    }
+    out
+}
+
+/// A `stores[...]` member of a `with` clause, by parameter position.
+///
+/// The type carries positions where source writes parameter names; a mangle is
+/// never read back, so the position is what it spells.
+#[must_use]
+pub fn mangle_stores_member(param_index: u32) -> String {
+    format!("stores[{param_index}]")
 }
 
 /// Canonical struct-type-argument names for a closure / [`CLOSURE_FN_TRAIT`]
-/// receiver: `[arity, return-type]`. Feeding these to
-/// [`mangle_generic_name`] with `CLOSURE_FN_TRAIT` reproduces the
-/// [`mangle_fn_type`] head, so the two spellings cannot drift. Trait synthesis
-/// (`Fn<N,Ret>^Inspect`) and template expansion both build them here.
+/// receiver: `[arity, return-type]`.
+///
+/// A *representation* key, not a type name, and deliberately coarser than
+/// [`mangle_fn_type`]: every closure of one arity and return type shares a
+/// `CanonicalClosure_K` and one `Fn<N,Ret>^Inspect` vtable.
 ///
 /// Examples:
 /// - `fn_type_arg_names(2, "i32")` → `["2", "i32"]`
