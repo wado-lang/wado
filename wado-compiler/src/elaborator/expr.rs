@@ -4004,7 +4004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
         );
         let head = crate::tir::StructDef::Anon(shape);
-        let anon_name = self.tysys.type_table.borrow().anon_struct_name(shape);
+        let anon_name = self.tysys.type_table.borrow().anon_struct_mangle(shape);
 
         let module_source = self.current_module_source.clone();
 

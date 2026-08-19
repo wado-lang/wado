@@ -5,10 +5,8 @@ use crate::wir::{WirExportDesc, WirInstr, WirPackage, WirType, WirTypeId};
 
 use super::nullability::Nullability;
 
-/// Collect all `func_ids` that must NOT be SROA'd or otherwise transformed
-/// (exports, element tables, `RefFunc` references, and helpers referenced
-/// by type from `WirInstr::ArrayClone::element_copy_type`, resolved through
-/// each helper's `value_copy_type` metadata).
+/// `func_id`s that must not be SROA'd: exports, element tables, `RefFunc`
+/// references, and every `$value_copy$` helper an `ArrayClone` calls.
 pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
     let mut pinned = IndexSet::default();
 
@@ -38,48 +36,30 @@ pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
         collect_ref_funcs_instr(&global.init, &mut pinned);
     }
 
-    // `WirInstr::ArrayClone` references its helper by the element's type
-    // (`element_copy_type`) — codegen resolves it via `value_copy_type`
-    // metadata at emit time and emits a plain `Call(func_idx)`. SROA-style
-    // return rewrites would change the helper's signature without touching
-    // that emit path, leaving the call expecting a single (ref T) while the
-    // rewritten helper now returns multi-value. Pin every helper that any
-    // ArrayClone refers to so the rewrites skip them.
-    let helper_mangle_to_idx = value_copy_helper_mangles(module);
+    // Codegen emits an `ArrayClone`'s helper call by hand, not through the
+    // `Call` path, so an SROA return rewrite would change the signature under
+    // it. Pin every helper an `ArrayClone` calls.
     for func in &module.functions {
         if let Some(body) = &func.body {
-            collect_array_clone_helpers(body, &helper_mangle_to_idx, &mut pinned);
+            collect_array_clone_helpers(body, &mut pinned);
         }
     }
 
     pinned
 }
 
-fn collect_array_clone_helpers(
-    instrs: &[WirInstr],
-    helper_mangle_to_idx: &IndexMap<&str, u32>,
-    pinned: &mut IndexSet<u32>,
-) {
+fn collect_array_clone_helpers(instrs: &[WirInstr], pinned: &mut IndexSet<u32>) {
     for instr in instrs {
-        collect_array_clone_helpers_instr(instr, helper_mangle_to_idx, pinned);
+        collect_array_clone_helpers_instr(instr, pinned);
     }
 }
 
-fn collect_array_clone_helpers_instr(
-    instr: &WirInstr,
-    helper_mangle_to_idx: &IndexMap<&str, u32>,
-    pinned: &mut IndexSet<u32>,
-) {
-    if let WirInstr::ArrayClone {
-        element_copy_mangle: copy_mangle,
-        ..
-    } = instr
-        && let Some(idx) = helper_mangle_to_idx.get(copy_mangle.as_str())
-    {
-        pinned.insert(*idx);
+fn collect_array_clone_helpers_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
+    if let WirInstr::ArrayClone { element_copy, .. } = instr {
+        pinned.insert(element_copy.index());
     }
     instr.for_each_child(&mut |child| {
-        collect_array_clone_helpers_instr(child, helper_mangle_to_idx, pinned);
+        collect_array_clone_helpers_instr(child, pinned);
     });
 }
 
@@ -274,24 +254,6 @@ pub(super) fn count_local_gets(instr: &WirInstr, counts: &mut IndexMap<String, u
     instr.for_each_child(&mut |child| {
         count_local_gets(child, counts);
     });
-}
-
-/// Map each synthesized `$value_copy$` helper's copied-type mangle
-/// (`value_copy_mangle` metadata) to its absolute `WirFuncId` index
-/// (array index + [`WirPackage::defined_func_base`]). Built once — a
-/// linear scan per `ArrayClone` site would be O(N²).
-pub(super) fn value_copy_helper_mangles(module: &WirPackage) -> IndexMap<&str, u32> {
-    module
-        .functions
-        .iter()
-        .enumerate()
-        .filter_map(|(i, func)| {
-            Some((
-                func.value_copy_mangle.as_deref()?,
-                u32::try_from(i).expect("func index fits u32") + module.defined_func_base,
-            ))
-        })
-        .collect()
 }
 
 /// Visit every `WirTypeId` slot nested in a `WirType`.

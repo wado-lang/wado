@@ -172,20 +172,22 @@ pub fn compute_move_eligible(
     // Structural freshness: the locals *holding* an owned value, however often
     // read. A least fixpoint — seed every sourced local, drop those whose source
     // is not owned given the rest. By-value params are seeded too, the caller
-    // having deep-copied or move-elided the argument; reference params borrow
-    // the caller's storage and never are.
+    // having deep-copied or move-elided the argument. A local of reference type
+    // never is: it borrows storage someone else owns, so its death frees
+    // nothing and a projection out of it moves nothing.
     let mut fresh: IndexSet<u32> = a
         .let_sources
         .keys()
         .copied()
         .chain(a.declared_owned.iter().copied())
         .chain(a.match_sources.iter().map(|(l, _)| *l))
-        .chain(
-            func.params
-                .iter()
-                .filter(|p| !is_reference_type(p.type_id, type_table))
-                .map(|p| p.local_index),
-        )
+        .chain(func.params.iter().map(|p| p.local_index))
+        .filter(|idx| {
+            !func
+                .locals
+                .get(*idx as usize)
+                .is_some_and(|l| is_reference_type(l.type_id, type_table))
+        })
         .collect();
     let mut changed = true;
     while changed {
@@ -258,10 +260,128 @@ enum Selector {
 
 /// A storage location: a root local plus a root-first chain of projections.
 /// `self.rows[0]` is `{ root: self, selectors: [Field(rows), Index] }`.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct AccessPath {
     root: u32,
     selectors: Vec<Selector>,
+}
+
+/// Two positions in one block run in written order; anything nested runs
+/// conditionally, so only same-block positions are ordered.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Pos {
+    block: u32,
+    index: u32,
+}
+
+impl Pos {
+    fn runs_after(self, other: Self) -> bool {
+        self.block == other.block && self.index > other.index
+    }
+}
+
+struct Mutation {
+    path: AccessPath,
+    /// `p = x` repoints `p`; the value an earlier binding took out of `p` keeps
+    /// the storage it already had. Only a write *inside* that value disturbs it.
+    rebinds_place: bool,
+    pos: Pos,
+}
+
+fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
+    if m.rebinds_place {
+        return !writes_inside(&m.path, read);
+    }
+    disjoint(&m.path, read)
+}
+
+/// Whether `write` names a place strictly inside the value `read` names: every
+/// selector `read` has, `write` may agree on, and `write` goes deeper.
+fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
+    if write.selectors.len() <= read.selectors.len() {
+        return false;
+    }
+    for (w, r) in write.selectors.iter().zip(read.selectors.iter()) {
+        match (w, r) {
+            (Selector::Field(a), Selector::Field(b)) if a != b => return false,
+            (Selector::Variant(a), Selector::Variant(b)) if a != b => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
+/// What each reference local borrows, so a read through it is asked about the
+/// place that owns it. A reference parameter has no entry — its referent is the
+/// caller's, and this body cannot name it.
+#[derive(Default)]
+pub struct RefTargets {
+    map: IndexMap<u32, AccessPath>,
+}
+
+impl RefTargets {
+    /// Re-root a path read through a reference at the place it borrows.
+    #[allow(clippy::wrong_self_convention)]
+    fn resolve(&self, path: AccessPath) -> AccessPath {
+        let Some(target) = self.map.get(&path.root) else {
+            return path;
+        };
+        let mut resolved = target.clone();
+        resolved.selectors.extend(path.selectors);
+        resolved
+    }
+
+    #[must_use]
+    pub fn referent_root(&self, expr: &TirExpr) -> Option<u32> {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self.map.get(index).map(|p| p.root),
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => Some(self.resolve(place_path(place)?).root),
+            _ => None,
+        }
+    }
+
+    /// What `value` borrows: `&place`, or a rebind of a recorded reference.
+    fn borrowed_path(&self, value: &TirExpr) -> Option<AccessPath> {
+        match &value.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => Some(self.resolve(place_path(place)?)),
+            TirExprKind::Local { index, .. } => self.map.get(index).cloned(),
+            _ => None,
+        }
+    }
+}
+
+#[must_use]
+pub fn compute_ref_targets(func: &TirFunction) -> RefTargets {
+    let mut walker = RefTargetWalker {
+        targets: RefTargets::default(),
+    };
+    if let Some(body) = &func.body {
+        walker.visit_block(body);
+    }
+    walker.targets
+}
+
+struct RefTargetWalker {
+    targets: RefTargets,
+}
+
+impl TirRefVisitor for RefTargetWalker {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let {
+            local_index, value, ..
+        } = &stmt.kind
+            && let Some(path) = self.targets.borrowed_path(value)
+        {
+            self.targets.map.insert(*local_index, path);
+        }
+        self.walk_stmt(stmt);
+    }
 }
 
 /// The access path of a pure place expression, or `None` for a non-place: a
@@ -338,6 +458,7 @@ pub fn compute_share_eligible(
     mut_receiver_methods: &FuncKeySet,
     ref_receiver_methods: &FuncKeySet,
     returns_receiver_alias: &FuncKeySet,
+    ref_targets: &RefTargets,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -352,18 +473,28 @@ pub fn compute_share_eligible(
         sources: IndexMap::default(),
         mutated: Vec::new(),
         consumed: IndexSet::default(),
+        ref_targets,
+        pos: Pos { block: 0, index: 0 },
+        next_block: 1,
     };
     collector.walk_block(body);
 
     collector
         .sources
         .iter()
-        .filter_map(|(&local, path)| {
+        .filter_map(|(&local, (path, read_pos))| {
             if path.root == local {
                 return None;
             }
+            // `let r = p; p = x;` hands `r` the only reference to what `p` held,
+            // so `r` may leave the function even though it was read out of a
+            // place the caller still owns.
+            let released = collector
+                .mutated
+                .iter()
+                .any(|m| m.rebinds_place && m.path == *path && m.pos.runs_after(*read_pos));
             if move_eligible.contains(&local)
-                || collector.consumed.contains(&local)
+                || (!released && collector.consumed.contains(&local))
                 || collector.is_mutated_root(local)
                 || collector.consumed.contains(&path.root)
             {
@@ -372,7 +503,7 @@ pub fn compute_share_eligible(
             let safe = collector
                 .mutated
                 .iter()
-                .all(|m| m.root != path.root || disjoint(m, path));
+                .all(|m| m.path.root != path.root || write_cannot_reach(m, path));
             safe.then_some(local)
         })
         .collect()
@@ -382,41 +513,68 @@ struct ShareCollector<'a> {
     mut_receiver_methods: &'a FuncKeySet,
     ref_receiver_methods: &'a FuncKeySet,
     returns_receiver_alias: &'a FuncKeySet,
-    /// Binding local → the access path of its source projection.
-    sources: IndexMap<u32, AccessPath>,
-    /// Every access path a mutation writes through.
-    mutated: Vec<AccessPath>,
+    sources: IndexMap<u32, (AccessPath, Pos)>,
+    mutated: Vec<Mutation>,
     /// Locals read in a value position (consumed), so not safe to share.
     consumed: IndexSet<u32>,
+    ref_targets: &'a RefTargets,
+    pos: Pos,
+    next_block: u32,
 }
 
 impl ShareCollector<'_> {
     fn is_mutated_root(&self, local: u32) -> bool {
-        self.mutated.iter().any(|m| m.root == local)
+        self.mutated.iter().any(|m| m.path.root == local)
     }
 
     /// Record a write through `place`. When the exact path is unknown, mark
     /// every local `place` mentions as fully mutated (a bare-root path) — the
     /// conservative default.
+    fn resolve(&self, path: AccessPath) -> AccessPath {
+        self.ref_targets.resolve(path)
+    }
+
     fn record_mutation(&mut self, place: &TirExpr) {
+        self.record_write(place, false);
+    }
+
+    fn record_rebind(&mut self, place: &TirExpr) {
+        self.record_write(place, true);
+    }
+
+    fn record_write(&mut self, place: &TirExpr, rebinds_place: bool) {
+        let pos = self.pos;
         if let Some(p) = place_path(place) {
-            self.mutated.push(p);
+            let path = self.resolve(p);
+            self.mutated.push(Mutation {
+                path,
+                rebinds_place,
+                pos,
+            });
         } else {
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
             for r in roots {
-                self.mutated.push(AccessPath {
-                    root: r,
-                    selectors: Vec::new(),
+                self.mutated.push(Mutation {
+                    path: AccessPath {
+                        root: r,
+                        selectors: Vec::new(),
+                    },
+                    rebinds_place: false,
+                    pos,
                 });
             }
         }
     }
 
     fn mark_local_mutated(&mut self, index: u32) {
-        self.mutated.push(AccessPath {
-            root: index,
-            selectors: Vec::new(),
+        self.mutated.push(Mutation {
+            path: AccessPath {
+                root: index,
+                selectors: Vec::new(),
+            },
+            rebinds_place: false,
+            pos: self.pos,
         });
     }
 
@@ -424,7 +582,7 @@ impl ShareCollector<'_> {
     /// receiver-aliasing accessor call whose receiver / first arg is a place.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
         if let Some(p) = place_path(value) {
-            return Some(p);
+            return Some(self.resolve(p));
         }
         match &value.kind {
             TirExprKind::Call { func, args, .. }
@@ -432,16 +590,24 @@ impl ShareCollector<'_> {
                     .returns_receiver_alias
                     .contains(&func.module_source, &func.name) =>
             {
-                place_path(&args.first()?.expr)
+                Some(self.resolve(place_path(&args.first()?.expr)?))
             }
             _ => None,
         }
     }
 
     fn walk_block(&mut self, block: &TirBlock) {
-        for stmt in &block.stmts {
+        let outer = self.pos;
+        let block_id = self.next_block;
+        self.next_block += 1;
+        for (index, stmt) in block.stmts.iter().enumerate() {
+            self.pos = Pos {
+                block: block_id,
+                index: u32::try_from(index).unwrap_or(u32::MAX),
+            };
             self.walk_stmt(stmt);
         }
+        self.pos = outer;
     }
 
     fn walk_stmt(&mut self, stmt: &TirStmt) {
@@ -450,7 +616,7 @@ impl ShareCollector<'_> {
                 local_index, value, ..
             } => {
                 if let Some(path) = self.source_path(value) {
-                    self.sources.insert(*local_index, path);
+                    self.sources.insert(*local_index, (path, self.pos));
                 }
                 self.walk_value(value);
             }
@@ -520,7 +686,7 @@ impl ShareCollector<'_> {
             TirExprKind::Assign { target, value } => {
                 match &target.kind {
                     TirExprKind::Local { index, .. } => self.mark_local_mutated(*index),
-                    _ => self.record_mutation(target),
+                    _ => self.record_rebind(target),
                 }
                 self.walk_value(value);
             }

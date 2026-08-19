@@ -2955,9 +2955,17 @@ fn "inspect_3.wado/inspect_3.wado/PrettyLine^core:prelude/traits.wado/InspectAlt
 fn "core:prelude/types.wado/core:prelude/types.wado/Option<inspect_3.wado/PrettyPoint>^core:prelude/traits.wado/InspectAlt::inspect_alt$spec0"(self, f) {
     let __inspect_alt_Some_2: ref "inspect_3.wado//PrettyPoint";
     let __match_3: ref null "inspect_3.wado//PrettyPoint";
-    let s_12: ref "core:prelude/string.wado//String";
-    let s_21: ref "core:prelude/string.wado//String";
-    __match_3 = self.value;
+    let v_4: ref null "inspect_3.wado//PrettyPoint";
+    let __vc_payload_0: ref "inspect_3.wado//PrettyPoint";
+    let s_15: ref "core:prelude/string.wado//String";
+    let s_24: ref "core:prelude/string.wado//String";
+    v_4 = self.value;
+    __match_3 = (if ref.is_null(v_4) == 0 -> ref null "inspect_3.wado//PrettyPoint" {
+        __vc_payload_0 = ref.as_non_null(v_4);
+        struct.new "inspect_3.wado//PrettyPoint" { x: __vc_payload_0.x, y: __vc_payload_0.y };
+    } else {
+        v_4;
+    });
     if ref.is_null(__match_3) == 0 {
         __inspect_alt_Some_2 = ref.as_non_null(__match_3);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, global:core:prelude/types.wado::__const_obj_323);
@@ -2965,16 +2973,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Option<inspect_3.wado/Pretty
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 10);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent"(f);
         "inspect_3.wado/inspect_3.wado/PrettyPoint^core:prelude/traits.wado/InspectAlt::inspect_alt$spec1"(__inspect_alt_Some_2, f);
-        s_12 = global:inspect_3.wado::__const_obj_235;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_12);
+        s_15 = global:inspect_3.wado::__const_obj_235;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_15);
         f.indent = f.indent - 1;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 10);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent"(f);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 41);
     } else {
         block {
-            s_21 = global:inspect_3.wado::__const_obj_151;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_21);
+            s_24 = global:inspect_3.wado::__const_obj_151;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_24);
         };
     }
 }
@@ -3150,12 +3158,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b289: block {
-            l290: loop {
-                break_if b289 t <= 0_i64;
+        b290: block {
+            l291: loop {
+                break_if b290 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l290;
+                continue l291;
             };
         };
         break __inline_count_digits_i64_0: n;

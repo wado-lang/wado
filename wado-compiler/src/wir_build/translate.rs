@@ -432,7 +432,6 @@ fn register_call_wrapper(
             fq: wrapper_fq.to_string(),
         },
         type_id: fn_type_id,
-        value_copy_mangle: None,
         param_names,
         body: Some(body),
         meta: crate::wir::WirMeta::default(),
@@ -609,7 +608,6 @@ fn register_inspect_wrapper(
     let func = WirFunction {
         name: WirName { fq: wrapper_fq },
         type_id: callback_fn_type_id,
-        value_copy_mangle: None,
         param_names: vec![env_local, formatter_local],
         body: Some(body),
         meta: crate::wir::WirMeta::default(),
@@ -925,7 +923,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     match_counter: 0,
                     local_counter: 0,
                     resolved_local_names,
-                    immutable_locals: IndexSet::default(),
                     multi_value_split_locals: IndexMap::default(),
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
@@ -968,10 +965,6 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// `local_names` map on every visit, which is O(N) per call and fired
     /// for every `LocalGet`/`LocalSet`/`LocalTee`/match-binding in the body.
     pub(super) resolved_local_names: IndexMap<u32, String>,
-    /// Set of local indices declared as immutable (`let`, not `let mut`).
-    /// Used to skip unnecessary value copies when an immutable binding
-    /// is initialized from another immutable local.
-    pub(super) immutable_locals: IndexSet<u32>,
     /// TIR locals holding a multi-value-call result, mapped to the WIR split
     /// locals they were unpacked into and keyed by field name. A later
     /// `FieldAccess(LocalGet(__tmp), name)` reads the matching split local
@@ -1672,18 +1665,8 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         match &arena.stmts[stmt_id].kind {
             StmtKind::Let {
-                local_index,
-                value,
-                is_mut,
-                ..
+                local_index, value, ..
             } => {
-                // `immutable_locals` used to feed the WIR-level `is_source_immutable`
-                // shortcut; keep the tracking for the residual reader
-                // (`wir_build::value_copy::build_value_copy` no longer needs it but
-                // removing the field is follow-up cleanup).
-                if !is_mut {
-                    self.immutable_locals.insert(*local_index);
-                }
                 // Phase 5: when the initializer is a direct call to a
                 // multi-value-return function, bind the result's N tuple
                 // elements into N split locals via `MultiValueLocalBind`
