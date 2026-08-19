@@ -2701,14 +2701,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_base_name: &str,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let concrete_type_args: Vec<TypeId> =
-            if let ResolvedType::GenericInstance { type_args, .. } =
-                self.tysys.type_table.borrow().get(base_type_id).clone()
-            {
-                type_args
-            } else {
-                Vec::new()
-            };
+        let concrete_type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(base_type_id)
+            .unwrap_or_default();
 
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
@@ -3062,16 +3060,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ModuleSource,
         Option<TypeId>,
     )> {
-        // Get concrete type arguments from the base type (for generic instances like Triple<i32>).
-        // The raw GC array `Array<T>` carries its element type as the single
-        // type arg, mirroring a generic instance, so `impl IndexValue for Array<T>`
-        // binds `T` to the element type.
-        let concrete_type_args: Vec<TypeId> =
-            match self.tysys.type_table.borrow().get(base_type_id).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => type_args,
-                ResolvedType::BuiltinArray(elem) => vec![elem],
-                _ => Vec::new(),
-            };
+        let concrete_type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(base_type_id)
+            .unwrap_or_default();
 
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),

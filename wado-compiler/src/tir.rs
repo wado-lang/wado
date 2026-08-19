@@ -2476,6 +2476,25 @@ impl TypeTable {
         }
     }
 
+    /// The type arguments a nominal instantiation binds to its declaration's
+    /// parameters — the companion to [`Self::decl_of_type`], which names the
+    /// declaration. Every query that reasons "declaration plus arguments" asks
+    /// here, so a shape that is not a `GenericInstance` is handled once.
+    ///
+    /// `Array<T>` is the shape that is not: it is declared definitionless, so
+    /// it interns as a `BuiltinArray` carrying its element type alone.
+    pub fn nominal_type_args(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
+        match self.get(type_id) {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
+            ResolvedType::BuiltinArray(elem) => Some(vec![*elem]),
+            // A monomorphized `Struct` is deliberately absent: it keeps no type
+            // args, and its associated types are registered against the
+            // instance itself by `register_monomorphized_assoc_types`.
+            _ => None,
+        }
+    }
+
     /// Resolve an associated type for a `GenericInstance` type using generic definitions.
     /// For `ListIter<i32>::Item`: looks up `("ListIter", "Item")` → `TypeParam(0)`,
     /// then substitutes using the instance's `type_args` to get `i32`.
@@ -2484,10 +2503,7 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let type_args = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            _ => return None,
-        };
+        let type_args = self.nominal_type_args(concrete_id)?;
         let (_, def_type_id) =
             self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
         match self.get(def_type_id).clone() {
@@ -2538,14 +2554,7 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        // `Array<T>` is definitionless, so it resolves to a `BuiltinArray`
-        // rather than a `GenericInstance`; its element type is its sole
-        // type argument.
-        let type_args = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            ResolvedType::BuiltinArray(elem) => vec![elem],
-            _ => return None,
-        };
+        let type_args = self.nominal_type_args(concrete_id)?;
         let (_, def_type_id) =
             self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
         let subst: IndexMap<u32, TypeId> = type_args
@@ -2634,13 +2643,7 @@ impl TypeTable {
         if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
             return Some(resolved);
         }
-        // `Array<T>` is definitionless, so it is a `BuiltinArray` rather than a
-        // `GenericInstance`; its element type is its sole type argument.
-        let type_args = match self.get(concrete_id).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            ResolvedType::BuiltinArray(elem) => vec![elem],
-            _ => return None,
-        };
+        let type_args = self.nominal_type_args(concrete_id)?;
         let def_key = (
             self.decl_of_type(concrete_id)?,
             *trait_key,

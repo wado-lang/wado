@@ -3541,12 +3541,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         _ => None,
                     });
                 if let (Some(base_name), Some(base_type_id)) = (base_name.clone(), base_type_id) {
-                    let base_args = match self.tysys.type_table.borrow().get(base_type_id) {
-                        ResolvedType::GenericInstance { type_args, .. }
-                        | ResolvedType::GenericResource { type_args, .. } => type_args.clone(),
-                        ResolvedType::BuiltinArray(elem) => vec![*elem],
-                        _ => vec![],
-                    };
+                    let base_args = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .nominal_type_args(base_type_id)
+                        .unwrap_or_default();
                     newtype_dispatch = Some((newtype_id, base_type_id, base_args));
                     let base_fq = self.tysys.fq_receiver_head(base_type_id);
                     let mangled = MethodName::format_local(&base_fq, None, method_name);
