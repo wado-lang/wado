@@ -64,8 +64,7 @@ function render(title: string, stage: Stage): string[] {
   const out = [`## ${title}`, ''];
   if (stage.missing.length > 0) {
     out.push(
-      `> ${stage.missing.length} of ${dirs.length} shards reported nothing for this stage.`,
-      '> The totals below cover the rest.',
+      `> ${stage.missing.length} of ${dirs.length} shards reported nothing; these totals cover the rest.`,
       '',
     );
   }

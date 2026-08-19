@@ -2492,13 +2492,9 @@ pub(super) fn written_type_arg(
                 .iter()
                 .map(|param| written_type_arg(param, resolutions).to_mangled())
                 .collect();
-            // The written spelling, because an effect has no reference site: the
-            // resolve pass walks none, so asking it for one panics on the
-            // totality invariant, and minting an identity from the name is what
-            // that invariant exists to prevent. The resolved side qualifies a
-            // concrete effect by its module, so the two agree on a binder and
-            // not on a concrete effect — an impl target naming one will not
-            // match until effects carry a declaration identity.
+            // The written spelling: an effect has no reference site, so there
+            // is no identity to ask for. The resolved side qualifies a concrete
+            // effect by module, so the two agree on a binder and not on one.
             let mut with_clause: Vec<String> = ft.effects.clone();
             for entry in &ft.stores {
                 with_clause.push(match entry {

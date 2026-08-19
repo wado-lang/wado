@@ -365,8 +365,7 @@ pub fn compute_ref_targets(func: &TirFunction) -> RefTargets {
     if let Some(body) = &func.body {
         walker.visit_block(body);
     }
-    // A reference that is assigned to after its `Let` no longer has one target
-    // this walk can name: which place it borrows depends on the path taken, and
+    // Which place a reassigned reference borrows depends on the path taken, and
     // there is no control flow here to decide that. Dropping the entry costs
     // the elision and keeps the copy.
     for index in &walker.reassigned {
@@ -570,9 +569,8 @@ impl ShareCollector<'_> {
                 pos,
             });
         } else {
-            // Re-rooted like the `place_path` branch above: a write through a
-            // deref roots at the reference, and a read of the same place roots
-            // at the referent, so leaving these bare makes the two never meet.
+            // Resolved like the branch above: a write rooted at the reference
+            // and a read rooted at the referent would never meet.
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
             for r in roots {

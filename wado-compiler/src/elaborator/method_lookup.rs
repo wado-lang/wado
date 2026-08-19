@@ -207,12 +207,9 @@ impl TypeSystem {
                         .zip(recv_elems)
                         .all(|(e, r)| self.arg_matches(e, r))
             }
-            // A function type is spelled by its whole shape — `fn mut`, the
-            // parameters, the return, the `with` clause — and the impl is
-            // registered under the written spelling while the call site looks
-            // one up under the receiver's. It applies exactly where the two
-            // agree; comparing anything looser matches an impl the call site
-            // then cannot name, and WIR build ICEs on the unresolved call.
+            // The impl is registered under the written spelling and the call
+            // site looks one up under the receiver's, so it applies exactly
+            // where the two agree. Looser, and the call has no impl to name.
             Type::Function(_) => {
                 let written_name =
                     super::trait_env::written_type_arg(written, &self.resolutions).to_mangled();
