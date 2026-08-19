@@ -1,9 +1,8 @@
 #![TODO]
-// An impl target whose function type carries an effect is registered under a
-// name no receiver produces — `fn()->()with(E)` against the receiver's
-// `fn()->()` — and WIR build then ICEs on the unresolved call. The construct is
-// unimplemented rather than mismangled: an effect has no reference site, so
-// neither side can tell a binder from a concrete effect.
+// An impl target whose function type carries an effect never matches: an effect
+// has no reference site, so neither side can tell the binder `E` from a
+// concrete effect, and `fn()->()with(E)` is not what the receiver spells.
+// Effect-polymorphic impl targets are unimplemented, not mismangled.
 
 struct Slot<T> {
     v: T,

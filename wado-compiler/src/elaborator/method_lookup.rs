@@ -207,24 +207,18 @@ impl TypeSystem {
                         .zip(recv_elems)
                         .all(|(e, r)| self.arg_matches(e, r))
             }
-            // Parameters are part of the shape, though the mangled `Fn` head
-            // spells only arity and return type.
-            Type::Function(ft) => match resolved {
-                ResolvedType::Function {
-                    params,
-                    return_type,
-                    ..
-                } => {
-                    params.len() == ft.params.len()
-                        && self.arg_matches(&ft.return_type, return_type)
-                        && ft
-                            .params
-                            .iter()
-                            .zip(params)
-                            .all(|(p, r)| self.arg_matches(p, r))
-                }
-                _ => false,
-            },
+            // A function type is spelled by its whole shape — `fn mut`, the
+            // parameters, the return, the `with` clause — and the impl is
+            // registered under the written spelling while the call site looks
+            // one up under the receiver's. It applies exactly where the two
+            // agree; comparing anything looser matches an impl the call site
+            // then cannot name, and WIR build ICEs on the unresolved call.
+            Type::Function(_) => {
+                let written_name =
+                    super::trait_env::written_type_arg(written, &self.resolutions).to_mangled();
+                let recv_name = self.type_table.borrow().mangle_type_arg_for_generic(recv);
+                written_name == recv_name
+            }
             // A pack, an `_`, a parse error: nothing written to match against.
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => true,
             // The arms below read the receiver through readers that see past a
