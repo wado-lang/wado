@@ -1292,6 +1292,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.type_contains_closure_inner(&type_table, type_id, &mut visited)
     }
 
+    /// Whether `type_id` is (or wraps, through newtypes and references) an
+    /// `ArraySlice<T>` — a borrowed view, which has no Component Model
+    /// representation.
+    pub(super) fn type_is_slice_view(&self, type_id: TypeId) -> bool {
+        use crate::tir::ResolvedType;
+        let tt = self.tysys.type_table.borrow();
+        let base = tt.get_ultimate_base_type(type_id);
+        // A `&Slice<T>` is the same view behind a reference.
+        let base = if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(base) {
+            tt.get_ultimate_base_type(*inner)
+        } else {
+            base
+        };
+        let ResolvedType::GenericInstance { def, .. } = tt.get(base) else {
+            return false;
+        };
+        tt.compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice) == Some(*def)
+    }
+
     fn type_contains_closure_inner(
         &self,
         type_table: &crate::tir::TypeTable,
@@ -2217,6 +2236,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: param.span,
                 });
             }
+            // A slice has no CM representation. Rejecting it here keeps the
+            // static "an `export` appears in WIT" guarantee: reaching
+            // `wit_emit` instead drops the component-type section wholesale.
+            if crosses_cm_boundary && scope.type_is_slice_view(type_id) {
+                let _ = scope.emit(TypeError::SliceAtCmBoundary {
+                    function: func.name.clone(),
+                    position: format!("parameter '{}'", param.name),
+                    span: param.span,
+                });
+            }
             // Walked for the recorded expression types only; reify
             // re-emits the default from the AST.
             if let Some(default_ast) = &param.default {
@@ -2266,6 +2295,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Closures cannot cross the CM boundary in return position either.
         if crosses_cm_boundary && scope.type_contains_closure(return_type) {
             let _ = scope.emit(TypeError::ClosureAtCmBoundary {
+                function: func.name.clone(),
+                position: "return type".to_string(),
+                span: func.span,
+            });
+        }
+        if crosses_cm_boundary && scope.type_is_slice_view(declared_return_type) {
+            let _ = scope.emit(TypeError::SliceAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
                 span: func.span,

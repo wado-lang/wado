@@ -670,6 +670,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A slice view has no Component Model representation. Triggered when an
+    /// `export` (or imported) function has a slice-typed parameter or return
+    /// type.
+    SliceAtCmBoundary {
+        function: String,
+        position: String,
+        span: Span,
+    },
+
     /// `export fn` cannot declare default parameter values. The Component
     /// Model ABI requires every parameter at the CM boundary, so defaults
     /// would diverge from the WIT signature.
@@ -1434,6 +1443,17 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "closure type in {position} of `{function}` is not allowed: closures cannot cross the Component Model boundary"
+                ),
+                *span,
+            ),
+            TypeError::SliceAtCmBoundary {
+                function,
+                position,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "slice type in {position} of `{function}` is not allowed: a slice is a borrowed view with no Component Model representation; use `List<T>` or `Array<T>`"
                 ),
                 *span,
             ),
