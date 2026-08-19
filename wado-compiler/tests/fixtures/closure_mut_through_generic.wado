@@ -1,0 +1,22 @@
+#![TODO]
+// A `fn mut` closure passed through a generic type parameter traps with `null
+// reference` before it is ever called, where the non-`mut` sibling passes.
+// Reproduces with one instantiation, so no name collides. It needs the CLI
+// world — the test world returns normally — and only `-O0` survives to run it;
+// some pass above O0 rewrites whatever is left null.
+use { println, Stdout } from "core:cli";
+
+fn count<T>(v: T) -> i32 {
+    return 1;
+}
+
+export fn run() with Stdout {
+    let mut n = 0;
+    println(`${count(|| { n += 1; })}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n",
+    "only_opt": ["O0"]
+}

@@ -1,0 +1,14 @@
+#![TODO]
+// A closure passed through a generic type parameter and then called traps with
+// `cast failure`: the value comes back as the canonical closure while the call
+// site casts it to the functor struct. Independent of the `Fn<...>` mangling —
+// it reproduces with one instantiation, so no name collides.
+
+fn id<T>(v: T) -> T {
+    return v;
+}
+
+test "a closure survives a round trip through a generic" {
+    let f = id(|x: i32| x + 1);
+    assert f(1) == 2;
+}
