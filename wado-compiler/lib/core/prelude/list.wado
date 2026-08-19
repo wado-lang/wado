@@ -579,26 +579,26 @@ impl Default for List<T> {
 
 impl<T: Inspect> Inspect for List<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        write_seq_inspect(&self.repr, self.used, f, true, f.resolved_seq_limit());
+        write_seq_inspect(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: Inspect> Display for List<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
-        write_seq_inspect(&self.repr, self.used, f, false, f.precision);
+        write_seq_inspect(&self.repr, 0, self.used, f, false, f.precision);
     }
 }
 
 impl<T: InspectAlt> InspectAlt for List<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(&self.repr, self.used, f, true, f.resolved_seq_limit());
+        write_seq_inspect_alt(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: InspectAlt> DisplayAlt for List<T> {
     pub fn fmt_alt(&self, f: &mut Formatter) {
         // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(&self.repr, self.used, f, false, f.precision);
+        write_seq_inspect_alt(&self.repr, 0, self.used, f, false, f.precision);
     }
 }

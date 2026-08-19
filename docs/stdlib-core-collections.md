@@ -170,9 +170,12 @@ Returns true if the value was present, false otherwise.
 
 Removes all elements from the set.
 
-#### `pub fn iter(&self) -> TreeSetIter<T>`
+#### `pub fn iter_value(&self) -> TreeSetIter<T>`
 
 Returns an iterator over the elements in insertion order.
+Returns an iterator yielding each element by value, named for what it
+yields as the sequence family is (WEP-2026-06-02): a set holds no
+references to hand out, so the value iterator is the only one.
 
 #### `impl IntoIterator for TreeSet<T>`
 

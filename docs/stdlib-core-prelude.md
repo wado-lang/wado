@@ -3266,6 +3266,38 @@ Returns true if the slice contains the given value.
 
 ##### `fn index_ref(&self, index: i32) -> &T`
 
+#### `impl IndexValue<RangeExclusive<i32>> for Slice<T>`
+
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self]`
+
+#### `impl IndexValue<RangeInclusive<i32>> for Slice<T>`
+
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self]`
+
+#### `impl Eq for Slice<T>`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for Slice<T>`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Inspect for Slice<T>`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Display for Slice<T>`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for Slice<T>`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl DisplayAlt for Slice<T>`
+
+##### `pub fn fmt_alt(&self, f: &mut Formatter)`
+
 #### `impl IntoIterator for Slice<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`

@@ -16,6 +16,7 @@
 
 use {
     Ordering,
+    Default,
     Eq,
     Ord,
     Ref,
@@ -83,6 +84,43 @@ impl Array<T> {
         return SliceRefMutIter::internal_new(self, 0, builtin::array_len(self));
     }
 
+}
+
+impl Default for Array<T> {
+    pub fn default() -> Array<T> {
+        return builtin::array_new(0);
+    }
+}
+
+// `[e0, e1, …]` fills an `Array<T>` of exactly the literal's length. A fixed
+// array cannot be its own builder — it has no cursor to append at — so the
+// builder carries one and hands back the finished array.
+internal struct ArrayLiteralBuilder<T> {
+    repr: Array<T>,
+    used: i32,
+}
+
+impl SequenceLiteralBuilder for ArrayLiteralBuilder<T> {
+    type Element = T;
+    type Output = Array<T>;
+
+    fn new_literal(capacity: i32) -> ArrayLiteralBuilder<T> {
+        return ArrayLiteralBuilder { repr: builtin::array_new(capacity), used: 0 };
+    }
+
+    fn push_literal(&mut self, value: T) with stores[value] {
+        builtin::array_set(&mut self.repr, self.used, value);
+        self.used += 1;
+    }
+
+    fn build(&self) -> Array<T> {
+        return self.repr;
+    }
+}
+
+impl SequenceLiteral for Array<T> {
+    type Element = T;
+    type Builder = ArrayLiteralBuilder<T>;
 }
 
 impl<T> Sequence for Array<T> {
@@ -221,11 +259,11 @@ impl<T: Ord> Ord for Array<T> {
 // sequences (`Array<T>` itself; `List<T>` over its used prefix). `limit` is the
 // resolved element cap (negative = none); `marker` appends `, ...` when
 // elements are dropped.
-internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
+internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
     f.write_char('[');
     let mut shown = 0;
     let mut truncated = false;
-    for let mut i = 0; i < len; i += 1 {
+    for let mut i = start; i < end; i += 1 {
         if limit >= 0 && shown >= limit {
             truncated = true;
             break;
@@ -248,15 +286,15 @@ internal fn write_seq_inspect<T: Inspect>(repr: &Array<T>, len: i32, f: &mut For
 
 /// Pretty-printed counterpart of [`write_seq_inspect`]: each element on its own
 /// indented line; `marker` appends a `...` line when elements are dropped.
-internal fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if len == 0 {
+internal fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
+    if start >= end {
         f.write_str(&"[]");
         return;
     }
     f.open_brace("[");
     let mut shown = 0;
     let mut truncated = false;
-    for let mut i = 0; i < len; i += 1 {
+    for let mut i = start; i < end; i += 1 {
         if limit >= 0 && shown >= limit {
             truncated = true;
             break;
@@ -275,26 +313,26 @@ internal fn write_seq_inspect_alt<T: InspectAlt>(repr: &Array<T>, len: i32, f: &
 
 impl<T: Inspect> Inspect for Array<T> {
     pub fn inspect(&self, f: &mut Formatter) {
-        write_seq_inspect(self, builtin::array_len(self), f, true, f.resolved_seq_limit());
+        write_seq_inspect(self, 0, builtin::array_len(self), f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: Inspect> Display for Array<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
-        write_seq_inspect(self, builtin::array_len(self), f, false, f.precision);
+        write_seq_inspect(self, 0, builtin::array_len(self), f, false, f.precision);
     }
 }
 
 impl<T: InspectAlt> InspectAlt for Array<T> {
     pub fn inspect_alt(&self, f: &mut Formatter) {
-        write_seq_inspect_alt(self, builtin::array_len(self), f, true, f.resolved_seq_limit());
+        write_seq_inspect_alt(self, 0, builtin::array_len(self), f, true, f.resolved_seq_limit());
     }
 }
 
 impl<T: InspectAlt> DisplayAlt for Array<T> {
     pub fn fmt_alt(&self, f: &mut Formatter) {
         // DisplayAlt never applies the default sequence cap (see Display).
-        write_seq_inspect_alt(self, builtin::array_len(self), f, false, f.precision);
+        write_seq_inspect_alt(self, 0, builtin::array_len(self), f, false, f.precision);
     }
 }

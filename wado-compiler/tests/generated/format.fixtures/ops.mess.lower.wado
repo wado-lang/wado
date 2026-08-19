@@ -684,6 +684,11 @@ struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub pred: fn mut(u8) -> bool,
 }
 
+struct "ArrayLiteralBuilder<u8>" {
+    repr: Array<u8>,
+    used: i32,
+}
+
 struct "SliceRefIter<u8>" {
     repr: &Array<u8>,
     index: i32,
@@ -822,6 +827,22 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<u8>,i32>" {
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceRefIter<u8>,&Array<u8>>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/array.wado/ArrayLiteralBuilder<u8>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/array.wado/ArrayLiteralBuilder<u8>,Array<u8>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1286,14 +1307,6 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,core:prelude/string.wado/StrCharIter>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/slice.wado/Slice<u8>,[&Array<u8>,i32,i32]>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -3155,7 +3168,7 @@ pub fn "core:prelude/bytes.wado/ByteList^core:prelude/traits.wado/InspectAlt::in
 }
 
 pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: &Slice<u8>, f: &mut Formatter) {
-    self."core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(f);
+    self."core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,bool>^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
@@ -14197,7 +14210,7 @@ fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>]
 }
 
 pub fn "Array<u8>^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(self, core::builtin::array_len::<u8>(self), f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect_alt<u8>"(self, 0, core::builtin::array_len::<u8>(self), f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
 }
 
 pub fn "&Array<u8>^core:prelude/traits.wado/InspectAlt::inspect_alt"(self: &&Array<u8>, f: &mut Formatter) {
@@ -14461,81 +14474,16 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
     return self.repr."Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
-fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/ReflectStruct::type_name"());
-    let mut wrote_field: bool = false;
-    let mut has_secret: bool = false;
-    __tuple_for_of_4: {
-        let __tuple_4: [StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>, StructField<core:prelude/slice.wado/Slice<u8>,i32>, StructField<core:prelude/slice.wado/Slice<u8>,i32>] = "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/ReflectStruct::members"();
-        __tuple_iter_4_0: {
-            let field: StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>> = __tuple_4.0;
-            if field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>::is_secret"() {
-                has_secret = true;
-            } else {
-                if wrote_field {
-                    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ", used: 2 });
-                } else {
-                    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" { ", used: 3 });
-                    wrote_field = true;
-                }
-                f."core:prelude/format.wado/Formatter::write_str"(&field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>^core:prelude/traits.wado/Member::name"());
-                f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed": ", used: 2 });
-                field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>::get"(self)."&Array<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-            }
-        }
-        __tuple_iter_4_1: {
-            let field: StructField<core:prelude/slice.wado/Slice<u8>,i32> = __tuple_4.1;
-            if field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>::is_secret"() {
-                has_secret = true;
-            } else {
-                if wrote_field {
-                    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ", used: 2 });
-                } else {
-                    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" { ", used: 3 });
-                    wrote_field = true;
-                }
-                f."core:prelude/format.wado/Formatter::write_str"(&field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>^core:prelude/traits.wado/Member::name"());
-                f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed": ", used: 2 });
-                Box<i32> { value: field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>::get"(self) }."i32^core:prelude/traits.wado/Inspect::inspect"(f);
-            }
-        }
-        __tuple_iter_4_2: {
-            let field: StructField<core:prelude/slice.wado/Slice<u8>,i32> = __tuple_4.2;
-            if field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>::is_secret"() {
-                has_secret = true;
-            } else {
-                if wrote_field {
-                    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ", used: 2 });
-                } else {
-                    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" { ", used: 3 });
-                    wrote_field = true;
-                }
-                f."core:prelude/format.wado/Formatter::write_str"(&field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>^core:prelude/traits.wado/Member::name"());
-                f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed": ", used: 2 });
-                Box<i32> { value: field."core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>::get"(self) }."i32^core:prelude/traits.wado/Inspect::inspect"(f);
-            }
-        }
-    }
-    if wrote_field {
-        if has_secret {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed", ..", used: 4 });
-        }
-        f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" }", used: 2 });
-    } else {
-        if has_secret {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" { .. }", used: 7 });
-        } else {
-            f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed" {}", used: 3 });
-        }
-    }
+pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Slice<u8>, f: &mut Formatter) {
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self.repr, self.start, self.end, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
 }
 
 pub fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &List<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(&self.repr, self.used, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(&self.repr, 0, self.used, f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
 }
 
 pub fn "Array<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &Array<u8>, f: &mut Formatter) {
-    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self, core::builtin::array_len::<u8>(self), f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
+    "core::prelude/array.wado::core/prelude/array.wado/write_seq_inspect<u8>"(self, 0, core::builtin::array_len::<u8>(self), f, true, f."core:prelude/format.wado/Formatter::resolved_seq_limit"());
 }
 
 pub fn "core:prelude/list.wado/List<u8>::len"(self: &List<u8>) -> i32 {
@@ -14630,13 +14578,13 @@ pub fn "core:prelude/slice.wado/SliceValueIter<u8>::collect"(self: &mut SliceVal
     return "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(repr, remaining);
 }
 
-fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
+fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
     f."core:prelude/format.wado/Formatter::write_char"('[');
     let mut shown: i32 = 0;
     let mut truncated: bool = false;
-    let mut i: i32 = 0;
+    let mut i: i32 = start;
     loop {
-        if !(i < len) {
+        if !(i < end) {
             break;
         }
         __for_0_body: {
@@ -14660,50 +14608,6 @@ fn "core/prelude/array.wado/write_seq_inspect<u8>"(repr: &Array<u8>, len: i32, f
         }
     }
     f."core:prelude/format.wado/Formatter::write_char"(']');
-}
-
-pub fn "core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>::get"(self: &StructField<core:prelude/slice.wado/Slice<u8>,i32>, v: &Slice<u8>) -> i32 {
-    return "core::prelude/slice.wado::$field_get$core:prelude/slice.wado/Slice<u8>$i32"(v, self.index);
-}
-
-fn "core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>^core:prelude/traits.wado/Member::name"(self: &StructField<core:prelude/slice.wado/Slice<u8>,i32>) -> String {
-    return self.field_name;
-}
-
-pub fn "core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>::is_secret"(self: &StructField<core:prelude/slice.wado/Slice<u8>,i32>) -> bool {
-    return self.is_secret;
-}
-
-pub fn "core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>::get"(self: &StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>, v: &Slice<u8>) -> &Array<u8> {
-    return "core::prelude/slice.wado::$field_get$core:prelude/slice.wado/Slice<u8>$&Array<u8>"(v, self.index);
-}
-
-pub fn "&Array<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &&Array<u8>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"&", used: 1 });
-    let inner: &Array<u8> = *self;
-    *inner."Array<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-}
-
-pub fn "&&Array<u8>^core:prelude/traits.wado/Inspect::inspect"(self: &&&Array<u8>, f: &mut Formatter) {
-    f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"&", used: 1 });
-    let inner: &&Array<u8> = *self;
-    *inner."&Array<u8>^core:prelude/traits.wado/Inspect::inspect"(f);
-}
-
-fn "core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>^core:prelude/traits.wado/Member::name"(self: &StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>) -> String {
-    return self.field_name;
-}
-
-pub fn "core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>::is_secret"(self: &StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>) -> bool {
-    return self.is_secret;
-}
-
-pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>, StructField<core:prelude/slice.wado/Slice<u8>,i32>, StructField<core:prelude/slice.wado/Slice<u8>,i32>] {
-    return [StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/slice.wado/Slice<u8>,i32> { index: 1, field_name: String { repr: packed"start", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/slice.wado/Slice<u8>,i32> { index: 2, field_name: String { repr: packed"end", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
-}
-
-pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/ReflectStruct::type_name"() -> String {
-    return String { repr: packed"Slice", used: 5 };
 }
 
 fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
@@ -14785,17 +14689,17 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^
     return *self;
 }
 
-fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, len: i32, f: &mut Formatter, marker: bool, limit: i32) {
-    if (len == 0) {
+fn "core/prelude/array.wado/write_seq_inspect_alt<u8>"(repr: &Array<u8>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
+    if (start >= end) {
         f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"[]", used: 2 });
         return;
     }
     f."core:prelude/format.wado/Formatter::open_brace"(String { repr: packed"[", used: 1 });
     let mut shown: i32 = 0;
     let mut truncated: bool = false;
-    let mut i: i32 = 0;
+    let mut i: i32 = start;
     loop {
-        if !(i < len) {
+        if !(i < end) {
             break;
         }
         __for_0_body: {
@@ -15342,6 +15246,20 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>$Fn<1,bool>"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> fn mut(u8) -> bool {
     return match index {
         1 => v.pred,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/array.wado/ArrayLiteralBuilder<u8>$Array<u8>"(v: &ArrayLiteralBuilder<u8>, index: i32) -> Array<u8> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/array.wado/ArrayLiteralBuilder<u8>$i32"(v: &ArrayLiteralBuilder<u8>, index: i32) -> i32 {
+    return match index {
+        1 => v.used,
         _ => core::builtin::unreachable(),
     };
 }
@@ -18924,18 +18842,6 @@ fn __initialize_modules() {
 
 fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
     return List<u64> { repr: core::builtin::array_clone_prefix::<u64>(&v.repr, v.used), used: v.used };
-}
-
-fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>,core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>]"(v: [StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>, StructField<core:prelude/slice.wado/Slice<u8>,i32>, StructField<core:prelude/slice.wado/Slice<u8>,i32>]) -> [StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>, StructField<core:prelude/slice.wado/Slice<u8>,i32>, StructField<core:prelude/slice.wado/Slice<u8>,i32>] {
-    return [core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>,core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>"(v.2) };
-}
-
-fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,i32>"(v: StructField<core:prelude/slice.wado/Slice<u8>,i32>) -> StructField<core:prelude/slice.wado/Slice<u8>,i32> {
-    return StructField<core:prelude/slice.wado/Slice<u8>,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
-}
-
-fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>"(v: StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>) -> StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>> {
-    return StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>]"(v: [EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>]) -> [EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>] {

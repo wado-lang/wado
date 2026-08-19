@@ -14,10 +14,13 @@
 // Element access is always a value copy (`s[i]` yields `T`, never `&T`),
 // because Wasm GC has no interior references.
 
-use { Ref, IndexValue, IndexRef, Iterator, IntoIterator, Add, Eq, Ord, Ordering } from "core:prelude/traits.wado";
+use { Ref, IndexValue, IndexRef, Iterator, IntoIterator, Add, Eq, Ord, Ordering, Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
+use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
+use { Formatter } from "core:prelude/format.wado";
+use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 
 /// Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
@@ -211,10 +214,7 @@ impl IndexValue<i32> for Slice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index < 0 || index >= self.end - self.start {
-            builtin::cold_path();
-            panic("index out of bounds");
-        }
+        assert index < self.end - self.start, "index out of bounds";
         return builtin::array_get_value(self.repr, self.start + index);
     }
 }
@@ -225,11 +225,93 @@ impl<T: Ref> IndexRef<i32> for Slice<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T {
-        if index < 0 || index >= self.end - self.start {
-            builtin::cold_path();
-            panic("index out of bounds");
-        }
+        assert index < self.end - self.start, "index out of bounds";
         return builtin::array_get_ref(self.repr, self.start + index);
+    }
+}
+
+impl IndexValue<RangeExclusive<i32>> for Slice<T> {
+    type Output = Slice<T>;
+
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
+        return self.slice(range.start, range.end);
+    }
+}
+
+impl IndexValue<RangeInclusive<i32>> for Slice<T> {
+    type Output = Slice<T>;
+
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {
+        return self.slice(range.start, range.end + 1);
+    }
+}
+
+// A view compares and renders by its elements. Structural derivation would
+// compare the backing reference and print the three fields, which is never what
+// a slice means.
+impl<T: Eq> Eq for Slice<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len = self.end - self.start;
+        if len != other.end - other.start {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if builtin::array_get_value(self.repr, self.start + i)
+                != builtin::array_get_value(other.repr, other.start + i)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+impl<T: Ord> Ord for Slice<T> {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        let len = self.end - self.start;
+        let other_len = other.end - other.start;
+        let min_len = i32_min(len, other_len);
+        for let mut i = 0; i < min_len; i += 1 {
+            let a = builtin::array_get_value(self.repr, self.start + i);
+            let b = builtin::array_get_value(other.repr, other.start + i);
+            if a < b {
+                return Ordering::Less;
+            }
+            if a > b {
+                return Ordering::Greater;
+            }
+        }
+        if len < other_len {
+            return Ordering::Less;
+        }
+        if len > other_len {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+impl<T: Inspect> Inspect for Slice<T> {
+    pub fn inspect(&self, f: &mut Formatter) {
+        write_seq_inspect(self.repr, self.start, self.end, f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: Inspect> Display for Slice<T> {
+    pub fn fmt(&self, f: &mut Formatter) {
+        write_seq_inspect(self.repr, self.start, self.end, f, false, f.precision);
+    }
+}
+
+impl<T: InspectAlt> InspectAlt for Slice<T> {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        write_seq_inspect_alt(self.repr, self.start, self.end, f, true, f.resolved_seq_limit());
+    }
+}
+
+impl<T: InspectAlt> DisplayAlt for Slice<T> {
+    pub fn fmt_alt(&self, f: &mut Formatter) {
+        write_seq_inspect_alt(self.repr, self.start, self.end, f, false, f.precision);
     }
 }
 

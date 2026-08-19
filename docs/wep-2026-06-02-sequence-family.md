@@ -233,10 +233,20 @@ per-type difference in mechanism correct rather than drift:
   a stale slot. An explicit check is required anyway, so it uses `assert` and
   gets power-assert diagnostics for free.
 
-Two mechanism-level drifts are corrected: `Slice` hand-rolls its check as
-`if … { panic(…) }` instead of `assert`, and `List`'s index traits assert only
-`index < used`, omitting the lower bound that its own `insert` / `remove` /
-`swap` check. Both become `assert 0 <= index < len`.
+`Slice` hand-rolled its check as `if … { panic(…) }`; it uses `assert` like
+`List`, so both report through the same mechanism.
+
+The index traits check only the upper bound. The lower one belongs there — its
+own `insert` / `remove` / `swap` check it — but writing `assert 0 <= index < len`
+costs two things today and buys no safety, since a negative index traps on the
+Wasm bounds check either way: the power-assert instrumentation renders no
+operand values for a chained comparison
+([#1855](https://github.com/wado-lang/wado/issues/1855)), so the diagnostic
+loses the `index: 5` line that is the whole reason these traits assert rather
+than let Wasm trap; and the bounds-check elimination stops recognising the
+index-write loop, losing the `array.fill` collapse
+([#1856](https://github.com/wado-lang/wado/issues/1856)). Restore the lower
+bound once a chained comparison costs neither.
 
 `get_unchecked` carries this contract:
 
@@ -335,14 +345,10 @@ The naming above is in place. The phases below are independent of each other.
 
 ### Phase D — Trait implementations
 
-- [ ] `[a, b, c]` `Display` / `Inspect` for `Slice`, element-wise `Eq` / `Ord`
-      for `Slice`, `Default` for `Array`, `[…]` literals for `Array`, and
-      `IndexValue<RangeExclusive<i32>>` / `<RangeInclusive<i32>>` for `Slice`.
-- [ ] Reject structural derivation of `Eq` / `Ord` / `Inspect` for view types.
-- [ ] `assert 0 <= index < len` on every `List` and `Slice` index trait.
-- [ ] Put `TreeSet::iter` on the same axis. It is outside the sequence family,
-      but an unmarked `iter` yielding values is the drift this WEP removed
-      everywhere else, so leaving it is a standing invitation to reintroduce it.
+- [ ] Reject structural derivation of `Eq` / `Ord` / `Inspect` for a type
+      holding a reference. `Slice` now writes all four by hand, so nothing
+      depends on the derivation today, but the next view type would inherit
+      backing-identity equality silently.
 
 ### Phase E — Boundary and documentation
 

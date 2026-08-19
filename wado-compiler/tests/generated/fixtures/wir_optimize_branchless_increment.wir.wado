@@ -71,7 +71,7 @@ type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(25)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>" = fn(ref Array<bool>, i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(26)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>" = fn(ref Array<bool>, i32, i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(26)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(27)
 
@@ -357,33 +357,33 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     };
 }
 
-fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(repr, len, f, marker, limit) {
+fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(repr, start, end, f, marker, limit) {
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let s_11: ref "core:prelude/string.wado//String";
-    let self_16: bool;
-    let s_19: ref "core:prelude/string.wado//String";
-    let s_21: ref "core:prelude/string.wado//String";
-    let _licm_arith_24: bool;
+    let s_12: ref "core:prelude/string.wado//String";
+    let self_17: bool;
+    let s_20: ref "core:prelude/string.wado//String";
+    let s_22: ref "core:prelude/string.wado//String";
+    let _licm_arith_25: bool;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 91);
     shown = 0;
     truncated = 0;
-    i = 0;
-    _licm_arith_24 = limit >= 0;
+    i = start;
+    _licm_arith_25 = limit >= 0;
     b17: block {
         l18: loop {
-            break_if b17 i >= len;
-            if select i32(_licm_arith_24, shown >= limit, 0) {
+            break_if b17 i >= end;
+            if select i32(_licm_arith_25, shown >= limit, 0) {
                 truncated = 1;
                 break b17;
             }
             if shown > 0 {
-                s_11 = global:core:prelude/array.wado::__const_obj_28;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_11);
+                s_12 = global:core:prelude/array.wado::__const_obj_28;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_12);
             }
-            self_16 = builtin::array_get_value<bool>(repr, i);
-            "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f, (if self_16 -> ref "core:prelude/string.wado//String" {
+            self_17 = builtin::array_get_value<bool>(repr, i);
+            "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f, (if self_17 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
@@ -395,11 +395,11 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(rep
     };
     if select i32(marker, truncated, 0) {
         if shown > 0 {
-            s_19 = global:core:prelude/array.wado::__const_obj_27;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_19);
+            s_20 = global:core:prelude/array.wado::__const_obj_27;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_20);
         } else {
-            s_21 = global:core:prelude/array.wado::__const_obj_26;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_21);
+            s_22 = global:core:prelude/array.wado::__const_obj_26;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_22);
         }
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 93);
@@ -786,7 +786,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let _av_3: i32;
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(self.repr, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
         _av_3 = f.precision;
         if _av_3 == -2 {
             break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: 256;

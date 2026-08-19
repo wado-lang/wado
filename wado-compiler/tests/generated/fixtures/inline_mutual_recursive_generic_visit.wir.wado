@@ -112,7 +112,7 @@ type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(36)
 
 type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(37)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mutual_recursive_generic_visit.wado/Node>" = fn(ref "Array<inline_mutual_recursive_generic_visit.wado/Node>", i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(38)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mutual_recursive_generic_visit.wado/Node>" = fn(ref "Array<inline_mutual_recursive_generic_visit.wado/Node>", i32, i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(38)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(39)
 
@@ -477,29 +477,29 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     };
 }
 
-fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mutual_recursive_generic_visit.wado/Node>"(repr, len, f, marker, limit) {
+fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mutual_recursive_generic_visit.wado/Node>"(repr, start, end, f, marker, limit) {
     let shown: i32;
     let truncated: bool;
     let i: i32;
-    let s_11: ref "core:prelude/string.wado//String";
-    let s_15: ref "core:prelude/string.wado//String";
-    let s_17: ref "core:prelude/string.wado//String";
-    let _licm_arith_20: bool;
+    let s_12: ref "core:prelude/string.wado//String";
+    let s_16: ref "core:prelude/string.wado//String";
+    let s_18: ref "core:prelude/string.wado//String";
+    let _licm_arith_21: bool;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 91);
     shown = 0;
     truncated = 0;
-    i = 0;
-    _licm_arith_20 = limit >= 0;
+    i = start;
+    _licm_arith_21 = limit >= 0;
     b18: block {
         l19: loop {
-            break_if b18 i >= len;
-            if select i32(_licm_arith_20, shown >= limit, 0) {
+            break_if b18 i >= end;
+            if select i32(_licm_arith_21, shown >= limit, 0) {
                 truncated = 1;
                 break b18;
             }
             if shown > 0 {
-                s_11 = global:core:prelude/array.wado::__const_obj_23;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_11);
+                s_12 = global:core:prelude/array.wado::__const_obj_23;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_12);
             }
             "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(repr, i) }, f);
             shown = shown + 1;
@@ -509,11 +509,11 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mut
     };
     if select i32(marker, truncated, 0) {
         if shown > 0 {
-            s_15 = global:core:prelude/array.wado::__const_obj_22;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_15);
+            s_16 = global:core:prelude/array.wado::__const_obj_22;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_16);
         } else {
-            s_17 = global:core:prelude/array.wado::__const_obj_21;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_17);
+            s_18 = global:core:prelude/array.wado::__const_obj_21;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_18);
         }
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 93);
@@ -975,7 +975,7 @@ fn "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/LeafNode
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<inline_mutual_recursive_generic_visit.wado/Node>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let _av_3: i32;
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mutual_recursive_generic_visit.wado/Node>"(self.repr, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mutual_recursive_generic_visit.wado/Node>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
         _av_3 = f.precision;
         if _av_3 == -2 {
             break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: 256;

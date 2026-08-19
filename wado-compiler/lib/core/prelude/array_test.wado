@@ -229,3 +229,23 @@ test "Array views as a Slice" {
     assert a.windows(2).count() == 3;
     assert a.chunks(3).count() == 2;
 }
+
+test "an Array takes a sequence literal" {
+    let a: Array<i32> = [1, 2, 3];
+    assert a.len() == 3;
+    assert a[0] == 1;
+    assert a[2] == 3;
+
+    let s: Array<String> = ["x", "y"];
+    assert s.len() == 2;
+    assert s[1] == "y";
+
+    let empty: Array<i32> = [];
+    assert empty.len() == 0;
+}
+
+test "Array has a default" {
+    let d: Array<i32> = Array::default();
+    assert d.len() == 0;
+    assert d.is_empty();
+}

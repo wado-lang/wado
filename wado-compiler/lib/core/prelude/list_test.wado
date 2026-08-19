@@ -639,3 +639,34 @@ test "iter_ref_mut writes through to in-place elements" {
     assert names[0] == "a!?";
     assert names[1] == "b!?";
 }
+
+test "a Slice compares and renders by its elements" {
+    let a: List<i32> = [9, 2, 3, 4, 9];
+    let b: List<i32> = [2, 3, 4];
+
+    // Equal contents over different backings are equal; structural derivation
+    // over the backing reference would call these distinct.
+    assert a.slice(1, 4) == b.as_slice();
+    assert a.slice(1, 4) != a.slice(0, 3);
+
+    assert a.slice(1, 3) < b.as_slice();
+    assert b.as_slice() > a.slice(1, 3);
+
+    assert `${a.slice(1, 4)}` == "[2, 3, 4]";
+    assert `${a.slice(1, 4):?}` == "[2, 3, 4]";
+    assert `${a.slice(0, 0):?}` == "[]";
+}
+
+test "a Slice takes a range subscript" {
+    let l: List<i32> = [10, 20, 30, 40, 50];
+    let s = l.slice(1, 5);
+    assert s[0..<2] == l.slice(1, 3);
+    assert s[0..=1] == l.slice(1, 3);
+}
+
+test "an out-of-range Slice subscript reports both bounds" {
+    let l: List<i32> = [1, 2, 3];
+    let s = l.as_slice();
+    assert s[0] == 1;
+    assert s[2] == 3;
+}
