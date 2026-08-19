@@ -922,10 +922,10 @@ trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 trait Default { fn default() -> Self; }
 
 // For [] operators
-trait IndexRef<I> { type Elem: Ref; fn index_ref(&self, index: I) -> &Self::Elem; }
-trait IndexRefMut<I> { type Elem: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Elem; }
-trait IndexValue<I> { type Elem; fn index_value(&self, index: I) -> Self::Elem; }
-trait IndexAssign<I> { type Elem; fn index_assign(&mut self, index: I, value: Self::Elem); }
+trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
+trait IndexRefMut<I> { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
+trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
+trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers

@@ -64,19 +64,17 @@ Preserves insertion order of remaining elements.
 
 #### `pub fn keys(&self) -> TreeMapKeysRefIter<K, V> with stores[self]`
 
-Returns an iterator over the keys, in insertion order.
-
-The map's traversals yield references: reading is what a traversal is
-for, and a caller that wants the value dereferences. Unlike `iter`, the
-name already says what it yields, so it carries no axis suffix.
+The keys, in insertion order. A map traversal yields references and
+carries no axis suffix: `keys` already says what it yields, and a
+caller wanting owned keys takes `iter_value()` off the result.
 
 #### `pub fn values(&self) -> TreeMapValuesRefIter<K, V> with stores[self]`
 
-Returns an iterator over the values, in insertion order.
+The values, in insertion order.
 
 #### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self]`
 
-Returns an iterator over the key-value pairs, in insertion order.
+The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
@@ -176,12 +174,11 @@ Removes all elements from the set.
 
 #### `pub fn iter_ref(&self) -> TreeSetRefIter<T> with stores[self]`
 
-Returns an iterator yielding a reference to each element, in insertion
-order.
+The elements, in insertion order.
 
 #### `pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self]`
 
-Returns an iterator yielding each element by value, in insertion order.
+The elements, in insertion order.
 
 #### `impl IntoIterator for TreeSet<T>`
 

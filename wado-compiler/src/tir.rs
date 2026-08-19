@@ -128,7 +128,6 @@ impl SubstitutionContext {
                 bounds,
                 assoc_type_bindings,
             } => {
-                // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
                 // A projection that knows its trait is answered by identity:
                 // the entry is keyed by the declaring `DefId`, so two traits

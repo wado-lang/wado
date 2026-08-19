@@ -525,7 +525,7 @@ fn generate_lookup_function(
     // `impl FieldSchema for <Type> { fn lookup(key: ByteSlice) }` — a static
     // trait method (no `self`). `next_field::<Type>()` resolves it directly at
     // monomorphization, replacing the former runtime `lookup` closure. The key
-    // is a borrowed byte view, so each format passes its wire key's bytes with
+    // is a byte reference view, so each format passes its wire key's bytes with
     // no `String` round-trip.
     // Parameter: key: ByteSlice (Slice<u8>) at local 0.
     let mut locals = vec![param_local("__key", key_slice_type, false)];

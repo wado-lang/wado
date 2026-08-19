@@ -1,9 +1,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/list.wado")]
-// List type for Wado: a growable sequence backed by an `Array<T>`. Its views
-// and iterators (`Slice`, `SliceValueIter`, `SliceRefIter`, `SliceWindows`, `SliceChunks`) are
-// the shared types from `core:prelude/slice.wado`.
-
+// A growable sequence backed by an `Array<T>`. Its views and iterators are the
+// shared `Slice*` types from `core:prelude/slice.wado`.
 
 use {
     Ordering,
@@ -358,7 +356,6 @@ impl<T> AsSlice for List<T> {
 }
 
 impl<T: Eq> List<T> {
-    /// Returns true if the list contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         return self.as_slice().contains(value);
     }
@@ -402,9 +399,8 @@ impl<T: Ord> Ord for List<T> {
 }
 
 impl List<T> {
-    /// Returns an iterator yielding a mutable reference to each element.
-    /// Available only where `T` is mutated in place; a scalar element has no
-    /// addressable cell, so a write through `&mut T` would be lost.
+    /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
+    /// addressable cell, so a write through the reference would be lost.
     pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
         return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }

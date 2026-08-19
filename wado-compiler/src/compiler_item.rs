@@ -154,7 +154,7 @@ pub enum CompilerItem {
     /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
-    /// `Slice<T>` — the borrowed array view the byte-slice methods and
+    /// `Slice<T>` — the array reference view the byte-slice methods and
     /// the synthesised `FieldSchema::lookup` signature are written against.
     Slice,
     /// `AsyncCall<T>` — the subtask handle a `task`-returning call yields.
@@ -174,7 +174,7 @@ pub enum CompilerItem {
     /// `ByteList` — `type ByteList = List<u8>`, the owned byte buffer the CM
     /// binding and the digest / encoding modules pass around.
     ByteList,
-    /// `ByteSlice` — `type ByteSlice = Slice<u8>`, the borrowed byte view
+    /// `ByteSlice` — `type ByteSlice = Slice<u8>`, the byte reference view
     /// `FieldSchema::lookup` takes.
     ByteSlice,
 

@@ -1,79 +1,66 @@
 # WEP: Iterator Reference Model
 
-Align `List` iteration with Rust's `iter` / `iter_mut` / `into_iter`.
+What a sequence iterator yields — values, shared references, or mutable ones —
+and which of the three a given syntax or method selects.
 
 ## Context
 
-The friction driving this WEP is that Wado's iterator methods diverge from
-Rust's, so Rust muscle memory misfires:
-
-- `List::iter()` returns `Item = T` — it copies every element — the opposite of
-  Rust, where `iter()` yields `&T`. So `list.iter().any(...)` silently copies.
-- There is no `iter_mut`: `&mut List` yields `&T`, and elements are mutated by
-  index instead.
-
-Reference iteration exists only via `for-of &list` (`Item = &T`), not through a
-named method a Rust reader reaches for. The fix is to match Rust's surface.
-Inventing a _new_ divergence (e.g. making owned `for-of list` yield `&T`) would
-only move the friction elsewhere, so it is out of scope.
+`List::iter()` returned `Item = T`, copying every element, so
+`list.iter().any(…)` copied silently. Reference iteration existed only through
+`for-of &list`, reachable by no named method, and there was no way to mutate in
+place except by index.
 
 ## Decision
 
-Match Rust's conventions exactly:
+Iteration comes in three axes, and every iterator yields exactly one of them:
 
-- `iter()` over `List<T>` yields `&T` (return `SliceRefIter`, not `SliceValueIter`).
-- `iter_mut()` yields `&mut T` (new), enabling in-place mutation
-  (`for let x of xs.iter_mut() { *x = f(*x); }`) — sound with no borrow checker,
-  riding on the write-back model
-  ([WEP: Reference Representation](./wep-2026-06-13-reference-representation.md)).
-- `into_iter()` and owned `for let x of list` keep `Item = T` (by value),
-  matching Rust's owned iteration. Unchanged.
-- `for let x of &list` keeps `&T`. Unchanged.
-- `copied()` for iterating a reference list by value: `nums.iter().copied()`.
-  Implemented as an inherent `SliceRefIter::copied() -> SliceValueIter<T>` (both share
-  the same backing), not a generic `Iterator` adaptor — a generic
-  `impl<I: Iterator<Item = &T>, T>` can't yet resolve `I::Item` to `&T` in its
-  body (associated-type-equality bounds aren't propagated), so `copied()` chains
-  only directly off `iter()` today, not mid-chain after `filter()`/`map()`.
+| Axis    | Item     | Method           | `for-of` form      |
+| ------- | -------- | ---------------- | ------------------ |
+| value   | `T`      | `iter_value()`   | `for x of xs`      |
+| shared  | `&T`     | `iter_ref()`     | `for x of &xs`     |
+| mutable | `&mut T` | `iter_ref_mut()` | `for x of &mut xs` |
 
-Rejected — flipping owned `for-of list` to `&T` (and dropping the value
-iterator): Rust's owned `for x in v` yields values, so this would _add_ a new
-Rust divergence, the opposite of the goal. It also turns snapshot-copy iteration
-into live-reference iteration, a silent hazard when the body mutates the list.
+Reading a sequence yields references by default — `for x of &xs` and
+`iter_ref()` — and a caller wanting owned elements says so. The names spell the
+axis out rather than following Rust's `iter` / `iter_mut` / `into_iter`, because
+Wado's semantics differ enough that the Rust names would mislead: see
+[The Sequence Family](./wep-2026-06-02-sequence-family.md), which owns the
+naming rule and the iterator type names.
 
-Rejected — operator auto-deref: making `&T` read as `T` in operators is unsafe,
-because `==` on `&T` today compares reference identity, not value (`&a == &b` is
-`false` for distinct variables both holding `5`). Auto-deref would silently turn
-every `&T == &T` into a value comparison and remove identity testing via `==`.
-Primitives use `copied()` or `*x` instead. Reference value-vs-identity is a
+`SliceRefIter::iter_value()` drops a reference iterator to values, standing in
+for Rust's `copied()`. It is inherent rather than a generic `Iterator` adaptor —
+a generic `impl<I: Iterator<Item = &T>, T>` cannot yet resolve `I::Item` to `&T`
+in its body — so it chains only directly off `iter_ref()`, not after a
+`filter()` or `map()`.
+
+`&mut T` iteration is sound without a borrow checker because it rides the
+write-back model
+([Reference Representation](./wep-2026-06-13-reference-representation.md)). It
+is available only for elements mutated in place: a replace-on-assign element
+(`primitive` / `enum` / `flags` / `variant` / `fn`) has no addressable cell, so
+a write through the reference would be lost, and the compiler rejects it.
+
+Rejected — making owned `for x of xs` yield `&T` and dropping the value
+iterator. It turns snapshot-copy iteration into live-reference iteration, a
+silent hazard when the body mutates the sequence.
+
+Rejected — operator auto-deref. `==` on `&T` compares reference identity, so
+auto-deref would silently turn every `&T == &T` into a value comparison and
+remove identity testing through `==`. Use `*x`. Reference value-vs-identity is a
 separate proposal.
 
 ## Consequences
 
-- Removes the `iter()`-copies footgun; `.iter()` now matches Rust (`&T`), and
-  `iter_mut` / `copied` fill the remaining Rust-shaped gaps.
-- The only breaking change is `iter()` copy → reference (~136 call sites; the
-  subset with `|x: T|` closures or value-consuming bodies needs `|x: &T|` / `*x`,
-  the rest survive via field/method auto-deref). Owned `for-of` is untouched, so
-  no wide migration and no iterate-while-mutate hazard.
-- Operator semantics untouched (`==` stays reference identity).
-
-## Status
-
-- [x] `iter()` yields `&T` (`List::iter -> SliceRefIter`).
-- [x] `copied()` on `SliceRefIter`; fixture `iter_ref_adapter_monomorph.wado`.
-- [x] Migrated the breaking `iter()` call sites.
-- [x] `&mut` iteration for in-place elements: `&mut List<T>` yields `&mut T` via `SliceRefMutIter`; fixture `iter_mut_inplace.wado`.
-- [x] Reject `&mut` iteration over replace-on-assign / unresolved-generic elements; fixture `iter_mut_forbidden.wado`.
-- [x] Fixed a latent P0: `Fn<N,Ret>^Inspect` deduped by mangled name, not return `TypeId` (`&T` / `&mut T` collide).
+- Which iterator a call site gets is legible from its name, and the copying
+  default is gone.
+- No unmarked spelling survives, so every migration is mechanical but wide.
+- Operator semantics are untouched: `==` stays reference identity.
 
 ## TODO
 
-- [ ] `&mut` iteration for replace-on-assign element types (`primitive` / `enum`
-      / `flags` / `variant` / `fn`): needs the reference write-back model
-      (write-back to `xs[i]` on every loop-exit edge — WEP-2026-06-13); rejected
-      for now rather than silently dropped.
-- [ ] Public `iter_mut()` method: redundant with `for ... of &mut xs` until
-      adapter chaining over `&mut T` composes; add it then.
-- [ ] Generic `copied()` on any `Iterator<Item = &T>`: blocked on propagating
-      associated-type-equality bounds (`Item = &T`) into the impl body.
+- [ ] `&mut` iteration for replace-on-assign element types: needs write-back to
+      `xs[i]` on every loop-exit edge (WEP-2026-06-13). Rejected for now rather
+      than silently dropped; fixture `iter_mut_forbidden.wado` pins the error.
+- [ ] Generic `iter_value()` on any `Iterator<Item = &T>`: blocked on
+      propagating associated-type-equality bounds (`Item = &T`) into the impl
+      body.

@@ -1,11 +1,12 @@
 # WEP: The Sequence Family — `Array<T>` / `List<T>` / `Slice<T>`
 
-The standard for Wado's contiguous sequence types: their roles, the `Sequence` /
+The standard for Wado's contiguous sequence types: roles, the `Sequence` /
 `AsSlice` traits, naming, indexing contracts, and the Component Model boundary.
 
 ## Context
 
-Three types cover contiguous sequences, introduced months apart:
+Three types cover contiguous sequences, introduced months apart. The axis is
+sound — ownership × length-mutability — but capability never followed it.
 
 | Type       | Representation                           | Introduced |
 | ---------- | ---------------------------------------- | ---------- |
@@ -13,79 +14,58 @@ Three types cover contiguous sequences, introduced months apart:
 | `Array<T>` | Wasm GC `array T` (definitionless)       | 2026-06-03 |
 | `Slice<T>` | `struct { repr: &Array<T>, start, end }` | 2026-06-04 |
 
-The axis is sound — ownership × length-mutability — but capability does not
-follow it. Three gaps account for nearly all of the divergence.
-
-### The view type has no algorithm surface
-
-`first`, `last`, `contains`, `windows`, `chunks`, and range indexing live on
-`List` alone, so they vanish the moment code takes a slice. Wado has no `Deref`
-and no unsized types, so the only sharing mechanism is a trait — and none was
-written, leaving hand-duplication that was never completed.
-
-### Iteration was aligned on `List` only
-
-[Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md) moved
-`iter()` to yield `&T`, but only for `List`. `Array::iter()` and `Slice::iter()`
-still yield `T` under the superseded convention, and `iter_mut()` exists nowhere.
-
-### `Array<T>` and `Slice<T>` are undocumented and under-implemented
-
-Both are prelude-public, yet neither appears in `docs/spec.md` or the cheatsheet,
-and neither the CM type-mapping table nor the snapshot/aliasing rules below are
-written down anywhere. `Array<T>` takes no `[…]` literal and has no `Default`.
-
-### Structural derivation is wrong for a view
-
-`Eq` / `Ord` / `Inspect` are synthesized structurally on demand
-([Trait Derivation](./wep-2026-06-25-trait-derivation.md)), so `Slice` compares
-by backing identity — two views over equal contents are unequal — and inspects as
-`Slice { repr: &[1, 2, 3], start: 0, end: 3 }` instead of `[1, 2, 3]`.
+- `first`, `last`, `contains`, `windows`, `chunks`, and range indexing live on
+  `List` alone, so they vanish the moment code takes a slice. With no `Deref`
+  and no unsized types the only sharing mechanism is a trait, and none existed.
+- [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md) moved
+  `iter()` to `&T` for `List` only; `Array` and `Slice` kept the old meaning.
+- `Array<T>` and `Slice<T>` appear in no doc, take no `[…]` literal, and have no
+  `Default`.
+- Structural derivation makes `Slice` compare by backing identity and inspect as
+  `Slice { repr: …, start: 0, end: 3 }` rather than `[1, 2, 3]`.
 
 ## Decision
 
 ### Roles
 
-|               | Fixed length | Growable  |
-| ------------- | ------------ | --------- |
-| Owned         | `Array<T>`   | `List<T>` |
-| Borrowed view | `Slice<T>`   | —         |
+|                | Fixed length | Growable  |
+| -------------- | ------------ | --------- |
+| Owned          | `Array<T>`   | `List<T>` |
+| Reference view | `Slice<T>`   | —         |
 
-`Slice<T>` is the read-only vocabulary type: an algorithm that only reads a
-sequence is written once against a slice, and the owned types reach it through
-`as_slice()`.
+`Slice<T>` is the read-only vocabulary type: an algorithm that only reads is
+written once against a slice, and the owned types reach it via `as_slice()`.
 
-Conversion names are a closed rule: `as_*` is a zero-copy view, `to_*` copies.
+Conversion names are a closed rule — `as_*` returns a view referencing the
+elements, `to_*` copies them:
 
-| From → To                  | Method       | Cost                   |
+| From → To                  | Method       | Element cost           |
 | -------------------------- | ------------ | ---------------------- |
-| `Array` / `List` → `Slice` | `as_slice()` | zero-copy              |
-| `Slice` → `Array`          | `to_array()` | copy                   |
-| `Slice` → `List`           | `to_list()`  | copy                   |
+| `Array` / `List` → `Slice` | `as_slice()` | none                   |
+| `Slice` → `Array` / `List` | `to_*()`     | copy                   |
 | `List` → `Array`           | `to_array()` | copy, sized to `len()` |
 | `Array` → `List`           | `to_list()`  | copy                   |
 
 ### Slice semantics
 
-A slice holds a reference to the whole backing array plus offsets, because Wasm
-GC has no interior references. Two consequences are normative and belong in
-`docs/spec.md`:
+A slice references the whole backing array plus offsets, because Wasm GC has no
+interior references. It is not free, only element-free: a view is an ordinary
+value-semantic struct, so assigning one copies its three fields like any other.
+What it never copies is what it points at, however long that is.
 
-- Snapshot — a view keeps referring to the buffer it was created from. If the
-  source `List` grows and reallocates, the view does not observe it.
-- Aliasing — a write to the source that does not reallocate is visible through
-  the view.
+Two consequences are normative and belong in `docs/spec.md`. Both are
+memory-safe under GC, and element access through a view is always a value copy.
 
-Both are memory-safe under GC. Element access through a view is always a value
-copy.
+- Snapshot — a view keeps referring to the buffer it was created from, so a
+  source `List` that grows and reallocates is not observed.
+- Aliasing — a write to the source that does not reallocate is visible.
 
 ### `Sequence` and `AsSlice`
 
 Two traits, split by whether the implementor has a contiguous backing. The
-element type is an associated type, not a type parameter, because a trait bound
-takes no positional type arguments — `<S: Sequence<i32>>` does not parse, only
-the associated-type form `<S: Sequence<Elem = i32>>` does. This is the same shape
-`Iterator` already uses for `Item`.
+element type is an associated type because a trait bound takes no positional
+type arguments: `<S: Sequence<i32>>` does not parse, only
+`<S: Sequence<Elem = i32>>` — the shape `Iterator` already uses for `Item`.
 
 ```wado
 /// Read-only sequence algorithms. Needs no contiguous backing.
@@ -116,44 +96,33 @@ internal trait AsSlice: Sequence {
 }
 ```
 
-`Sequence` lives beside the other core traits; `AsSlice` lives with `Slice`,
-which it names. `Array<T>`, `List<T>`, and `Slice<T>` implement both. Inherent
-methods shadow trait methods
+All three types implement both. Inherent methods shadow trait methods
 ([Overload Resolution](./wep-2026-07-31-overload-resolution.md)), so `Slice`'s
-own bodies win for `Slice` and the defaults do not recurse.
+own bodies win and the defaults do not recurse. Those defaults go through
+`len` / `get_unchecked`, never `as_slice()`, so `first()` stays an `array.get`
+instead of a struct the optimizer has to remove again.
 
-Only methods with no element bound can be default bodies. An associated type
-carries no bound, so `contains`, `binary_search`, `starts_with`, and `ends_with`,
-which need `Elem: Eq` or `Elem: Ord`, stay bounded inherent impls
-(`impl<T: Eq> Slice<T> { … }`) with thin bounded forwarders on `Array` and
-`List`. `Iterator` already hits this wall: `sum` / `min` / `max` live on
-`impl<T: Add> SliceValueIter<T>` rather than on the trait, which is why
-`xs.iter().map(f).sum()` does not compile. Lifting the restriction needs bounds
-on associated types — a separate proposal, and the enabler that would fold these
-methods back in.
+Only methods with no element bound can be defaults, since an associated type
+carries no bound. `contains`, `binary_search`, `starts_with`, and `ends_with`
+need `Elem: Eq` or `Elem: Ord`, so they stay bounded inherent impls with thin
+forwarders. `Iterator` already hits this wall — `sum` / `min` / `max` live on
+`impl<T: Add> SliceValueIter<T>`, not on the trait. Bounds on associated types
+would fold all of them back in; that is a separate proposal.
 
-`Sequence` default bodies are written against `len` + `get_unchecked` and do not
-construct a `Slice`: a `first()` that goes through `as_slice()` turns an
-`array.get` into a three-field struct the optimizer then has to remove.
-View-producing operations are exempt — constructing the view is the operation.
+Mutation is absent from both traits: `set`, `sort`, `reverse`, and `[i] = v`
+need a mutable backing `Slice` lacks, and length-changing operations belong to
+`List` alone. With two possible implementors a `SequenceMut` would not pay.
 
-Mutation is deliberately absent from both traits: `set`, `sort`, `reverse`, and
-`[i] = v` need a mutable backing that `Slice` does not have, and length-changing
-operations belong to `List` alone. They stay inherent. With only two possible
-implementors, a `SequenceMut` trait would not pay for itself.
-
-`String` implements neither. Its byte view stays on the existing `AsByteSlice` /
-`as_byte_slice()`, whose name is honest about returning bytes. A future
-`String: Sequence` with `Elem = char` is left expressible — this is why `as_slice()` sits on
-`AsSlice` and not on `Sequence`, since UTF-8 has no contiguous `char` backing —
-but is out of scope: `len()` and `get_unchecked()` over UTF-8 are O(n), which
-would silently make every `Sequence` default body O(n²).
+`String` implements neither; its byte view stays on `AsByteSlice`. A future
+`String: Sequence` with `Elem = char` is left expressible — which is why
+`as_slice()` sits on `AsSlice`, UTF-8 having no contiguous `char` backing — but
+`len()` and `get_unchecked()` over UTF-8 are O(n), making every default O(n²).
 
 ### Naming
 
-The value/reference axis is spelled out in every name that carries it. There is
-no unmarked member — an unmarked name is what drifted before, when the plain
-`Iter` came to mean the by-value iterator while `iter()` moved to references.
+The value/reference axis is spelled out in every name that carries it. No
+member is unmarked; an unmarked name is what drifted before, when the plain
+`Iter` came to mean by-value while `iter()` moved to references.
 
 | Axis    | Token    | Yields   |
 | ------- | -------- | -------- |
@@ -161,39 +130,36 @@ no unmarked member — an unmarked name is what drifted before, when the plain
 | shared  | `Ref`    | `&T`     |
 | mutable | `RefMut` | `&mut T` |
 
-`RefMut`, not `MutRef`: the marker traits read `Ref` / `RefMut`, and it matches
+`RefMut`, not `MutRef`: the marker traits read `Ref` / `RefMut`, matching
 `std::cell::Ref` / `RefMut`.
+
+`Slice`, not `ArraySlice`: the latter states the backing rather than the role,
+and `list.as_slice() -> ArraySlice` reads wrong. The argument for a prefix —
+that a flat prelude cannot be shadowed — holds far more strongly for `Iter`
+(which also collided with the `Iterator` trait). Domain uses take qualified
+names (`TimeSlice`), and a conflict is a compile error, not silent breakage.
 
 | Type                 | Item       |
 | -------------------- | ---------- |
-| `Slice<T>`           | —          |
 | `SliceValueIter<T>`  | `T`        |
 | `SliceRefIter<T>`    | `&T`       |
 | `SliceRefMutIter<T>` | `&mut T`   |
 | `SliceWindows<T>`    | `Slice<T>` |
 | `SliceChunks<T>`     | `Slice<T>` |
 
-`Slice`, not `ArraySlice`: the latter states the backing rather than the role,
-and `list.as_slice() -> ArraySlice` reads wrong. The argument for the prefix —
-that `Slice` is too generic for a flat prelude, which cannot be shadowed — holds
-far more strongly for `Iter` (which also collided with the `Iterator` trait) than
-for `Slice`. Domain uses take qualified names (`TimeSlice`), and the conflict is
-a clear compile error, not silent breakage.
-
 Methods take the same axis: `iter_value()`, `iter_ref()`, `iter_ref_mut()`, and
-`SliceRefIter::iter_value()` in place of a Rust-style `copied()`. Wado's
-reference semantics diverge from Rust's — a `&T` into an array element is a
-snapshot copy that cannot write back, and `&mut T` is available only for
-`T: RefMut` — so reusing Rust's names would mislead, which
+`SliceRefIter::iter_value()` where Rust says `copied()`. Wado's reference
+semantics diverge — a `&T` into an array element is a snapshot copy that cannot
+write back, and `&mut T` needs `T: RefMut` — so Rust's names would mislead,
+which
 [Checked/Unchecked Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
-forbids.
+forbids. `IntoIterator` / `into_iter` are exempt: they are the `for-of`
+desugaring hook, and `for-of` marks the axis in syntax already.
 
-`IntoIterator` / `into_iter` are exempt: they are the `for-of` desugaring hook,
-not a hand-called method, and `for-of` already marks the axis in syntax
-(`for x of xs` / `&xs` / `&mut xs` yield `T` / `&T` / `&mut T`).
+### Map and set traversals
 
-The axis is not confined to sequences. `TreeMap` and `TreeSet` carry it too,
-since a caller reading either has the same choice to make:
+`TreeMap` and `TreeSet` carry the same axis, since a caller reading either has
+the same choice to make.
 
 | Type                            | Item       | Reached by               |
 | ------------------------------- | ---------- | ------------------------ |
@@ -207,31 +173,23 @@ since a caller reading either has the same choice to make:
 | `TreeMapEntriesValueIter<K, V>` | `[K, V]`   | `entries().iter_value()` |
 
 A map projection needs no axis suffix: `keys` already names what it yields, and
-`keys_ref` would repeat the `&K` the signature states. The three yield
-references, and reference is the only axis they offer — a `&mut` into a key
-would break the ordering invariant, and one into a value buys nothing over
-`m[k] = v`. Callers wanting owned elements take `iter_value()` off the
-reference iterator, exactly as with `SliceRefIter`. `TreeMapValuesValueIter`
-doubles the word because the axis meets a projection that is itself named
-`values`; the reading — the map's _values_, yielded by _value_ — is exact, and
-dropping either word would cost more than the repetition does.
+`keys_ref` would repeat the `&K` the signature states. Reference is the only
+axis the three offer — a `&mut` key would break the ordering invariant, and a
+`&mut` value buys nothing over `m[k] = v`. `TreeMapValuesValueIter` doubles the
+word because the axis meets a projection already named `values`; the reading is
+exact, and dropping either word would cost more than the repetition.
 
 The iterators hold `&List<TreeMapEntry<K, V>>`, mirroring `Slice`'s
-`&Array<T>`. Holding it by value would deep-copy every entry at construction —
-which the pre-iterator `entries()` did, returning an eagerly built `List`.
+`&Array<T>`; holding it by value would deep-copy every entry at construction,
+which the eager `entries()` did. Being views they inherit the aliasing rule, so
+inserting or removing mid-traversal can skip or repeat an entry — a behaviour
+change from the eager versions. `iter_value().collect()` takes a snapshot.
 
-The index traits keep their four-way split — it follows from Wado's constraints,
-since `Output: Ref` / `Output: RefMut` bounds exclude scalars from `IndexRef`,
-and a scalar has no addressable cell, so `IndexAssign` cannot fold into a
-`&mut`. All four call their associated type `Output`, as Rust does with the one
-`Index::Output` its `IndexMut` inherits.
+### Indexing
 
-`Output`, not `Elem`: what a subscript yields is the element only when the
-subscript is one position. `IndexValue<RangeExclusive<i32>>` yields a
-`Slice<T>`, so `Elem` would be false there. `Output` claims only that it is what
-the operation produces, which holds for all four — loosely for `IndexAssign`,
-whose value travels inward, but never falsely. `Sequence::Elem` keeps the name
-because a sequence's elements really are elements.
+The index traits keep their four-way split: `Output: Ref` / `Output: RefMut`
+bounds exclude scalars from `IndexRef`, and a scalar has no addressable cell, so
+`IndexAssign` cannot fold into a `&mut`.
 
 | Trait                              | Subscript   | `Output`    |
 | ---------------------------------- | ----------- | ----------- |
@@ -240,41 +198,42 @@ because a sequence's elements really are elements.
 | `IndexRefMut<I>` / `index_ref_mut` | `&mut c[i]` | `&mut T`    |
 | `IndexAssign<I>` / `index_assign`  | `c[i] = v`  | written `T` |
 
-The internal intrinsics follow the same axis: `array_get_value`, `array_get_ref`,
-`array_get_ref_mut` (and `array_get_value_u8`). Naming them this way breaks no
-mirror of the Wasm instruction names, because the family never was one — Wasm GC
-has no `array.get_ref` or `array.get_mut_ref`, and `array_new` already maps to
-`array.new_default`.
+All four name their associated type `Output`, not `Elem`: what a subscript
+yields is the element only when the subscript is one position, and
+`IndexValue<RangeExclusive<i32>>` yields a `Slice<T>`. `Sequence::Elem` keeps
+its name because a sequence's elements really are elements.
 
-### Indexing and the `_unchecked` contract
+The internal intrinsics follow the axis too — `array_get_value`,
+`array_get_ref`, `array_get_ref_mut`. This mirrors no Wasm instruction names,
+because the family never did: Wasm GC has no `array.get_ref`, and `array_new`
+already maps to `array.new_default`.
 
-`.get(i)` returns `Option<T>` on all three types.
+### Bounds checks and the `_unchecked` contract
 
-`xs[i]` traps when out of bounds. The message is implementation-defined: Wado
-offers no trap recovery, so the trap itself is the whole contract. This makes the
-per-type difference in mechanism correct rather than drift:
+`.get(i)` returns `Option<T>` on all three types. `xs[i]` traps when out of
+bounds; the message is implementation-defined, since Wado offers no trap
+recovery and the trap itself is the whole contract. Each type checks exactly
+what Wasm's own check leaves uncovered:
 
-- `Array[i]` — the backing is the length, so `array.get`'s own bounds check is
-  necessary and sufficient. An added check would be pure duplicate cost.
-- `List[i]` / `Slice[i]` — the backing is longer than `len()` (spare capacity, or
-  the region outside the view), so the Wasm check is insufficient; it would read
-  a stale slot. An explicit check is required anyway, so it uses `assert` and
-  gets power-assert diagnostics for free.
+| Type    | Upper bound         | Lower bound                     |
+| ------- | ------------------- | ------------------------------- |
+| `Array` | `array.get`         | `array.get`                     |
+| `List`  | `assert` — capacity | `array.get`                     |
+| `Slice` | `assert` — the view | `assert` — `start + i` is valid |
 
-`Slice` hand-rolled its check as `if … { panic(…) }`; it uses `assert` like
-`List`, so both report through the same mechanism.
+`Array`'s backing is its length, so `array.get` is necessary and sufficient.
+`List` and `Slice` have backings longer than `len()` — spare capacity, or the
+region outside the view — so an upper-bound `assert` is required, and it earns
+power-assert diagnostics for free. Only `Slice` also needs the lower bound: it
+offsets by `start`, so `view[-1]` is a _valid_ backing index and would return an
+element outside the view silently. `List[-1]` and `Array[-1]` trap in
+`array.get`, a negative `i32` reading as a huge unsigned index.
 
-The index traits check only the upper bound. The lower one belongs there — its
-own `insert` / `remove` / `swap` check it — but writing `assert 0 <= index < len`
-costs two things today and buys no safety, since a negative index traps on the
-Wasm bounds check either way: the power-assert instrumentation renders no
-operand values for a chained comparison
-([#1855](https://github.com/wado-lang/wado/issues/1855)), so the diagnostic
-loses the `index: 5` line that is the whole reason these traits assert rather
-than let Wasm trap; and the bounds-check elimination stops recognising the
-index-write loop, losing the `array.fill` collapse
-([#1856](https://github.com/wado-lang/wado/issues/1856)). Restore the lower
-bound once a chained comparison costs neither.
+Each bound is its own `assert` rather than a chained `assert 0 <= i < len`,
+which today renders no operand values
+([#1855](https://github.com/wado-lang/wado/issues/1855)) and stops the
+bounds-check elimination from collapsing an index-write loop into `array.fill`
+([#1856](https://github.com/wado-lang/wado/issues/1856)).
 
 `get_unchecked` carries this contract:
 
@@ -282,19 +241,15 @@ bound once a chained comparison costs neither.
 > unspecified value of `T` or traps. It is never undefined behavior and never
 > compromises memory safety.
 
-This is a structural guarantee, not an aspiration: every path bottoms out in
-`array.get`, which Wasm GC always bounds-checks. Wado's `_unchecked` is
-categorically weaker than Rust's — it elides a semantic check, not a memory check
-— which is why Wado needs no `unsafe`. The name is borrowed from Rust; the
-contract is not.
-
-`Array::get` therefore returns `Option<T>` rather than `T`, and the raw trapping
-access is `Array::get_unchecked`, filling a gap in the family.
+That is structural, not aspirational: every path bottoms out in `array.get`,
+which Wasm GC always bounds-checks. Wado's `_unchecked` elides a semantic check,
+not a memory check — categorically weaker than Rust's, and why Wado needs no
+`unsafe`. The name is borrowed from Rust; the contract is not.
 
 ### Component Model boundary
 
 Eligibility splits by direction. Lowering (Wado supplies the list) needs only a
-contiguous region and a length. Lifting (Wado receives it) needs an owner for
+contiguous region and a length; lifting (Wado receives it) needs an owner for
 freshly lifted memory, and return-position generics are not expressible.
 
 | Type       | Lift (`export` param, `import` return) | Lower (`import` param, `export` return) |
@@ -307,12 +262,11 @@ freshly lifted memory, and return-position generics are not expressible.
 while `cm_binding/types.rs` reports it as having no CM representation.
 
 `Slice<T>` is rejected at the definition site in both directions until the
-lowering path exists, because reaching `wit_emit` instead drops the
-component-type section for the whole component and breaks the static "an
-`export` appears in WIT" guarantee of
-[Visibility](./wep-2026-06-25-visibility-internal-pub-export.md). Opening the
-lowering column needs the canonical-ABI lowering for a view (read `repr` /
-`start` / `end`, copy the range out) plus the `wit_emit` mapping.
+lowering path exists — anywhere within the type, not merely at its head, since a
+slice nested in a tuple or payload degrades identically. Reaching `wit_emit`
+instead drops the component-type section for the whole component, breaking the
+static "an `export` appears in WIT" guarantee of
+[Visibility](./wep-2026-06-25-visibility-internal-pub-export.md).
 
 Generic ergonomics stay out of the language. `wado-from-idl` emits a raw binding
 taking `Slice<T>` plus a thin Wado wrapper:
@@ -328,14 +282,11 @@ pub fn send<S: AsSlice<Elem = u8>>(&self, data: S, …) -> … {
 Callers keep writing `f(xs)`, and a sub-range crosses the boundary without the
 `to_list()` copy it needs today. The alternative — making `AsSlice` a
 WIT-representable bound projecting to `list<T>` — would add a bound-to-WIT
-projection plus a position-dependent legality rule to the language, at the one
-place where "one declaration, no overloading, no implicit conversion" binds
-hardest. `core:cbor` / `core:json` / `core:digest` already prove the wrapper
-pattern via `AsByteSlice`.
-
-This applies to top-level parameters only. A `list<T>` inside a `record` field
-has no position polymorphism and stays `List<T>` (e.g. `wasi:http`'s
-`FieldValue = List<u8>`).
+projection plus a position-dependent legality rule, at the one place where "one
+declaration, no overloading, no implicit conversion" binds hardest.
+`core:cbor` / `core:json` / `core:digest` already prove the wrapper pattern via
+`AsByteSlice`. This applies to top-level parameters only; a `list<T>` inside a
+`record` field stays `List<T>`.
 
 ## Consequences
 
@@ -343,29 +294,22 @@ has no position polymorphism and stays `List<T>` (e.g. `wasi:http`'s
   slice no longer loses methods.
 - Rust muscle memory is intentionally broken at the iterator methods, where
   Wado's semantics genuinely differ. The rename is wide but mechanical.
-- A view type has to write its own `Eq` / `Ord` / `Display` / `Inspect`. The
-  structural derivation is not wrong — `&T == &T` is reference identity by
-  design, so comparing the backing follows from it — but it answers about the
-  view rather than about the elements, which is not what a slice means.
+- A view has to write its own `Eq` / `Ord` / `Display` / `Inspect`. Structural
+  derivation is not wrong — `&T == &T` is reference identity by design — but it
+  answers about the view rather than the elements.
 - The `Slice` name is claimed from the prelude and can no longer be user-defined.
-- `Sequence` default bodies are instantiated per implementor, but each is small
-  and DCE removes unused ones.
-- Methods needing an element bound stay duplicated across the three types until
-  trait type parameters can carry bounds.
+- `Sequence` defaults are instantiated per implementor; each is small and DCE
+  removes unused ones.
+- Methods needing an element bound stay duplicated until bounds on associated
+  types exist.
 
 ## Roadmap
 
-### Iterator adaptors
-
 - [ ] `sum` / `min` / `max` are bounded inherent methods on `SliceValueIter`
-      alone, so `xs.iter_value().map(f).sum()` does not compile. Give the
-      adaptors their own, or record the gap against the bound restriction above.
-
-### Component Model boundary and documentation
-
+      alone, so `xs.iter_value().map(f).sum()` does not compile.
 - [ ] Accept `Array<T>` in `cm_binding`, matching `wit_emit`.
 - [ ] Lower `Slice<T>` through the canonical ABI and map it in `wit_emit`, then
       narrow the definition-site error to lifting positions only.
 - [ ] The `wado-from-idl` `AsSlice` wrapper.
-- [ ] Document `Array<T>` and `Slice<T>` in `docs/spec.md` (including the CM type
-      mapping table and the snapshot/aliasing rules) and the cheatsheet.
+- [ ] Document `Array<T>` and `Slice<T>` in `docs/spec.md` (CM type mapping,
+      snapshot/aliasing rules) and the cheatsheet.

@@ -1,18 +1,8 @@
 #![no_prelude]
 #![stdlib("core:prelude/array.wado")]
-// The raw fixed-length GC array `Array<T>` — the builtin storage primitive
-// behind `String` and `List<T>`, now exposed as a first-class value type.
-//
-// `Array<T>` is a value type: assigning it, passing it by value, or
-// returning it deep-copies the backing GC array (see WEP-2026-06-02). Its
-// length is a runtime value (`array.len`), not part of the type. `arr[i]`
-// copies (`T`, via the direct `array.get` path); `IndexRef` / `IndexRefMut` hand
-// out element references for `Ref` / `RefMut` elements, backed by the
-// `builtin::array_get_ref` / `array_get_ref_mut` intrinsics. In-place mutation
-// goes through `set` / `[i] = v`.
-//
-// Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
-// lowers directly to the matching `array.*` instruction.
+// The fixed-length GC array behind `String` and `List<T>`, and a value type in
+// its own right: assignment deep-copies it, and its length is a runtime value
+// (`array.len`), not part of the type. See WEP-2026-06-02.
 
 use {
     Ordering,
@@ -77,13 +67,11 @@ impl Array<T> {
         builtin::array_copy(self, dst, src, src_off, len);
     }
 
-    /// Returns an iterator yielding a mutable reference to each element.
-    /// Available only where `T` is mutated in place; a scalar element has no
-    /// addressable cell, so a write through `&mut T` would be lost.
+    /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
+    /// addressable cell, so a write through the reference would be lost.
     pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
         return SliceRefMutIter::internal_new(self, 0, builtin::array_len(self));
     }
-
 }
 
 impl Default for Array<T> {
@@ -142,7 +130,6 @@ impl<T> AsSlice for Array<T> {
 }
 
 impl<T: Eq> Array<T> {
-    /// Returns true if the array contains the given value.
     pub fn contains(&self, value: &T) -> bool {
         return self.as_slice().contains(value);
     }

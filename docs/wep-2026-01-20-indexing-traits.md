@@ -22,35 +22,35 @@ C++'s `vector<bool>` does).
 ## The four index traits
 
 ```wado
-/// Read by value: `c[i]` -> Elem (a copy).
+/// Read by value: `c[i]` -> Output (a copy).
 internal trait IndexValue<IndexType> {
-    type Elem;
-    fn index_value(&self, index: IndexType) -> Self::Elem;
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
 }
 
 /// Write by value: `c[i] = v`.
 internal trait IndexAssign<IndexType> {
-    type Elem;
-    fn index_assign(&mut self, index: IndexType, value: Self::Elem);
+    type Output;
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
 }
 
-/// Read by reference: `&c[i]` -> &Elem.
+/// Read by reference: `&c[i]` -> &Output.
 internal trait IndexRef<IndexType> {
-    type Elem: Ref;
-    fn index_ref(&self, index: IndexType) -> &Self::Elem;
+    type Output: Ref;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
 }
 
-/// Mutable reference: `c[i].mutating_method()` -> &mut Elem.
+/// Mutable reference: `c[i].mutating_method()` -> &mut Output.
 internal trait IndexRefMut<IndexType> {
-    type Elem: RefMut;
-    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Elem;
+    type Output: RefMut;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
 }
 ```
 
 The traits are independent — a container implements only the behaviors it
 supports. `IndexValue` / `IndexAssign` carry no bound (reads copy out, writes copy
-in). `IndexRef` returns a shared reference, so its `Elem` must be `Ref`;
-`IndexRefMut` returns a mutable reference, so its `Elem` must additionally be
+in). `IndexRef` returns a shared reference, so its `Output` must be `Ref`;
+`IndexRefMut` returns a mutable reference, so its `Output` must additionally be
 mutated in place, `RefMut`. A container of value-typed elements cannot implement
 the reference traits; its `[i]` is read by value.
 
@@ -100,13 +100,13 @@ even though `&i32` is.
 Both are sealed: the compiler provides each for every eligible type and rejects a
 user `impl Ref` / `impl RefMut` (a user's own same-named `trait` owns that name).
 
-## The markers gate the trait `Elem`, not the `&` operator
+## The markers gate the trait `Output`, not the `&` operator
 
-`type Elem: Ref` on `IndexRef` and `type Elem: RefMut` on `IndexRefMut` are
-enforced: a container whose `Elem` is a value type cannot declare `IndexRef`,
-and one whose `Elem` is replace-on-assign cannot declare `IndexRefMut` — either
+`type Output: Ref` on `IndexRef` and `type Output: RefMut` on `IndexRefMut` are
+enforced: a container whose `Output` is a value type cannot declare `IndexRef`,
+and one whose `Output` is replace-on-assign cannot declare `IndexRefMut` — either
 promises a reference the element cannot back. It exposes `IndexValue` instead, so
-`impl IndexRef<i32> for C { type Elem = i32 }` is a compile error.
+`impl IndexRef<i32> for C { type Output = i32 }` is a compile error.
 
 The gate is on the traits, not the language `&`. `&c[i]` on a value element
 (`&nums[i]` on `List<i32>`) stays legal: under value semantics a reference to a

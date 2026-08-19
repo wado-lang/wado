@@ -703,11 +703,11 @@ Trait for creating a collection from any iterator of `Elem`.
 
 ### `pub trait AsByteSlice`
 
-Zero-copy conversion to a `ByteSlice`.
+Conversion to a `ByteSlice` that copies no bytes.
 
 Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
-`core:json` `from_bytes`) accept any of them without copying.
+`core:json` `from_bytes`) accept any of them.
 
 #### `fn as_byte_slice(&self) -> ByteSlice with stores[self]`
 
@@ -798,9 +798,9 @@ Write a chunk of data to the stream.
 #### `fn write_raw(&self, data: Slice<T>)`
 
 Write a byte view directly to the stream, without the deep copy that
-value-semantics `write` makes. The slice is a zero-copy window over a
-backing array (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`),
-so only the CM lowering copy remains.
+value-semantics `write` makes. The slice references its backing array
+(`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
+only the CM lowering copy remains.
 
 #### `fn cancel_write(&self)`
 
@@ -3195,22 +3195,15 @@ _Fields are private._
 
 #### `pub fn len(&self) -> i32`
 
-Returns the number of elements in the slice.
-
 Also the byte-length anchor for the synthesised `FieldSchema::lookup`
-(on `Slice<u8>`), routed through `#[compiler_item]` so a rename
-here cannot silently break code generation.
+(on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
+cannot silently break code generation.
 
 #### `pub fn get_unchecked(&self, index: i32) -> T`
 
-Returns the element at `index` without bounds checking.
-
-The caller must guarantee `0 <= index < len()`; an out-of-range
-`index` reads past the view into the backing array or traps.
-
-Also the byte-read anchor for the synthesised `FieldSchema::lookup`
-(on `Slice<u8>`), routed through `#[compiler_item]` for the same
-rename-safety reason as `len`.
+The caller must guarantee `0 <= index < len()`; an out-of-range `index`
+reads past the view into the backing array or traps. Also the byte-read
+anchor for `FieldSchema::lookup`, as `len` is for byte length.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
@@ -3219,34 +3212,23 @@ to its bounds.
 
 #### `pub fn iter_value(&self) -> SliceValueIter<T> with stores[self]`
 
-Returns an iterator yielding each element by value.
-
 #### `pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self]`
-
-Returns an iterator yielding a reference to each element.
 
 #### `pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self]`
 
-Returns an iterator over overlapping windows of `size` consecutive
-elements. Panics if `size` is not positive.
+Overlapping windows of `size` consecutive elements. Panics if `size` is
+not positive.
 
 #### `pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self]`
 
-Returns an iterator over non-overlapping chunks of up to `size`
-elements. The last chunk may be shorter. Panics if `size` is not
-positive.
+Non-overlapping chunks of up to `size` elements; the last may be
+shorter. Panics if `size` is not positive.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
-Copies the slice's elements into a new `Array<T>`.
-
 #### `pub fn to_list(&self) -> List<T>`
 
-Copies the slice's elements into a new `List<T>`.
-
 #### `pub fn contains(&self, value: &T) -> bool`
-
-Returns true if the slice contains the given value.
 
 #### `impl Sequence for Slice<T>`
 
@@ -3329,18 +3311,16 @@ copy of the underlying range.
 
 ### `pub struct SliceRefIter<T>`
 
-A by-reference forward iterator over a backing `Array<T>` range, yielding
-`&T`. The yielded reference points to a fresh copy of each element (Wasm GC
-has no interior references), so it is a read-only view and cannot mutate the
-backing array. Backs `for x of &list`.
+A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
+points to a fresh copy of the element — Wasm GC has no interior references —
+so it reads but never writes the backing array. Backs `for x of &list`.
 
 _Fields are private._
 
 #### `pub fn iter_value(&self) -> SliceValueIter<T>`
 
-The value iterator over the same remaining range: yields `T` where this
-yields `&T`. Named for the axis rather than Rust's `copied()`, since
-every element read in Wado is a copy already.
+The same remaining range yielded by value. Named for the axis rather
+than Rust's `copied()`: every element read in Wado is a copy already.
 
 #### `impl Iterator for SliceRefIter<T>`
 
@@ -4002,13 +3982,10 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
-Returns true if the list contains the given value.
-
 #### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self]`
 
-Returns an iterator yielding a mutable reference to each element.
-Available only where `T` is mutated in place; a scalar element has no
-addressable cell, so a write through `&mut T` would be lost.
+Yields `&mut T` only where `T: RefMut`: a scalar element has no
+addressable cell, so a write through the reference would be lost.
 
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering)`
 

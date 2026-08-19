@@ -1453,7 +1453,7 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "slice type in {position} of `{function}` is not allowed: a slice is a borrowed view with no Component Model representation; use `List<T>` or `Array<T>`"
+                    "slice type in {position} of `{function}` is not allowed: a slice is a reference view with no Component Model representation; use `List<T>` or `Array<T>`"
                 ),
                 *span,
             ),

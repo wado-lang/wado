@@ -5,7 +5,7 @@
 //! A byte sequence is a first-class concept across the ecosystem, not an
 //! incidental `List<u8>`. These newtypes give the serde data model a real
 //! byte-string type (`core:cbor` byte strings; `core:json` base64) and let
-//! byte-reading APIs accept any owned or borrowed byte buffer without copying.
+//! byte-reading APIs accept an owned byte buffer or a view of one, uncopied.
 
 
 use { Array } from "core:prelude/array.wado";
@@ -20,15 +20,15 @@ internal type ByteArray = Array<u8>;
 #[compiler_item("byte_list")]
 internal type ByteList = List<u8>;
 
-/// A borrowed, zero-copy view over a byte buffer.
+/// A view referencing a byte buffer.
 #[compiler_item("byte_slice")]
 internal type ByteSlice = Slice<u8>;
 
-/// Zero-copy conversion to a `ByteSlice`.
+/// Conversion to a `ByteSlice` that copies no bytes.
 ///
 /// Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 /// UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
-/// `core:json` `from_bytes`) accept any of them without copying.
+/// `core:json` `from_bytes`) accept any of them.
 internal trait AsByteSlice {
     fn as_byte_slice(&self) -> ByteSlice with stores[self];
 }
