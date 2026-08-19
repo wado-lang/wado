@@ -123,7 +123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
                 let ref_name = format!("__ref_{var_name}");
-                let _ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
+                let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
                 mut_captures.push(super::sem::types::MutCapture {
@@ -132,6 +132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     inner_type,
                     ref_type,
                     outer_index,
+                    ref_index,
                 });
                 deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
             }
