@@ -272,12 +272,12 @@ fn bench<T, F: FnMut() -> T>(label: &str, work_per_iter: f64, unit: &str, mut f:
 }
 
 fn main() {
-    let json_data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/twitter.json"))
+    let json_data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/twitter.json"))
         .expect("Failed to read twitter.json");
     let json_size = json_data.len();
 
     let resp: TwitterResponse =
-        serde_json::from_str(&json_data).expect("Failed to parse twitter.json");
+        serde_json::from_slice(&json_data).expect("Failed to parse twitter.json");
 
     println!("json-twitter: {json_size} bytes");
 
@@ -286,7 +286,7 @@ fn main() {
     });
 
     let count = bench("De", json_size as f64, "B", || {
-        let r: TwitterResponse = serde_json::from_str(&json_data).expect("decode");
+        let r: TwitterResponse = serde_json::from_slice(&json_data).expect("decode");
         r.statuses.len()
     });
 

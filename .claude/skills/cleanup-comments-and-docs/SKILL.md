@@ -1,6 +1,6 @@
 ---
 name: cleanup-comments-and-docs
-description: Cut the branch's comments, doc comments, and Markdown down to the minimum — delete anything the code already says, cap doc/module comments at 3 lines and each Markdown topic at 2. Mandatory: run it after finishing a requested task, before reporting back to the user.
+description: "Cut the branch's comments, doc comments, and Markdown down to the minimum — delete anything the code already says, cap doc/module comments at 3 lines and each Markdown topic at 2. Mandatory: run it after finishing a requested task, before reporting back to the user."
 ---
 
 ## Scope

@@ -590,7 +590,8 @@ impl CstStore {
             Open => ChildKind::Node,
             Miss => ChildKind::Missing,
             Skip => ChildKind::Skipped,
-            _ => ChildKind::Token,
+            Tok => ChildKind::Token,
+            Close => panic("CstStore::child_kind: Close is not a child row"),
         };
     }
 
@@ -678,7 +679,7 @@ fn cst_to_string_tree_impl(
                 out.push_str(&">");
                 c += 1;
             },
-            _ => c += 1,
+            Close => c += 1,
         }
     }
     out.push_str(&")");
@@ -1708,11 +1709,6 @@ impl Parser {
         }
     }
 
-    fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.full_message(); }
-        return String::from("");
-    }
-
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
         for let x of set { if *x == k { return true; } }
         return false;
@@ -1851,22 +1847,13 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if k != TK_EOF {
-            let mut blocked = false;
-            for let x of excluded {
-                if x == k {
-                    blocked = true;
-                    break;
-                }
-            }
-            if !blocked {
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
-            }
+        if k != TK_EOF && !self.in_set(k, excluded) {
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
@@ -1877,40 +1864,38 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        for let x of included {
-            if x == k {
-                if k == TK_EOF {
-                    self.b.token(self.pos);
-                    return self.pos;
-                }
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
+        if self.in_set(k, included) {
+            if k == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
             }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            &included,
+            included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
 }
 
-fn scan_json(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_json(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_value(tokens, pos, 0);
+    pos = scan_value(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_obj(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_obj(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1921,7 +1906,7 @@ fn scan_obj(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { break try_0; }
                 pos += 1;
-                pos = scan_pair(tokens, pos, 0);
+                pos = scan_pair(tokens, pos);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
@@ -1929,7 +1914,7 @@ fn scan_obj(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                         sg_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                             pos += 1;
-                            pos = scan_pair(tokens, pos, 0);
+                            pos = scan_pair(tokens, pos);
                             if pos < 0 { break sg_0; }
                             break sg_0_done;
                         }
@@ -1959,18 +1944,18 @@ fn scan_obj(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_pair(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_pair(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STRING { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
     pos += 1;
-    pos = scan_value(tokens, pos, 0);
+    pos = scan_value(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_arr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_arr(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1981,7 +1966,7 @@ fn scan_arr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_0; }
                 pos += 1;
-                pos = scan_value(tokens, pos, 0);
+                pos = scan_value(tokens, pos);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
@@ -1989,7 +1974,7 @@ fn scan_arr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                         sg_1: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
-                            pos = scan_value(tokens, pos, 0);
+                            pos = scan_value(tokens, pos);
                             if pos < 0 { break sg_1; }
                             break sg_1_done;
                         }
@@ -2019,7 +2004,7 @@ fn scan_arr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_value(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_value(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2043,7 +2028,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_LIT_LBRACE {
             pos = start;
             try_2: {
-                pos = scan_obj(tokens, pos, 0);
+                pos = scan_obj(tokens, pos);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
@@ -2051,7 +2036,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_LIT_LBRACKET {
             pos = start;
             try_3: {
-                pos = scan_arr(tokens, pos, 0);
+                pos = scan_arr(tokens, pos);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
@@ -2088,8 +2073,8 @@ fn scan_value(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 }
 
 fn _parse_json__inner(p: &mut Parser) -> () {
-    let value = _parse_value(p);
-    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    _parse_value(p);
+    p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -2105,8 +2090,8 @@ fn _parse_json(p: &mut Parser) -> () {
 }
 
 fn _parse_obj__inner_alt_0(p: &mut Parser) -> () {
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
-    let pair = _parse_pair(p);
+    p.expect(TK_LIT_LBRACE, &SYNC_0);
+    _parse_pair(p);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -2117,7 +2102,7 @@ fn _parse_obj__inner_alt_0(p: &mut Parser) -> () {
                 sg_2: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
                     pos += 1;
-                    pos = scan_pair(tokens, pos, 0);
+                    pos = scan_pair(tokens, pos);
                     if pos < 0 { break sg_2; }
                     break sg_2_done;
                 }
@@ -2127,16 +2112,16 @@ fn _parse_obj__inner_alt_0(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
-        let pair = _parse_pair(p);
+        p.expect(TK_LIT_COMMA, &SYNC_0);
+        _parse_pair(p);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
+    p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
     return;
 }
 
 fn _parse_obj__inner_alt_1(p: &mut Parser) -> () {
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_1);
-    let rbrace = p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
+    p.expect(TK_LIT_LBRACE, &SYNC_1);
+    p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
     return;
 }
 
@@ -2172,9 +2157,9 @@ fn _parse_obj(p: &mut Parser) -> () {
 }
 
 fn _parse_pair__inner(p: &mut Parser) -> () {
-    let string = p.expect(TK_STRING, &SYNC_3);
-    let colon = p.expect(TK_LIT_COLON, &SYNC_4);
-    let value = _parse_value(p);
+    p.expect(TK_STRING, &SYNC_3);
+    p.expect(TK_LIT_COLON, &SYNC_4);
+    _parse_value(p);
     return;
 }
 
@@ -2190,8 +2175,8 @@ fn _parse_pair(p: &mut Parser) -> () {
 }
 
 fn _parse_arr__inner_alt_0(p: &mut Parser) -> () {
-    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_4);
-    let value = _parse_value(p);
+    p.expect(TK_LIT_LBRACKET, &SYNC_4);
+    _parse_value(p);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -2202,7 +2187,7 @@ fn _parse_arr__inner_alt_0(p: &mut Parser) -> () {
                 sg_3: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
                     pos += 1;
-                    pos = scan_value(tokens, pos, 0);
+                    pos = scan_value(tokens, pos);
                     if pos < 0 { break sg_3; }
                     break sg_3_done;
                 }
@@ -2212,16 +2197,16 @@ fn _parse_arr__inner_alt_0(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA, &SYNC_4);
-        let value = _parse_value(p);
+        p.expect(TK_LIT_COMMA, &SYNC_4);
+        _parse_value(p);
     }
-    let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+    p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
 
 fn _parse_arr__inner_alt_1(p: &mut Parser) -> () {
-    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_5);
-    let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+    p.expect(TK_LIT_LBRACKET, &SYNC_5);
+    p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
 
@@ -2259,31 +2244,31 @@ fn _parse_arr(p: &mut Parser) -> () {
 fn _parse_value__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_STRING {
-        let string = p.expect(TK_STRING, &EMPTY_SYNC);
+        p.expect(TK_STRING, &EMPTY_SYNC);
         return;
     }
     if kind == TK_NUMBER {
-        let number = p.expect(TK_NUMBER, &EMPTY_SYNC);
+        p.expect(TK_NUMBER, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_LBRACE {
-        let obj = _parse_obj(p);
+        _parse_obj(p);
         return;
     }
     if kind == TK_LIT_LBRACKET {
-        let arr = _parse_arr(p);
+        _parse_arr(p);
         return;
     }
     if kind == TK_LIT_TRUE {
-        let lit_true = p.expect(TK_LIT_TRUE, &EMPTY_SYNC);
+        p.expect(TK_LIT_TRUE, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_FALSE {
-        let lit_false = p.expect(TK_LIT_FALSE, &EMPTY_SYNC);
+        p.expect(TK_LIT_FALSE, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_NULL {
-        let lit_null = p.expect(TK_LIT_NULL, &EMPTY_SYNC);
+        p.expect(TK_LIT_NULL, &EMPTY_SYNC);
         return;
     }
     p.no_viable(
@@ -2346,19 +2331,19 @@ pub fn parse_value(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_value(p));
 }
 
-pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(14);
+fn _token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(14);
     for let mut k = 0; k < 14; k += 1 {
-        token_names.push(token_kind_name(k));
+        v.push(token_kind_name(k));
     }
-    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
+    return v;
+}
+
+pub fn to_string_tree(result: &ParseResult) -> String {
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(14);
-    for let mut k = 0; k < 14; k += 1 {
-        token_names.push(token_kind_name(k));
-    }
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
         if RULE_NAMES[i] == *rule {
@@ -2366,9 +2351,10 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
             break;
         }
     }
+    if _kind < 0 { return String::new(); }
     let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
 }

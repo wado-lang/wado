@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::compiler_item::SeqField;
 use crate::flat_package::FlatPackage;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
@@ -19,14 +19,15 @@ use crate::tir::{
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
-use super::needs_value_copy;
+use super::{ValueCopyHelpers, needs_value_copy};
 
 pub fn synthesize_helpers(
     project: &mut FlatPackage,
     initial: IndexSet<TypeId>,
-) -> IndexMap<TypeId, (ModuleSource, String)> {
+) -> ValueCopyHelpers<(ModuleSource, String)> {
+    let mut helpers = ValueCopyHelpers::default();
     if initial.is_empty() {
-        return IndexMap::default();
+        return helpers;
     }
 
     let type_table_rc = project.type_table.clone();
@@ -35,7 +36,6 @@ pub fn synthesize_helpers(
     // anything in a `wasi:` module, which would orphan helpers for types
     // declared in WASI interfaces (e.g. `wasi:http/types`).
     let helper_module = project.entry_module_source.clone();
-    let mut name_for_type: IndexMap<TypeId, (ModuleSource, String)> = IndexMap::default();
     let mut new_funcs: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
 
     // Worklist over the transitive closure of types that need a
@@ -45,15 +45,9 @@ pub fn synthesize_helpers(
     // also need. Iterate until no new types appear.
     let mut seen: IndexSet<TypeId> = initial.iter().copied().collect();
     let mut worklist: Vec<TypeId> = initial.into_iter().collect();
-    // The type table can intern the same structural type under more than one
-    // `TypeId`, which would otherwise mint two identically-named helpers and
-    // collide in the function registry. Helpers are identified by their
-    // canonical mangle, so a second `TypeId` for an already-generated type
-    // maps onto the same helper (recorded in `name_for_type`) instead of
-    // producing a duplicate.
     let mut generated_names: IndexSet<String> = IndexSet::default();
     while let Some(type_id) = worklist.pop() {
-        let func = generate_copy_function(type_id, project, &type_table_rc, &helper_module);
+        let (func, key) = generate_copy_function(type_id, project, &type_table_rc, &helper_module);
         if let Some(ref body) = func.body {
             let tt = type_table_rc.borrow();
             let mut sub = Collector {
@@ -67,14 +61,18 @@ pub fn synthesize_helpers(
                 }
             }
         }
-        name_for_type.insert(type_id, (func.module_source.clone(), func.name.clone()));
+        helpers.insert(
+            type_id,
+            key,
+            (func.module_source.clone(), func.name.clone()),
+        );
         if generated_names.insert(func.name.clone()) {
             new_funcs.push(Rc::new(RefCell::new(func)));
         }
     }
 
     project.functions.extend(new_funcs);
-    name_for_type
+    helpers
 }
 
 /// Walk a newly-generated helper body and collect every `TypeId` that
@@ -125,18 +123,19 @@ fn dummy_span() -> Span {
     Span::new(0, 0, 1, 1)
 }
 
+/// The helper for `type_id`, and the structural key it is identified by — the
+/// one derivation of that key.
 fn generate_copy_function(
     type_id: TypeId,
     project: &FlatPackage,
     type_table: &Rc<RefCell<TypeTable>>,
     helper_module: &ModuleSource,
-) -> TirFunction {
+) -> (TirFunction, String) {
     let resolved = type_table.borrow().get(type_id).clone();
     let module_source = helper_module.clone();
     let span = dummy_span();
-    let name = crate::name::value_copy_helper_name(
-        &type_table.borrow().mangle_type_arg_for_generic(type_id),
-    );
+    let key = type_table.borrow().mangle_type_arg_for_generic(type_id);
+    let name = crate::name::value_copy_helper_name(&key);
 
     let v_local = TirExpr::new(
         TirExprKind::Local {
@@ -176,7 +175,7 @@ fn generate_copy_function(
     locals.extend(extra_locals);
     let local_count = u32::try_from(locals.len()).expect("local count fits in u32");
 
-    TirFunction {
+    let func = TirFunction {
         name,
         module_source,
         visibility: crate::ast::Visibility::Private,
@@ -209,7 +208,8 @@ fn generate_copy_function(
         kind: FunctionKind::ValueCopy { type_id },
 
         return_abi: crate::tir::ReturnAbi::default(),
-    }
+    };
+    (func, key)
 }
 
 fn build_copy_body(

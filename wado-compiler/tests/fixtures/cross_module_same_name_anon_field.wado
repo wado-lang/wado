@@ -1,0 +1,19 @@
+// An anonymous struct's identity is its field types. Rendering them unqualified
+// gave `{ v: a }` and `{ v: b }` one head, `__anon_{v:Foo}`, so every helper
+// keyed by it had one definition for two signatures.
+
+use { make as make_a } from "./sub/cross_module_same_name_anon_field_a.wado";
+use { make as make_b } from "./sub/cross_module_same_name_anon_field_b.wado";
+
+test "anonymous structs over same-named field types stay distinct" {
+    let sa = { v: make_a() };
+    let sb = { v: make_b() };
+
+    let sa_copy = sa;
+    let sb_copy = sb;
+
+    assert sa.v.n == 1;
+    assert sa_copy.v.n == 1;
+    assert sb.v.s == "b";
+    assert sb_copy.v.s == "b";
+}

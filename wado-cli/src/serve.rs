@@ -46,10 +46,11 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 /// is the granularity of runaway-guest detection.
 const EPOCH_TICK_MS: u64 = 1000;
 
-/// Recycling resets state that accumulates in a long-lived instance,
-/// notably the component resource table (issue #1133). Throughput is
-/// flat from ~1k to ~100k requests so recycling is sized rare. `0` disables.
-const DEFAULT_RECYCLE_REQUESTS: u64 = 10000;
+/// Recycling resets state that accumulates in a long-lived instance, notably
+/// the component resource table (issue #1133). Throughput peaks over a broad
+/// 25–200 plateau, tuned on a service whose `global` initializers are cheap;
+/// raise it for one that pays to build them. `0` disables.
+const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 
 /// Each in-flight request needs an async fiber stack from the pooling
 /// allocator, so this also sizes the engine's stack pool.
@@ -103,7 +104,7 @@ const RECYCLE_REQUESTS_SPEC: args::OptSpec = args::OptSpec {
     long: Some("recycle-requests"),
     short: None,
     value: Some("<n>"),
-    desc: "Recycle a worker after N requests; 0 disables (default: 10000)",
+    desc: "Recycle a worker after N requests; raise it when the service's\ninitializers are costly, 0 disables (default: 200)",
 };
 
 const MAX_CONCURRENCY_SPEC: args::OptSpec = args::OptSpec {

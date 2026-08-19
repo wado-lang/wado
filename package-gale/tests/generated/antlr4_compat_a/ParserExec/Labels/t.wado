@@ -590,7 +590,8 @@ impl CstStore {
             Open => ChildKind::Node,
             Miss => ChildKind::Missing,
             Skip => ChildKind::Skipped,
-            _ => ChildKind::Token,
+            Tok => ChildKind::Token,
+            Close => panic("CstStore::child_kind: Close is not a child row"),
         };
     }
 
@@ -678,7 +679,7 @@ fn cst_to_string_tree_impl(
                 out.push_str(&">");
                 c += 1;
             },
-            _ => c += 1,
+            Close => c += 1,
         }
     }
     out.push_str(&")");
@@ -1310,11 +1311,6 @@ impl Parser {
         }
     }
 
-    fn pending_message(&self) -> String {
-        if let Some(e) = &self.pending { return e.full_message(); }
-        return String::from("");
-    }
-
     fn in_set(&self, k: i32, set: &List<i32>) -> bool {
         for let x of set { if *x == k { return true; } }
         return false;
@@ -1453,22 +1449,13 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if k != TK_EOF {
-            let mut blocked = false;
-            for let x of excluded {
-                if x == k {
-                    blocked = true;
-                    break;
-                }
-            }
-            if !blocked {
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
-            }
+        if k != TK_EOF && !self.in_set(k, excluded) {
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `unexpected token "${self.tokens.token_text(self.pos)}"`,
@@ -1479,37 +1466,35 @@ impl Parser {
         return self.pos;
     }
 
-    fn expect_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        for let x of included {
-            if x == k {
-                if k == TK_EOF {
-                    self.b.token(self.pos);
-                    return self.pos;
-                }
-                let _i = self.advance();
-                self.b.token(_i);
-                return _i;
+        if self.in_set(k, included) {
+            if k == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
             }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
         }
         self.fail(
             `got "${self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
-            &included,
+            included,
             DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
+    pos = scan_b(tokens, pos, &EMPTY_FOLLOW);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_ID {
         let sp = pos;
-        pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
+        pos = scan_b(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1518,7 +1503,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn scan_b(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_b(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -1529,14 +1514,14 @@ fn scan_b(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let b1 = _parse_b(p, &EMPTY_FOLLOW);
+    _parse_b(p, &EMPTY_FOLLOW);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_b(tokens, pos, &EMPTY_FOLLOW, 0);
+            pos = scan_b(tokens, pos, &EMPTY_FOLLOW);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1556,9 +1541,9 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             }
             break;
         }
-        let b = _parse_b(p, &EMPTY_FOLLOW);
+        _parse_b(p, &EMPTY_FOLLOW);
     }
-    let b3_item = p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
+    p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
     return;
 }
 
@@ -1574,7 +1559,7 @@ fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let id_ = p.expect(TK_ID, &SYNC_0);
+    p.expect(TK_ID, &SYNC_0);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -1588,7 +1573,7 @@ fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let int = p.expect(TK_INT, &EMPTY_SYNC);
+        p.expect(TK_INT, &EMPTY_SYNC);
     }
     return;
 }
@@ -1633,19 +1618,19 @@ pub fn parse_b(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));
 }
 
-pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
+fn _token_names() -> List<String> {
+    let mut v: List<String> = List::with_capacity(6);
     for let mut k = 0; k < 6; k += 1 {
-        token_names.push(token_kind_name(k));
+        v.push(token_kind_name(k));
     }
-    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &token_names);
+    return v;
+}
+
+pub fn to_string_tree(result: &ParseResult) -> String {
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(6);
-    for let mut k = 0; k < 6; k += 1 {
-        token_names.push(token_kind_name(k));
-    }
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
         if RULE_NAMES[i] == *rule {
@@ -1653,9 +1638,10 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
             break;
         }
     }
+    if _kind < 0 { return String::new(); }
     let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &token_names);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
 }

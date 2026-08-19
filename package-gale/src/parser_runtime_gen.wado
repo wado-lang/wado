@@ -586,16 +586,17 @@ pub fn gen_parser_struct(
     w.end();
     w.blank();
 
-    // Message of the deepest pending failure (for trace output); empty when
-    // none has been recorded yet.
-    let mut pm = FnSpec::new(&"pending_message");
-    pm.set_receiver(&"&self");
-    pm.set_return_type(&"String");
-    pm.emit_begin(w);
-    w.line(&"if let Some(e) = &self.pending { return e.full_message(); }");
-    w.line(&"return String::from(\"\");");
-    w.end();
-    w.blank();
+    // `trace_fail` is its only caller.
+    if trace {
+        let mut pm = FnSpec::new(&"pending_message");
+        pm.set_receiver(&"&self");
+        pm.set_return_type(&"String");
+        pm.emit_begin(w);
+        w.line(&"if let Some(e) = &self.pending { return e.full_message(); }");
+        w.line(&"return String::new();");
+        w.end();
+        w.blank();
+    }
 
     // Membership test for a recovery sync set (the rule's FIRST-of-rest).
     let mut iset = FnSpec::new(&"in_set");
@@ -831,22 +832,13 @@ pub fn gen_parser_struct(
     // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
     let mut f10 = FnSpec::new(&"expect_not");
     f10.set_receiver(&"&mut self");
-    f10.add_param(&"excluded", &"List<i32>");
+    f10.add_param(&"excluded", &"&List<i32>");
     f10.set_return_type(&"i32");
     f10.emit_begin(w);
     w.line(&"if self.recovering { return self.pos; }");
     w.line(&"let k = self.kinds[self.pos];");
-    w.begin(&"if k != TK_EOF");
-    w.line(&"let mut blocked = false;");
-    w.begin(&"for let x of excluded");
-    w.begin(&"if x == k");
-    w.line(&"blocked = true;");
-    w.line(&"break;");
-    w.end();
-    w.end();
-    w.begin(&"if !blocked");
+    w.begin(&"if k != TK_EOF && !self.in_set(k, excluded)");
     emit_consume_return(w);
-    w.end();
     w.end();
     w.line(&"self.fail(");
     w.indent();
@@ -865,25 +857,23 @@ pub fn gen_parser_struct(
     // set (EOF included unless listed); a listed EOF matches without advancing.
     let mut f11 = FnSpec::new(&"expect_set");
     f11.set_receiver(&"&mut self");
-    f11.add_param(&"included", &"List<i32>");
+    f11.add_param(&"included", &"&List<i32>");
     f11.set_return_type(&"i32");
     f11.emit_begin(w);
     w.line(&"if self.recovering { return self.pos; }");
     w.line(&"let k = self.kinds[self.pos];");
-    w.begin(&"for let x of included");
-    w.begin(&"if x == k");
+    w.begin(&"if self.in_set(k, included)");
     w.begin(&"if k == TK_EOF");
     w.line(&"self.b.token(self.pos);");
     w.line(&"return self.pos;");
     w.end();
     emit_consume_return(w);
     w.end();
-    w.end();
     w.line(&"self.fail(");
     w.indent();
     w.line(&"`got \"${self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
-    w.line(&"&included,");
+    w.line(&"included,");
     w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");

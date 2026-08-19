@@ -1,31 +1,39 @@
 use { println, Stdout } from "core:cli";
 
+// A `&mut` scrutinee gives its bindings `&mut`, and one onto a non-scalar
+// writes through. A scalar binding is refused on both the `let` and the `match`
+// path — Wasm GC has no interior pointer to one, so it would reference a copy.
+
+struct Counter {
+    hits: List<i32>,
+}
+
 fn test_mut_ref_if_let() with Stdout {
-    // &mut Option<T>: x should bind as &mut T
-    let mut opt = Option::<i32>::Some(42);
+    let mut opt = Option::<Counter>::Some(Counter { hits: [1] });
     let rmo = &mut opt;
-    if let Some(x) = rmo {
-        // x is &mut i32 (wraps a copy of the payload)
-        assert *x == 42;
-        *x = 100;
-        assert *x == 100;
+    if let Some(c) = rmo {
+        c.hits.push(2);
+    }
+    if let Some(c) = &opt {
+        assert c.hits.len() == 2;
     }
     println("ok");
 }
 
 fn test_mut_ref_match() with Stdout {
-    // Match on &mut Option<T>
-    let mut opt = Option::<i32>::Some(10);
+    let mut opt = Option::<Counter>::Some(Counter { hits: [10] });
     let rmo = &mut opt;
     let val = match rmo {
-        Some(x) => {
-            assert *x == 10;
-            *x = 20;
-            *x
+        Some(c) => {
+            c.hits.push(20);
+            c.hits.len()
         },
         None => 0,
     };
-    assert val == 20;
+    assert val == 2;
+    if let Some(c) = &opt {
+        assert c.hits.len() == 2;
+    }
     println("ok");
 }
 

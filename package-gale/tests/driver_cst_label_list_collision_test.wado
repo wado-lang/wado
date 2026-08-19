@@ -43,6 +43,10 @@ test "label-list: group-inner list label after a label named for the group" {
     assert_tree_of(&g::parse_list_group(&"tag word"), &"tag word", &"(list_group tag word)");
 }
 
+test "label-list: a list label whose block holds another labelled element" {
+    assert_tree_of(&g::parse_nested_list(&"tag"), &"tag", &"(nested_list tag)");
+}
+
 test "non-greedy plus: mandatory first iteration keeps its own scope" {
     assert_tree_of(
         &g::parse_lazy_plus(&"tag tag word end"),

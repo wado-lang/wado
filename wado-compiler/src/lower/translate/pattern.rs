@@ -1,6 +1,5 @@
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
-
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
@@ -234,6 +233,48 @@ struct PatternLowerer<'a> {
     struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
+    /// Locals bound to a scrutinee here. Their `Let` goes through the fold, so
+    /// each already reads a place nothing can write.
+    owned_temps: IndexSet<u32>,
+}
+
+/// Such a binding aliases the place it reads, so it must read one nothing can
+/// write.
+fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
+    match pattern {
+        TirPattern::Binding { type_id, .. } => {
+            crate::lower::plan::value_copy::needs_value_copy(*type_id, type_table)
+        }
+        TirPattern::Tuple(sub, _)
+        | TirPattern::Variant { bindings: sub, .. }
+        | TirPattern::Or(sub) => sub.iter().any(|p| binds_by_value(p, type_table)),
+        TirPattern::Struct { fields, .. } => fields
+            .iter()
+            .any(|f| binds_by_value(&f.pattern, type_table)),
+        TirPattern::Wildcard
+        | TirPattern::Literal(_)
+        | TirPattern::Enum { .. }
+        | TirPattern::ConstantValue { .. }
+        | TirPattern::Range { .. } => false,
+    }
+}
+
+/// The type a compound pattern's temp holds: the scrutinee's, match-ergonomic
+/// references peeled. Shared with the value-copy seed walk, which mints no temp
+/// of its own and would otherwise spell the peel a second time.
+pub(crate) fn pattern_temp_type(
+    pattern: &TirPattern,
+    value_type: TypeId,
+    type_table: &TypeTable,
+) -> TypeId {
+    if !matches!(pattern, TirPattern::Tuple(_, _) | TirPattern::Struct { .. }) {
+        return value_type;
+    }
+    let mut current = value_type;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = *type_table.get(current) {
+        current = inner;
+    }
+    current
 }
 
 impl<'a> PatternLowerer<'a> {
@@ -255,6 +296,7 @@ impl<'a> PatternLowerer<'a> {
             variant_case_map,
             struct_fields_map,
             const_int_globals,
+            owned_temps: IndexSet::default(),
         }
     }
 
@@ -1518,47 +1560,20 @@ impl<'a> PatternLowerer<'a> {
                 ));
             }
             TirStmtKind::Expr(mut expr) => {
-                // Hoist a non-trivial statement-position `Match`
-                // scrutinee into a temp local. `labeled_block_fusion`
-                // keys on the `(Let, Match)` pair to eliminate GC
-                // allocations from inlined `Option<T>`-returning calls
-                // (e.g. `Iterator::next` in `while let` loops); with the
-                // scrutinee inline the optimisation stops firing. This
-                // runs after `resource_cleanup`, so the temp does not
-                // perturb resource-flow analysis.
+                // Two reasons: `labeled_block_fusion` keys on the
+                // `(Let, Match)` pair and stops firing on an inline scrutinee,
+                // and an owning arm binding needs a scrutinee nothing can
+                // write.
                 if let TirExprKind::Match {
-                    expr: scrutinee, ..
+                    expr: scrutinee,
+                    arms,
+                    ..
                 } = &mut expr.kind
-                    && !matches!(scrutinee.kind, TirExprKind::Local { .. })
+                    && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
+                        || self.needs_owned_scrutinee(scrutinee, arms, type_table))
                 {
-                    let placeholder =
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
-                    let mut hoisted = std::mem::replace(&mut **scrutinee, placeholder);
-                    self.lower_expr(&mut hoisted, type_table);
-                    let scrutinee_type = hoisted.type_id;
-                    let scrutinee_span = hoisted.span;
-                    let temp = self.alloc_local(scrutinee_type);
-                    let temp_name = format!("__match_{temp}");
-                    out.push(TirStmt::new(
-                        TirStmtKind::Let {
-                            name: temp_name.clone(),
-                            local_index: temp,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id: scrutinee_type,
-                            value: hoisted,
-                            skip_value_copy: false,
-                        },
-                        stmt.span,
-                    ));
-                    **scrutinee = TirExpr::new(
-                        TirExprKind::Local {
-                            index: temp,
-                            name: temp_name,
-                        },
-                        scrutinee_type,
-                        scrutinee_span,
-                    );
+                    let temp_let = self.bind_scrutinee_to_temp(scrutinee, type_table, stmt.span);
+                    out.push(temp_let);
                 }
                 self.lower_expr(&mut expr, type_table);
                 out.push(TirStmt::new(TirStmtKind::Expr(expr), stmt.span));
@@ -1652,6 +1667,115 @@ impl<'a> PatternLowerer<'a> {
         ));
     }
 
+    /// An arm binding that takes ownership of a writable place would alias it.
+    /// The temp's `Let` asks the fold for the copy.
+    fn needs_owned_scrutinee(
+        &self,
+        scrutinee: &TirExpr,
+        arms: &[TirMatchArm],
+        type_table: &TypeTable,
+    ) -> bool {
+        if let TirExprKind::Local { index, .. } = &scrutinee.kind
+            && self.owned_temps.contains(index)
+        {
+            return false;
+        }
+        self.place_is_writable(scrutinee, type_table)
+            && arms
+                .iter()
+                .any(|arm| binds_by_value(&arm.pattern, type_table))
+    }
+
+    /// A projection through a reference is writable whatever it is rooted at:
+    /// an immutable local still holds a `&mut`. What is not a place is a
+    /// temporary this body alone holds; whether *that* aliases the caller's
+    /// storage is decided where it escapes, not here.
+    fn place_is_writable(&self, expr: &TirExpr, type_table: &TypeTable) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self
+                .locals
+                .get(*index as usize)
+                .is_none_or(|local| local.is_mut),
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+                expr: inner,
+            } => {
+                matches!(
+                    type_table.get(inner.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                ) || self.place_is_writable(inner, type_table)
+            }
+            _ => false,
+        }
+    }
+
+    /// Move `scrutinee` into a temp, leaving a read of it in place. The caller
+    /// puts the returned `Let` wherever its position allows a statement.
+    fn bind_scrutinee_to_temp(
+        &mut self,
+        scrutinee: &mut TirExpr,
+        type_table: &TypeTable,
+        span: Span,
+    ) -> TirStmt {
+        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, scrutinee.span);
+        let mut hoisted = std::mem::replace(scrutinee, placeholder);
+        self.lower_expr(&mut hoisted, type_table);
+        let type_id = hoisted.type_id;
+        let scrutinee_span = hoisted.span;
+        let temp = self.alloc_local(type_id);
+        let name = format!("__match_{temp}");
+        self.owned_temps.insert(temp);
+        *scrutinee = TirExpr::new(
+            TirExprKind::Local {
+                index: temp,
+                name: name.clone(),
+            },
+            type_id,
+            scrutinee_span,
+        );
+        TirStmt::new(
+            TirStmtKind::Let {
+                name,
+                local_index: temp,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value: hoisted,
+                skip_value_copy: false,
+            },
+            span,
+        )
+    }
+
+    /// The temp a compound pattern's projections read. The fold decides its
+    /// copy, and the per-binding `Let`s share its storage rather than ask
+    /// again.
+    fn emit_pattern_temp_let(
+        &mut self,
+        value: TirExpr,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+    ) -> (u32, String) {
+        let local_index = self.alloc_local(value.type_id);
+        let name = self.next_temp_name();
+        let type_id = value.type_id;
+        self.owned_temps.insert(local_index);
+        out.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+        (local_index, name)
+    }
+
     /// Lower `LetDestructure` to explicit Let statements
     fn lower_let_pattern(
         &mut self,
@@ -1666,50 +1790,29 @@ impl<'a> PatternLowerer<'a> {
         let mut value = value;
         self.lower_expr(&mut value, type_table);
 
-        // Match ergonomics for let patterns: if the value is a reference type
-        // but the pattern is a compound (tuple/struct), deref the value first.
-        let value = match pattern {
-            TirPattern::Tuple(_, _) | TirPattern::Struct { .. } => {
-                let mut current = value;
-                loop {
-                    match type_table.get(current.type_id).clone() {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                            current = TirExpr::new(
-                                TirExprKind::Unary {
-                                    op: TirUnaryOp::Deref,
-                                    expr: Box::new(current),
-                                },
-                                inner,
-                                span,
-                            );
-                        }
-                        _ => break current,
-                    }
-                }
-            }
-            _ => value,
-        };
+        let target = pattern_temp_type(pattern, value.type_id, type_table);
+        let mut value = value;
+        while value.type_id != target {
+            let (ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)) =
+                *type_table.get(value.type_id)
+            else {
+                unreachable!("pattern_temp_type peels references only")
+            };
+            value = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(value),
+                },
+                inner,
+                span,
+            );
+        }
+        let value = value;
 
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
-                // Allocate temp local for the tuple
-                let tuple_temp_index = self.alloc_local(value.type_id);
-                let tuple_temp_name = self.next_temp_name();
-
-                // Create Let for the tuple
-                let tuple_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: tuple_temp_name.clone(),
-                        local_index: tuple_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(tuple_let);
+                let (tuple_temp_index, tuple_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // Get element types
                 let elem_types = type_table
@@ -1757,24 +1860,8 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                // For variant patterns in LetDestructure, extract payload
-                // Allocate temp for variant
-                let variant_temp_index = self.alloc_local(value.type_id);
-                let variant_temp_name = self.next_temp_name();
-
-                let variant_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: variant_temp_name.clone(),
-                        local_index: variant_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(variant_let);
+                let (variant_temp_index, variant_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // If there are bindings, extract payload
                 if let Some(binding) = bindings.first() {
@@ -1806,23 +1893,8 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirPattern::Struct { fields, .. } => {
-                // Allocate temp local for the struct
-                let struct_temp_index = self.alloc_local(value.type_id);
-                let struct_temp_name = self.next_temp_name();
-
-                let struct_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: struct_temp_name.clone(),
-                        local_index: struct_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(struct_let);
+                let (struct_temp_index, struct_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 // Get field type info from struct definition
                 let struct_fields_info = self.get_struct_fields(
@@ -1901,22 +1973,8 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse
-                let tuple_temp_index = self.alloc_local(value.type_id);
-                let tuple_temp_name = self.next_temp_name();
-
-                let tuple_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: tuple_temp_name.clone(),
-                        local_index: tuple_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(tuple_let);
+                let (tuple_temp_index, tuple_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 let elem_types = type_table
                     .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
@@ -1965,23 +2023,8 @@ impl<'a> PatternLowerer<'a> {
                     && !(*payload_type == TypeTable::UNIT
                         && matches!(binding, TirPattern::Wildcard))
                 {
-                    // Allocate temp and extract payload
-                    let variant_temp_index = self.alloc_local(value.type_id);
-                    let variant_temp_name = self.next_temp_name();
-
-                    let variant_let = TirStmt::new(
-                        TirStmtKind::Let {
-                            name: variant_temp_name.clone(),
-                            local_index: variant_temp_index,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id: value.type_id,
-                            value,
-                            skip_value_copy: false,
-                        },
-                        span,
-                    );
-                    out.push(variant_let);
+                    let (variant_temp_index, variant_temp_name) =
+                        self.emit_pattern_temp_let(value, span, out);
 
                     let payload_expr = TirExpr::new(
                         TirExprKind::VariantPayload {
@@ -2012,22 +2055,8 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Struct { fields, .. } => {
                 // Nested struct - allocate temp and recurse
-                let struct_temp_index = self.alloc_local(value.type_id);
-                let struct_temp_name = self.next_temp_name();
-
-                let struct_let = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: struct_temp_name.clone(),
-                        local_index: struct_temp_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: value.type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                out.push(struct_let);
+                let (struct_temp_index, struct_temp_name) =
+                    self.emit_pattern_temp_let(value, span, out);
 
                 let struct_fields_info = self.get_struct_fields(
                     type_table.get_local_type(struct_temp_index, &self.locals),
@@ -2088,6 +2117,10 @@ impl<'a> PatternLowerer<'a> {
     }
     /// Lower expressions (recurse into sub-expressions)
     fn lower_expr(&mut self, expr: &mut TirExpr, type_table: &TypeTable) {
+        let span = expr.span;
+        // A `Match` in expression position has no statement slot for the temp
+        // its owning arm bindings need, so it grows a block to hold one.
+        let mut scrutinee_temp: Option<TirStmt> = None;
         match &mut expr.kind {
             TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
                 self.lower_block(block, type_table);
@@ -2107,8 +2140,11 @@ impl<'a> PatternLowerer<'a> {
                 expr: scrutinee,
                 arms,
             } => {
-                // First, recursively lower sub-expressions
-                self.lower_expr(scrutinee, type_table);
+                if self.needs_owned_scrutinee(scrutinee, arms, type_table) {
+                    scrutinee_temp = Some(self.bind_scrutinee_to_temp(scrutinee, type_table, span));
+                } else {
+                    self.lower_expr(scrutinee, type_table);
+                }
                 for arm in arms.iter_mut() {
                     if let Some(guard) = &mut arm.guard {
                         self.lower_expr(guard, type_table);
@@ -2388,6 +2424,19 @@ impl<'a> PatternLowerer<'a> {
                     "WithHandler/Resume should be desugared by effect-dispatch synthesis before this phase"
                 )
             }
+        }
+        if let Some(temp_let) = scrutinee_temp {
+            let matched =
+                std::mem::replace(expr, TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span));
+            let type_id = matched.type_id;
+            *expr = TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![temp_let, TirStmt::new(TirStmtKind::Expr(matched), span)],
+                    span,
+                )),
+                type_id,
+                span,
+            );
         }
     }
 }

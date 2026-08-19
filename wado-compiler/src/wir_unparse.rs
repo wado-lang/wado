@@ -1514,7 +1514,7 @@ impl<'a> WirUnparser<'a> {
             WirInstr::ArrayClone {
                 type_id,
                 src,
-                element_copy_mangle: _,
+                element_copy: _,
                 len,
             } => {
                 let elem = self.array_elem_type_str(type_id);

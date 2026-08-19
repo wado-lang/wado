@@ -12,49 +12,57 @@
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router, extract::Path};
-use serde_json::{Value, json};
+use serde::Serialize;
 
-fn body(route: &str, params: Vec<String>) -> Json<Value> {
-    Json(json!({ "route": route, "params": params }))
+/// Typed rather than a `serde_json::Value` tree, so this row serializes the
+/// way an Axum service would and emits the field order the other servers do.
+#[derive(Serialize)]
+struct Body {
+    route: &'static str,
+    params: Vec<String>,
 }
 
-async fn user() -> Json<Value> {
+fn body(route: &'static str, params: Vec<String>) -> Json<Body> {
+    Json(Body { route, params })
+}
+
+async fn user() -> Json<Body> {
     body("user", vec![])
 }
-async fn user_comments() -> Json<Value> {
+async fn user_comments() -> Json<Body> {
     body("user.comments", vec![])
 }
-async fn user_avatar() -> Json<Value> {
+async fn user_avatar() -> Json<Body> {
     body("user.avatar", vec![])
 }
-async fn user_lookup_username(Path(username): Path<String>) -> Json<Value> {
+async fn user_lookup_username(Path(username): Path<String>) -> Json<Body> {
     body("user.lookup.username", vec![username])
 }
-async fn user_lookup_email(Path(address): Path<String>) -> Json<Value> {
+async fn user_lookup_email(Path(address): Path<String>) -> Json<Body> {
     body("user.lookup.email", vec![address])
 }
-async fn event_show(Path(id): Path<String>) -> Json<Value> {
+async fn event_show(Path(id): Path<String>) -> Json<Body> {
     body("event.show", vec![id])
 }
-async fn event_comments(Path(id): Path<String>) -> Json<Value> {
+async fn event_comments(Path(id): Path<String>) -> Json<Body> {
     body("event.comments", vec![id])
 }
-async fn event_comment_create(Path(id): Path<String>) -> Json<Value> {
+async fn event_comment_create(Path(id): Path<String>) -> Json<Body> {
     body("event.comment.create", vec![id])
 }
-async fn map_events(Path(location): Path<String>) -> Json<Value> {
+async fn map_events(Path(location): Path<String>) -> Json<Body> {
     body("map.events", vec![location])
 }
-async fn status() -> Json<Value> {
+async fn status() -> Json<Body> {
     body("status", vec![])
 }
-async fn deeply_nested() -> Json<Value> {
+async fn deeply_nested() -> Json<Body> {
     body("deeply.nested", vec![])
 }
-async fn static_(Path(path): Path<String>) -> Json<Value> {
+async fn static_(Path(path): Path<String>) -> Json<Body> {
     body("static", vec![path])
 }
-async fn not_found() -> (StatusCode, Json<Value>) {
+async fn not_found() -> (StatusCode, Json<Body>) {
     (StatusCode::NOT_FOUND, body("not-found", vec![]))
 }
 
