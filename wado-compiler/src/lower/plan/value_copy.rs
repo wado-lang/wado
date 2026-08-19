@@ -39,12 +39,54 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
         .and_then(|mi| mi.impl_type_args.first().copied())
 }
 
-/// `TypeId` → `(ModuleSource, $value_copy$)` for every helper
-/// `synthesize_helpers` registered in [`FlatPackage::functions`], plus the
-/// interprocedural return-convention set the fold consults to decide whether a
-/// call result is owned (a move) or borrowed (a copy).
+/// Which helper copies a type, keyed by the structural mangle that is the
+/// helper's identity — and the one place a type becomes that key. The table
+/// interns one logical type under several `TypeId`s, so an id key answers for
+/// one of them only.
+#[derive(Debug)]
+pub struct ValueCopyHelpers<T> {
+    by_key: IndexMap<String, T>,
+    /// Memo over the types synthesis walked. A miss is unobservable — `get`
+    /// derives the key instead.
+    key_of: IndexMap<TypeId, String>,
+}
+
+impl<T> Default for ValueCopyHelpers<T> {
+    fn default() -> Self {
+        Self {
+            by_key: IndexMap::default(),
+            key_of: IndexMap::default(),
+        }
+    }
+}
+
+impl<T> ValueCopyHelpers<T> {
+    pub fn insert(&mut self, type_id: TypeId, key: String, helper: T) {
+        self.by_key.entry(key.clone()).or_insert(helper);
+        self.key_of.insert(type_id, key);
+    }
+
+    #[must_use]
+    pub fn get(&self, type_id: TypeId, type_table: &TypeTable) -> Option<&T> {
+        if let Some(key) = self.key_of.get(&type_id) {
+            return self.by_key.get(key);
+        }
+        self.by_key
+            .get(&type_table.mangle_type_arg_for_generic(type_id))
+    }
+
+    pub fn map<U>(&self, mut f: impl FnMut(&T) -> U) -> ValueCopyHelpers<U> {
+        ValueCopyHelpers {
+            by_key: self.by_key.iter().map(|(k, v)| (k.clone(), f(v))).collect(),
+            key_of: self.key_of.clone(),
+        }
+    }
+}
+
+/// Which `$value_copy$` helper copies each type, plus the return conventions
+/// telling the fold whether a call result is owned (a move) or borrowed.
 pub struct ValueCopyPlan {
-    pub name_for_type: IndexMap<TypeId, (ModuleSource, String)>,
+    pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
     pub returns_owned: FuncKeySet,
     /// Functions whose every returned value is owned *or* a projection of the
     /// receiver / first parameter (`build(&self) -> List { return *self }`). A
@@ -91,7 +133,7 @@ pub fn plan(
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
     let seed = analyze::collect_seed_types(flat);
-    let name_for_type = synthesize::synthesize_helpers(flat, seed);
+    let helpers = synthesize::synthesize_helpers(flat, seed);
     // Computed after synthesis so the value-copy helpers (always owned) are
     // present in `flat.functions` and seed the fixpoint.
     let conventions = ownership::compute_return_conventions(flat);
@@ -113,7 +155,7 @@ pub fn plan(
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
-        name_for_type,
+        helpers,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         stored_params,

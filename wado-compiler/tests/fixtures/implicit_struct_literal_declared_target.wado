@@ -1,0 +1,39 @@
+// An implicit struct literal — `{ … }` with no name — against a target that
+// declares a struct *is* that struct, at every depth, so it gets field
+// defaults, omitted-field checking, visibility and spreads from the one body
+// that decides what a struct literal means.
+//
+// The function-local struct proves the target is read as an identity: its
+// storage name carries `@AstId`, which a lookup by rendering never finds.
+
+struct Inner { a: i32 }
+struct Outer { i: Inner, n: f64 }
+struct Defaulted { x: i32, y: i32 = 7 }
+
+fn local_target() -> f64 {
+    struct P { v: f64 }
+    let p: P = { v: 1 };
+    return p.v
+}
+
+test "a nested implicit literal builds the field's declared struct" {
+    let o: Outer = { i: { a: 1 }, n: 2 };
+    assert o.i.a == 1;
+    assert o.n == 2.0;
+}
+
+test "an implicit literal builds a function-local struct" {
+    assert local_target() == 1.0;
+}
+
+test "an omitted field takes the declaration's default" {
+    let d: Defaulted = { x: 1 };
+    assert d.y == 7;
+}
+
+test "an implicit literal composes over a spread of its own type" {
+    let base = Defaulted { x: 1, y: 2 };
+    let d: Defaulted = { ..base, x: 9 };
+    assert d.x == 9;
+    assert d.y == 2;
+}

@@ -194,6 +194,16 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         task_return_flat_params,
         wasm_assets,
         trait_env,
+        // Before the interner is drained: a helper only `array_clone::<T>`
+        // reaches is never resolved by a wrap, and DCE still has to root it.
+        value_copy_helpers: value_copy.helpers.map(|(module_source, name)| {
+            translator.interner.borrow_mut().resolve(&nir::FunctionRef {
+                module_source: module_source.clone(),
+                name: name.clone(),
+                monomorph_info: None,
+                method_info: None,
+            })
+        }),
     };
     // Finalize the born-resolved callee ids: append the interned extern stubs,
     // set every function's `id` to its store position (`FuncId == position`), and
@@ -323,6 +333,7 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
+    ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::compute_moved_roots`]).
     moved_roots: IndexSet<u32>,
@@ -394,6 +405,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
+        let ref_targets = if needs_copy_analysis {
+            value_copy::last_use::compute_ref_targets(func)
+        } else {
+            value_copy::last_use::RefTargets::default()
+        };
         let share_eligible_locals = if needs_copy_analysis {
             value_copy::last_use::compute_share_eligible(
                 func,
@@ -401,6 +417,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.mut_receiver_methods,
                 &base.value_copy.ref_receiver_methods,
                 &base.value_copy.returns_receiver_alias,
+                &ref_targets,
             )
         } else {
             IndexSet::default()
@@ -423,6 +440,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_locals,
             move_eligible_place_spans,
             share_eligible_locals,
+            ref_targets,
             moved_roots,
             alias_components,
             arena: RefCell::new(Body::empty()),
@@ -446,6 +464,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_locals: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
             share_eligible_locals: IndexSet::default(),
+            ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
             arena: RefCell::new(Body::empty()),
@@ -685,10 +704,16 @@ impl FunctionTranslator<'_, '_> {
     /// copying it: the source must be rooted at an immutable local whose
     /// storage is never moved to a new owner.
     fn source_shares_immutable_storage(&self, value: &TirExpr) -> bool {
-        if !value_copy::analyze::is_source_immutable(value, &self.immutable_locals) {
+        let type_table = self.base.type_table.borrow();
+        if !value_copy::analyze::is_source_immutable(
+            value,
+            &self.immutable_locals,
+            &type_table,
+            &self.ref_targets,
+        ) {
             return false;
         }
-        value_copy::analyze::source_root(value)
+        value_copy::analyze::source_root(value, &type_table, &self.ref_targets)
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 
@@ -999,21 +1024,25 @@ impl FunctionTranslator<'_, '_> {
         ))
     }
 
-    /// Emit a call to the `$value_copy$T(...)` helper. Returns the
-    /// value unchanged when the helper is not registered — this
-    /// mirrors the pre-Phase-A silent fall-through, where
-    /// `value_copy::insert` only wrapped at sites it walked
-    /// (pattern-lowered / deref-expansion / wide-int `Let`s are
-    /// synthesised after that walk, so they were never wrapped).
+    /// A destination needing no copy passes through. Where one is due, a
+    /// missing helper is a hole in the seed walk, and aliasing there is silent.
     fn wrap_value_copy(&self, value: ExprId, type_id: tir::TypeId) -> ExprId {
         let span = self.expr_span(value);
-        let Some((helper_module, helper_name)) = self.base.value_copy.name_for_type.get(&type_id)
-        else {
-            return value;
+        let helper = {
+            let tt = self.base.type_table.borrow();
+            let Some(helper) = self.base.value_copy.helpers.get(type_id, &tt) else {
+                assert!(
+                    !value_copy::needs_value_copy(type_id, &tt),
+                    "the seed walk registered no value-copy helper for {}",
+                    tt.mangle_type_arg_for_generic(type_id)
+                );
+                return value;
+            };
+            helper.clone()
         };
         let func = nir::FunctionRef {
-            module_source: helper_module.clone(),
-            name: helper_name.clone(),
+            module_source: helper.0,
+            name: helper.1,
             monomorph_info: None,
             method_info: None,
         };
@@ -1689,12 +1718,16 @@ impl FunctionTranslator<'_, '_> {
                 .monomorph_info
                 .as_ref()
                 .and_then(|mi| mi.impl_type_args.first().copied())
-            && let Some((helper_module, helper_name)) =
-                self.base.value_copy.name_for_type.get(&type_id)
+            && let Some((helper_module, helper_name)) = self
+                .base
+                .value_copy
+                .helpers
+                .get(type_id, &self.base.type_table.borrow())
+                .cloned()
         {
             let func = nir::FunctionRef {
-                module_source: helper_module.clone(),
-                name: helper_name.clone(),
+                module_source: helper_module,
+                name: helper_name,
                 monomorph_info: None,
                 method_info: None,
             };

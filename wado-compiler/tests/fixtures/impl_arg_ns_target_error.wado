@@ -1,0 +1,16 @@
+// `impl c::Cell<i32>` must not apply to a `Cell<String>`.
+//
+// The naming side and the matching side read the target's arguments through one
+// function; reading a namespaced target in only one of them let every `Cell`
+// reach a name minted for this instantiation.
+
+use { Cell } from "./sub/impl_arg_ns_target_cell.wado";
+use {} from "./sub/impl_arg_ns_target_holder.wado";
+
+export fn run() {
+    let s = Cell { a: "not an i32" };
+    let _ = s.get();
+}
+
+__DATA__
+{"compile_error": "no method 'get' found"}

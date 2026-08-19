@@ -12,6 +12,7 @@ use super::callgraph::CallGraph;
 use super::funcset::FuncKeySet;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::tir::{
     FunctionKind, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
@@ -29,6 +30,7 @@ pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_self_projection: &'a FuncKeySet,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
+    assumed_owned: Option<(&'a ModuleSource, &'a str)>,
 }
 
 impl<'a> OwnedCalls<'a> {
@@ -37,7 +39,16 @@ impl<'a> OwnedCalls<'a> {
             returns_owned,
             returns_self_projection,
             indirect_owned_returns: None,
+            assumed_owned: None,
         }
+    }
+
+    /// Assume `func` returns owned while proving that it does: the fixpoint only
+    /// adds, so a self-call would read back the verdict being computed. Returns
+    /// that avoid the recursive call are still checked on their own.
+    pub fn assuming_owned(mut self, module_source: &'a ModuleSource, name: &'a str) -> Self {
+        self.assumed_owned = Some((module_source, name));
+        self
     }
 
     /// Attach the indirect-call verdict (see [`compute_indirect_owned_returns`]).
@@ -64,6 +75,12 @@ impl<'a> OwnedCalls<'a> {
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
             return !is_container_alias_read(&func.name, func.monomorph_info.as_ref());
+        }
+        if self
+            .assumed_owned
+            .is_some_and(|(ms, name)| *ms == func.module_source && name == func.name)
+        {
+            return true;
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -201,7 +218,8 @@ pub fn compute_return_conventions(project: &FlatPackage) -> ReturnConventions {
             return false;
         };
         let (ret_owned, ret_self_proj) = {
-            let oracle = OwnedCalls::new(&owned, &self_proj);
+            let oracle =
+                OwnedCalls::new(&owned, &self_proj).assuming_owned(&func.module_source, &func.name);
             function_return_convention(body, &func.params, &oracle, &type_table)
         };
         let mut changed = false;

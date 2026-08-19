@@ -1,0 +1,38 @@
+// The green half of the `impl_arg_shape_*_error` fixtures: an argument naming
+// no declaration must not over-constrain, so the impl still applies to the
+// receiver whose argument is its own shape.
+//
+// What makes a position concrete also decides how the methods are *named*, so
+// one predicate answers both. These calls are what proves it: each reached WIR
+// build as an unresolved `Call` when two answered.
+
+use { Slot, MSlot } from "./sub/impl_arg_shapes_holder.wado";
+use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";
+
+fn double(n: i32) -> i32 {
+    return n * 2
+}
+
+test "a tuple impl argument applies to its own shape" {
+    let s = Slot { a: [1, Tag { n: 2 }] };
+    assert s.tup() == 1;
+}
+
+test "a reference impl argument applies to a reference receiver" {
+    let t = Tag { n: 9 };
+    let s = Slot { a: &t };
+    assert s.refr() == 2;
+}
+
+test "a function-type impl argument applies to its own shape" {
+    let s = Slot { a: double };
+    assert s.func() == 3;
+    assert (s.a)(4) == 8;
+}
+
+test "a mut reference impl argument applies to a mut reference receiver" {
+    let mut t = Tag { n: 3 };
+    let s = MSlot { a: &mut t };
+    assert s.refm() == 4;
+}
+

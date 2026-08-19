@@ -752,15 +752,6 @@ pub struct TraitEnv {
     /// name)`. Lets `lookup_function_type_params` read a callee's type params
     /// without scanning the module AST.
     pub(super) function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>>,
-    /// Type name → modules declaring a struct / resource / variant / enum /
-    /// builtin type of that name, in build order. Powers
-    /// `find_struct_module_source` without an AST scan. Newtypes are tracked
-    /// separately in [`Self::newtype_decl_modules`] because the query consults
-    /// them only as a later fallback.
-    pub(super) struct_like_decl_modules: IndexMap<String, Vec<DefId>>,
-    /// Type name → modules declaring a `newtype` of that name, in build order.
-    /// The fallback half of `find_struct_module_source`'s module lookup.
-    pub(super) newtype_decl_modules: IndexMap<String, Vec<DefId>>,
     /// Declared name → every declaration written under it, in build order.
     /// The frame derivation's second tier reads this on every name that is not
     /// an import, so it is keyed by name rather than scanned: the sets it
@@ -1002,9 +993,9 @@ impl TraitEnv {
         // every PascalCase reference to its declaring module.
         for (module_source, module) in modules {
             for item in &module.items {
-                // Digest the per-item facts that `lookup_function_type_params`
-                // and `find_struct_module_source` read, so neither needs to
-                // re-scan `loaded_modules`. (Non-impl items fall through to the
+                // Digest the per-item facts `lookup_function_type_params` and
+                // `decls_by_name` are built from, so neither needs to re-scan
+                // `loaded_modules`. (Non-impl items fall through to the
                 // `Item::Impl` guard below and `continue`.)
                 match item {
                     Item::Function(f) => {
@@ -1104,28 +1095,14 @@ impl TraitEnv {
                     .as_ref()
                     .and_then(crate::resolve::head_site)
                     .and_then(|site| resolutions.declared(site));
+                // Implementing a trait is naming it, so the header's own
+                // site answers and a position reaching nothing is an error —
+                // never another module's same-named trait.
                 let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
-                    // The site the header wrote answers first. `impl_target_key`
-                    // resolves through the symbol table, which holds no entry
-                    // for a trait, so a module implementing its own `trait Sub`
-                    // fell through to `core:prelude`'s arithmetic one.
-                    trait_ref.map(ImplTargetKey::Decl).unwrap_or_else(|| {
-                        // A trait position whose site names no declaration.
-                        // The declaration indexes are the only thing that can
-                        // answer, and they decline when several modules
-                        // declare the name.
-                        unique_declared_trait(
-                            defs,
-                            &get_type_name_static(trait_type),
-                            &decl_index,
-                            &effect_decl_index,
-                            &resource_decl_index,
-                        )
-                        .map_or_else(
-                            || impl_target_key_at(trait_type, module_source, resolutions),
-                            ImplTargetKey::Decl,
-                        )
-                    })
+                    trait_ref.map_or_else(
+                        || impl_target_key_at(trait_type, module_source, resolutions),
+                        ImplTargetKey::Decl,
+                    )
                 });
                 impl_headers.insert(
                     (module_source.clone(), impl_block.id),
@@ -1280,7 +1257,11 @@ impl TraitEnv {
         );
 
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
-        violations.extend(check_inherent_impl_collisions(defs, &impl_headers));
+        violations.extend(check_inherent_impl_collisions(
+            defs,
+            &impl_headers,
+            resolutions,
+        ));
 
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
@@ -1315,8 +1296,6 @@ impl TraitEnv {
                 supertrait_closures,
                 function_type_params,
                 decls_by_name,
-                struct_like_decl_modules,
-                newtype_decl_modules,
                 module_namespace_imports,
                 assoc_type_bound_index,
                 blanket_impls,
@@ -1401,17 +1380,6 @@ impl TraitEnv {
     /// it takes no vantage — the caller filters for the module it means.
     pub(crate) fn decls_named<'n>(&'n self, name: &str) -> impl Iterator<Item = DefId> + 'n {
         self.decls_by_name.get(name).into_iter().flatten().copied()
-    }
-
-    /// Declaring module of a struct-like type (struct / resource / variant /
-    /// enum / builtin) by name, when the name picks out exactly one. Several
-    /// modules declaring the name leaves it unresolved rather than guessing:
-    /// a wrong module is worse than the caller's existing fallback.
-    pub(crate) fn find_struct_like_decl_key(&self, name: &str) -> Option<DefId> {
-        match self.struct_like_decl_modules.get(name)?.as_slice() {
-            [only] => Some(*only),
-            _ => None,
-        }
     }
 
     /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
@@ -1728,35 +1696,6 @@ fn impl_target_key_at(
 ) -> ImplTargetKey {
     sited_impl_target_key(ty, module_source, resolutions)
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
-}
-
-/// The one trait declaration named `name`, else the one effect or resource —
-/// per-family and in that order, so a `trait Encode` beside another module's
-/// `interface Encode` is one trait rather than an ambiguity. Declines when a
-/// single family holds two. Differs from `decl_key_or_local`, which consults its
-/// struct-like index first.
-fn unique_declared_trait(
-    defs: &crate::defs::DefTable,
-    name: &str,
-    decls: &IndexSet<DefId>,
-    effects: &IndexSet<DefId>,
-    resources: &IndexSet<DefId>,
-) -> Option<DefId> {
-    let unique = |mut hits: Box<dyn Iterator<Item = &DefId> + '_>| {
-        let first = hits.next()?;
-        hits.next().is_none().then_some(*first)
-    };
-    unique(Box::new(
-        decls.iter().filter(|key| defs.name(**key) == name),
-    ))
-    .or_else(|| {
-        unique(Box::new(
-            effects
-                .iter()
-                .chain(resources.iter())
-                .filter(|key| defs.name(**key) == name),
-        ))
-    })
 }
 
 /// The key an `impl` header's target resolves to, from the site the header
@@ -2299,10 +2238,11 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
             target_mentions_impl_param(inner, params)
         }
         ast::Type::TypePackSpread(name, _) => params.contains(name.as_str()),
-        ast::Type::NamespacedGeneric(_)
-        | ast::Type::Function(_)
-        | ast::Type::Infer(_)
-        | ast::Type::Error(_) => false,
+        ast::Type::NamespacedGeneric(ns) => ns
+            .args
+            .iter()
+            .any(|a| target_mentions_impl_param(a, params)),
+        ast::Type::Function(_) | ast::Type::Infer(_) | ast::Type::Error(_) => false,
     }
 }
 
@@ -2316,6 +2256,7 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
 fn check_inherent_impl_collisions(
     defs: &crate::defs::DefTable,
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    resolutions: &crate::resolve::Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
         IndexMap::default();
@@ -2337,6 +2278,34 @@ fn check_inherent_impl_collisions(
     }
 
     let mut violations = Vec::new();
+
+    // Two inherent impls minting one function name are one definition
+    // downstream, which monomorphization asserts away with a panic. Keyed on
+    // what the definition side mints, since the target's *arguments* answer a
+    // different question and discard the pointee of a reference target.
+    let mut minted: IndexSet<(String, &str)> = IndexSet::default();
+    for header in &instantiations {
+        let peeled = match &header.ty {
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
+            other => other,
+        };
+        let receiver = written_type_arg(peeled, resolutions);
+        for method in &header.methods {
+            if !minted.insert((receiver.to_mangled(), method.name.as_str())) {
+                violations.push((
+                    header.module.clone(),
+                    TypeError::DuplicateInherentMethod {
+                        // What this impl wrote: the minted head is one
+                        // string for both, so it names neither.
+                        self_type_name: written_type_source(&header.ty),
+                        method_name: method.name.clone(),
+                        span: method.span,
+                    },
+                ));
+            }
+        }
+    }
+
     for header in instantiations {
         let Some(generic_methods) = generic_methods_by_target.get(&header.target) else {
             continue;
@@ -2515,6 +2484,12 @@ pub(super) fn written_type_arg(
             name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
         }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
+        // The closure system's head: arity and return type, matching the
+        // resolved form. Parameter types are not part of it on either side.
+        ast::Type::Function(ft) => name::FqTypeName::builtin(&name::mangle_fn_type(
+            ft.params.len(),
+            &written_type_arg(&ft.return_type, resolutions).to_mangled(),
+        )),
         _ => {
             let head = match crate::resolve::head_site(ty).map(|site| resolutions.get(site)) {
                 Some(crate::resolve::Resolution::Def(def)) => {
@@ -2538,6 +2513,40 @@ pub(super) fn written_type_arg(
                 _ => head,
             }
         }
+    }
+}
+
+/// The written form of `ty`, for a diagnostic saying what the programmer
+/// wrote (WEP 2026-08-12 §9).
+///
+/// Renders the AST, so nothing reads it back into a declaration.
+fn written_type_source(ty: &ast::Type) -> String {
+    let list = |args: &[ast::Type]| {
+        args.iter()
+            .map(written_type_source)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    match ty {
+        ast::Type::Named(named) => named.name.clone(),
+        ast::Type::Generic(g) => format!("{}<{}>", g.name, list(&g.args)),
+        ast::Type::NamespacedGeneric(ns) => {
+            format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
+        }
+        ast::Type::Function(ft) => {
+            let m = if ft.is_mut { " mut" } else { "" };
+            format!(
+                "fn{m}({}) -> {}",
+                list(&ft.params),
+                written_type_source(&ft.return_type)
+            )
+        }
+        ast::Type::Tuple(elems) => format!("[{}]", list(elems)),
+        ast::Type::Reference(inner) => format!("&{}", written_type_source(inner)),
+        ast::Type::MutReference(inner) => format!("&mut {}", written_type_source(inner)),
+        ast::Type::TypePackSpread(name, _) => format!("..{name}"),
+        ast::Type::Infer(_) => "_".to_string(),
+        ast::Type::Error(_) => "<error>".to_string(),
     }
 }
 

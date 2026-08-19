@@ -1,0 +1,14 @@
+// `impl Slot<[i32, Tag]>` must not apply to a `Slot<i32>`.
+//
+// A tuple, a reference and a function type name no declaration, so the head
+// site answers nothing — but naming none is not matching anything.
+
+use { Slot } from "./sub/impl_arg_shapes_holder.wado";
+
+export fn run() {
+    let s = Slot { a: 7 };
+    let _ = s.tup();
+}
+
+__DATA__
+{"compile_error": "no method 'tup' found"}

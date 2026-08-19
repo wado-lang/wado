@@ -1,0 +1,28 @@
+// An inherent `impl &Cw<i32>` defines its methods on the pointee, so it and
+// `impl Cw<i32>` mint one name. Monomorphization asserts that pair away with a
+// panic; the coherence check asks the same question first.
+//
+// The message names what this impl wrote — the reference form — rather than
+// the head both minted, which is a spelling neither of them wrote.
+
+struct Cw<T> { a: T }
+
+impl Cw<i32> {
+    fn one(self) -> i32 {
+        return 1
+    }
+}
+
+impl &Cw<i32> {
+    fn one(self) -> i32 {
+        return 2
+    }
+}
+
+export fn run() {
+    let c = Cw { a: 1 };
+    let _ = c.one();
+}
+
+__DATA__
+{"compile_error": "duplicate definition of `one` for `&Cw<i32>`"}

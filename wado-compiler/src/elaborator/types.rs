@@ -1279,7 +1279,7 @@ impl TypeError {
             } => (
                 Code::OrphanRule,
                 format!(
-                    "duplicate definition of `{method_name}` for `{self_type_name}`: an inherent impl generic over the same type already defines it, and an inherent impl carries no trait contract to make the two interchangeable"
+                    "duplicate definition of `{method_name}` for `{self_type_name}`: another inherent impl already defines it, and an inherent impl carries no trait contract to make the two interchangeable"
                 ),
                 *span,
             ),
@@ -2180,8 +2180,6 @@ pub(crate) struct TypeLookup<'a> {
     pub(crate) local_variant_cases: &'a IndexMap<crate::defs::DefId, VariantInfo>,
     /// Fields of the anonymous shapes this walk interned, by shape id.
     pub(crate) anon_struct_fields: &'a IndexMap<crate::tir::AnonStructId, StructFieldInfo>,
-    /// See `ModuleDecls::local_item_renders`.
-    pub(crate) local_item_renders: &'a IndexMap<(String, ModuleSource), crate::defs::DefId>,
     /// The local items in scope at the walk's position, highest precedence.
     pub(crate) fn_local_items: &'a IndexMap<String, crate::defs::DefId>,
     /// The declaration indexes — the frame derivation, for a caller holding a
@@ -2195,7 +2193,7 @@ pub(crate) struct TypeLookup<'a> {
 
 impl<'a> TypeLookup<'a> {
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.struct_fields_of(self.declaration_or_render(name)?)
+        self.struct_fields_of(self.declaration(name)?)
     }
 
     /// Field info for a struct type's own head — the form with nothing left to
@@ -2210,21 +2208,39 @@ impl<'a> TypeLookup<'a> {
         }
     }
 
-    pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
-        self.variant_cases_of(self.declaration(name)?)
+    /// The cases of the variant a *written* qualifier names — the `Color` of
+    /// `Color::Red`, read off the site the resolve walk answered for.
+    ///
+    /// The spelling answers only where no walk saw the node.
+    pub(super) fn variant_cases_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&'a VariantInfo> {
+        self.variant_cases_of(self.declaration_at(site, name)?)
     }
 
-    pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
-        self.enum_cases_of(self.declaration(name)?)
+    /// [`Self::variant_cases_at`] for an `enum`.
+    pub(super) fn enum_cases_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&'a EnumInfo> {
+        self.enum_cases_of(self.declaration_at(site, name)?)
     }
 
-    pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
-        self.flags_members_of(self.declaration(name)?)
+    /// [`Self::variant_cases_at`] for a `flags` type.
+    pub(super) fn flags_members_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<&'a FlagsInfo> {
+        self.flags_members_of(self.declaration_at(site, name)?)
     }
 
     /// The newtype (or `flags` type) `name` names here.
     pub(super) fn newtype(&self, name: &str) -> Option<TypeId> {
-        self.newtype_of(self.declaration_or_render(name)?)
+        self.newtype_of(self.declaration(name)?)
     }
 
     /// The fields of the struct `def` declares.
@@ -2299,7 +2315,7 @@ impl<'a> TypeLookup<'a> {
         match site.and_then(|site| self.resolutions.walked(site)) {
             Some(crate::resolve::Resolution::Def(def)) => Some(def),
             Some(crate::resolve::Resolution::Binder(_)) => None,
-            Some(crate::resolve::Resolution::Unresolved) | None => self.declaration_or_render(name),
+            Some(crate::resolve::Resolution::Unresolved) | None => self.declaration(name),
         }
     }
 
@@ -2329,17 +2345,6 @@ impl<'a> TypeLookup<'a> {
                     .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
             })
             .or_else(|| self.resolutions.prelude_decl(name))
-    }
-
-    /// [`Self::declaration`], falling back to the local-item rendering index
-    /// for a caller that arrived holding a `{name}@{AstId}` spelling rather
-    /// than the declaration it renders.
-    pub(super) fn declaration_or_render(&self, name: &str) -> Option<crate::defs::DefId> {
-        self.declaration(name).or_else(|| {
-            self.local_item_renders
-                .get(&(name.to_string(), self.current_module_source.clone()))
-                .copied()
-        })
     }
 }
 

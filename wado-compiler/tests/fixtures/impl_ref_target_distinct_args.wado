@@ -1,0 +1,26 @@
+// Two inherent impls collide when their methods mint one function name — the
+// question monomorphization asks when it asserts `(module, name)` is unique.
+// Asking instead for the target's *arguments* answers a different question:
+// that reading peels a reference to compare shapes, so the pointee that tells
+// these two apart is exactly what it discards, and the second was reported as
+// the first's duplicate.
+
+struct Cw<T> { a: T }
+struct Dw<T> { a: T }
+
+impl &Cw<i32> {
+    fn one(self) -> i32 {
+        return 1
+    }
+}
+
+impl &Dw<i32> {
+    fn one(self) -> i32 {
+        return 2
+    }
+}
+
+test "unrelated reference targets are not one definition" {
+    let c = Cw { a: 7 };
+    assert c.a == 7;
+}

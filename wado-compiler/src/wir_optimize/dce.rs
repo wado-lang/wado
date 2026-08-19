@@ -11,7 +11,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{
     WirExportDesc, WirFuncId, WirImportDesc, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId,
 };
-use crate::wir_optimize::util::{for_each_type_id_slot, value_copy_helper_mangles};
+use crate::wir_optimize::util::for_each_type_id_slot;
 
 fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
     for instr in body {
@@ -19,44 +19,14 @@ fn collect_func_refs_from_body(body: &[WirInstr], out: &mut IndexSet<u32>) {
     }
 }
 
-/// Walk `body` and, for every `WirInstr::ArrayClone` carrying an
-/// `element_copy_type`, resolve the type to its synthesized `$value_copy$`
-/// helper's array-index through `resolve` and insert it into `out`. Used by
-/// [`mark_unreachable_defined_functions`] to root the per-element helper,
-/// whose edge is a type reference rather than a `Call` the generic walker
-/// would see.
-fn collect_array_clone_helper_refs<F>(body: &[WirInstr], resolve: &F, out: &mut IndexSet<u32>)
-where
-    F: Fn(&str) -> Option<u32>,
-{
-    for instr in body {
-        collect_array_clone_helper_refs_recursive(instr, resolve, out);
-    }
-}
-
-fn collect_array_clone_helper_refs_recursive<F>(
-    instr: &WirInstr,
-    resolve: &F,
-    out: &mut IndexSet<u32>,
-) where
-    F: Fn(&str) -> Option<u32>,
-{
-    if let WirInstr::ArrayClone {
-        element_copy_mangle: copy_mangle,
-        ..
-    } = instr
-        && let Some(idx) = resolve(copy_mangle)
-    {
-        out.insert(idx);
-    }
-    instr.for_each_child(&mut |child| {
-        collect_array_clone_helper_refs_recursive(child, resolve, out);
-    });
-}
-
 fn collect_func_refs_recursive(instr: &WirInstr, out: &mut IndexSet<u32>) {
     match instr {
-        WirInstr::Call { func_id, .. } | WirInstr::RefFunc { func_id } => {
+        WirInstr::Call { func_id, .. }
+        | WirInstr::RefFunc { func_id }
+        | WirInstr::ArrayClone {
+            element_copy: func_id,
+            ..
+        } => {
             out.insert(func_id.index());
         }
         _ => {}
@@ -119,12 +89,12 @@ pub fn mark_unreferenced_globals(module: &mut WirPackage) {
 
 fn remap_func_ids(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
     match instr {
-        WirInstr::Call { func_id, .. } => {
-            if let Some(&new) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
-            }
-        }
-        WirInstr::RefFunc { func_id } => {
+        WirInstr::Call { func_id, .. }
+        | WirInstr::RefFunc { func_id }
+        | WirInstr::ArrayClone {
+            element_copy: func_id,
+            ..
+        } => {
             if let Some(&new) = remap.get(&func_id.index()) {
                 *func_id = WirFuncId::new(new, Rc::from(func_id.fq()));
             }
@@ -156,22 +126,6 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
     let to_array_idx =
         |abs_idx: u32| -> Option<u32> { abs_idx.checked_sub(base).filter(|i| *i < num_funcs) };
 
-    // `WirInstr::ArrayClone` references its per-element copy helper by the
-    // element type's canonical mangle (`element_copy_mangle`), not by a
-    // `WirFuncId` the generic body walker following `WirInstr::Call` /
-    // `RefFunc` could see. Resolve those edges through the shared
-    // `util::value_copy_helper_mangles` map (absolute indices, converted to
-    // array indices here) and fold them into each function's callee set;
-    // without this the helper is dropped by DCE, then the codegen call site
-    // can't resolve it and panics.
-    let helper_mangle_to_abs = value_copy_helper_mangles(module);
-    let resolve_helper_name = |copy_mangle: &str| -> Option<u32> {
-        helper_mangle_to_abs
-            .get(copy_mangle)
-            .copied()
-            .and_then(to_array_idx)
-    };
-
     let mut callees_of: Vec<IndexSet<u32>> = Vec::with_capacity(module.functions.len());
     for func in &module.functions {
         let mut callees: IndexSet<u32> = IndexSet::default();
@@ -183,7 +137,6 @@ pub fn mark_unreachable_defined_functions(module: &mut WirPackage) {
                     callees.insert(arr_idx);
                 }
             }
-            collect_array_clone_helper_refs(body, &resolve_helper_name, &mut callees);
         }
         callees_of.push(callees);
     }

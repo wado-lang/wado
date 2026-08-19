@@ -1,0 +1,15 @@
+// `impl<Tag> Slot<tag::Tag, Tag>` — a concrete argument written with a
+// namespace prefix.
+//
+// Whether an argument constrains is a question about the declaration it names,
+// not the shape of the spelling naming it. Every spelling has a head site.
+
+use { Slot } from "./sub/impl_arg_ns_qualified_holder.wado";
+
+export fn run() {
+    let s = Slot { a: "not a Tag", b: 7 };
+    let _ = s.n();
+}
+
+__DATA__
+{"compile_error": "no method 'n' found"}

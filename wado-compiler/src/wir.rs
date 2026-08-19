@@ -221,7 +221,6 @@ impl WasmModuleInfo {
                     attributes: Vec::new(),
                 },
                 locals,
-                value_copy_mangle: None,
                 generic_origin: None,
                 effects: Vec::new(),
                 stores: Vec::new(),
@@ -258,26 +257,19 @@ impl WasmModuleInfo {
 
 /// Recursively remap `WirFuncId` indices in a `WirInstr` tree.
 fn remap_func_ids_in_instr(instr: &mut WirInstr, remap: &IndexMap<u32, u32>) {
-    match instr {
-        WirInstr::Call { func_id, args } => {
-            if let Some(&new_idx) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
-            }
-            for arg in args {
-                remap_func_ids_in_instr(arg, remap);
-            }
-        }
-        WirInstr::RefFunc { func_id } => {
-            if let Some(&new_idx) = remap.get(&func_id.index()) {
-                *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
-            }
-        }
-        _ => {
-            instr.for_each_boxed_child_mut(&mut |child| {
-                remap_func_ids_in_instr(child, remap);
-            });
-        }
+    if let WirInstr::Call { func_id, .. }
+    | WirInstr::RefFunc { func_id }
+    | WirInstr::ArrayClone {
+        element_copy: func_id,
+        ..
+    } = instr
+        && let Some(&new_idx) = remap.get(&func_id.index())
+    {
+        *func_id = WirFuncId::new(new_idx, Rc::from(func_id.fq()));
     }
+    instr.for_each_boxed_child_mut(&mut |child| {
+        remap_func_ids_in_instr(child, remap);
+    });
 }
 
 impl WirPackage {
@@ -830,13 +822,6 @@ pub struct WirFunction {
     pub compiler_item: Option<crate::compiler_item::CompilerItem>,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
-    /// The copied type's canonical mangle when this is a synthesized
-    /// `$value_copy$` deep-copy helper (`FunctionKind::ValueCopy`). Lets
-    /// codegen and DCE resolve an `ArrayClone`'s element-copy edge by
-    /// structural type identity instead of parsing the helper's name — and,
-    /// because it is the mangle (not an intern-order `TypeId`), identical
-    /// types interned more than once still resolve to the one helper.
-    pub value_copy_mangle: Option<String>,
     /// Declared locals the emitter allocates from, finalized once per producer
     /// (`optimize_wir` for the main package, `to_wir_package` for a bundled one).
     pub locals: WirLocals,
@@ -1393,10 +1378,9 @@ pub enum WirInstr {
     ArrayClone {
         type_id: WirTypeId,
         src: Box<WirInstr>,
-        /// The element type's canonical mangle. Codegen and DCE resolve it to
-        /// the `$value_copy$` helper through each helper's `value_copy_mangle`,
-        /// so the same type interned twice still matches.
-        element_copy_mangle: String,
+        /// The element type's `$value_copy$` helper. A callee reference like
+        /// any other, so DCE roots it and compaction remaps it.
+        element_copy: WirFuncId,
         /// Number of leading elements to copy — the destination's exact
         /// length. `None` clones the whole array (`array.len(src)`). Must
         /// evaluate to <= `array.len(src)`.

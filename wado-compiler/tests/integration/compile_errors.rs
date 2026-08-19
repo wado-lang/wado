@@ -609,3 +609,67 @@ fn test_sealed_reflect_error_attributed_to_user_file() {
     );
     assert_eq!(filename, "orphan_phase_diag.wado");
 }
+
+/// A `&mut` destructure of scalar fields used to answer with a `&mut` onto a
+/// copy, so `*x = 100` wrote to storage nobody could read back.
+#[test]
+fn test_scalar_mut_ref_binding_is_rejected() {
+    let source = r"
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let mut p = Point { x: 10, y: 20 };
+    let { x, y } = &mut p;
+    *x = 100;
+}
+";
+
+    let err = crate::common::compile_source(source).expect_err("expected a type error");
+    let text = err.to_string();
+    assert!(
+        text.contains("mutable reference to a primitive"),
+        "Unexpected message: {text}"
+    );
+}
+
+/// The same rule on the `match` path, which reaches the wrap by a different
+/// route and used to answer with a `&mut` onto a copy — an invalid module.
+#[test]
+fn test_scalar_mut_ref_match_binding_is_rejected() {
+    let source = r"
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let mut p = Point { x: 10, y: 20 };
+    match &mut p {
+        Point { x, y } => {
+            *x = 100;
+            *y = 200;
+        }
+    }
+}
+";
+
+    let err = crate::common::compile_source(source).expect_err("expected a type error");
+    let text = err.to_string();
+    assert!(
+        text.contains("mutable reference to a primitive"),
+        "Unexpected message: {text}"
+    );
+}
+
+/// Its non-scalar counterpart still binds by reference and writes through.
+#[test]
+fn test_non_scalar_mut_ref_binding_is_allowed() {
+    let source = r"
+struct Bag { items: List<i32> }
+
+export fn run() {
+    let mut b = Bag { items: [1] };
+    let { items } = &mut b;
+    items.push(2);
+}
+";
+
+    crate::common::compile_source(source).expect("a non-scalar &mut binding compiles");
+}

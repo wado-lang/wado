@@ -3234,30 +3234,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// Resolve a struct literal
+    /// The struct declaration an unnamed literal's target names, or `None`
+    /// where it declares none and the literal interns by its fields.
+    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<crate::defs::DefId> {
+        match *self.tysys.type_table.borrow().get(expected_type?) {
+            ResolvedType::Struct {
+                def: crate::tir::StructDef::Decl(def),
+                ..
+            } => Some(def),
+            _ => None,
+        }
+    }
+
     pub(super) fn resolve_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Handle implicit struct literals (name is None) — anonymous struct inference
-        let Some(raw_name) = &struct_lit.name else {
-            return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
-        };
-        // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
-        // lookups below (struct_fields, symbols, …).
-        let canonical_name;
-        let name = if let Some(canon) = self.sem.imports.canonical_ns_ref(raw_name) {
-            canonical_name = canon;
-            &canonical_name
+        // A literal with no name is a shape — unless the target declares a
+        // struct, in which case `{ x: 1 }` *is* `Point { x: 1 }`. One body
+        // decides that; how the declaration was reached is the only difference.
+        let implicit_decl = if struct_lit.name.is_some() {
+            None
         } else {
-            raw_name
+            let Some(def) = self.implicit_struct_target(expected_type) else {
+                return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
+            };
+            Some(def)
         };
 
+        // `ns::Struct` canonicalizes to its `ns$Struct` alias for the registry
+        // lookups below (struct_fields, symbols, …).
+        let name: Option<String> = struct_lit.name.as_ref().map(|raw| {
+            self.sem
+                .imports
+                .canonical_ns_ref(raw)
+                .unwrap_or_else(|| raw.clone())
+        });
+
         // Record use→def reference for the struct type name.
-        if let Some(name_id) = struct_lit.name_id {
-            self.record_item_reference_by_name(name_id, name);
+        if let (Some(name_id), Some(written)) = (struct_lit.name_id, name.as_ref()) {
+            self.record_item_reference_by_name(name_id, written);
         }
 
         // Which declaration the written name means is the resolve pass's
@@ -3267,9 +3285,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the default rather than the one splicing it in. Everything below
         // reads the declaration; the name and module are renderings of it, for
         // the mangled instance name and the diagnostics.
-        let struct_decl = struct_lit
-            .name_id
-            .and_then(|id| self.tysys.resolutions.declared(id));
+        let struct_decl = implicit_decl.or_else(|| {
+            struct_lit
+                .name_id
+                .and_then(|id| self.tysys.resolutions.declared(id))
+        });
         let declared = struct_decl.and_then(|def| self.lookup_struct_fields_of_decl(def));
         // The canonical name, not the import alias — and for a function-local
         // `struct` its mangled storage name, which is what makes the
@@ -3283,12 +3303,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // in WIR build, which used to surface as a downstream
             // `StructLiteral expected Ref WirType` panic. The best-effort pair
             // is still returned so later passes have something.
+            // Reachable only for a written name: an implicit literal took its
+            // declaration from the target's head, which has fields.
+            let written = name.clone().unwrap_or_default();
             let _ = self.emit(TypeError::UnknownType {
-                name: name.clone(),
+                name: written.clone(),
                 span: struct_lit.span,
             });
-            (name.clone(), self.current_module_source.clone())
+            (written, self.current_module_source.clone())
         };
+        // `struct_name` is the storage name, carrying a local struct's
+        // `@AstId`. A diagnostic says what the programmer wrote (§9).
+        let display_name = struct_decl
+            .map(|def| self.tysys.resolutions.defs().name(def).to_string())
+            .unwrap_or_else(|| struct_name.clone());
 
         // Get expected field types using (name, module_source) lookup.
         //
@@ -3458,7 +3486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
                 {
                     let _ = self.emit(TypeError::ExtraField {
-                        struct_name: struct_name.clone(),
+                        struct_name: display_name.clone(),
                         field_name: field.name.clone(),
                         span: field.span,
                     });
@@ -3535,7 +3563,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 } else {
                     let _ = self.emit(TypeError::MissingField {
-                        struct_name: struct_name.clone(),
+                        struct_name: display_name.clone(),
                         field_name: expected_name.clone(),
                         span: struct_lit.span,
                     });
@@ -3559,7 +3587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let read_via_spread = !struct_lit.spreads.is_empty() && !set_explicitly;
                 if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
                     let _ = self.emit(TypeError::PrivateFieldAccess {
-                        struct_name: struct_name.clone(),
+                        struct_name: display_name.clone(),
                         field_name: fname.clone(),
                         visibility: *vis,
                         span: struct_lit.span,
@@ -4004,7 +4032,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
         );
         let head = crate::tir::StructDef::Anon(shape);
-        let anon_name = self.tysys.type_table.borrow().anon_struct_name(shape);
+        let anon_name = self.tysys.type_table.borrow().anon_struct_mangle(shape);
 
         let module_source = self.current_module_source.clone();
 

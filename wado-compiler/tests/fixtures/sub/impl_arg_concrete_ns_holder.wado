@@ -1,0 +1,14 @@
+use tag from "./cross_module_same_name_impl_arg_tag_a.wado";
+
+pub struct Cell<A> {
+    pub a: A
+}
+
+// Fully concrete, and its one argument is namespace-qualified. Whether that
+// counts as concrete decides how `get` is named, and the call site decides it
+// again when it looks the name up — so the two answers must be one function's.
+impl Cell<tag::Tag> {
+    pub fn get(&self) -> i32 {
+        return self.a.n
+    }
+}

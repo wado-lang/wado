@@ -1,0 +1,11 @@
+use g from "./impl_arg_ns_generic_cell.wado";
+
+// A namespaced target writes its arguments where a plain one does. Reading only
+// the plain spelling left `T` unregistered, so the header did not compile, and
+// recorded no target argument, so the method's return type stayed `T` at every
+// call site.
+impl<T> g::GCell<T> {
+    pub fn get(self) -> T {
+        return self.a
+    }
+}
