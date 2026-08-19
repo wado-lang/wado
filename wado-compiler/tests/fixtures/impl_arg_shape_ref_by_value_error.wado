@@ -1,10 +1,7 @@
 // `impl Slot<&Tag>` must not apply to a by-value `Slot<Tag>`.
 //
-// The comparison ran two renderers: the top level used `mangle_type_name`,
-// which drops the reference (`TypeNameInfo::Ref` hands back the inner name), so
-// `&Tag` and `Tag` rendered identically and the impl matched both. A tuple's
-// elements went through `to_mangled`, which keeps it — so `impl Slot<[i32, &Tag]>`
-// rejected what `impl Slot<&Tag>` accepted. One renderer now spells both sides.
+// Reference-ness is part of the shape. A comparison that renders it away at one
+// depth and keeps it at another accepts here and rejects inside a tuple.
 
 use { Slot } from "./sub/impl_arg_shapes_holder.wado";
 use { Tag } from "./sub/cross_module_same_name_impl_arg_tag_a.wado";

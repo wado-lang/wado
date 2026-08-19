@@ -1,11 +1,9 @@
-// `impl Cell<ns::Tag>` — an ordinary, fully concrete inherent impl whose one
-// argument carries a namespace prefix.
+// `impl Cell<ns::Tag>` — a fully concrete inherent impl whose one argument
+// carries a namespace prefix.
 //
-// `impl_is_concrete_instantiation` did not count a namespace-qualified argument
-// as concrete, so the impl's methods were named as a template while the call
-// site named an instantiation (`Cell<./tag.wado/Tag>::get`), and the call
-// reached WIR build unresolved. Nothing about the program is unusual — the two
-// halves of "is this argument concrete" had simply drifted apart.
+// Nothing about the program is unusual. It fails when the two halves of "is
+// this argument concrete" disagree, naming the methods a template while the
+// call site names an instantiation.
 
 use { Cell } from "./sub/impl_arg_concrete_ns_holder.wado";
 use tag from "./sub/cross_module_same_name_impl_arg_tag_a.wado";

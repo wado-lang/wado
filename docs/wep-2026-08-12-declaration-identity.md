@@ -438,66 +438,42 @@ API, and adding one is a review decision.
 
 ### What still turns a name into a declaration
 
-These are what is left, each with the reason it is there. A declaration is
-whatever _identifies_ one, so the census spans both currencies: a `DefId`, and
-a `Symbol` row, which carries the declaring node and answers the same question
-one table earlier. Adding to this list is a design change; the alternative is
-always to give the caller the reference site instead.
+What is left, each with the reason. A declaration is whatever _identifies_ one,
+so this spans both currencies: a `DefId`, and a `Symbol` row, which carries the
+declaring node. Adding to the list is a design change — the alternative is
+always to give the caller the reference site.
 
-The one scope:
+The one scope, which every other entry exists by not being:
 
-- `Scopes::resolve` and `resolve_value` — the one place this shape belongs.
-  Every other entry exists because it is _not_ this.
+- `Scopes::resolve`, `resolve_value`
 
 The three recorded facts the frame derivation is built from. Each is one tier,
 none is a scope, and none takes a vantage a caller could get wrong:
 
-- `imported_as` — the import tier alone, for a caller to whom the _aliasing_ is
-  the question. The one import fact that is not a scope lookup.
-- `prelude_decl` — the prelude tier alone. It cannot be given a vantage: the
-  prelude is in scope in every module, so there is none from which it answers
-  differently.
-- `decls_named` — hands back _every_ declaration written under the name and
-  picks none, so it is not an answer. It holds what modules declare, never what
-  they import, and takes no module: the caller filters by a frame of its own.
+- `imported_as` — the import tier alone, for a caller asking about the aliasing
+- `prelude_decl` — the prelude tier, which has no vantage to be given
+- `decls_named` — every declaration under the name and no choice between them
 
-The derivation itself — those three tiers, in order, over a frame that is the
-walk's own position rather than a caller's argument:
+The derivation itself: those tiers in order, over the walk's own frame. Each has
+a sited entry point a caller with a reference site reaches instead.
 
-- `decl_key_or_local` — for a caller holding a rendered head whose reference
-  site is not at hand. A caller _with_ a site reaches `decl_key_at`.
-- `TypeLookup::declaration` — the same, one layer down; `declaration_at` is the
-  sited entry point.
-- `namespace_member` — `imported_as` on the `ns$Name` alias a namespace import
-  registers: the import tier answering the qualification the programmer wrote.
-- `scoped_trait_decl_key` — `declaration` filtered to the trait index, for the
-  `TypeSystem` queries that hold a scope and a bound's spelling but not its site.
-- `bound_declaring_assoc_type` — asks which of a _binder's_ bounds declares an
-  associated-type name. The binder is the walk's own, and the trait comes from
-  each bound's reference site.
+- `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
+- `namespace_member` — the `ns$Name` alias a namespace import registers
+- `scoped_trait_decl_key` — filtered to the trait index, for a bound's spelling
+- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name
 
-The same derivation in the `Symbol` currency, which the `DefId` columns of §5
-subsume:
+The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 
-- `symbol_named` — the derivation handing back the symbol row instead of the
-  identity. `symbol_at` is the sited entry point, and answers from the same
-  table so annotate and reify cannot disagree.
-- `imported` — `imported_as` in this currency: the module's own import list, no
-  prelude fallback and no declaration of its own, so a caller orders the layers.
-- `lookup_in_module` / `lookup_in_module_with_visited` — what a module declares
-  under a name, re-export chains followed, the second with its own cycle guard.
+- `symbol_named`, `imported`, `lookup_in_module`, `lookup_in_module_with_visited`
 
-One rendering still compared against a declaration's own:
+One rendering still compared against a declaration's own, which goes when the
+impl index carries `DefId`s:
 
-- `impl_target_decl_key` — walks a receiver type's newtype chain for the link
-  whose rendering equals the head an impl was found under. The name is the impl
-  index's, not a caller's; it goes when that index carries `DefId`s.
+- `impl_target_decl_key` — a receiver's newtype chain against an impl's head
 
-The Component Model boundary, which is permanent:
+The Component Model boundary, permanent for the reason §9 gives:
 
-- `cm_decl_in`, and `cm_decl` on the synthesis side, which resolves the
-  interface's module first. §9 states why a WIT name has no reference site to
-  ask.
+- `cm_decl_in`, `cm_decl`
 
 ## The frame derivation
 
@@ -541,93 +517,70 @@ removal.
 ### What a derivation may not be
 
 A derivation reaches a module's own scope and no further. Three shapes look like
-more of it and are not, because each answers from declarations no module involved
-can see — so what a name means depends on the rest of the program.
+more of it and are not, each answering from declarations no module involved can
+see, so what a name means comes to depend on the rest of the program.
 
-- A program-wide unique match. "The one declaration of that name anywhere,
-  declining when two modules declare it" makes an unrelated module's declaration
-  change an answer, and declining is not neutral: whatever the caller falls back
-  to is the comparison this design removes.
-- A first-in-build-order pick. An index keyed by name with no ambiguity check
-  answers whichever module was loaded first.
-- A second key tried when the first misses. Filing a fact under the call site's
-  frame and the receiver's, then taking whichever hits, makes the order a
-  silent tiebreak — and a receiver reached through a namespace prefix is where
-  the order is wrong. One key, built from the receiver the caller holds: the
-  path segment's own reference site, the middle segment of a `ns::Type::method`
-  path, or the receiver type's own declaration. A head that names no declaration
-  falls to the frame derivation, which is one vantage rather than two.
+- A program-wide unique match, declining when two modules declare the name.
+  Declining is not neutral: the caller's fallback is the comparison this design
+  removes.
+- A first-in-build-order pick — a name-keyed index with no ambiguity check.
+- A second key tried when the first misses, which makes the order a silent
+  tiebreak. One key, built from the receiver the caller holds: the path
+  segment's own site, the middle segment of `ns::Type::method`, or the receiver
+  type's declaration. A head naming none falls to the frame derivation.
 
-Where a position reaches nothing, the answer is the diagnostic, not a wider
-search. An `impl` header's trait position is §3's case: implementing a trait is
-naming it, so a position that reaches nothing is "trait not in scope", and the
-key it gets carries a spelling no query can mistake for an identity.
+Where a position reaches nothing the answer is a diagnostic, not a wider search.
+An `impl` header's trait position is §3's case: implementing a trait is naming
+it, so reaching nothing is "trait not in scope", and the key it gets carries a
+spelling no query can mistake for an identity.
 
-A rendering is never read back into a declaration, and a map from a name to one
-is the same defect waiting for a reader. `mangle_local_item_name`'s `@AstId`
-suffix stays a renderer (§6): written at one site, read back at none.
+A rendering is never read back into a declaration, and a name-keyed map is the
+same defect waiting for a reader.
 
 ## Impl target arguments
 
-An `impl` header's type arguments are where this design is asked the same
-question twice: which positions the header pins decides both how its methods are
-_named_ and which receivers reach that name. Two predicates answering it drift,
-so there is one — `TypeSystem::impl_arg_pins_a_position`.
+An `impl` header's type arguments are asked the same question twice — which
+positions the header pins decides both how its methods are _named_ and which
+receivers reach that name — so one predicate answers it,
+`TypeSystem::impl_arg_pins_a_position`.
 
-Reading the target is the same hazard one step earlier, and it is the one this
-design got wrong repeatedly. A target has more spellings than any one call site
-remembers — `Cell<T>`, `ns::Cell<T>`, `&Cell<T>`, `[i32, T]` — so a reading
-written inline covers the spellings its author had in mind and silently declines
-the rest.
-
-The failure that kept recurring was subtler than a missing spelling: consumers
-asking _different questions_ shared one reading because the questions sound
-alike. "The target's arguments" is three questions.
+Reading the target is the same hazard one step earlier, and "the target's
+arguments" is three questions. Consumers asking different ones shared a reading
+because the questions sound alike; each now has its own.
 
 - **Does this receiver reach this impl, and does this argument pin its
-  position?** `impl_target_args`: a shape comparison, so it reads through a
-  reference and counts a tuple's elements.
-- **What parameters does the header bind, and what does the block record?**
-  `impl_target_head_args`: the head's own argument list. Narrower by one form —
-  a tuple target is the variadic pack, bound by its own path.
-- **What name does the definition mint?** The whole target with references
-  peeled, rendered. This is the only one that must agree with something outside
-  the elaborator: monomorphization asserts the minted `(module, name)` is
-  unique, so a check about duplicate definitions has to ask exactly what that
-  assertion asks, and nothing else.
+  position?** `impl_target_args` — a shape comparison, reading through a
+  reference and counting a tuple's elements.
+- **What does the header bind and the block record?** `impl_target_head_args` —
+  the head's own argument list, narrower by the tuple target, which binds as a
+  variadic pack through its own path.
+- **What name does the definition mint?** The whole target, references peeled,
+  rendered. The only one that must agree outside the elaborator: monomorphization
+  asserts the minted `(module, name)` is unique, so a duplicate-definition check
+  asks exactly that and nothing else.
 
-Sharing a reading across two of these does not fail loudly. It fails as a
-narrower or wider answer than the question wanted: reading _arguments_ where the
-minted _name_ was the question makes `&Cw<i32>` and `&Dw<i32>` render alike,
-because the pointee — the only thing telling them apart — is exactly what a
-shape comparison peels away.
-
-So a reading is named for the question it answers, never for the shape it reads.
-A consumer that cannot name its question in those terms is asking a fourth one,
-and that is the thing to notice.
+Sharing a reading fails quietly, as an answer narrower or wider than the
+question wanted — reading _arguments_ where the minted _name_ was asked makes
+`&Cw<i32>` and `&Dw<i32>` alike, the pointee that separates them being what a
+shape comparison peels. So a reading is named for its question, never for the
+shape it reads.
 
 Each argument is read at its own reference site, never by the shape of its
 spelling:
 
-- A binder is free where it stands, and nowhere else. `impl<T> Slot<[i32, T]>`
-  still requires a two-element tuple whose first element is `i32`. Asking this of
-  the site rather than the spelling is what keeps an alias whose target happens
-  to be spelled like a type parameter from reading as a binder, and a
-  namespace-qualified `ns::Tag` from reading as one either.
-- Where the header cannot bind a binder at all — one nested inside a shape — the
-  impl matches nothing, because a receiver it matched would have nothing to
-  instantiate it with.
-- Naming no declaration is not matching anything. A tuple, a reference and a
-  function type each name none: they are shapes, and a receiver either has the
-  shape or has not.
+- A binder is free where it stands and nowhere else: `impl<T> Slot<[i32, T]>`
+  still wants a two-element tuple starting `i32`. Asking the site is what keeps
+  an alias spelled like a parameter, or a qualified `ns::Tag`, from reading as
+  a binder.
+- A binder the header cannot bind — one nested in a shape — matches nothing,
+  since a receiver matching it would have nothing to instantiate.
+- Naming no declaration is not matching anything: a tuple, a reference and a
+  function type are shapes, and a receiver either has the shape or has not.
 
-The comparison is structural, not textual. Rendering both sides and comparing the
-strings is §8's hazard from the inside: the header side is an AST and the
-receiver side a `TypeId`, so it takes two renderers agreeing on every shape at
-every depth. They cannot be made to. Instead, two declarations are compared as
-declarations through `TypeHead` — `DefId` equality where a declaration names one,
-the rendering where nothing declares the shape, so `i32` and `()` compare
-correctly without being nominal types — and every other shape is compared as the
-shape it is: a reference to a reference of the same kind, a tuple to a tuple of
-the same arity, a function type through its parameters as well as its return.
+The comparison is structural. Rendering both sides is §8's hazard from the
+inside — an AST against a `TypeId` needs two renderers agreeing at every depth,
+which cannot be arranged. Declarations compare through `TypeHead` (`DefId` where
+one is named, the rendering where nothing declares the shape, so `i32` and `()`
+compare without being nominal types); every other shape compares as itself, a
+reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.

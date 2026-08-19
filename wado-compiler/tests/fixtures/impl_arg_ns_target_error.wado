@@ -1,10 +1,8 @@
 // `impl c::Cell<i32>` must not apply to a `Cell<String>`.
 //
-// `impl_is_concrete_instantiation` reads a namespaced target's arguments, so it
-// named this impl's methods as an instantiation; `inherent_impl_type_args_match`
-// matched only `Type::Generic` and returned "no constraint" for every other
-// target shape, so every `Cell` reached that name. Both now ask the same
-// function for the target's arguments.
+// The naming side and the matching side read the target's arguments through one
+// function; reading a namespaced target in only one of them let every `Cell`
+// reach a name minted for this instantiation.
 
 use { Cell } from "./sub/impl_arg_ns_target_cell.wado";
 use {} from "./sub/impl_arg_ns_target_holder.wado";
