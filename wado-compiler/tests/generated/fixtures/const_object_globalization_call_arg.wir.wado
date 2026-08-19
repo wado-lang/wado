@@ -111,7 +111,7 @@ fn "const_object_globalization_call_arg.wado/byte_sum"(s, extra) {
             let __match_5_mv_1: i32;
             multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next"(__iter_3);
             if __match_5_mv_0 == 0 {
-                total = total + builtin::array_get<u8>(_licm_repr_13, __match_5_mv_1);
+                total = total + builtin::array_get_value<u8>(_licm_repr_13, __match_5_mv_1);
             } else {
                 break b0;
             }
@@ -226,7 +226,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };

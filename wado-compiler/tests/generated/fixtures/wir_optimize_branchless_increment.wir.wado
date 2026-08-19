@@ -150,7 +150,7 @@ fn "wir_optimize_branchless_increment.wado/count_trues"(arr) {
     b0: block {
         l1: loop {
             break_if b0 i >= _licm_used_11;
-            count = count + builtin::array_get<bool>(_licm_repr_12, i);
+            count = count + builtin::array_get_value<bool>(_licm_repr_12, i);
             i = i + 1;
             continue l1;
         };
@@ -260,7 +260,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b11: block {
         l12: loop {
             break_if b11 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l12;
         };
@@ -382,7 +382,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bool>"(rep
                 s_11 = global:core:prelude/array.wado::__const_obj_28;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            self_16 = builtin::array_get<bool>(repr, i);
+            self_16 = builtin::array_get_value<bool>(repr, i);
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f, (if self_16 -> ref "core:prelude/string.wado//String" {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
             } else {

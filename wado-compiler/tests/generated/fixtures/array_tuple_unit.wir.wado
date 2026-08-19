@@ -28,7 +28,7 @@ struct tuple//[i32, ()] {  // TypeId(4)
 
 array Array<[i32,()]> (mut ref "tuple//[i32, ()]");  // TypeId(5)
 
-struct core:prelude/slice.wado//ArrayIter<[i32,()]> {  // TypeId(6)
+struct core:prelude/slice.wado//SliceValueIter<[i32,()]> {  // TypeId(6)
     mut repr: ref Array<[i32,()]>,
     mut index: i32,
     mut end: i32,
@@ -79,7 +79,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(27)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[i32,()]>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<[i32,()]>") -> ref null "tuple//[i32, ()]";  // TypeId(28)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,()]>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<[i32,()]>") -> ref null "tuple//[i32, ()]";  // TypeId(28)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(29)
 
@@ -107,7 +107,7 @@ global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude
 
 fn "array_tuple_unit.wado/run"() with Stdout {
     let arr: ref "core:prelude//List<[i32,()]>";
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<[i32,()]>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<[i32,()]>";
     let item: ref "tuple//[i32, ()]";
     let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
@@ -123,10 +123,10 @@ fn "array_tuple_unit.wado/run"() with Stdout {
         global:array_tuple_unit.wado::__modules_initialized = 1;
     };
     arr = struct.new "core:prelude//List<[i32,()]>" { repr: array.new_fixed<ref "tuple//[i32, ()]">(struct.new "tuple//[i32, ()]" { 0: 1 }, struct.new "tuple//[i32, ()]" { 0: 2 }, struct.new "tuple//[i32, ()]" { 0: 3 }), used: 3 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<[i32,()]>" { repr: arr.repr, index: 0, end: 3 };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<[i32,()]>" { repr: arr.repr, index: 0, end: 3 };
     b0: block {
         l1: loop {
-            __match_6 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[i32,()]>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_2);
+            __match_6 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,()]>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_2);
             if ref.is_null(__match_6) == 0 {
                 item = ref.as_non_null(__match_6);
                 block {
@@ -228,7 +228,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };
@@ -336,7 +336,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[i32,()]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,()]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "tuple//[i32, ()]";
     let v: ref "tuple//[i32, ()]";
     let _av_3: i32;
@@ -344,7 +344,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<[i32,()]>^core:pre
     if _av_3 >= 3 {
         return ref.null none;
     }
-    v = builtin::array_get<ref "tuple//[i32, ()]">(self.repr, _av_3);
+    v = builtin::array_get_value<ref "tuple//[i32, ()]">(self.repr, _av_3);
     item = struct.new "tuple//[i32, ()]" { 0: v.0 };
     self.index = _av_3 + 1;
     return item;

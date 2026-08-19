@@ -47,13 +47,13 @@ array Array<core:prelude/types.wado/Option<i32>> (mut ref "core:prelude/types.wa
 
 array Array<match_comprehensive.wado/Tree> (mut ref "match_comprehensive.wado//Tree");  // TypeId(9)
 
-struct core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>> {  // TypeId(10)
+struct core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>> {  // TypeId(10)
     mut repr: ref "Array<core:prelude/types.wado/Option<i32>>",
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<match_comprehensive.wado/Tree> {  // TypeId(11)
+struct core:prelude/slice.wado//SliceValueIter<match_comprehensive.wado/Tree> {  // TypeId(11)
     mut repr: ref "Array<match_comprehensive.wado/Tree>",
     mut index: i32,
     mut end: i32,
@@ -141,11 +141,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<match_comprehensive.wado/Tree>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<match_comprehensive.wado/Tree>") -> ref null "match_comprehensive.wado//Tree";  // TypeId(47)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<match_comprehensive.wado/Tree>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<match_comprehensive.wado/Tree>") -> ref null "match_comprehensive.wado//Tree";  // TypeId(47)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>") -> [i32, ref null "core:prelude/types.wado//Option<i32>"];  // TypeId(48)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>>") -> [i32, ref null "core:prelude/types.wado//Option<i32>"];  // TypeId(48)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec1" = fn(ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>") -> [i32, ref null "core:prelude/types.wado//Option<i32>"];  // TypeId(49)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec1" = fn(ref "core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>>") -> [i32, ref null "core:prelude/types.wado//Option<i32>"];  // TypeId(49)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(50)
 
@@ -424,7 +424,7 @@ fn "match_comprehensive.wado/match_option_chained"() with Stdout {
 
 fn "match_comprehensive.wado/match_variant_comprehensive"() with Stdout {
     let trees: ref "core:prelude//List<match_comprehensive.wado/Tree>";
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<match_comprehensive.wado/Tree>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<match_comprehensive.wado/Tree>";
     let tree: ref "match_comprehensive.wado//Tree";
     let n_4: i32;
     let n_5: i32;
@@ -470,10 +470,10 @@ fn "match_comprehensive.wado/match_variant_comprehensive"() with Stdout {
     let rx_255: i32;
     let tx_256: i32;
     trees = struct.new "core:prelude//List<match_comprehensive.wado/Tree>" { repr: array.new_fixed<ref "match_comprehensive.wado//Tree">(struct.new "match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, struct.new "match_comprehensive.wado//Tree::Node" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } }, struct.new "match_comprehensive.wado//Tree" { 2 }, struct.new "match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 99 }), used: 4 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<match_comprehensive.wado/Tree>" { repr: trees.repr, index: 0, end: 4 };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<match_comprehensive.wado/Tree>" { repr: trees.repr, index: 0, end: 4 };
     b16: block {
         l17: loop {
-            __match_14 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<match_comprehensive.wado/Tree>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_2);
+            __match_14 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<match_comprehensive.wado/Tree>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_2);
             if ref.is_null(__match_14) == 0 {
                 tree = ref.as_non_null(__match_14);
                 desc = (if (if ref.test "match_comprehensive.wado//Tree::Leaf"(tree) -> i32 {
@@ -633,7 +633,7 @@ fn "match_comprehensive.wado/match_variant_comprehensive"() with Stdout {
 fn "match_comprehensive.wado/match_in_loop"() with Stdout {
     let items: ref "core:prelude//List<core:prelude/types.wado/Option<i32>>";
     let sum: i32;
-    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>";
+    let __iter_3: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>>";
     let item: ref "core:prelude/types.wado//Option<i32>";
     let n_5: i32;
     let __local_6: ref "core:prelude/string.wado//String";
@@ -651,12 +651,12 @@ fn "match_comprehensive.wado/match_in_loop"() with Stdout {
     let tx_95: i32;
     items = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 5 }), used: 5 };
     sum = 0;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: items.repr, index: 0, end: 5 };
+    __iter_3 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>>" { repr: items.repr, index: 0, end: 5 };
     b38: block {
         l39: loop {
             let __match_8_mv_0: i32;
             let __match_8_mv_1: ref null "core:prelude/types.wado//Option<i32>";
-            multivalue_bind [__match_8_mv_0, __match_8_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_3);
+            multivalue_bind [__match_8_mv_0, __match_8_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_3);
             if __match_8_mv_0 == 0 {
                 item = ref.as_non_null(__match_8_mv_1);
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(item) {
@@ -912,7 +912,7 @@ fn "match_comprehensive.wado/matches_operator"() with Stdout {
 
 fn "match_comprehensive.wado/if_let_with_else"() with Stdout {
     let values: ref "core:prelude//List<core:prelude/types.wado/Option<i32>>";
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>>";
     let v: ref "core:prelude/types.wado//Option<i32>";
     let n_4: i32;
     let __local_5: ref "core:prelude/string.wado//String";
@@ -933,12 +933,12 @@ fn "match_comprehensive.wado/if_let_with_else"() with Stdout {
     let rx_98: i32;
     let tx_99: i32;
     values = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 30 }), used: 3 };
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: values.repr, index: 0, end: 3 };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/types.wado/Option<i32>>" { repr: values.repr, index: 0, end: 3 };
     b54: block {
         l55: loop {
             let __match_7_mv_0: i32;
             let __match_7_mv_1: ref null "core:prelude/types.wado//Option<i32>";
-            multivalue_bind [__match_7_mv_0, __match_7_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec1"(__iter_2);
+            multivalue_bind [__match_7_mv_0, __match_7_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec1"(__iter_2);
             if __match_7_mv_0 == 0 {
                 v = ref.as_non_null(__match_7_mv_1);
                 if ref.test "core:prelude/types.wado//Option<i32>::Some"(v) {
@@ -1120,7 +1120,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b69: block {
         l70: loop {
             break_if b69 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l70;
         };
@@ -1471,7 +1471,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<match_comprehensive.wado/Tree>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<match_comprehensive.wado/Tree>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "match_comprehensive.wado//Tree";
     let v_2: ref "match_comprehensive.wado//Tree";
     let __vc_payload_0: i32;
@@ -1481,7 +1481,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<match_comprehensiv
     if _av_6 >= 4 {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "match_comprehensive.wado//Tree">(self.repr, _av_6);
+    v_2 = builtin::array_get_value<ref "match_comprehensive.wado//Tree">(self.repr, _av_6);
     item = (if ref.test "match_comprehensive.wado//Tree::Leaf"(v_2) -> ref "match_comprehensive.wado//Tree" {
         __vc_payload_0 = ref.cast "match_comprehensive.wado//Tree::Leaf"(v_2).payload_0;
         struct.new "match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: __vc_payload_0 };
@@ -1495,26 +1495,26 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<match_comprehensiv
     return item;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "core:prelude/types.wado//Option<i32>";
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= 5 {
         return 1, ref.null none;
     }
-    item = builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(self.repr, _av_2);
+    item = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec1"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/types.wado/Option<i32>>^core:prelude/traits.wado/Iterator::next$spec1"(self) {
     let item: ref "core:prelude/types.wado//Option<i32>";
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= 3 {
         return 1, ref.null none;
     }
-    item = builtin::array_get<ref "core:prelude/types.wado//Option<i32>">(self.repr, _av_2);
+    item = builtin::array_get_value<ref "core:prelude/types.wado//Option<i32>">(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

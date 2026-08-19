@@ -21,7 +21,7 @@ only move the friction elsewhere, so it is out of scope.
 
 Match Rust's conventions exactly:
 
-- `iter()` over `List<T>` yields `&T` (return `ArrayRefIter`, not `ArrayIter`).
+- `iter()` over `List<T>` yields `&T` (return `SliceRefIter`, not `SliceValueIter`).
 - `iter_mut()` yields `&mut T` (new), enabling in-place mutation
   (`for let x of xs.iter_mut() { *x = f(*x); }`) — sound with no borrow checker,
   riding on the write-back model
@@ -30,7 +30,7 @@ Match Rust's conventions exactly:
   matching Rust's owned iteration. Unchanged.
 - `for let x of &list` keeps `&T`. Unchanged.
 - `copied()` for iterating a reference list by value: `nums.iter().copied()`.
-  Implemented as an inherent `ArrayRefIter::copied() -> ArrayIter<T>` (both share
+  Implemented as an inherent `SliceRefIter::copied() -> SliceValueIter<T>` (both share
   the same backing), not a generic `Iterator` adaptor — a generic
   `impl<I: Iterator<Item = &T>, T>` can't yet resolve `I::Item` to `&T` in its
   body (associated-type-equality bounds aren't propagated), so `copied()` chains
@@ -60,10 +60,10 @@ separate proposal.
 
 ## Status
 
-- [x] `iter()` yields `&T` (`List::iter -> ArrayRefIter`).
-- [x] `copied()` on `ArrayRefIter`; fixture `iter_ref_adapter_monomorph.wado`.
+- [x] `iter()` yields `&T` (`List::iter -> SliceRefIter`).
+- [x] `copied()` on `SliceRefIter`; fixture `iter_ref_adapter_monomorph.wado`.
 - [x] Migrated the breaking `iter()` call sites.
-- [x] `&mut` iteration for in-place elements: `&mut List<T>` yields `&mut T` via `ArrayRefMutIter`; fixture `iter_mut_inplace.wado`.
+- [x] `&mut` iteration for in-place elements: `&mut List<T>` yields `&mut T` via `SliceRefMutIter`; fixture `iter_mut_inplace.wado`.
 - [x] Reject `&mut` iteration over replace-on-assign / unresolved-generic elements; fixture `iter_mut_forbidden.wado`.
 - [x] Fixed a latent P0: `Fn<N,Ret>^Inspect` deduped by mangled name, not return `TypeId` (`&T` / `&mut T` collide).
 

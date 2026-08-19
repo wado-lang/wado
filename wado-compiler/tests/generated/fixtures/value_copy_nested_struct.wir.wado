@@ -222,9 +222,9 @@ fn "value_copy_nested_struct.wado/run"() {
     __sroa_h_cells = struct.new "core:prelude//List<value_copy_nested_struct.wado/Inner>" { repr: array.new_fixed<ref "value_copy_nested_struct.wado//Inner">(struct.new "value_copy_nested_struct.wado//Inner" { boxed: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(100), used: 1 } }), used: 1 };
     __sroa___sroa_h2_cells_repr = builtin::array_clone_deep_prefix<ref "value_copy_nested_struct.wado//Inner">(__sroa_h_cells.repr, 1);
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(block {
-    }; builtin::array_get<ref "value_copy_nested_struct.wado//Inner">(__sroa___sroa_h2_cells_repr, 0).boxed, 200);
+    }; builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">(__sroa___sroa_h2_cells_repr, 0).boxed, 200);
     self_67 = block {
-    }; builtin::array_get<ref "value_copy_nested_struct.wado//Inner">(__sroa_h_cells.repr, 0).boxed;
+    }; builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">(__sroa_h_cells.repr, 0).boxed;
     __v0_18 = self_67.used;
     if @unlikely(__v0_18 != 1) {
         cold_path;
@@ -232,7 +232,7 @@ fn "value_copy_nested_struct.wado/run"() {
         unreachable;
     }
     self_75 = block {
-    }; builtin::array_get<ref "value_copy_nested_struct.wado//Inner">(__sroa___sroa_h2_cells_repr, 0).boxed;
+    }; builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">(__sroa___sroa_h2_cells_repr, 0).boxed;
     __v0_20 = self_75.used;
     if @unlikely(__v0_20 != 2) {
         cold_path;
@@ -306,7 +306,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b15: block {
         l16: loop {
             break_if b15 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l16;
         };

@@ -22,7 +22,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(4)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
@@ -81,7 +81,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(29)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(30)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref Array<u8>;  // TypeId(30)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
@@ -103,12 +103,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:cast_newtype_of_generic.wado::__modules_initialized: bool = 0;
-global mut global:cast_newtype_of_generic.wado::__const_obj_0: ref null "core:prelude/slice.wado//ArraySlice<u8>" = ref.null none;
+global mut global:cast_newtype_of_generic.wado::__const_obj_0: ref null "core:prelude/slice.wado//Slice<u8>" = ref.null none;
 global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "cast_newtype_of_generic.wado/run"() with Stdout {
     let owned: ref "core:prelude//List<u8>";
-    let view: ref "core:prelude/slice.wado//ArraySlice<u8>";
+    let view: ref "core:prelude/slice.wado//Slice<u8>";
     let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let len: i32;
@@ -130,12 +130,12 @@ fn "cast_newtype_of_generic.wado/run"() with Stdout {
         global:cast_newtype_of_generic.wado::__modules_initialized = 1;
     };
     repr_52 = array.new_fixed<u8>(104, 105);
-    global:cast_newtype_of_generic.wado::__const_obj_0 = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_52, start: 0, end: 2 };
+    global:cast_newtype_of_generic.wado::__const_obj_0 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_52, start: 0, end: 2 };
     a = global:cast_newtype_of_generic.wado::__const_obj_0.end - global:cast_newtype_of_generic.wado::__const_obj_0.start;
     len = select i32(a > 0, a, 0);
-    repr_11 = "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array"(global:cast_newtype_of_generic.wado::__const_obj_0);
+    repr_11 = "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(global:cast_newtype_of_generic.wado::__const_obj_0);
     owned = struct.new "core:prelude//List<u8>" { repr: repr_11, used: len };
-    view = struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: owned.repr, start: 0, end: len };
+    view = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: owned.repr, start: 0, end: len };
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     f_22 = __local_5;
@@ -262,7 +262,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -583,7 +583,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(self) {
     let len: i32;
     let out: ref Array<u8>;
     let _av_5: i32;

@@ -1,6 +1,6 @@
 // Verifies (issue #1184, review follow-up) that an unread `let _` binding
 // whose value performs an out-of-bounds heap access still traps at -O2,
-// AND that the underlying `drop(array_get(...))` survives WIR-level
+// AND that the underlying `drop(array_get_value(...))` survives WIR-level
 // `elide_local`.
 //
 // `ElideWriteOnly` has two deletion paths: the `Drop(value)` rule and the
@@ -16,5 +16,5 @@ export fn run() {
 __DATA__
 {
     "trapped": true,
-    "wir_expect:O2": ["drop(builtin::array_get<i32>"]
+    "wir_expect:O2": ["drop(builtin::array_get_value<i32>"]
 }

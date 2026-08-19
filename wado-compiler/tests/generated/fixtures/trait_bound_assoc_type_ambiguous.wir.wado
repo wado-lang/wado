@@ -230,7 +230,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits"(s, start, end, radix) {
     b6: block {
         l7: loop {
             break_if b6 i >= end;
-            d = "core:prelude/intparse.wado/digit_value"(builtin::array_get_u8(bytes, i));
+            d = "core:prelude/intparse.wado/digit_value"(builtin::array_get_value_u8(bytes, i));
             if select i32(d < 0, 1, d >= radix) {
                 return 1, 0_i64, 1;
             }
@@ -259,7 +259,7 @@ fn "core:prelude/intparse.wado/parse_unsigned_prefix_range"(s, start, end) {
     }), start <= end, 0) == 0, 1, start == end) {
         return 1, 0, 0;
     }
-    first = builtin::array_get<u8>(s.repr, start);
+    first = builtin::array_get_value<u8>(s.repr, start);
     if first == 43 {
         if (start + 1) >= end {
             return 1, 0, 1;
@@ -309,7 +309,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b21: block {
         l22: loop {
             break_if b21 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l22;
         };

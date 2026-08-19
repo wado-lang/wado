@@ -165,10 +165,10 @@ fn "array_index_1.wado/array_index_inline"() with Stdout {
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     block {
     };
-    first = builtin::array_get<i32>(arr.repr, 0);
+    first = builtin::array_get_value<i32>(arr.repr, 0);
     block {
     };
-    second = builtin::array_get<i32>(arr.repr, 1);
+    second = builtin::array_get_value<i32>(arr.repr, 1);
     block {
     };
     builtin::array_set<i32>(arr.repr, 2, 100);
@@ -214,7 +214,7 @@ fn "array_index_1.wado/array_index_inline"() with Stdout {
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     f_118 = __local_5_5;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_126(block {
-    }; builtin::array_get<i32>(arr.repr, 2)), f_118);
+    }; builtin::array_get_value<i32>(arr.repr, 2)), f_118);
     rx_129 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_130 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "array_index_1.wado/__cm_binding__Stdout_write_via_stream"(rx_129);
@@ -521,7 +521,7 @@ fn "array_index_1.wado/array_index_inline_loop"() with Stdout {
     b27: block {
         l28: loop {
             break_if b27 i_3 >= 5;
-            sum = sum + builtin::array_get<i32>(_licm_repr_244, i_3);
+            sum = sum + builtin::array_get_value<i32>(_licm_repr_244, i_3);
             i_3 = i_3 + 1;
             continue l28;
         };
@@ -595,7 +595,7 @@ fn "array_index_1.wado/array_index_inline_loop"() with Stdout {
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_145 = __local_10;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_153(block {
-    }; builtin::array_get<i32>(arr2.repr, 0)), f_145);
+    }; builtin::array_get_value<i32>(arr2.repr, 0)), f_145);
     new_used_160 = __local_9.used + 1;
     if @unlikely(new_used_160 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -615,7 +615,7 @@ fn "array_index_1.wado/array_index_inline_loop"() with Stdout {
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_185 = __local_10;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_193(block {
-    }; builtin::array_get<i32>(arr2.repr, 1)), f_185);
+    }; builtin::array_get_value<i32>(arr2.repr, 1)), f_185);
     new_used_200 = __local_9.used + 1;
     if @unlikely(new_used_200 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -635,7 +635,7 @@ fn "array_index_1.wado/array_index_inline_loop"() with Stdout {
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_225 = __local_10;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_233(block {
-    }; builtin::array_get<i32>(arr2.repr, 2)), f_225);
+    }; builtin::array_get_value<i32>(arr2.repr, 2)), f_225);
     rx_236 = builtin::i32_wrap_i64(local.tee packed_235("wasi/stream-new"()));
     tx_237 = builtin::i32_wrap_i64(packed_235 >> 32_i64);
     handle_140 = "array_index_1.wado/__cm_binding__Stdout_write_via_stream"(rx_236);
@@ -757,7 +757,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b51: block {
         l52: loop {
             break_if b51 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l52;
         };

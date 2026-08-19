@@ -86,9 +86,9 @@ impl FunctionRef {
             .map(|i| i.generic_name.as_str())?;
 
         match generic_name {
-            "array_get"
+            "array_get_value"
             | "array_get_ref"
-            | "array_get_mut_ref"
+            | "array_get_ref_mut"
             | "array_set"
             | "array_new"
             | "array_len"

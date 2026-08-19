@@ -1933,7 +1933,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b200: block {
         l201: loop {
             break_if b200 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l201;
         };
@@ -2442,7 +2442,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
                 iter.index = __hfs_index_15;
                 break b258;
             }
-            byte = builtin::array_get<u8>(_licm_repr_14, __hfs_index_15);
+            byte = builtin::array_get_value<u8>(_licm_repr_14, __hfs_index_15);
             __hfs_index_15 = __hfs_index_15 + 1;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l259;

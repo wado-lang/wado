@@ -136,7 +136,7 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
             __local_3.used = new_used;
             builtin::array_set_u8(__local_3.repr, start_545, 58);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, block {
-            }; builtin::array_get<ref "core:prelude/string.wado//String">(global:const_object_globalization_large_ref_array.wado::__const_obj_8.repr, 3));
+            }; builtin::array_get_value<ref "core:prelude/string.wado//String">(global:const_object_globalization_large_ref_array.wado::__const_obj_8.repr, 3));
             rx_561 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_562 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "const_object_globalization_large_ref_array.wado/__cm_binding__Stdout_write_via_stream"(rx_561);
@@ -229,7 +229,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b9: block {
         l10: loop {
             break_if b9 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l10;
         };

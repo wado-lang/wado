@@ -356,7 +356,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b11: block {
         l12: loop {
             break_if b11 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l12;
         };
@@ -488,7 +488,7 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
         b23: block {
             l24: loop {
                 break_if b23 __sroa___iter_4_index >= end;
-                ref_val = builtin::array_get<ref "core:prelude/string.wado//String">(__sroa___iter_4_repr, __sroa___iter_4_index);
+                ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">(__sroa___iter_4_repr, __sroa___iter_4_index);
                 __sroa___iter_4_index = __sroa___iter_4_index + 1;
                 drop("serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serde_serialize_array.wado/SerializeSeq::element<core:prelude/string.wado/String>"(__local_6, ref_val));
                 continue l24;
@@ -534,7 +534,7 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
         b28: block {
             l29: loop {
                 break_if b28 __sroa___iter_4_index >= end;
-                ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(__sroa___iter_4_repr, __sroa___iter_4_index) };
+                ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(__sroa___iter_4_repr, __sroa___iter_4_index) };
                 __sroa___iter_4_index = __sroa___iter_4_index + 1;
                 drop("serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serde_serialize_array.wado/SerializeSeq::element<i32>"(__local_6, ref_val.value));
                 continue l29;

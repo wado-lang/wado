@@ -176,13 +176,13 @@ fn "trait_default.wado/trait_default_count"() with Stdout {
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 4, 5), used: 5 };
     __sroa_iter_repr = arr.repr;
     __sroa_iter_index = 0;
-    drop(builtin::array_get<i32>(__sroa_iter_repr, 0));
+    drop(builtin::array_get_value<i32>(__sroa_iter_repr, 0));
     __sroa_iter_index = 1;
     n = 0;
     b0: block {
         l1: loop {
             break_if b0 __sroa_iter_index >= 5;
-            drop(builtin::array_get<i32>(__sroa_iter_repr, __sroa_iter_index));
+            drop(builtin::array_get_value<i32>(__sroa_iter_repr, __sroa_iter_index));
             __sroa_iter_index = __sroa_iter_index + 1;
             n = n + 1;
             continue l1;
@@ -310,7 +310,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b6: block {
         l7: loop {
             break_if b6 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l7;
         };

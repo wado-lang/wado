@@ -163,7 +163,7 @@ fn "opt_match_thread_loop_break_bail.wado/first_hit"(data, needles) {
         l1: loop {
             break_if b0 i_3 >= _licm_used_30;
             hit = local.tee idx(__sroa_slot_28 = 0; __sroa_slot_29 = 0; __inline_find_1: block {
-                needle = builtin::array_get<i32>(_licm_repr_31, i_3);
+                needle = builtin::array_get_value<i32>(_licm_repr_31, i_3);
                 i_10 = 0;
                 b2: block {
                     l3: loop {
@@ -172,7 +172,7 @@ fn "opt_match_thread_loop_break_bail.wado/first_hit"(data, needles) {
                             cold_path;
                             "core:rt/panic"(__local_5_26 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5_26, global:opt_match_thread_loop_break_bail.wado::__const_obj_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5_26, global:opt_match_thread_loop_break_bail.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5_26, global:opt_match_thread_loop_break_bail.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 58); __local_6_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5_26); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:opt_match_thread_loop_break_bail.wado::__const_obj_4, __local_6_27); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5_26, global:opt_match_thread_loop_break_bail.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5_26, global:opt_match_thread_loop_break_bail.wado::__const_obj_2); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 105); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 100); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 101); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 120); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 32); __local_6_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5_26); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: i_10 }, __local_6_27); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_5_26, global:opt_match_thread_loop_break_bail.wado::__const_obj_1); __local_6_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5_26); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_32 }, __local_6_27); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5_26, 10); __local_5_26);
                             unreachable;
-                        }; builtin::array_get<i32>(_licm_repr_33, i_10) == needle {
+                        }; builtin::array_get_value<i32>(_licm_repr_33, i_10) == needle {
                             __sroa_slot_28 = 0;
                             __sroa_slot_29 = i_10;
                             break __inline_find_1;
@@ -338,7 +338,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b17: block {
         l18: loop {
             break_if b17 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l18;
         };

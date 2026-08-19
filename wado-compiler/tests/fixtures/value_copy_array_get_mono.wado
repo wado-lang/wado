@@ -1,6 +1,6 @@
 // Reading an element must yield an independent copy even when a raw
-// `builtin::array_get<T>` call has monomorphized the intrinsic. A monomorphized
-// `array_get<T>` still aliases its container, so the value-copy analysis must
+// `builtin::array_get_value<T>` call has monomorphized the intrinsic. A monomorphized
+// `array_get_value<T>` still aliases its container, so the value-copy analysis must
 // recognize it by its generic name (not the mangled monomorphized name) and
 // copy at the binding; otherwise a mutation to the copy corrupts the source.
 
@@ -10,7 +10,7 @@ struct Pair { inner: Cell, tag: i32 }
 fn raw_get(seed: i32) -> Cell {
     let mut arr: Array<Cell> = builtin::array_new(1);
     builtin::array_set(&mut arr, 0, Cell { v: seed });
-    return builtin::array_get(&arr, 0);
+    return builtin::array_get_value(&arr, 0);
 }
 
 test "direct list index binding copies" {

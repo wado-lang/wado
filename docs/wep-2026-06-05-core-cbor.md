@@ -84,7 +84,7 @@ gap, mirroring Rust's `[u8; N]` / `&[u8]` / `Vec<u8>`:
 // in core:prelude
 type ByteArray = Array<u8>;       // owned, fixed length (hashes, keys)
 type ByteList  = List<u8>;        // owned, growable
-type ByteSlice = ArraySlice<u8>;  // borrowed view (no copy)
+type ByteSlice = Slice<u8>;  // borrowed view (no copy)
 ```
 
 Letting `from_*` accept any of the three without copying needs a byte-slice
@@ -435,7 +435,7 @@ remaining item is lossy CBOR→JSON conversion.
 - [x] serde: `serialize_bytes`/`deserialize_bytes`; `visit_i64`/`u64`/`i128`/
       `u128`/`bytes`/`unknown` with defaults; `FieldSchema::lookup(ByteSlice)`
 - [x] compiler: emit the new `lookup` signature from the struct-deserialize
-      synthesizer (reads the key via the generic `ArraySlice<u8>` ops,
+      synthesizer (reads the key via the generic `Slice<u8>` ops,
       monomorphized at `u8`)
 - [x] `core:json`/`core:json_nsd`: bytes-primary API
       (`from_bytes`/`to_bytes`/`to_bytes_pretty`/`to_bytes_canonical`); the

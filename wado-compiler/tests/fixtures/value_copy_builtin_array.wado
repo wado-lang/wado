@@ -22,12 +22,12 @@ export fn run() {
     // Assignment deep-copies the array.
     let mut b = a;
     builtin::array_set(&mut b, 0, 99);
-    assert builtin::array_get(&a, 0) == 10;
-    assert builtin::array_get(&b, 0) == 99;
+    assert builtin::array_get_value(&a, 0) == 10;
+    assert builtin::array_get_value(&b, 0) == 99;
 
     // Pass-by-value deep-copies the array.
     mutate_copy(a);
-    assert builtin::array_get(&a, 0) == 10;
+    assert builtin::array_get_value(&a, 0) == 10;
 }
 
 __DATA__

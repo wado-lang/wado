@@ -291,7 +291,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits"(s, start, end, radix) {
     b11: block {
         l12: loop {
             break_if b11 i >= end;
-            d = "core:prelude/intparse.wado/digit_value"(builtin::array_get_u8(bytes, i));
+            d = "core:prelude/intparse.wado/digit_value"(builtin::array_get_value_u8(bytes, i));
             if select i32(d < 0, 1, d >= radix) {
                 return 1, 0_i64, 1;
             }
@@ -322,7 +322,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }), start <= end, 0) == 0, 1, start == end) {
         return 1, ref.null none, 0;
     }
-    is_negative = local.tee first(builtin::array_get<u8>(s.repr, start)) == 45;
+    is_negative = local.tee first(builtin::array_get_value<u8>(s.repr, start)) == 45;
     has_sign = select i32(is_negative, 1, first == 43);
     if select i32(has_sign, (start + 1) >= end, 0) {
         return 1, ref.null none, 1;
@@ -408,7 +408,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b31: block {
         l32: loop {
             break_if b31 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l32;
         };

@@ -207,7 +207,7 @@ fn "for_merged.wado/__test_3_for_let_pattern"() {
     b6: block {
         l7: loop {
             break_if b6 __sroa_iter_index >= 3;
-            item = builtin::array_get<i32>(__sroa_iter_repr, __sroa_iter_index);
+            item = builtin::array_get_value<i32>(__sroa_iter_repr, __sroa_iter_index);
             __sroa_iter_index = __sroa_iter_index + 1;
             sum = sum + item;
             count = count + 1;
@@ -339,7 +339,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b19: block {
         l20: loop {
             break_if b19 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l20;
         };

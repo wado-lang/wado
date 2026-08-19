@@ -121,7 +121,7 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
                 if __hfs_pos_28 >= s.data.used {
                     break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_0: -1;
                 }
-                break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_0: builtin::array_get<u8>(s.data.repr, __hfs_pos_28);
+                break __inline_hfs_inline_break_no_writeback_wado_Scanner__peek_0: builtin::array_get_value<u8>(s.data.repr, __hfs_pos_28);
             } >= 0 {
                 count = count + 1;
                 __hfs_pos_28 = __hfs_pos_28 + 1;
@@ -222,7 +222,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -316,7 +316,7 @@ fn "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanne
                 self.pos = __hfs_pos_10;
                 break b16;
             }
-            b = builtin::array_get<u8>(_licm_repr_7, __hfs_pos_10);
+            b = builtin::array_get_value<u8>(_licm_repr_7, __hfs_pos_10);
             if b == 32 {
                 __hfs_pos_10 = __hfs_pos_10 + 1;
             } else {

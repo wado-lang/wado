@@ -18,17 +18,17 @@ struct PointHolder {
 }
 
 impl<i32> IndexRef<i32> for PointHolder {
-    type Output = Point;
+    type Elem = Point;
 
-    fn index_ref(&self, _idx: i32) -> &Self::Output {
+    fn index_ref(&self, _idx: i32) -> &Self::Elem {
         return &self.point;
     }
 }
 
-impl<i32> IndexMutRef<i32> for PointHolder {
-    type Output = Point;
+impl<i32> IndexRefMut<i32> for PointHolder {
+    type Elem = Point;
 
-    fn index_mut_ref(&mut self, _idx: i32) -> &mut Self::Output {
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Elem {
         return &mut self.point;
     }
 }

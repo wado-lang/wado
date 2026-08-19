@@ -150,7 +150,7 @@ fn "value_copy_select_alias.wado/__test_0_select_lowered_if_binds_an_independent
     builtin::array_set<i32>(a.repr, 0, 999);
     block {
     };
-    __v0_5 = builtin::array_get<i32>(__array_clone_dst_8, 0);
+    __v0_5 = builtin::array_get_value<i32>(__array_clone_dst_8, 0);
     if @unlikely(__v0_5 != 1) {
         cold_path;
         "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, global:value_copy_select_alias.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, if ref.is_null(global:value_copy_select_alias.wado::__const_obj_4) {
@@ -176,7 +176,7 @@ fn "value_copy_select_alias.wado/__test_1_select_lowered_if_binds_an_independent
     builtin::array_set<i32>(b.repr, 1, 999);
     block {
     };
-    __v0_5 = builtin::array_get<i32>(__array_clone_dst_8, 1);
+    __v0_5 = builtin::array_get_value<i32>(__array_clone_dst_8, 1);
     if @unlikely(__v0_5 != 5) {
         cold_path;
         "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, global:value_copy_select_alias.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, if ref.is_null(global:value_copy_select_alias.wado::__const_obj_25) {
@@ -209,7 +209,7 @@ fn "value_copy_select_alias.wado/__test_2_select_through_a_helper_still_copies_e
     builtin::array_set<i32>(a_1.repr, 2, 999);
     block {
     };
-    __v0_5 = builtin::array_get<i32>(__sroa_a_repr, 2);
+    __v0_5 = builtin::array_get_value<i32>(__sroa_a_repr, 2);
     if @unlikely(__v0_5 != 3) {
         cold_path;
         "core:rt/panic"(__local_7_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(118); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, global:value_copy_select_alias.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, global:value_copy_select_alias.wado::__const_obj_46); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, global:value_copy_select_alias.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 58); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:value_copy_select_alias.wado::__const_obj_44, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7_7, global:value_copy_select_alias.wado::__const_obj_43); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 120); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 91); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 50); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 93); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 32); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7_7); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_5 }, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7_7, 10); __local_7_7);
@@ -309,7 +309,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b17: block {
         l18: loop {
             break_if b17 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l18;
         };

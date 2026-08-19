@@ -14,17 +14,17 @@ struct Cell {
 }
 
 impl<i32> IndexValue<i32> for Cell {
-    type Output = i32;
+    type Elem = i32;
 
-    fn index_value(&self, _idx: i32) -> Self::Output {
+    fn index_value(&self, _idx: i32) -> Self::Elem {
         return self.value;
     }
 }
 
 impl<i32> IndexAssign<i32> for Cell {
-    type Input = i32;
+    type Elem = i32;
 
-    fn index_assign(&mut self, _idx: i32, v: Self::Input) {
+    fn index_assign(&mut self, _idx: i32, v: Self::Elem) {
         self.value = v;
     }
 }
@@ -53,9 +53,9 @@ struct SideIndex {
 }
 
 impl<i32> IndexValue<i32> for SideIndex {
-    type Output = i32;
+    type Elem = i32;
 
-    fn index_value(&self, i: i32) -> Self::Output {
+    fn index_value(&self, i: i32) -> Self::Elem {
         IDX_CALLS += 1;
         return self.data[i];
     }

@@ -6,9 +6,9 @@
 // `Array<T>` is a value type: assigning it, passing it by value, or
 // returning it deep-copies the backing GC array (see WEP-2026-06-02). Its
 // length is a runtime value (`array.len`), not part of the type. `arr[i]`
-// copies (`T`, via the direct `array.get` path); `IndexRef` / `IndexMutRef` hand
+// copies (`T`, via the direct `array.get` path); `IndexRef` / `IndexRefMut` hand
 // out element references for `Ref` / `RefMut` elements, backed by the
-// `builtin::array_get_ref` / `array_get_mut_ref` intrinsics. In-place mutation
+// `builtin::array_get_ref` / `array_get_ref_mut` intrinsics. In-place mutation
 // goes through `set` / `[i] = v`.
 //
 // Every method is a thin wrapper over a `builtin::array_*` intrinsic, which
@@ -23,14 +23,14 @@ use {
     IndexValue,
     IndexAssign,
     IndexRef,
-    IndexMutRef,
+    IndexRefMut,
     IntoIterator,
     Display,
     DisplayAlt,
     Inspect,
     InspectAlt,
 } from "core:prelude/traits.wado";
-use { ArraySlice, ArrayIter, ArrayRefIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
+use { Slice, SliceValueIter, SliceRefIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { i32_clamp, i32_min } from "core:rt";
@@ -62,7 +62,7 @@ impl Array<T> {
     /// Returns a copy of the element at `index` (`array.get`).
     /// Traps if `index` is out of bounds.
     pub fn get(&self, index: i32) -> T {
-        return builtin::array_get(self, index);
+        return builtin::array_get_value(self, index);
     }
 
     /// Sets the element at `index` to `value` (`array.set`).
@@ -84,95 +84,95 @@ impl Array<T> {
 
     /// Returns a zero-copy view over `[start, end)`, clamped to the array's
     /// bounds.
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> with stores[self] {
+    pub fn slice(&self, start: i32, end: i32) -> Slice<T> with stores[self] {
         let len = builtin::array_len(self);
         let s = i32_clamp(start, 0, len);
         let e = i32_clamp(end, s, len);
-        return ArraySlice::internal_new(self, s, e);
+        return Slice::internal_new(self, s, e);
     }
 
     /// Returns a by-value iterator over the array's elements.
-    pub fn iter(&self) -> ArrayIter<T> with stores[self] {
-        return ArrayIter::internal_new(self, 0, builtin::array_len(self));
+    pub fn iter(&self) -> SliceValueIter<T> with stores[self] {
+        return SliceValueIter::internal_new(self, 0, builtin::array_len(self));
     }
 
     /// Returns an iterator over overlapping windows of `size` consecutive
     /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> ArrayWindows<T> with stores[self] {
-        return ArrayWindows::internal_new(self, 0, builtin::array_len(self), size);
+    pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self] {
+        return SliceWindows::internal_new(self, 0, builtin::array_len(self), size);
     }
 
     /// Returns an iterator over non-overlapping chunks of up to `size`
     /// elements. The last chunk may be shorter. Panics if `size` is not
     /// positive.
-    pub fn chunks(&self, size: i32) -> ArrayChunks<T> with stores[self] {
-        return ArrayChunks::internal_new(self, 0, builtin::array_len(self), size);
+    pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self] {
+        return SliceChunks::internal_new(self, 0, builtin::array_len(self), size);
     }
 }
 
 impl<T> IntoIterator for Array<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = SliceValueIter<T>;
 
     fn into_iter(&self) -> Self::Iter with stores[self] {
-        return ArrayIter::internal_new(self, 0, builtin::array_len(self));
+        return SliceValueIter::internal_new(self, 0, builtin::array_len(self));
     }
 }
 
 impl<T> IntoIterator for &Array<T> {
     type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Iter = SliceRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let arr = *self;
-        return ArrayRefIter::internal_new(arr, 0, builtin::array_len(arr));
+        return SliceRefIter::internal_new(arr, 0, builtin::array_len(arr));
     }
 }
 
 impl IndexValue<i32> for Array<T> {
-    type Output = T;
+    type Elem = T;
 
-    fn index_value(&self, index: i32) -> Self::Output {
-        return builtin::array_get(self, index);
+    fn index_value(&self, index: i32) -> Self::Elem {
+        return builtin::array_get_value(self, index);
     }
 }
 
 impl IndexAssign<i32> for Array<T> {
-    type Input = T;
+    type Elem = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Elem) with stores[value] {
         builtin::array_set(self, index, value);
     }
 }
 
 impl<T: Ref> IndexRef<i32> for Array<T> {
-    type Output = T;
+    type Elem = T;
 
     fn index_ref(&self, index: i32) -> &T {
         return builtin::array_get_ref(self, index);
     }
 }
 
-impl<T: RefMut> IndexMutRef<i32> for Array<T> {
-    type Output = T;
+impl<T: RefMut> IndexRefMut<i32> for Array<T> {
+    type Elem = T;
 
-    fn index_mut_ref(&mut self, index: i32) -> &mut T {
-        return builtin::array_get_mut_ref(self, index);
+    fn index_ref_mut(&mut self, index: i32) -> &mut T {
+        return builtin::array_get_ref_mut(self, index);
     }
 }
 
 impl IndexValue<RangeExclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+    type Elem = Slice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> with stores[self] {
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
         return self.slice(range.start, range.end);
     }
 }
 
 impl IndexValue<RangeInclusive<i32>> for Array<T> {
-    type Output = ArraySlice<T>;
+    type Elem = Slice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> with stores[self] {
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {
         return self.slice(range.start, range.end + 1);
     }
 }
@@ -184,7 +184,7 @@ impl<T: Eq> Eq for Array<T> {
             return false;
         }
         for let mut i = 0; i < len; i += 1 {
-            if builtin::array_get(self, i) != builtin::array_get(other, i) {
+            if builtin::array_get_value(self, i) != builtin::array_get_value(other, i) {
                 return false;
             }
         }
@@ -198,8 +198,8 @@ impl<T: Ord> Ord for Array<T> {
         let other_len = builtin::array_len(other);
         let min_len = i32_min(len, other_len);
         for let mut i = 0; i < min_len; i += 1 {
-            let a = builtin::array_get(self, i);
-            let b = builtin::array_get(other, i);
+            let a = builtin::array_get_value(self, i);
+            let b = builtin::array_get_value(other, i);
             if a < b {
                 return Ordering::Less;
             }

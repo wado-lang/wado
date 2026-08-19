@@ -28,7 +28,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
 
 array Array<i32> (mut i32);  // TypeId(5)
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(6)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(6)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -109,7 +109,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(42)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(43)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(43)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
 
@@ -213,7 +213,7 @@ fn "while_merged.wado/__test_2_while_let_basic"() {
     b6: block {
         l7: loop {
             break_if b6 __sroa_iter_index >= 3;
-            item = builtin::array_get<i32>(__sroa_iter_repr, __sroa_iter_index);
+            item = builtin::array_get_value<i32>(__sroa_iter_repr, __sroa_iter_index);
             __sroa_iter_index = __sroa_iter_index + 1;
             sum = sum + item;
             continue l7;
@@ -228,7 +228,7 @@ fn "while_merged.wado/__test_2_while_let_basic"() {
 
 fn "while_merged.wado/__test_3_while_let_chain"() {
     let arr: ref "core:prelude//List<i32>";
-    let iter: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let iter: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let sum: i32;
     let xs: ref "core:prelude//List<i32>";
     let ys: ref "core:prelude//List<i32>";
@@ -251,13 +251,13 @@ fn "while_merged.wado/__test_3_while_let_chain"() {
     let __sroa_ix_repr: ref Array<i32>;
     let __sroa_ix_index: i32;
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 8, 9), used: 5 };
-    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: arr.repr, index: 0, end: 5 };
+    iter = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: arr.repr, index: 0, end: 5 };
     sum = 0;
     b9: block {
         l10: loop {
             let __match_33_mv_0: i32;
             let __match_33_mv_1: i32;
-            multivalue_bind [__match_33_mv_0, __match_33_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(iter);
+            multivalue_bind [__match_33_mv_0, __match_33_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_33_mv_0 == 0 {
                 if __match_33_mv_1 < 5 {
                     sum = sum + __match_33_mv_1;
@@ -285,10 +285,10 @@ fn "while_merged.wado/__test_3_while_let_chain"() {
     b14: block {
         l15: loop {
             break_if b14 __sroa_ix_index >= 3;
-            item_112 = builtin::array_get<i32>(__sroa_ix_repr, __sroa_ix_index);
+            item_112 = builtin::array_get_value<i32>(__sroa_ix_repr, __sroa_ix_index);
             __sroa_ix_index = __sroa_ix_index + 1;
             break_if b14 __sroa_iy_index >= 3;
-            item_114 = builtin::array_get<i32>(__sroa_iy_repr, __sroa_iy_index);
+            item_114 = builtin::array_get_value<i32>(__sroa_iy_repr, __sroa_iy_index);
             __sroa_iy_index = __sroa_iy_index + 1;
             total = total + (item_112 + item_114);
             continue l15;
@@ -306,7 +306,7 @@ fn "while_merged.wado/__test_3_while_let_chain"() {
     b17: block {
         l18: loop {
             break_if b17 __sroa_iter3_index >= 4;
-            item_116 = builtin::array_get<i32>(__sroa_iter3_repr, __sroa_iter3_index);
+            item_116 = builtin::array_get_value<i32>(__sroa_iter3_repr, __sroa_iter3_index);
             __sroa_iter3_index = __sroa_iter3_index + 1;
             if select i32(item_116 > 1, item_116 < 6, 0) {
                 count = count + 1;
@@ -416,7 +416,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b27: block {
         l28: loop {
             break_if b27 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l28;
         };
@@ -810,14 +810,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

@@ -1409,7 +1409,7 @@ impl<'a> WirUnparser<'a> {
                 ..
             } => {
                 let elem = self.array_elem_type_str(type_id);
-                self.write(&format!("builtin::array_get<{elem}>("));
+                self.write(&format!("builtin::array_get_value<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -1436,7 +1436,7 @@ impl<'a> WirUnparser<'a> {
             } => {
                 let elem = self.array_elem_type_str(type_id);
                 let fname = if elem == "u8" {
-                    "builtin::array_get_u8".to_string()
+                    "builtin::array_get_value_u8".to_string()
                 } else {
                     format!("array.get_u<{elem}>")
                 };

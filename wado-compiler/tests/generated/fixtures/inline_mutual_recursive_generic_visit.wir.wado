@@ -270,7 +270,7 @@ fn "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_v
     b2: block {
         l3: loop {
             break_if b2 __sroa___iter_2_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get<ref "inline_mutual_recursive_generic_visit.wado//Node">(__sroa___iter_2_repr, __sroa___iter_2_index) };
+            ref_val = struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(__sroa___iter_2_repr, __sroa___iter_2_index) };
             __sroa___iter_2_index = __sroa___iter_2_index + 1;
             "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_node<inline_mutual_recursive_generic_visit.wado/Sum>"(v, ref_val.value);
             continue l3;
@@ -380,7 +380,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b12: block {
         l13: loop {
             break_if b12 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l13;
         };
@@ -501,7 +501,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mut
                 s_11 = global:core:prelude/array.wado::__const_obj_23;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_11);
             }
-            "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get<ref "inline_mutual_recursive_generic_visit.wado//Node">(repr, i) }, f);
+            "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(repr, i) }, f);
             shown = shown + 1;
             i = i + 1;
             continue l19;
@@ -868,7 +868,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<inline_mutual_recursive_g
     b70: block {
         l71: loop {
             break_if b70 i >= _licm_used_7;
-            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get<ref "inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_8, i) }, builtin::array_get<ref "inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_9, i)) == 0 {
+            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_8, i) }, builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(_licm_repr_9, i)) == 0 {
                 return 0;
             }
             i = i + 1;

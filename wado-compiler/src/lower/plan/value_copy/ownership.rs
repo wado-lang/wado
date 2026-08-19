@@ -20,9 +20,9 @@ use crate::tir::{
 use crate::tir_visitor::TirRefVisitor;
 
 fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
-    matches_builtin(name, monomorph_info, "array_get")
+    matches_builtin(name, monomorph_info, "array_get_value")
         || matches_builtin(name, monomorph_info, "array_get_ref")
-        || matches_builtin(name, monomorph_info, "array_get_mut_ref")
+        || matches_builtin(name, monomorph_info, "array_get_ref_mut")
 }
 
 /// Oracle the freshness checker consults for a call's return convention.
@@ -69,7 +69,7 @@ impl<'a> OwnedCalls<'a> {
 
     /// Whether a call to `func` yields an owned (fresh) value. A core builtin
     /// allocates or computes a fresh result — except the container-alias reads
-    /// `array_get` / `array_get_ref`, which borrow an element in place. A body
+    /// `array_get_value` / `array_get_ref`, which borrow an element in place. A body
     /// function is owned iff the fixpoint proved it so; extern / opaque callees
     /// default to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
@@ -109,7 +109,7 @@ pub struct ReturnConventions {
 }
 
 /// Functions whose every value-return aliases the receiver / first parameter
-/// (a *borrowed* projection, through `array_get` and nested accessor calls).
+/// (a *borrowed* projection, through `array_get_value` and nested accessor calls).
 /// Because it admits borrowed projections it must NOT feed the move/owned
 /// decision; only the read-only-share analysis consumes it.
 pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
@@ -158,7 +158,7 @@ fn function_returns_receiver_alias(body: &TirBlock, set: &FuncKeySet) -> bool {
 }
 
 /// Whether `expr` aliases the storage of parameter `param`: a projection chain,
-/// an `array_get` / `array_get_ref` element read of one, or a call to a
+/// an `array_get_value` / `array_get_ref` element read of one, or a call to a
 /// receiver-aliasing callee whose receiver / first argument is one.
 fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool {
     match &expr.kind {
@@ -185,7 +185,7 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
 
 /// Least fixpoint over the two return conventions. Seeds the always-owned
 /// callees (value-copy helpers clone; builtins except the container-alias
-/// reads `array_get` / `array_get_ref` allocate) and grows: a body function
+/// reads `array_get_value` / `array_get_ref` allocate) and grows: a body function
 /// becomes owned once every value it returns is owned,
 /// and self-projecting once every value it returns is owned *or* a projection of
 /// its first parameter (`return *self`). `returns_owned` is a subset of

@@ -211,7 +211,7 @@ fn "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_
         b2: block {
             l3: loop {
                 break_if b2 __sroa___iter_3_index >= end;
-                ref_val = struct.new "core:prelude/types.wado//Box<single_module_variant_iter.wado/Choice>" { value: builtin::array_get<ref "single_module_variant_iter.wado//Choice">(__sroa___iter_3_repr, __sroa___iter_3_index) };
+                ref_val = struct.new "core:prelude/types.wado//Box<single_module_variant_iter.wado/Choice>" { value: builtin::array_get_value<ref "single_module_variant_iter.wado//Choice">(__sroa___iter_3_repr, __sroa___iter_3_index) };
                 __sroa___iter_3_index = __sroa___iter_3_index + 1;
                 "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>"(h, ref_val.value);
                 continue l3;
@@ -274,7 +274,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b10: block {
         l11: loop {
             break_if b10 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l11;
         };

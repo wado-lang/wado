@@ -26,13 +26,13 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(5)
+struct core:prelude/slice.wado//SliceValueIter<u8> {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut index: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//ArraySlice<u8> {  // TypeId(6)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
@@ -93,23 +93,23 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(32)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> [i32, ref null "core:prelude/string.wado//String"];  // TypeId(33)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>", i32, i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> i32;  // TypeId(34)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(35)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref Array<u8>;  // TypeId(37)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref Array<u8>;  // TypeId(37)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(38)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(39)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/ArrayIter<u8>>" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(40)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> ref "core:prelude//List<u8>";  // TypeId(40)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(41)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(41)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
@@ -137,7 +137,7 @@ global global:core:prelude/string.wado::__const_obj_1: ref null "core:prelude/st
 fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     let arr: ref "core:prelude//List<u8>";
     let s: ref "core:prelude/string.wado//String";
-    let bytes: ref "core:prelude/slice.wado//ArrayIter<u8>";
+    let bytes: ref "core:prelude/slice.wado//SliceValueIter<u8>";
     let collected: ref "core:prelude//List<u8>";
     let handle: i32;
     let packed: i64;
@@ -150,11 +150,11 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
         global:ice_array_iter_into_iterator.wado::__modules_initialized = 1;
     };
     arr = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
-    bytes = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: arr.repr, index: 0, end: 5 };
-    collected = "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/ArrayIter<u8>>"(bytes);
+    bytes = struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: arr.repr, index: 0, end: 5 };
+    collected = "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(bytes);
     let __match_3_mv_0: i32;
     let __match_3_mv_1: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+    multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: collected.repr, start: 0, end: collected.used });
     if __match_3_mv_0 == 0 {
         s = ref.as_non_null(__match_3_mv_1);
         rx_33 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
@@ -270,7 +270,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -442,7 +442,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(b
             continue l24;
         };
     };
-    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null("core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array"(bytes)), used: bytes.end - bytes.start };
+    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(bytes)), used: bytes.end - bytes.start };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, start, len) {
@@ -453,7 +453,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
     let b1_7: u8;
     let b2_8: u8;
     let b3: u8;
-    b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
+    b0 = builtin::array_get_value<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return 1;
     }
@@ -466,7 +466,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
+        b1_4 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely(select i32(b1_4 <u 128, 1, b1_4 >u 191)) {
             cold_path;
             return 0;
@@ -478,7 +478,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b1_5 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
+        b1_5 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if (if select i32(b1_5 <u 128, 1, b1_5 >u 191) -> i32 {
             1;
         } else {
@@ -491,7 +491,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b2_6 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
+        b2_6 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 2));
         if @unlikely(select i32(b2_6 <u 128, 1, b2_6 >u 191)) {
             cold_path;
             return 0;
@@ -503,7 +503,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b1_7 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
+        b1_7 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if (if select i32(b1_7 <u 128, 1, b1_7 >u 191) -> i32 {
             1;
         } else {
@@ -516,12 +516,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b2_8 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
+        b2_8 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 2));
         if @unlikely(select i32(b2_8 <u 128, 1, b2_8 >u 191)) {
             cold_path;
             return 0;
         }
-        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 3));
+        b3 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 3));
         if @unlikely(select i32(b3 <u 128, 1, b3 >u 191)) {
             cold_path;
             return 0;
@@ -713,7 +713,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArraySlice<u8>::to_array"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(self) {
     let len: i32;
     let out: ref Array<u8>;
     let _av_5: i32;
@@ -748,14 +748,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/ArrayIter<u8>>"(iter) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter) {
     let result: ref "core:prelude//List<u8>";
     result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     b77: block {
         l78: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: u8;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
             if __match_4_mv_0 == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_4_mv_1);
             } else {
@@ -767,14 +767,14 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     return result;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u8;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u8>(self.repr, _av_2);
+    item = builtin::array_get_value<u8>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

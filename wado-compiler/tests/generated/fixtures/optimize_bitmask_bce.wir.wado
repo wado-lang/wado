@@ -133,7 +133,7 @@ fn "optimize_bitmask_bce.wado/run"() {
         l1: loop {
             break_if b0 i >= 100;
             idx = i & 32767;
-            sum = sum + builtin::array_get<i32>(repr, idx);
+            sum = sum + builtin::array_get_value<i32>(repr, idx);
             builtin::array_set<i32>(repr, idx, i);
             i = i + 1;
             continue l1;
@@ -206,7 +206,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b9: block {
         l10: loop {
             break_if b9 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l10;
         };

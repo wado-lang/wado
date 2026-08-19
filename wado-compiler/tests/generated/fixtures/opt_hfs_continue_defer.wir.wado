@@ -217,7 +217,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -450,7 +450,7 @@ fn "opt_hfs_continue_defer.wado/opt_hfs_continue_defer.wado/Cursor::skip_run"(se
                 break b24;
             }
             index_5 = __hfs_pos_16;
-            b = builtin::array_get<u8>(_licm_repr_13, index_5);
+            b = builtin::array_get_value<u8>(_licm_repr_13, index_5);
             if b > 64 {
                 self.pos = __hfs_pos_16;
                 break b24;

@@ -149,7 +149,7 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 __sroa___iter_5_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(a, __sroa___iter_5_index) };
+            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(a, __sroa___iter_5_index) };
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             asum = asum + ref_val.value;
             continue l1;
@@ -246,7 +246,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b6: block {
         l7: loop {
             break_if b6 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l7;
         };
@@ -335,7 +335,7 @@ fn "ref_impl_dispatch_list_vs_array.wado/core:prelude/list.wado/List<i32>^ref_im
     b14: block {
         l15: loop {
             break_if b14 __sroa___iter_2_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get<i32>(__sroa___iter_2_repr, __sroa___iter_2_index) };
+            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(__sroa___iter_2_repr, __sroa___iter_2_index) };
             __sroa___iter_2_index = __sroa___iter_2_index + 1;
             s.total = s.total + ref_val.value;
             continue l15;

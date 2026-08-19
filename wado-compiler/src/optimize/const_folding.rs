@@ -266,7 +266,7 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
 
 /// Which callee ids are the builtins the engine evaluates.
 ///
-/// `array_get` is generic, but a builtin is declared once and shared by every
+/// `array_get_value` is generic, but a builtin is declared once and shared by every
 /// instantiation — the type arguments ride on the call, not on a monomorphized
 /// callee record — so the name is read off whichever of the two forms the
 /// callee has.
@@ -285,7 +285,7 @@ pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             continue;
         };
         let builtin = match name.as_str() {
-            "builtin::array_get" | "builtin::array_get_u8" => CtfeBuiltin::ArrayGet,
+            "builtin::array_get_value" | "builtin::array_get_value_u8" => CtfeBuiltin::ArrayGet,
             "builtin::array_len" => CtfeBuiltin::ArrayLen,
             "builtin::array_new" => CtfeBuiltin::ArrayNew,
             "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,

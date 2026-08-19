@@ -7,14 +7,14 @@ The standard for Wado's contiguous sequence types: their roles, the `Sequence` /
 
 Three types cover contiguous sequences, introduced months apart:
 
-| Type            | Representation                           | Introduced |
-| --------------- | ---------------------------------------- | ---------- |
-| `List<T>`       | `struct { repr: Array<T>, used }`        | 2026-02    |
-| `Array<T>`      | Wasm GC `array T` (definitionless)       | 2026-06-03 |
-| `ArraySlice<T>` | `struct { repr: &Array<T>, start, end }` | 2026-06-04 |
+| Type       | Representation                           | Introduced |
+| ---------- | ---------------------------------------- | ---------- |
+| `List<T>`  | `struct { repr: Array<T>, used }`        | 2026-02    |
+| `Array<T>` | Wasm GC `array T` (definitionless)       | 2026-06-03 |
+| `Slice<T>` | `struct { repr: &Array<T>, start, end }` | 2026-06-04 |
 
 The axis is sound — ownership × length-mutability — but capability does not
-follow it. Four gaps account for nearly all of the divergence.
+follow it. Three gaps account for nearly all of the divergence.
 
 ### The view type has no algorithm surface
 
@@ -26,12 +26,10 @@ written, leaving hand-duplication that was never completed.
 ### Iteration was aligned on `List` only
 
 [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md) moved
-`iter()` to yield `&T`, but only for `List`. `Array::iter()` and
-`ArraySlice::iter()` still yield `T` under the superseded convention, and
-`iter_mut()` exists nowhere. The unmarked name `ArrayIter` now means the
-by-value iterator while `iter()` means references.
+`iter()` to yield `&T`, but only for `List`. `Array::iter()` and `Slice::iter()`
+still yield `T` under the superseded convention, and `iter_mut()` exists nowhere.
 
-### `Array<T>` and `ArraySlice<T>` are undocumented and under-implemented
+### `Array<T>` and `Slice<T>` are undocumented and under-implemented
 
 Both are prelude-public, yet neither appears in `docs/spec.md` or the cheatsheet,
 and neither the CM type-mapping table nor the snapshot/aliasing rules below are
@@ -40,10 +38,9 @@ written down anywhere. `Array<T>` takes no `[…]` literal and has no `Default`.
 ### Structural derivation is wrong for a view
 
 `Eq` / `Ord` / `Inspect` are synthesized structurally on demand
-([Trait Derivation](./wep-2026-06-25-trait-derivation.md)), so `ArraySlice`
-compares by backing identity — two views over equal contents are unequal — and
-inspects as `ArraySlice { repr: &[1, 2, 3], start: 0, end: 3 }` instead of
-`[1, 2, 3]`.
+([Trait Derivation](./wep-2026-06-25-trait-derivation.md)), so `Slice` compares
+by backing identity — two views over equal contents are unequal — and inspects as
+`Slice { repr: &[1, 2, 3], start: 0, end: 3 }` instead of `[1, 2, 3]`.
 
 ## Decision
 
@@ -122,7 +119,7 @@ bound — `trait SequenceEq<T: Eq>: Sequence<T>` does not parse — so `contains
 `binary_search`, `starts_with`, and `ends_with`, which need `T: Eq` or `T: Ord`,
 stay bounded inherent impls (`impl<T: Eq> Slice<T> { … }`) with thin bounded
 forwarders on `Array` and `List`. `Iterator` already hits this wall: `sum` /
-`min` / `max` live on `impl<T: Add> ArrayIter<T>` rather than on the trait, which
+`min` / `max` live on `impl<T: Add> SliceValueIter<T>` rather than on the trait, which
 is why `xs.iter().map(f).sum()` does not compile. Lifting the restriction needs
 bounds on trait type parameters and associated types — a separate proposal, and
 the enabler that would fold these methods back in.
@@ -147,9 +144,9 @@ would silently make every `Sequence` default body O(n²).
 
 ### Naming
 
-The value/reference axis is spelled out everywhere. No unmarked member: an
-unmarked name is what drifted, when `ArrayIter` came to mean the by-value
-iterator while `iter()` moved to references.
+The value/reference axis is spelled out in every name that carries it. There is
+no unmarked member — an unmarked name is what drifted before, when the plain
+`Iter` came to mean the by-value iterator while `iter()` moved to references.
 
 | Axis    | Token    | Yields   |
 | ------- | -------- | -------- |
@@ -157,60 +154,54 @@ iterator while `iter()` moved to references.
 | shared  | `Ref`    | `&T`     |
 | mutable | `RefMut` | `&mut T` |
 
-`RefMut`, not `MutRef`: the marker traits already read `Ref` / `RefMut`, and it
-matches `std::cell::Ref` / `RefMut`.
+`RefMut`, not `MutRef`: the marker traits read `Ref` / `RefMut`, and it matches
+`std::cell::Ref` / `RefMut`.
 
-| Current              | New                  | Item       |
-| -------------------- | -------------------- | ---------- |
-| `ArraySlice<T>`      | `Slice<T>`           | —          |
-| `ArrayIter<T>`       | `SliceValueIter<T>`  | `T`        |
-| `ArrayRefIter<T>`    | `SliceRefIter<T>`    | `&T`       |
-| `ArrayRefMutIter<T>` | `SliceRefMutIter<T>` | `&mut T`   |
-| `ArrayWindows<T>`    | `SliceWindows<T>`    | `Slice<T>` |
-| `ArrayChunks<T>`     | `SliceChunks<T>`     | `Slice<T>` |
+| Type                 | Item       |
+| -------------------- | ---------- |
+| `Slice<T>`           | —          |
+| `SliceValueIter<T>`  | `T`        |
+| `SliceRefIter<T>`    | `&T`       |
+| `SliceRefMutIter<T>` | `&mut T`   |
+| `SliceWindows<T>`    | `Slice<T>` |
+| `SliceChunks<T>`     | `Slice<T>` |
 
-`Slice`, not `ArraySlice`: the old name states the backing rather than the role,
-and `list.as_slice() -> ArraySlice` reads wrong. The rationale for the prefix —
+`Slice`, not `ArraySlice`: the latter states the backing rather than the role,
+and `list.as_slice() -> ArraySlice` reads wrong. The argument for the prefix —
 that `Slice` is too generic for a flat prelude, which cannot be shadowed — holds
 far more strongly for `Iter` (which also collided with the `Iterator` trait) than
 for `Slice`. Domain uses take qualified names (`TimeSlice`), and the conflict is
 a clear compile error, not silent breakage.
 
-Methods take the same axis. Wado's reference semantics diverge from Rust's — a
-`&T` into an array element is a snapshot copy that cannot write back, and
-`&mut T` is available only for `T: RefMut` — so reusing Rust's names would
-mislead, which
+Methods take the same axis: `iter_value()`, `iter_ref()`, `iter_ref_mut()`, and
+`SliceRefIter::iter_value()` in place of a Rust-style `copied()`. Wado's
+reference semantics diverge from Rust's — a `&T` into an array element is a
+snapshot copy that cannot write back, and `&mut T` is available only for
+`T: RefMut` — so reusing Rust's names would mislead, which
 [Checked/Unchecked Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
 forbids.
 
-| Current                      | New                              | Yields   |
-| ---------------------------- | -------------------------------- | -------- |
-| `into_iter()` (inherent)     | `iter_value()`                   | `T`      |
-| `iter()`                     | `iter_ref()`                     | `&T`     |
-| `iter_mut()` (unimplemented) | `iter_ref_mut()`                 | `&mut T` |
-| `copied()`                   | `iter_value()` on `SliceRefIter` | `T`      |
-
-`IntoIterator` / `into_iter` are unchanged: they are the `for-of` desugaring
-hook, not a hand-called method, and `for-of` already marks the axis in syntax
+`IntoIterator` / `into_iter` are exempt: they are the `for-of` desugaring hook,
+not a hand-called method, and `for-of` already marks the axis in syntax
 (`for x of xs` / `&xs` / `&mut xs` yield `T` / `&T` / `&mut T`).
 
-Index traits keep their four-way split — it follows from Wado's constraints,
-since `Output: Ref` / `Output: RefMut` bounds exclude scalars from `IndexRef`,
-and a scalar has no addressable cell, so `IndexAssign` cannot fold into a `&mut`
-— but are renamed onto the axis, and their associated types unified. All four
-name the same element type today under three different names (`Output` twice,
-plus `Input`).
+The index traits keep their four-way split — it follows from Wado's constraints,
+since `Elem: Ref` / `Elem: RefMut` bounds exclude scalars from `IndexRef`, and a
+scalar has no addressable cell, so `IndexAssign` cannot fold into a `&mut`. All
+four name the same element type, so all four call it `Elem`.
 
-| Current                            | New                                |
-| ---------------------------------- | ---------------------------------- |
-| `IndexValue<I>` / `index_value`    | unchanged                          |
-| `IndexRef<I>` / `index_ref`        | unchanged                          |
-| `IndexMutRef<I>` / `index_mut_ref` | `IndexRefMut<I>` / `index_ref_mut` |
-| `IndexAssign<I>` / `index_assign`  | unchanged (write axis)             |
-| `type Output` / `type Input`       | `type Elem`                        |
+| Trait                              | Element access |
+| ---------------------------------- | -------------- |
+| `IndexValue<I>` / `index_value`    | reads `T`      |
+| `IndexRef<I>` / `index_ref`        | reads `&T`     |
+| `IndexRefMut<I>` / `index_ref_mut` | reads `&mut T` |
+| `IndexAssign<I>` / `index_assign`  | writes `T`     |
 
-Internal intrinsics follow: `array_get` → `array_get_value`, `array_get_mut_ref`
-→ `array_get_ref_mut`.
+The internal intrinsics follow the same axis: `array_get_value`, `array_get_ref`,
+`array_get_ref_mut` (and `array_get_value_u8`). Naming them this way breaks no
+mirror of the Wasm instruction names, because the family never was one — Wasm GC
+has no `array.get_ref` or `array.get_mut_ref`, and `array_new` already maps to
+`array.new_default`.
 
 ### Indexing and the `_unchecked` contract
 
@@ -309,17 +300,7 @@ has no position polymorphism and stays `List<T>` (e.g. `wasi:http`'s
 
 ## Roadmap
 
-Phase A is exclusive and atomic: it avoids a window where a name means two
-things. The rest are independent.
-
-### Phase A — Rename
-
-Mechanical, no behavior change, green at the end.
-
-- [ ] `ArraySlice` → `Slice` and the iterator family to `Slice*` on the
-      `Value` / `Ref` / `RefMut` axis; `IndexMutRef` → `IndexRefMut`;
-      `Output` / `Input` → `Elem`; the `array_get*` intrinsics; regenerate WIR
-      snapshots.
+The naming above is in place. The phases below are independent of each other.
 
 ### Phase B — `Sequence` / `AsSlice`
 

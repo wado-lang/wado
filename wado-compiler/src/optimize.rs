@@ -515,7 +515,7 @@ fn run_optimization_passes(
         }
         // Container SROA must run before inline in each iteration: inline
         // expands `IndexValue::index_value` and friends into raw
-        // `builtin::array_get` + field-access pairs, after which the method-call
+        // `builtin::array_get_value` + field-access pairs, after which the method-call
         // shape this pass keys on is gone. Running early also catches the `[]`
         // desugaring while its inner `Constructor` is still a plain `Call`.
         gated!("nir/container_sroa", scalarize_containers);

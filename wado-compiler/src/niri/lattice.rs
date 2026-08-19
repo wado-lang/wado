@@ -471,7 +471,7 @@ impl Interpreter<'_> {
         arm_lattice_for_feasible_join(self.operand_to_lattice(body, arm.body))
     }
 
-    /// Evaluate `array_get(seq, i)` / `array_len(seq)` over a constant
+    /// Evaluate `array_get_value(seq, i)` / `array_len(seq)` over a constant
     /// sequence, or the sequence `array_new(len)` allocates. A read's argument
     /// is a reference to the array, and a reference to a constant reads as that
     /// constant, so no separate deref step is needed.

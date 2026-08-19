@@ -164,7 +164,7 @@ fn "bug_nested_for_of_break.wado/loop_entry_decision"(states, rule) {
     b0: block {
         l1: loop {
             break_if b0 i >= _licm_used_23;
-            st = builtin::array_get<ref "bug_nested_for_of_break.wado//State">(_licm_repr_24, i);
+            st = builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">(_licm_repr_24, i);
             if select i32(select i32(st.kind == 9, st.rule == rule, 0), st.decision >= 0, 0) {
                 has_prec = 0;
                 self_16 = st.transitions;
@@ -174,7 +174,7 @@ fn "bug_nested_for_of_break.wado/loop_entry_decision"(states, rule) {
                 b3: block {
                     l4: loop {
                         break_if b3 __sroa___iter_5_index >= end;
-                        ref_val = builtin::array_get<ref "bug_nested_for_of_break.wado//Transition">(__sroa___iter_5_repr, __sroa___iter_5_index);
+                        ref_val = builtin::array_get_value<ref "bug_nested_for_of_break.wado//Transition">(__sroa___iter_5_repr, __sroa___iter_5_index);
                         __sroa___iter_5_index = __sroa___iter_5_index + 1;
                         if ref_val.kind == 5 {
                             has_prec = 1;
@@ -295,7 +295,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b16: block {
         l17: loop {
             break_if b16 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l17;
         };

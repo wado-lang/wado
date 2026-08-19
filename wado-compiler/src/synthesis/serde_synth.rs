@@ -268,7 +268,7 @@ fn generate_field_schema(
     // trait signature.
     let key_slice_type = {
         let base = {
-            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice);
+            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::Slice);
             tt.make_generic_instance(def, vec![TypeTable::U8])
         };
         let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteSlice);
@@ -329,7 +329,7 @@ fn generate_field_schema(
 }
 
 /// Build a `key.get_unchecked(index_expr) as i32` expression on a
-/// `ByteSlice` (`ArraySlice<u8>`) key, with a computed index.
+/// `ByteSlice` (`Slice<u8>`) key, with a computed index.
 ///
 /// The method is looked up via [`CompilerItem::ByteSliceGetUnchecked`] —
 /// renaming the underlying Wado declaration cannot break this site as
@@ -359,7 +359,7 @@ fn key_get_byte_as_i32_expr(
     )
 }
 
-/// Build a `key.len()` expression on a `ByteSlice` (`ArraySlice<u8>`) key,
+/// Build a `key.len()` expression on a `ByteSlice` (`Slice<u8>`) key,
 /// returning the byte length as `i32`.
 fn byte_slice_len_expr(
     key_ref: TirExpr,
@@ -376,8 +376,8 @@ fn byte_slice_len_expr(
     )
 }
 
-/// Build a call to a generic `ArraySlice<T>` method on a `ByteSlice`
-/// (`ArraySlice<u8>`) receiver, monomorphized at `T = u8`.
+/// Build a call to a generic `Slice<T>` method on a `ByteSlice`
+/// (`Slice<u8>`) receiver, monomorphized at `T = u8`.
 ///
 /// The method is resolved via `#[compiler_item]` (rename-safe, per issue
 /// #1077) and called with `impl_type_args = [u8]` so the monomorphizer
@@ -527,7 +527,7 @@ fn generate_lookup_function(
     // monomorphization, replacing the former runtime `lookup` closure. The key
     // is a borrowed byte view, so each format passes its wire key's bytes with
     // no `String` round-trip.
-    // Parameter: key: ByteSlice (ArraySlice<u8>) at local 0.
+    // Parameter: key: ByteSlice (Slice<u8>) at local 0.
     let mut locals = vec![param_local("__key", key_slice_type, false)];
     let mut next_local: u32 = 1;
 

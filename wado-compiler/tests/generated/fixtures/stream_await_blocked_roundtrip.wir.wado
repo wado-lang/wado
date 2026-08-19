@@ -151,7 +151,7 @@ struct tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Res
     mut 1: i32,
 }
 
-struct core:prelude/slice.wado//ArrayIter<u8> {  // TypeId(23)
+struct core:prelude/slice.wado//SliceValueIter<u8> {  // TypeId(23)
     mut repr: ref Array<u8>,
     mut index: i32,
     mut end: i32,
@@ -298,7 +298,7 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(65)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<u8>") -> [i32, u8];  // TypeId(66)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<u8>") -> [i32, u8];  // TypeId(66)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//List<u8>", u8);  // TypeId(67)
 
@@ -344,10 +344,10 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
     let body_stream: i32;
     let body: ref "core:prelude//List<u8>";
     let chunk: ref "core:prelude//List<u8>";
-    let __iter_8: ref "core:prelude/slice.wado//ArrayIter<u8>";
+    let __iter_8: ref "core:prelude/slice.wado//SliceValueIter<u8>";
     let headers: i32;
     let response: i32;
-    let __iter_17: ref "core:prelude/slice.wado//ArrayIter<u8>";
+    let __iter_17: ref "core:prelude/slice.wado//SliceValueIter<u8>";
     let one: ref "core:prelude//List<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_0: i32;
@@ -545,12 +545,12 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
         l1: loop {
             chunk = "core:rt/cm_stream_read_u8"(body_stream, 1);
             break_if b0 chunk.used == 0;
-            __iter_8 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: chunk.repr, index: 0, end: chunk.used };
+            __iter_8 = struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: chunk.repr, index: 0, end: chunk.used };
             b2: block {
                 l3: loop {
                     let __match_192_mv_0: i32;
                     let __match_192_mv_1: u8;
-                    multivalue_bind [__match_192_mv_0, __match_192_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_8);
+                    multivalue_bind [__match_192_mv_0, __match_192_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_8);
                     if __match_192_mv_0 == 0 {
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(body, __match_192_mv_1);
                     } else {
@@ -988,12 +988,12 @@ fn "stream_await_blocked_roundtrip.wado/handle"(request) {
             }
         }
     }
-    __iter_17 = struct.new "core:prelude/slice.wado//ArrayIter<u8>" { repr: body.repr, index: 0, end: body.used };
+    __iter_17 = struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: body.repr, index: 0, end: body.used };
     b96: block {
         l97: loop {
             let __match_196_mv_0: i32;
             let __match_196_mv_1: u8;
-            multivalue_bind [__match_196_mv_0, __match_196_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_17);
+            multivalue_bind [__match_196_mv_0, __match_196_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_17);
             if __match_196_mv_0 == 0 {
                 one = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(__match_196_mv_1), used: 1 };
                 ptr_239 = "mem/realloc"(0, 0, 1, 1);
@@ -1444,7 +1444,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b165: block {
         l166: loop {
             break_if b165 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l166;
         };
@@ -1503,14 +1503,14 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: u8;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<u8>(self.repr, _av_2);
+    item = builtin::array_get_value<u8>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

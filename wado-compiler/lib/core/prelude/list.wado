@@ -1,7 +1,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/list.wado")]
 // List type for Wado: a growable sequence backed by an `Array<T>`. Its views
-// and iterators (`ArraySlice`, `ArrayIter`, `ArrayRefIter`, `ArrayWindows`, `ArrayChunks`) are
+// and iterators (`Slice`, `SliceValueIter`, `SliceRefIter`, `SliceWindows`, `SliceChunks`) are
 // the shared types from `core:prelude/slice.wado`.
 
 
@@ -12,7 +12,7 @@ use {
     Ref,
     RefMut,
     IndexRef,
-    IndexMutRef,
+    IndexRefMut,
     IndexValue,
     IndexAssign,
     IntoIterator,
@@ -27,7 +27,7 @@ use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
-use { ArraySlice, ArrayIter, ArrayRefIter, ArrayRefMutIter, ArrayWindows, ArrayChunks } from "core:prelude/slice.wado";
+use { Slice, SliceValueIter, SliceRefIter, SliceRefMutIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 
 #[compiler_item("list")]
@@ -259,8 +259,8 @@ impl List<T> {
     /// (one `array_copy`, no per-element bounds checks). The slice may view a
     /// different backing array than this list. Taken by value because a slice is
     /// a cheap view (a backing reference plus two offsets), which also lets a
-    /// newtype view (e.g. `ByteSlice`) coerce to `ArraySlice<T>` at the call.
-    pub fn extend_from_slice(&mut self, other: ArraySlice<T>) {
+    /// newtype view (e.g. `ByteSlice`) coerce to `Slice<T>` at the call.
+    pub fn extend_from_slice(&mut self, other: Slice<T>) {
         let other_len = other.len();
         if other_len == 0 {
             return;
@@ -348,25 +348,25 @@ impl<T: Eq> List<T> {
 }
 
 impl IndexValue<i32> for List<T> {
-    type Output = T;
+    type Elem = T;
 
-    fn index_value(&self, index: i32) -> Self::Output {
+    fn index_value(&self, index: i32) -> Self::Elem {
         assert index < self.used, "index out of bounds";
         return self.repr[index];
     }
 }
 
 impl IndexAssign<i32> for List<T> {
-    type Input = T;
+    type Elem = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Elem) with stores[value] {
         assert index < self.used, "index out of bounds";
         self.repr[index] = value;
     }
 }
 
 impl<T: Ref> IndexRef<i32> for List<T> {
-    type Output = T;
+    type Elem = T;
 
     fn index_ref(&self, index: i32) -> &T {
         assert index < self.used, "index out of bounds";
@@ -374,12 +374,12 @@ impl<T: Ref> IndexRef<i32> for List<T> {
     }
 }
 
-impl<T: RefMut> IndexMutRef<i32> for List<T> {
-    type Output = T;
+impl<T: RefMut> IndexRefMut<i32> for List<T> {
+    type Elem = T;
 
-    fn index_mut_ref(&mut self, index: i32) -> &mut T {
+    fn index_ref_mut(&mut self, index: i32) -> &mut T {
         assert index < self.used, "index out of bounds";
-        return builtin::array_get_mut_ref(&mut self.repr, index);
+        return builtin::array_get_ref_mut(&mut self.repr, index);
     }
 }
 
@@ -422,36 +422,36 @@ impl<T: Ord> Ord for List<T> {
 
 impl List<T> {
     /// Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+    pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
         let s = i32_clamp(start, 0, self.used);
         let e = i32_clamp(end, s, self.used);
-        return ArraySlice::internal_new(&self.repr, s, e);
+        return Slice::internal_new(&self.repr, s, e);
     }
 
     /// Returns a view over the whole list.
-    pub fn as_slice(&self) -> ArraySlice<T> {
-        return ArraySlice::internal_new(&self.repr, 0, self.used);
+    pub fn as_slice(&self) -> Slice<T> {
+        return Slice::internal_new(&self.repr, 0, self.used);
     }
 
     /// Returns an iterator over references to the list's elements (`&T`),
     /// mirroring Rust's `iter()`. For owned values use `into_iter()` or
     /// `for let x of list` (both yield `T`); to turn a reference iterator back
     /// into values, chain `copied()`.
-    pub fn iter(&self) -> ArrayRefIter<T> {
-        return ArrayRefIter::internal_new(&self.repr, 0, self.used);
+    pub fn iter(&self) -> SliceRefIter<T> {
+        return SliceRefIter::internal_new(&self.repr, 0, self.used);
     }
 
     /// Returns an iterator over overlapping windows of `size` consecutive
     /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> ArrayWindows<T> {
-        return ArrayWindows::internal_new(&self.repr, 0, self.used, size);
+    pub fn windows(&self, size: i32) -> SliceWindows<T> {
+        return SliceWindows::internal_new(&self.repr, 0, self.used, size);
     }
 
     /// Returns an iterator over non-overlapping chunks of up to `size`
     /// elements. The last chunk may be shorter. Panics if `size` is not
     /// positive.
-    pub fn chunks(&self, size: i32) -> ArrayChunks<T> {
-        return ArrayChunks::internal_new(&self.repr, 0, self.used, size);
+    pub fn chunks(&self, size: i32) -> SliceChunks<T> {
+        return SliceChunks::internal_new(&self.repr, 0, self.used, size);
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
@@ -507,47 +507,47 @@ impl List<T> {
 }
 
 impl IndexValue<RangeExclusive<i32>> for List<T> {
-    type Output = ArraySlice<T>;
+    type Elem = Slice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
     }
 }
 
 impl IndexValue<RangeInclusive<i32>> for List<T> {
-    type Output = ArraySlice<T>;
+    type Elem = Slice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T> {
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }
 
 impl<T> IntoIterator for List<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = SliceValueIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
-        return ArrayIter::internal_new(&self.repr, 0, self.used);
+        return SliceValueIter::internal_new(&self.repr, 0, self.used);
     }
 }
 
 impl<T> IntoIterator for &List<T> {
     type Item = &T;
-    type Iter = ArrayRefIter<T>;
+    type Iter = SliceRefIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return ArrayRefIter::internal_new(&list.repr, 0, list.used);
+        return SliceRefIter::internal_new(&list.repr, 0, list.used);
     }
 }
 
 impl<T> IntoIterator for &mut List<T> {
     type Item = &mut T;
-    type Iter = ArrayRefMutIter<T>;
+    type Iter = SliceRefMutIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         let list = *self;
-        return ArrayRefMutIter::internal_new(&mut list.repr, 0, list.used);
+        return SliceRefMutIter::internal_new(&mut list.repr, 0, list.used);
     }
 }
 

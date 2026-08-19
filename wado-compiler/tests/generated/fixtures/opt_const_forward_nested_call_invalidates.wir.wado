@@ -222,7 +222,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b5: block {
         l6: loop {
             break_if b5 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l6;
         };
@@ -305,7 +305,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::pop"(self) {
         return 1, 0;
     }
     self.used = self.used - 1;
-    return 0, builtin::array_get<i32>(self.repr, self.used);
+    return 0, builtin::array_get_value<i32>(self.repr, self.used);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {

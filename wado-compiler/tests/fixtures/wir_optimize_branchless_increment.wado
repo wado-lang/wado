@@ -4,7 +4,7 @@
 // pass replaces the branch with an unconditional add of the 0/1 value.
 //
 // At O0: `if ... { count = count + 1; }` (conditional increment)
-// At O2: `count = count + builtin::array_get<bool>(...)` (branchless add)
+// At O2: `count = count + builtin::array_get_value<bool>(...)` (branchless add)
 //
 // Requires O2 because the array access must be inlined first.
 
@@ -36,5 +36,5 @@ __DATA__
     "test": {},
     "wir_expect:O0": ["count = count + 1"],
     "wir_not_expect:O2": ["count = count + 1"],
-    "wir_expect:O2": ["count + builtin::array_get<bool>"]
+    "wir_expect:O2": ["count + builtin::array_get_value<bool>"]
 }

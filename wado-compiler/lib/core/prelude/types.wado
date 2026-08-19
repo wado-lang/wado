@@ -6,7 +6,7 @@
 
 use { String } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
-use { ArraySlice } from "core:prelude/slice.wado";
+use { Slice } from "core:prelude/slice.wado";
 
 
 /// Tuple type family declaration — establishes `core:prelude` as the owner of all tuple types.
@@ -226,7 +226,7 @@ internal resource StreamWritable<T> {
     /// backing array (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`),
     /// so only the CM lowering copy remains.
     #[cm("stream-write-raw")]
-    fn write_raw(&self, data: ArraySlice<T>);
+    fn write_raw(&self, data: Slice<T>);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
     #[cm("stream-cancel-write")]

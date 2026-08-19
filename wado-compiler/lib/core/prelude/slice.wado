@@ -1,7 +1,7 @@
 #![no_prelude]
 #![stdlib("core:prelude/slice.wado")]
-// Zero-copy views over a backing `Array<T>`: the `ArraySlice<T>` view and the
-// iterators `ArrayIter<T>`, `ArrayRefIter<T>`, `ArrayWindows<T>`, and `ArrayChunks<T>`.
+// Zero-copy views over a backing `Array<T>`: the `Slice<T>` view and the
+// iterators `SliceValueIter<T>`, `SliceRefIter<T>`, `SliceWindows<T>`, and `SliceChunks<T>`.
 //
 // Each view holds a reference to the whole backing array (`&Array<T>`) plus
 // integer offsets, so constructing one never copies elements. `&Array<T>`
@@ -23,23 +23,23 @@ use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 /// A contiguous view into a backing `Array<T>` over the half-open range
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
 /// never copies elements.
-#[compiler_item("array_slice")]
-internal struct ArraySlice<T> {
+#[compiler_item("slice")]
+internal struct Slice<T> {
     repr: &Array<T>,
     start: i32,
     end: i32,
 }
 
-impl ArraySlice<T> {
+impl Slice<T> {
     /// Internal: build a slice from a backing array reference and bounds.
-    internal fn internal_new(repr: &Array<T>, start: i32, end: i32) -> ArraySlice<T> with stores[repr] {
-        return ArraySlice { repr, start, end };
+    internal fn internal_new(repr: &Array<T>, start: i32, end: i32) -> Slice<T> with stores[repr] {
+        return Slice { repr, start, end };
     }
 
     /// Returns the number of elements in the slice.
     ///
     /// Also the byte-length anchor for the synthesised `FieldSchema::lookup`
-    /// (on `ArraySlice<u8>`), routed through `#[compiler_item]` so a rename
+    /// (on `Slice<u8>`), routed through `#[compiler_item]` so a rename
     /// here cannot silently break code generation.
     #[compiler_item("byte_slice_len")]
     pub fn len(&self) -> i32 {
@@ -56,7 +56,7 @@ impl ArraySlice<T> {
         if index < 0 || index >= self.end - self.start {
             return null;
         }
-        return Option::Some(builtin::array_get(self.repr, self.start + index));
+        return Option::Some(builtin::array_get_value(self.repr, self.start + index));
     }
 
     /// Returns the element at `index` without bounds checking.
@@ -65,20 +65,20 @@ impl ArraySlice<T> {
     /// `index` reads past the view into the backing array or traps.
     ///
     /// Also the byte-read anchor for the synthesised `FieldSchema::lookup`
-    /// (on `ArraySlice<u8>`), routed through `#[compiler_item]` for the same
+    /// (on `Slice<u8>`), routed through `#[compiler_item]` for the same
     /// rename-safety reason as `len`.
     #[compiler_item("byte_slice_get_unchecked")]
     pub fn get_unchecked(&self, index: i32) -> T {
-        return builtin::array_get(self.repr, self.start + index);
+        return builtin::array_get_value(self.repr, self.start + index);
     }
 
     /// Returns a sub-slice over `[start, end)` relative to this slice, clamped
     /// to its bounds.
-    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+    pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
         let len = self.end - self.start;
         let s = i32_clamp(start, 0, len);
         let e = i32_clamp(end, s, len);
-        return ArraySlice {
+        return Slice {
             repr: self.repr,
             start: self.start + s,
             end: self.start + e,
@@ -86,8 +86,8 @@ impl ArraySlice<T> {
     }
 
     /// Returns a by-value iterator over the slice.
-    pub fn iter(&self) -> ArrayIter<T> {
-        return ArrayIter {
+    pub fn iter(&self) -> SliceValueIter<T> {
+        return SliceValueIter {
             repr: self.repr,
             index: self.start,
             end: self.end,
@@ -123,22 +123,22 @@ impl ArraySlice<T> {
     }
 }
 
-impl IndexValue<i32> for ArraySlice<T> {
-    type Output = T;
+impl IndexValue<i32> for Slice<T> {
+    type Elem = T;
 
-    fn index_value(&self, index: i32) -> Self::Output {
+    fn index_value(&self, index: i32) -> Self::Elem {
         if index < 0 || index >= self.end - self.start {
             builtin::cold_path();
             panic("index out of bounds");
         }
-        return builtin::array_get(self.repr, self.start + index);
+        return builtin::array_get_value(self.repr, self.start + index);
     }
 }
 
 // A slice holds a shared `&Array<T>`, so it can alias elements (`IndexRef`) but
-// cannot hand out `&mut` into the backing (no `IndexMutRef`).
-impl<T: Ref> IndexRef<i32> for ArraySlice<T> {
-    type Output = T;
+// cannot hand out `&mut` into the backing (no `IndexRefMut`).
+impl<T: Ref> IndexRef<i32> for Slice<T> {
+    type Elem = T;
 
     fn index_ref(&self, index: i32) -> &T {
         if index < 0 || index >= self.end - self.start {
@@ -149,9 +149,9 @@ impl<T: Ref> IndexRef<i32> for ArraySlice<T> {
     }
 }
 
-impl<T> IntoIterator for ArraySlice<T> {
+impl<T> IntoIterator for Slice<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = SliceValueIter<T>;
 
     fn into_iter(&self) -> Self::Iter {
         return self.iter();
@@ -159,42 +159,42 @@ impl<T> IntoIterator for ArraySlice<T> {
 }
 
 /// A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
-internal struct ArrayIter<T> {
+internal struct SliceValueIter<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
 }
 
-impl ArrayIter<T> {
+impl SliceValueIter<T> {
     /// Internal: build an iterator over `[index, end)` of a backing array.
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayIter<T> with stores[repr] {
-        return ArrayIter { repr, index, end };
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceValueIter<T> with stores[repr] {
+        return SliceValueIter { repr, index, end };
     }
 }
 
-impl<T> Iterator for ArrayIter<T> {
+impl<T> Iterator for SliceValueIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.end {
             return null;
         }
-        let item = builtin::array_get(self.repr, self.index);
+        let item = builtin::array_get_value(self.repr, self.index);
         self.index += 1;
         return Option::Some(item);
     }
 }
 
-impl<T> IntoIterator for ArrayIter<T> {
+impl<T> IntoIterator for SliceValueIter<T> {
     type Item = T;
-    type Iter = ArrayIter<T>;
+    type Iter = SliceValueIter<T>;
 
-    fn into_iter(&self) -> ArrayIter<T> {
+    fn into_iter(&self) -> SliceValueIter<T> {
         return *self;
     }
 }
 
-impl ArrayIter<T> {
+impl SliceValueIter<T> {
     /// Collects the remaining elements into a new `List<T>` with a single bulk
     /// copy of the underlying range.
     pub fn collect(&mut self) -> List<T> {
@@ -208,13 +208,13 @@ impl ArrayIter<T> {
     }
 }
 
-impl<T: Add> ArrayIter<T> {
+impl<T: Add> SliceValueIter<T> {
     pub fn sum(&mut self) -> Option<T> {
         return self.reduce(|a: T, b: T| a + b);
     }
 }
 
-impl<T: Ord> ArrayIter<T> {
+impl<T: Ord> SliceValueIter<T> {
     pub fn min(&mut self) -> Option<T> {
         if let Some(first) = self.next() {
             let mut result = first;
@@ -248,27 +248,27 @@ impl<T: Ord> ArrayIter<T> {
 /// `&T`. The yielded reference points to a fresh copy of each element (Wasm GC
 /// has no interior references), so it is a read-only view and cannot mutate the
 /// backing array. Backs `for x of &list`.
-internal struct ArrayRefIter<T> {
+internal struct SliceRefIter<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
 }
 
-impl ArrayRefIter<T> {
+impl SliceRefIter<T> {
     /// Internal: build a by-reference iterator over `[index, end)`.
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> ArrayRefIter<T> with stores[repr] {
-        return ArrayRefIter { repr, index, end };
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceRefIter<T> with stores[repr] {
+        return SliceRefIter { repr, index, end };
     }
 
     /// Value ("copied") view over the same backing: yields `T` instead of `&T`.
     /// Mirrors Rust's `iter().copied()`, letting a reference iterator over a
     /// primitive list read as values (`xs.iter().copied()`).
-    pub fn copied(&self) -> ArrayIter<T> {
-        return ArrayIter::internal_new(self.repr, self.index, self.end);
+    pub fn copied(&self) -> SliceValueIter<T> {
+        return SliceValueIter::internal_new(self.repr, self.index, self.end);
     }
 }
 
-impl<T> Iterator for ArrayRefIter<T> {
+impl<T> Iterator for SliceRefIter<T> {
     type Item = &T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -281,20 +281,20 @@ impl<T> Iterator for ArrayRefIter<T> {
     }
 }
 
-internal struct ArrayRefMutIter<T> {
+internal struct SliceRefMutIter<T> {
     repr: &mut Array<T>,
     index: i32,
     end: i32,
 }
 
-impl ArrayRefMutIter<T> {
+impl SliceRefMutIter<T> {
     /// Internal: build a by-mutable-reference iterator over `[index, end)`.
-    internal fn internal_new(repr: &mut Array<T>, index: i32, end: i32) -> ArrayRefMutIter<T> with stores[repr] {
-        return ArrayRefMutIter { repr, index, end };
+    internal fn internal_new(repr: &mut Array<T>, index: i32, end: i32) -> SliceRefMutIter<T> with stores[repr] {
+        return SliceRefMutIter { repr, index, end };
     }
 }
 
-impl<T> Iterator for ArrayRefMutIter<T> {
+impl<T> Iterator for SliceRefMutIter<T> {
     type Item = &mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -308,30 +308,30 @@ impl<T> Iterator for ArrayRefMutIter<T> {
 }
 
 /// An iterator over overlapping windows of `size` consecutive elements. Each
-/// item is a `ArraySlice<T>` viewing the backing array.
-internal struct ArrayWindows<T> {
+/// item is a `Slice<T>` viewing the backing array.
+internal struct SliceWindows<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
     size: i32,
 }
 
-impl ArrayWindows<T> {
+impl SliceWindows<T> {
     /// Internal: build a windows iterator over `[index, end)` with window `size`.
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayWindows<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceWindows<T> with stores[repr] {
         assert size > 0, "window size must be positive";
-        return ArrayWindows { repr, index, end, size };
+        return SliceWindows { repr, index, end, size };
     }
 }
 
-impl<T> Iterator for ArrayWindows<T> {
-    type Item = ArraySlice<T>;
+impl<T> Iterator for SliceWindows<T> {
+    type Item = Slice<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index + self.size > self.end {
             return null;
         }
-        let slice = ArraySlice {
+        let slice = Slice {
             repr: self.repr,
             start: self.index,
             end: self.index + self.size,
@@ -341,41 +341,41 @@ impl<T> Iterator for ArrayWindows<T> {
     }
 }
 
-impl<T> IntoIterator for ArrayWindows<T> {
-    type Item = ArraySlice<T>;
-    type Iter = ArrayWindows<T>;
+impl<T> IntoIterator for SliceWindows<T> {
+    type Item = Slice<T>;
+    type Iter = SliceWindows<T>;
 
-    fn into_iter(&self) -> ArrayWindows<T> {
+    fn into_iter(&self) -> SliceWindows<T> {
         return *self;
     }
 }
 
 /// An iterator over non-overlapping chunks of up to `size` elements. The last
-/// chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
-internal struct ArrayChunks<T> {
+/// chunk may be shorter. Each item is a `Slice<T>` viewing the backing array.
+internal struct SliceChunks<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
     size: i32,
 }
 
-impl ArrayChunks<T> {
+impl SliceChunks<T> {
     /// Internal: build a chunks iterator over `[index, end)` with chunk `size`.
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> ArrayChunks<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceChunks<T> with stores[repr] {
         assert size > 0, "chunk size must be positive";
-        return ArrayChunks { repr, index, end, size };
+        return SliceChunks { repr, index, end, size };
     }
 }
 
-impl<T> Iterator for ArrayChunks<T> {
-    type Item = ArraySlice<T>;
+impl<T> Iterator for SliceChunks<T> {
+    type Item = Slice<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.end {
             return null;
         }
         let stop = i32_min(self.index + self.size, self.end);
-        let slice = ArraySlice {
+        let slice = Slice {
             repr: self.repr,
             start: self.index,
             end: stop,
@@ -385,11 +385,11 @@ impl<T> Iterator for ArrayChunks<T> {
     }
 }
 
-impl<T> IntoIterator for ArrayChunks<T> {
-    type Item = ArraySlice<T>;
-    type Iter = ArrayChunks<T>;
+impl<T> IntoIterator for SliceChunks<T> {
+    type Item = Slice<T>;
+    type Iter = SliceChunks<T>;
 
-    fn into_iter(&self) -> ArrayChunks<T> {
+    fn into_iter(&self) -> SliceChunks<T> {
         return *self;
     }
 }

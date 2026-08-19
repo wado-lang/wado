@@ -32,7 +32,7 @@ struct closure_effect_generic.wado//__Closure_0 {  // TypeId(5)
 
 array Array<i32> (mut i32);  // TypeId(6)
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(7)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(7)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -118,7 +118,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(45)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(45)
 
 type "functype//closure_effect_generic.wado/closure_effect_generic.wado/__Closure_0::__call" = fn(ref "closure_effect_generic.wado//__Closure_0", i32);  // TypeId(46)
 
@@ -154,13 +154,13 @@ global global:closure_effect_generic.wado::__const_obj_3: ref null "core:prelude
 global global:core:prelude/primitive.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "closure_effect_generic.wado/each"(items, f) {
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: items.repr, index: 0, end: items.used };
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: items.repr, index: 0, end: items.used };
     b0: block {
         l1: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if __match_4_mv_0 == 0 {
                 let __indirect_call_0: ref "canonical//CanonicalClosure_0";
                 __indirect_call_0 = ref.cast "canonical//CanonicalClosure_0"(f);
@@ -213,19 +213,19 @@ fn "closure_effect_generic.wado/__cm_export__run"() {
 }
 
 fn "closure_effect_generic.wado/each$__Closure_1"(items) {
-    let __iter_2: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
     let rx_24: i32;
     let tx_25: i32;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: items.repr, index: 0, end: items.used };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: items.repr, index: 0, end: items.used };
     b4: block {
         l5: loop {
             let __match_4_mv_0: i32;
             let __match_4_mv_1: i32;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
             if __match_4_mv_0 == 0 {
                 __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                 __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
@@ -332,7 +332,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b14: block {
         l15: loop {
             break_if b14 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l15;
         };
@@ -726,14 +726,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

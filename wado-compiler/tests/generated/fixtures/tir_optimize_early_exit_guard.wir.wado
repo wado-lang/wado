@@ -81,7 +81,7 @@ fn "tir_optimize_early_exit_guard.wado/safe_get"(arr, pos) {
     if pos >= arr.used {
         return 63;
     }
-    return builtin::array_get<char>(arr.repr, pos);
+    return builtin::array_get_value<char>(arr.repr, pos);
 }
 
 fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
@@ -207,7 +207,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b5: block {
         l6: loop {
             break_if b5 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l6;
         };

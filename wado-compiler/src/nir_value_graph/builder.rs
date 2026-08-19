@@ -467,7 +467,7 @@ struct Builder<'a> {
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
-    /// [`FuncId`]s of pure builtin intrinsics (`array_get`, `array_len`, …): a
+    /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …): a
     /// call to one writes no heap, so a loop body that only calls such
     /// intrinsics does not invalidate forwarded field versions. Empty is
     /// conservative (every call is a heap write). See [`is_builtin_pure_call`].

@@ -603,7 +603,7 @@ impl Analyzer<'_> {
     }
 
     /// True when `callee` is a builtin intrinsic. No builtin mutates an
-    /// element's pointee (`array_set` rewrites a spine slot; `array_get` /
+    /// element's pointee (`array_set` rewrites a spine slot; `array_get_value` /
     /// `select` forward values), so a by-value argument moved into one cannot
     /// reach the demoted spine's shared elements.
     fn callee_is_builtin(&self, callee: FuncKey) -> bool {
@@ -1012,7 +1012,7 @@ impl ElementImmutable<'_, '_, '_> {
             }
             // Field/index write to a self-derived base other than `self`
             // itself (writing `self.repr`/`self.used` is a spine op; writing
-            // `array_get(...).field` is an element mutation).
+            // `array_get_value(...).field` is an element mutation).
             ExprKind::Assign { target, value } => {
                 let target = *target;
                 let value = *value;
@@ -1094,7 +1094,7 @@ impl ElementImmutable<'_, '_, '_> {
             }
             ExprKind::Call { func_id, args, .. } => {
                 // No builtin intrinsic mutates an element's pointee
-                // (`array_set` rewrites a spine slot; `array_get` / `select`
+                // (`array_set` rewrites a spine slot; `array_get_value` / `select`
                 // only forward values), so a self-derived arg to a builtin is
                 // harmless. Opaque (non-builtin) calls still gate.
                 let callee = super::dce::callee_descriptor(self.analyzer.descriptors, *func_id);
@@ -1209,7 +1209,7 @@ fn is_self_derived_op(
 }
 
 /// True when the expression at `id` produces a value that may alias `self`'s
-/// storage — the tracked local itself, a projection of it, an `array_get`
+/// storage — the tracked local itself, a projection of it, an `array_get_value`
 /// element read of a tracked spine, or an aggregate / closure that captures
 /// any such value.
 ///
@@ -1237,11 +1237,11 @@ fn is_self_derived(
             is_self_derived_op(body, *inner, tainted, tt, descriptors)
         }
         ExprKind::Call { func_id, args, .. } => {
-            // `array_get(spine, _)` yields an element of the spine; other
+            // `array_get_value(spine, _)` yields an element of the spine; other
             // array builtins (`array_clone`, `array_new`) produce fresh
             // storage and are not self-derived.
             builtin_gname(super::dce::callee_descriptor(descriptors, *func_id)).as_deref()
-                == Some("builtin::array_get")
+                == Some("builtin::array_get_value")
                 && args
                     .first()
                     .is_some_and(|a| is_self_derived_op(body, a.expr, tainted, tt, descriptors))

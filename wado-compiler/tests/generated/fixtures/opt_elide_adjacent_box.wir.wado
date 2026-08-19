@@ -171,7 +171,7 @@ fn "opt_elide_adjacent_box.wado/sum_leaves"(nodes) {
     b0: block {
         l1: loop {
             break_if b0 __sroa___iter_2_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<opt_elide_adjacent_box.wado/Node>" { value: builtin::array_get<ref "opt_elide_adjacent_box.wado//Node">(__sroa___iter_2_repr, __sroa___iter_2_index) };
+            ref_val = struct.new "core:prelude/types.wado//Box<opt_elide_adjacent_box.wado/Node>" { value: builtin::array_get_value<ref "opt_elide_adjacent_box.wado//Node">(__sroa___iter_2_repr, __sroa___iter_2_index) };
             __sroa___iter_2_index = __sroa___iter_2_index + 1;
             let __match_scrut_0: ref "opt_elide_adjacent_box.wado//Node";
             __match_scrut_0 = ref_val.value;
@@ -321,7 +321,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b12: block {
         l13: loop {
             break_if b12 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l13;
         };

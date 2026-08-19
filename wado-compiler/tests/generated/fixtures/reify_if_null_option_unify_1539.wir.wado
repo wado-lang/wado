@@ -335,7 +335,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b30: block {
         l31: loop {
             break_if b30 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l31;
         };
@@ -560,7 +560,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits
         b47: block {
             l48: loop {
                 break_if b47 j >= len;
-                if builtin::array_get<u8>(haystack, 0 + j) != builtin::array_get<u8>(needle, j) {
+                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
                     break __inline_bytes_match_at_2: 0;
                 }
                 j = j + 1;

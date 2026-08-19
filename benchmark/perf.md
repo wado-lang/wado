@@ -42,7 +42,7 @@ another 0.50%); it is a real function there, not inlined away. Also:
   short-circuits on length. Only same-length-heavy structs benefit (`Event`:
   16 comparisons → 13).
 - Byte-at-a-time is irreducible: WasmGC has no multi-byte load or compare over
-  `Array<u8>` (`builtin.wado` has only `array_get_u8`/`array_copy`/`array_fill`).
+  `Array<u8>` (`builtin.wado` has only `array_get_value_u8`/`array_copy`/`array_fill`).
 - v2's discriminating-byte shortcut is unsound here — an unknown key matching
   on length and that byte would silently capture a real field's value.
 

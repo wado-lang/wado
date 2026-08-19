@@ -246,7 +246,7 @@ pub(crate) fn is_owned_value(
         | TirExprKind::TypePackExpansion { .. }
         | TirExprKind::Null => true,
         // A call is owned iff its callee returns an owned value. A core builtin
-        // allocates or computes a fresh result — except `array_get`, the element
+        // allocates or computes a fresh result — except `array_get_value`, the element
         // read that aliases its container — handled inside `oracle.is_owned`. A
         // raw CM call lifts a fresh value across the ABI boundary. A callee that
         // instead returns a projection of its receiver / first argument

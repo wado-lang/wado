@@ -459,7 +459,7 @@ impl Monomorphizer {
     ) -> Option<String> {
         match type_table.get(type_id) {
             // The identity a method name is built from, so the rendered
-            // spelling: `ArraySlice<u8>::internal_repr`, not `ArraySlice`.
+            // spelling: `Slice<u8>::internal_repr`, not `Slice`.
             ResolvedType::Struct { def, type_args } => {
                 Some(type_table.struct_rendered_name(*def, type_args))
             }

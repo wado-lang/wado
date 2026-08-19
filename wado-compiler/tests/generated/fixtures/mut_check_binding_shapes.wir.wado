@@ -39,7 +39,7 @@ array Array<mut_check_binding_shapes.wado/Held> (mut ref "mut_check_binding_shap
 
 array Array<i32> (mut i32);  // TypeId(8)
 
-struct core:prelude/slice.wado//ArrayIter<mut_check_binding_shapes.wado/Held> {  // TypeId(9)
+struct core:prelude/slice.wado//SliceValueIter<mut_check_binding_shapes.wado/Held> {  // TypeId(9)
     mut repr: ref "Array<mut_check_binding_shapes.wado/Held>",
     mut index: i32,
     mut end: i32,
@@ -109,7 +109,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::push" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(38)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<mut_check_binding_shapes.wado/Held>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<mut_check_binding_shapes.wado/Held>") -> ref null "mut_check_binding_shapes.wado//Held";  // TypeId(39)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<mut_check_binding_shapes.wado/Held>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<mut_check_binding_shapes.wado/Held>") -> ref null "mut_check_binding_shapes.wado//Held";  // TypeId(39)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
@@ -136,7 +136,7 @@ global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude
 fn "mut_check_binding_shapes.wado/run"() with Stdout {
     let items: ref "core:prelude//List<mut_check_binding_shapes.wado/Held>";
     let total: i32;
-    let __iter_3: ref "core:prelude/slice.wado//ArrayIter<mut_check_binding_shapes.wado/Held>";
+    let __iter_3: ref "core:prelude/slice.wado//SliceValueIter<mut_check_binding_shapes.wado/Held>";
     let TABLE: ref "core:prelude//List<i32>";
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
@@ -159,10 +159,10 @@ fn "mut_check_binding_shapes.wado/run"() with Stdout {
     };
     items = struct.new "core:prelude//List<mut_check_binding_shapes.wado/Held>" { repr: array.new_fixed<ref "mut_check_binding_shapes.wado//Held">(struct.new "mut_check_binding_shapes.wado//Held::Only" { discriminant: 0, payload_0: struct.new "mut_check_binding_shapes.wado//Acc" { sum: 1 } }), used: 1 };
     total = 0;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<mut_check_binding_shapes.wado/Held>" { repr: items.repr, index: 0, end: 1 };
+    __iter_3 = struct.new "core:prelude/slice.wado//SliceValueIter<mut_check_binding_shapes.wado/Held>" { repr: items.repr, index: 0, end: 1 };
     b0: block {
         l1: loop {
-            __match_10 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<mut_check_binding_shapes.wado/Held>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_3);
+            __match_10 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<mut_check_binding_shapes.wado/Held>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_3);
             if (if ref.is_null(__match_10) == 0 -> i32 {
                 __local_11 = ref.as_non_null(__match_10);
                 if ref.test "mut_check_binding_shapes.wado//Held::Only"(__local_11) -> i32 {
@@ -313,7 +313,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b13: block {
         l14: loop {
             break_if b13 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l14;
         };
@@ -656,7 +656,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<mut_check_binding_shapes.wado/Held>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<mut_check_binding_shapes.wado/Held>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "mut_check_binding_shapes.wado//Held";
     let v_2: ref "mut_check_binding_shapes.wado//Held";
     let __vc_payload_0: ref "mut_check_binding_shapes.wado//Acc";
@@ -665,7 +665,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<mut_check_binding_
     if _av_5 >= 1 {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "mut_check_binding_shapes.wado//Held">(self.repr, _av_5);
+    v_2 = builtin::array_get_value<ref "mut_check_binding_shapes.wado//Held">(self.repr, _av_5);
     __vc_payload_0 = ref.cast "mut_check_binding_shapes.wado//Held::Only"(v_2).payload_0;
     item = struct.new "mut_check_binding_shapes.wado//Held::Only" { discriminant: 0, payload_0: struct.new "mut_check_binding_shapes.wado//Acc" { sum: __vc_payload_0.sum } };
     self.index = _av_5 + 1;

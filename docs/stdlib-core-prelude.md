@@ -58,27 +58,27 @@ Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
 value element is read through `IndexValue`.
 
-#### `fn index_ref(&self, index: IndexType) -> &Self::Output`
+#### `fn index_ref(&self, index: IndexType) -> &Self::Elem`
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexMutRef<IndexType>`
+### `pub trait IndexRefMut<IndexType>`
 
 Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
+#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Elem`
 
 Returns a mutable reference to the element at the given index.
 
 ### `pub trait IndexAssign<IndexType>`
 
 Value-assignment indexing: `container[i] = value`.
-Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
+#### `fn index_assign(&mut self, index: IndexType, value: Self::Elem)`
 
 Assigns a value to the element at the given index.
 
@@ -88,7 +88,7 @@ Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
 aliased by reference (scalars, resources).
 
-#### `fn index_value(&self, index: IndexType) -> Self::Output`
+#### `fn index_value(&self, index: IndexType) -> Self::Elem`
 
 Returns a copy of the element at the given index.
 
@@ -398,27 +398,27 @@ Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
 value element is read through `IndexValue`.
 
-#### `fn index_ref(&self, index: IndexType) -> &Self::Output`
+#### `fn index_ref(&self, index: IndexType) -> &Self::Elem`
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexMutRef<IndexType>`
+### `pub trait IndexRefMut<IndexType>`
 
 Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `fn index_mut_ref(&mut self, index: IndexType) -> &mut Self::Output`
+#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Elem`
 
 Returns a mutable reference to the element at the given index.
 
 ### `pub trait IndexAssign<IndexType>`
 
 Value-assignment indexing: `container[i] = value`.
-Separate from `IndexMutRef`: a scalar element has no addressable cell, so
+Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `fn index_assign(&mut self, index: IndexType, value: Self::Input)`
+#### `fn index_assign(&mut self, index: IndexType, value: Self::Elem)`
 
 Assigns a value to the element at the given index.
 
@@ -428,7 +428,7 @@ Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
 aliased by reference (scalars, resources).
 
-#### `fn index_value(&self, index: IndexType) -> Self::Output`
+#### `fn index_value(&self, index: IndexType) -> Self::Elem`
 
 Returns a copy of the element at the given index.
 
@@ -795,7 +795,7 @@ Opaque i32 handle managed by the runtime.
 
 Write a chunk of data to the stream.
 
-#### `fn write_raw(&self, data: ArraySlice<T>)`
+#### `fn write_raw(&self, data: Slice<T>)`
 
 Write a byte view directly to the stream, without the deep copy that
 value-semantics `write` makes. The slice is a zero-copy window over a
@@ -914,7 +914,7 @@ An owned, fixed-length byte buffer.
 
 ### `pub type ByteList = List<u8>`
 
-### `pub type ByteSlice = ArraySlice<u8>`
+### `pub type ByteSlice = Slice<u8>`
 
 ## Primitive Types
 
@@ -3185,7 +3185,7 @@ Error returned by float parsing.
 
 Returns the kind of this error.
 
-### `pub struct ArraySlice<T>`
+### `pub struct Slice<T>`
 
 A contiguous view into a backing `Array<T>` over the half-open range
 `[start, end)`. Holds a reference to the whole array, so creating a slice
@@ -3198,7 +3198,7 @@ _Fields are private._
 Returns the number of elements in the slice.
 
 Also the byte-length anchor for the synthesised `FieldSchema::lookup`
-(on `ArraySlice<u8>`), routed through `#[compiler_item]` so a rename
+(on `Slice<u8>`), routed through `#[compiler_item]` so a rename
 here cannot silently break code generation.
 
 #### `pub fn is_empty(&self) -> bool`
@@ -3217,15 +3217,15 @@ The caller must guarantee `0 <= index < len()`; an out-of-range
 `index` reads past the view into the backing array or traps.
 
 Also the byte-read anchor for the synthesised `FieldSchema::lookup`
-(on `ArraySlice<u8>`), routed through `#[compiler_item]` for the same
+(on `Slice<u8>`), routed through `#[compiler_item]` for the same
 rename-safety reason as `len`.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
+#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
 Returns a sub-slice over `[start, end)` relative to this slice, clamped
 to its bounds.
 
-#### `pub fn iter(&self) -> ArrayIter<T>`
+#### `pub fn iter(&self) -> SliceValueIter<T>`
 
 Returns a by-value iterator over the slice.
 
@@ -3237,19 +3237,19 @@ Copies the slice's elements into a new `Array<T>`.
 
 Copies the slice's elements into a new `List<T>`.
 
-#### `impl IndexValue<i32> for ArraySlice<T>`
+#### `impl IndexValue<i32> for Slice<T>`
 
-##### `fn index_value(&self, index: i32) -> Self::Output`
+##### `fn index_value(&self, index: i32) -> Self::Elem`
 
-#### `impl IndexRef<i32> for ArraySlice<T>`
+#### `impl IndexRef<i32> for Slice<T>`
 
 ##### `fn index_ref(&self, index: i32) -> &T`
 
-#### `impl IntoIterator for ArraySlice<T>`
+#### `impl IntoIterator for Slice<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
 
-### `pub struct ArrayIter<T>`
+### `pub struct SliceValueIter<T>`
 
 A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
 
@@ -3266,15 +3266,15 @@ copy of the underlying range.
 
 #### `pub fn max(&mut self) -> Option<T>`
 
-#### `impl Iterator for ArrayIter<T>`
+#### `impl Iterator for SliceValueIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayIter<T>`
+#### `impl IntoIterator for SliceValueIter<T>`
 
-##### `fn into_iter(&self) -> ArrayIter<T>`
+##### `fn into_iter(&self) -> SliceValueIter<T>`
 
-### `pub struct ArrayRefIter<T>`
+### `pub struct SliceRefIter<T>`
 
 A by-reference forward iterator over a backing `Array<T>` range, yielding
 `&T`. The yielded reference points to a fresh copy of each element (Wasm GC
@@ -3283,45 +3283,45 @@ backing array. Backs `for x of &list`.
 
 _Fields are private._
 
-#### `pub fn copied(&self) -> ArrayIter<T>`
+#### `pub fn copied(&self) -> SliceValueIter<T>`
 
 Value ("copied") view over the same backing: yields `T` instead of `&T`.
 Mirrors Rust's `iter().copied()`, letting a reference iterator over a
 primitive list read as values (`xs.iter().copied()`).
 
-#### `impl Iterator for ArrayRefIter<T>`
+#### `impl Iterator for SliceRefIter<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-### `pub struct ArrayWindows<T>`
+### `pub struct SliceWindows<T>`
 
 An iterator over overlapping windows of `size` consecutive elements. Each
-item is a `ArraySlice<T>` viewing the backing array.
+item is a `Slice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `impl Iterator for ArrayWindows<T>`
+#### `impl Iterator for SliceWindows<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayWindows<T>`
+#### `impl IntoIterator for SliceWindows<T>`
 
-##### `fn into_iter(&self) -> ArrayWindows<T>`
+##### `fn into_iter(&self) -> SliceWindows<T>`
 
-### `pub struct ArrayChunks<T>`
+### `pub struct SliceChunks<T>`
 
 An iterator over non-overlapping chunks of up to `size` elements. The last
-chunk may be shorter. Each item is a `ArraySlice<T>` viewing the backing array.
+chunk may be shorter. Each item is a `Slice<T>` viewing the backing array.
 
 _Fields are private._
 
-#### `impl Iterator for ArrayChunks<T>`
+#### `impl Iterator for SliceChunks<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for ArrayChunks<T>`
+#### `impl IntoIterator for SliceChunks<T>`
 
-##### `fn into_iter(&self) -> ArrayChunks<T>`
+##### `fn into_iter(&self) -> SliceChunks<T>`
 
 ### `pub struct String`
 
@@ -3364,7 +3364,7 @@ Write the byte at `index` without bounds or UTF-8 checks.
 
 #### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
 
-Read-only view of the string's UTF-8 bytes as an `ArraySlice<u8>` over `[0, len())`.
+Read-only view of the string's UTF-8 bytes as an `Slice<u8>` over `[0, len())`.
 
 #### `pub fn grow(&mut self, min_capacity: i32)`
 
@@ -3940,13 +3940,13 @@ Shrinks the capacity to match the current length.
 
 Extends this list with elements from another list.
 
-#### `pub fn extend_from_slice(&mut self, other: ArraySlice<T>)`
+#### `pub fn extend_from_slice(&mut self, other: Slice<T>)`
 
 Extends this list with the elements of a slice in a single bulk copy
 (one `array_copy`, no per-element bounds checks). The slice may view a
 different backing array than this list. Taken by value because a slice is
 a cheap view (a backing reference plus two offsets), which also lets a
-newtype view (e.g. `ByteSlice`) coerce to `ArraySlice<T>` at the call.
+newtype view (e.g. `ByteSlice`) coerce to `Slice<T>` at the call.
 
 #### `pub fn reverse(&mut self)`
 
@@ -3966,27 +3966,27 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 Returns true if the list contains the given value.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T>`
+#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
 Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
 
-#### `pub fn as_slice(&self) -> ArraySlice<T>`
+#### `pub fn as_slice(&self) -> Slice<T>`
 
 Returns a view over the whole list.
 
-#### `pub fn iter(&self) -> ArrayRefIter<T>`
+#### `pub fn iter(&self) -> SliceRefIter<T>`
 
 Returns an iterator over references to the list's elements (`&T`),
 mirroring Rust's `iter()`. For owned values use `into_iter()` or
 `for let x of list` (both yield `T`); to turn a reference iterator back
 into values, chain `copied()`.
 
-#### `pub fn windows(&self, size: i32) -> ArrayWindows<T>`
+#### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
 
 Returns an iterator over overlapping windows of `size` consecutive
 elements. Panics if `size` is not positive.
 
-#### `pub fn chunks(&self, size: i32) -> ArrayChunks<T>`
+#### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
 
 Returns an iterator over non-overlapping chunks of up to `size`
 elements. The last chunk may be shorter. Panics if `size` is not
@@ -4008,19 +4008,19 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexValue<i32> for List<T>`
 
-##### `fn index_value(&self, index: i32) -> Self::Output`
+##### `fn index_value(&self, index: i32) -> Self::Elem`
 
 #### `impl IndexAssign<i32> for List<T>`
 
-##### `fn index_assign(&mut self, index: i32, value: Self::Input) with stores[value]`
+##### `fn index_assign(&mut self, index: i32, value: Self::Elem) with stores[value]`
 
 #### `impl IndexRef<i32> for List<T>`
 
 ##### `fn index_ref(&self, index: i32) -> &T`
 
-#### `impl IndexMutRef<i32> for List<T>`
+#### `impl IndexRefMut<i32> for List<T>`
 
-##### `fn index_mut_ref(&mut self, index: i32) -> &mut T`
+##### `fn index_ref_mut(&mut self, index: i32) -> &mut T`
 
 #### `impl Eq for List<T>`
 
@@ -4032,11 +4032,11 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexValue<RangeExclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> ArraySlice<T>`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
 
 #### `impl IndexValue<RangeInclusive<i32>> for List<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> ArraySlice<T>`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
 #### `impl IntoIterator for List<T>`
 

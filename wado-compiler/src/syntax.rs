@@ -363,7 +363,7 @@ impl SyntaxDefinition {
                 "Iterator",
                 "IntoIterator",
                 "IndexRef",
-                "IndexMutRef",
+                "IndexRefMut",
                 "IndexValue",
                 "IndexAssign",
             ],

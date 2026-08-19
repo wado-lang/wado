@@ -183,7 +183,7 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
             b8: block {
                 l9: loop {
                     break_if b8 __sroa___iter_3_index >= __sroa_v_used;
-                    byte_104 = builtin::array_get<u8>(__sroa_v_repr, __sroa___iter_3_index);
+                    byte_104 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_3_index);
                     __sroa___iter_3_index = __sroa___iter_3_index + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_104);
                     continue l9;
@@ -284,7 +284,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b14: block {
         l15: loop {
             break_if b14 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l15;
         };

@@ -166,7 +166,7 @@ fn "array_bounds.wado/array_bounds_check"() with Stdout {
     __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
     f_23 = __local_3;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_31(block {
-    }; builtin::array_get<i32>(arr.repr, 0)), f_23);
+    }; builtin::array_get_value<i32>(arr.repr, 0)), f_23);
     new_used_38 = __local_2.used + 1;
     if @unlikely(new_used_38 > builtin::array_len(__local_2.repr)) {
         cold_path;
@@ -186,7 +186,7 @@ fn "array_bounds.wado/array_bounds_check"() with Stdout {
     __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
     f_63 = __local_3;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_71(block {
-    }; builtin::array_get<i32>(arr.repr, 1)), f_63);
+    }; builtin::array_get_value<i32>(arr.repr, 1)), f_63);
     new_used_78 = __local_2.used + 1;
     if @unlikely(new_used_78 > builtin::array_len(__local_2.repr)) {
         cold_path;
@@ -206,7 +206,7 @@ fn "array_bounds.wado/array_bounds_check"() with Stdout {
     __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
     f_103 = __local_3;
     "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_111(block {
-    }; builtin::array_get<i32>(arr.repr, 2)), f_103);
+    }; builtin::array_get_value<i32>(arr.repr, 2)), f_103);
     rx_114 = builtin::i32_wrap_i64(local.tee packed_113("wasi/stream-new"()));
     tx_115 = builtin::i32_wrap_i64(packed_113 >> 32_i64);
     handle_18 = "array_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_114);
@@ -218,7 +218,7 @@ fn "array_bounds.wado/array_bounds_check"() with Stdout {
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_144(block {
-    }; builtin::array_get<i32>(arr.repr, 1)), __local_5_5);
+    }; builtin::array_get_value<i32>(arr.repr, 1)), __local_5_5);
     rx_147 = builtin::i32_wrap_i64(local.tee packed_146("wasi/stream-new"()));
     tx_148 = builtin::i32_wrap_i64(packed_146 >> 32_i64);
     handle_131 = "array_bounds.wado/__cm_binding__Stdout_write_via_stream"(rx_147);
@@ -246,8 +246,8 @@ fn "array_bounds.wado/array_bounds_elim_redundant"() with Stdout {
     b9: block {
         l10: loop {
             break_if b9 i >= 3;
-            a = builtin::array_get<i32>(_licm_repr_58, i);
-            b = builtin::array_get<i32>(_licm_repr_58, i);
+            a = builtin::array_get_value<i32>(_licm_repr_58, i);
+            b = builtin::array_get_value<i32>(_licm_repr_58, i);
             sum = sum + (a + b);
             i = i + 1;
             continue l10;
@@ -379,7 +379,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b19: block {
         l20: loop {
             break_if b19 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l20;
         };

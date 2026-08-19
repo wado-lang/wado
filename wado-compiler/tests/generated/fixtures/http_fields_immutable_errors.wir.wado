@@ -1349,7 +1349,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
         l108: loop {
             break_if b107 __value_i >= __value_len;
             __value_addr = __value_base + (__value_i * 8);
-            v = builtin::array_get<ref "core:prelude//List<u8>">(_licm_repr_47, __value_i);
+            v = builtin::array_get_value<ref "core:prelude//List<u8>">(_licm_repr_47, __value_i);
             let __array_clone_src_4: ref Array<u8>;
             __array_clone_src_4 = v.repr;
             let __array_clone_len_4: i32;
@@ -1364,7 +1364,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
                 l110: loop {
                     break_if b109 __list_i >= __sroa___value_elem_used;
                     __list_addr = __list_base + (__list_i * 1);
-                    __list_elem = builtin::array_get<u8>(__array_clone_dst_4, __list_i);
+                    __list_elem = builtin::array_get_value<u8>(__array_clone_dst_4, __list_i);
                     builtin::store_u8(__list_addr, __list_elem);
                     __list_i = __list_i + 1;
                     continue l110;
@@ -2074,7 +2074,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b213: block {
         l214: loop {
             break_if b213 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l214;
         };
@@ -2524,7 +2524,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
                 iter.index = __hfs_index_15;
                 break b263;
             }
-            byte = builtin::array_get<u8>(_licm_repr_14, __hfs_index_15);
+            byte = builtin::array_get_value<u8>(_licm_repr_14, __hfs_index_15);
             __hfs_index_15 = __hfs_index_15 + 1;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l264;

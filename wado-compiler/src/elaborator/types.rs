@@ -2378,11 +2378,11 @@ pub(super) struct IndexAssignTraitInfo {
     pub(super) index_type: Option<TypeId>,
 }
 
-/// Info about an `IndexMutRef` trait implementation
+/// Info about an `IndexRefMut` trait implementation
 pub(super) struct IndexMutTraitInfo {
     /// The Output associated type
     pub(super) output_type: TypeId,
-    /// Self kind for the `index_mut_ref` method (&mut self)
+    /// Self kind for the `index_ref_mut` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
     /// The implemented trait, named by the module that declares it.
     pub(super) trait_name: crate::name::FqTraitName,

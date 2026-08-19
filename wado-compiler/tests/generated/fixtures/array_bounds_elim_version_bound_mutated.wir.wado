@@ -159,7 +159,7 @@ condition: index < self.used
                     break __inline_core_prelude_list_wado_List_i32___pop_7: struct.new "core:prelude/types.wado//Option<i32>" { 1 };
                 }
                 __sroa_xs_used = __sroa_xs_used - 1;
-                break __inline_core_prelude_list_wado_List_i32___pop_7: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: builtin::array_get<i32>(repr, __sroa_xs_used) };
+                break __inline_core_prelude_list_wado_List_i32___pop_7: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: builtin::array_get_value<i32>(repr, __sroa_xs_used) };
             });
             i = i + 1;
             continue l1;
@@ -217,7 +217,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b10: block {
         l11: loop {
             break_if b10 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l11;
         };

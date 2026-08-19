@@ -1296,7 +1296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `type_id` is (or wraps, through newtypes and references) an
-    /// `ArraySlice<T>` — a borrowed view, which has no Component Model
+    /// `Slice<T>` — a borrowed view, which has no Component Model
     /// representation.
     pub(super) fn type_is_slice_view(&self, type_id: TypeId) -> bool {
         use crate::tir::ResolvedType;
@@ -1311,7 +1311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ResolvedType::GenericInstance { def, .. } = tt.get(base) else {
             return false;
         };
-        tt.compiler_item_def(crate::compiler_item::CompilerItem::ArraySlice) == Some(*def)
+        tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice) == Some(*def)
     }
 
     fn type_contains_closure_inner(

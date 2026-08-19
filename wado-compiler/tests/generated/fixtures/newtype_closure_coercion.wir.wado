@@ -24,7 +24,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(3)
 
 array Array<i32> (mut i32);  // TypeId(4)
 
-struct core:prelude/slice.wado//ArrayIter<i32> {  // TypeId(5)
+struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(5)
     mut repr: ref Array<i32>,
     mut index: i32,
     mut end: i32,
@@ -75,7 +75,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayIter<i32>") -> [i32, i32];  // TypeId(27)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/slice.wado//SliceValueIter<i32>") -> [i32, i32];  // TypeId(27)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(28)
 
@@ -173,14 +173,14 @@ fn "newtype_closure_coercion.wado/__cm_export__run"() {
 
 fn "newtype_closure_coercion.wado/fold$__Closure_4"(arr, init) {
     let acc: i32;
-    let __iter_4: ref "core:prelude/slice.wado//ArrayIter<i32>";
+    let __iter_4: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     acc = init;
-    __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_4 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
     b0: block {
         l1: loop {
             let __match_6_mv_0: i32;
             let __match_6_mv_1: i32;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_4);
+            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_4);
             if __match_6_mv_0 == 0 {
                 acc = acc + __match_6_mv_1;
             } else {
@@ -258,7 +258,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b7: block {
         l8: loop {
             break_if b7 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l8;
         };
@@ -336,14 +336,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start_8, other.repr, 0, other_len);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(self) {
     let item: i32;
     let _av_2: i32;
     _av_2 = self.index;
     if _av_2 >= self.end {
         return 1, 0;
     }
-    item = builtin::array_get<i32>(self.repr, _av_2);
+    item = builtin::array_get_value<i32>(self.repr, _av_2);
     self.index = _av_2 + 1;
     return 0, item;
 }

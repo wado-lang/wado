@@ -159,13 +159,13 @@ fn "value_copy_demote_user_backing.wado/__test_0_user_array_backed_struct_copy_d
     value_42 = one;
     builtin::array_set<ref null "core:prelude//List<i32>">(arr, 0, value_42);
     __sroa_b_repr = builtin::array_clone_deep<ref null "core:prelude//List<i32>">(arr);
-    __sroa___match_13_value = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: builtin::array_get<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0) }.value;
+    __sroa___match_13_value = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: builtin::array_get_value<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0) }.value;
     if ref.is_null(__sroa___match_13_value) == 0 {
         v_2 = ref.as_non_null(__sroa___match_13_value);
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(v_2, 2);
     } else {
     }
-    v_19 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: builtin::array_get<ref null "core:prelude//List<i32>">(arr, 0) }.value;
+    v_19 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: builtin::array_get_value<ref null "core:prelude//List<i32>">(arr, 0) }.value;
     __match_14 = (if ref.is_null(v_19) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0_20 = ref.as_non_null(v_19);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_10: ref Array<i32>; __array_clone_src_10 = __vc_payload_0_20.repr; let __array_clone_len_10: i32; __array_clone_len_10 = __vc_payload_0_20.used; let __array_clone_dst_10: ref Array<i32>; __array_clone_dst_10 = builtin::array_new<i32>(__array_clone_len_10); builtin::array_copy<i32>(__array_clone_dst_10, 0, __array_clone_src_10, 0, __array_clone_len_10); __array_clone_dst_10), used: __vc_payload_0_20.used };
@@ -182,7 +182,7 @@ fn "value_copy_demote_user_backing.wado/__test_0_user_array_backed_struct_copy_d
         }
     } else {
     }
-    v_25 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: builtin::array_get<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0) }.value;
+    v_25 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<i32>>>" { value: builtin::array_get_value<ref null "core:prelude//List<i32>">(__sroa_b_repr, 0) }.value;
     __match_15 = (if ref.is_null(v_25) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0_26 = ref.as_non_null(v_25);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_10: ref Array<i32>; __array_clone_src_10 = __vc_payload_0_26.repr; let __array_clone_len_10: i32; __array_clone_len_10 = __vc_payload_0_26.used; let __array_clone_dst_10: ref Array<i32>; __array_clone_dst_10 = builtin::array_new<i32>(__array_clone_len_10); builtin::array_copy<i32>(__array_clone_dst_10, 0, __array_clone_src_10, 0, __array_clone_len_10); __array_clone_dst_10), used: __vc_payload_0_26.used };
@@ -271,7 +271,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b14: block {
         l15: loop {
             break_if b14 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l15;
         };

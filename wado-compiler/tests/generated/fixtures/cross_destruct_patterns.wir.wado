@@ -34,7 +34,7 @@ struct cross_destruct_patterns.wado//Tagged {  // TypeId(5)
 
 array Array<cross_destruct_patterns.wado/Tagged> (mut ref "cross_destruct_patterns.wado//Tagged");  // TypeId(6)
 
-struct core:prelude/slice.wado//ArrayIter<cross_destruct_patterns.wado/Tagged> {  // TypeId(7)
+struct core:prelude/slice.wado//SliceValueIter<cross_destruct_patterns.wado/Tagged> {  // TypeId(7)
     mut repr: ref "Array<cross_destruct_patterns.wado/Tagged>",
     mut index: i32,
     mut end: i32,
@@ -95,7 +95,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<cross_destruct_patterns.wado/Tagged>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//ArrayIter<cross_destruct_patterns.wado/Tagged>") -> ref null "cross_destruct_patterns.wado//Tagged";  // TypeId(34)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<cross_destruct_patterns.wado/Tagged>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<cross_destruct_patterns.wado/Tagged>") -> ref null "cross_destruct_patterns.wado//Tagged";  // TypeId(34)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(35)
 
@@ -123,7 +123,7 @@ global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude
 
 fn "cross_destruct_patterns.wado/run"() with Stdout {
     let items: ref "core:prelude//List<cross_destruct_patterns.wado/Tagged>";
-    let __iter_10: ref "core:prelude/slice.wado//ArrayIter<cross_destruct_patterns.wado/Tagged>";
+    let __iter_10: ref "core:prelude/slice.wado//SliceValueIter<cross_destruct_patterns.wado/Tagged>";
     let l: ref "core:prelude/string.wado//String";
     let a: i32;
     let b: i32;
@@ -282,10 +282,10 @@ fn "cross_destruct_patterns.wado/run"() with Stdout {
     "core:cli/write_to_stream"(tx_188, __local_25, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_117);
     items = struct.new "core:prelude//List<cross_destruct_patterns.wado/Tagged>" { repr: array.new_fixed<ref "cross_destruct_patterns.wado//Tagged">(struct.new "cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 } }, struct.new "cross_destruct_patterns.wado//Tagged" { label: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(81), used: 1 }, coords: struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 } }), used: 2 };
-    __iter_10 = struct.new "core:prelude/slice.wado//ArrayIter<cross_destruct_patterns.wado/Tagged>" { repr: items.repr, index: 0, end: 2 };
+    __iter_10 = struct.new "core:prelude/slice.wado//SliceValueIter<cross_destruct_patterns.wado/Tagged>" { repr: items.repr, index: 0, end: 2 };
     b8: block {
         l9: loop {
-            __match_37 = "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<cross_destruct_patterns.wado/Tagged>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_10);
+            __match_37 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<cross_destruct_patterns.wado/Tagged>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_10);
             if ref.is_null(__match_37) == 0 {
                 let __variant_payload_1: ref "cross_destruct_patterns.wado//Tagged";
                 __variant_payload_1 = ref.as_non_null(__match_37);
@@ -446,7 +446,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b20: block {
         l21: loop {
             break_if b20 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l21;
         };
@@ -797,7 +797,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<cross_destruct_patterns.wado/Tagged>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<cross_destruct_patterns.wado/Tagged>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "cross_destruct_patterns.wado//Tagged";
     let v_2: ref "cross_destruct_patterns.wado//Tagged";
     let v_3: ref "core:prelude/string.wado//String";
@@ -807,7 +807,7 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/ArrayIter<cross_destruct_pat
     if _av_5 >= 2 {
         return ref.null none;
     }
-    v_2 = builtin::array_get<ref "cross_destruct_patterns.wado//Tagged">(self.repr, _av_5);
+    v_2 = builtin::array_get_value<ref "cross_destruct_patterns.wado//Tagged">(self.repr, _av_5);
     item = struct.new "cross_destruct_patterns.wado//Tagged" { label: ref.as_non_null(v_3 = v_2.label; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_3.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_3.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_3.used }), coords: ref.as_non_null(v_4 = v_2.coords; struct.new "tuple//[i32, i32]" { 0: v_4.0, 1: v_4.1 }) };
     self.index = _av_5 + 1;
     return item;

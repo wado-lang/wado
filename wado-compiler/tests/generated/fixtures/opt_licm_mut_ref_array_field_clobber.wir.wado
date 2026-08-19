@@ -128,7 +128,7 @@ global global:opt_licm_mut_ref_array_field_clobber.wado::__const_obj_7: ref null
 
 fn "opt_licm_mut_ref_array_field_clobber.wado/bump"(p) {
     let value: i32;
-    value = builtin::array_get<i32>(p, 0) + 1;
+    value = builtin::array_get_value<i32>(p, 0) + 1;
     builtin::array_set<i32>(p, 0, value);
 }
 
@@ -151,7 +151,7 @@ fn "opt_licm_mut_ref_array_field_clobber.wado/run"() {
     };
     b = struct.new "opt_licm_mut_ref_array_field_clobber.wado//Buf" { arr: ref.as_non_null(a = builtin::array_new<i32>(1); a), tag: 7 };
     "opt_licm_mut_ref_array_field_clobber.wado/opt_licm_mut_ref_array_field_clobber.wado/Buf::go"(b);
-    __v0_1 = builtin::array_get<i32>(b.arr, 0);
+    __v0_1 = builtin::array_get_value<i32>(b.arr, 0);
     if @unlikely(__v0_1 != 5) {
         cold_path;
         "core:rt/panic"(__local_7 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(152); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:opt_licm_mut_ref_array_field_clobber.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:opt_licm_mut_ref_array_field_clobber.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:opt_licm_mut_ref_array_field_clobber.wado::__const_obj_7, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, __local_5 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(20); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 118); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 61); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_5, 32); __local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: "core:prelude/array.wado/Array<i32>::get"(b.arr, 0) }, __local_6); __local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:opt_licm_mut_ref_array_field_clobber.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_7, global:opt_licm_mut_ref_array_field_clobber.wado::__const_obj_5); __local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_7); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_1 }, __local_8); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_7, 10); __local_7);
@@ -225,7 +225,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     b8: block {
         l9: loop {
             break_if b8 i >= len;
-            builtin::store_u8(ptr + i, builtin::array_get_u8(arr, src_start + i));
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             continue l9;
         };
@@ -445,7 +445,7 @@ fn "opt_licm_mut_ref_array_field_clobber.wado/opt_licm_mut_ref_array_field_clobb
     _licm_arr_4 = self.arr;
     b24: block {
         l25: loop {
-            break_if b24 builtin::array_get<i32>(_licm_arr_4, 0) >= 5;
+            break_if b24 builtin::array_get_value<i32>(_licm_arr_4, 0) >= 5;
             "opt_licm_mut_ref_array_field_clobber.wado/bump"(r);
             continue l25;
         };
@@ -634,7 +634,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "core:prelude/array.wado/Array<i32>::get"(self, index) {
-    return builtin::array_get<i32>(self, index);
+    return builtin::array_get_value<i32>(self, index);
 }
 
 export fn "opt_licm_mut_ref_array_field_clobber.wado/__cm_export__run" as "run"

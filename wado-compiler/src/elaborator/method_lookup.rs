@@ -2591,7 +2591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether concrete subscripts on `type_id` take the optimized intrinsic
-    /// path instead of the `IndexRef` / `IndexMutRef` traits. `List` does: its
+    /// path instead of the `IndexRef` / `IndexRefMut` traits. `List` does: its
     /// trait bodies index a private `repr` that Container SROA cannot see
     /// through, so its reference traits dispatch only in generic contexts.
     pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
@@ -2612,7 +2612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexRef",
             "index_ref",
-            "Output",
+            "Elem",
             expected_index_type,
         )
         .map(
@@ -2818,7 +2818,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexAssign",
             "index_assign",
-            "Input",
+            "Elem",
             None,
         )
         .map(
@@ -2842,9 +2842,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexMutRef",
-            "index_mut_ref",
-            "Output",
+            "IndexRefMut",
+            "index_ref_mut",
+            "Elem",
             None,
         )
         .map(
@@ -2873,7 +2873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexValue",
             "index_value",
-            "Output",
+            "Elem",
             expected_index_type,
         )
         .map(
@@ -3281,7 +3281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_index_mut_name = MethodName::format_local(
             &container_fq,
             Some(&index_mut_info.trait_name),
-            "index_mut_ref",
+            "index_ref_mut",
         );
 
         // IndexMut returns &mut Output
@@ -3308,7 +3308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: Some(LocalMethodName::new(
                         container_fq,
                         Some(index_mut_info.trait_name.clone()),
-                        "index_mut_ref".to_string(),
+                        "index_ref_mut".to_string(),
                     )),
                 },
                 self_kind: index_mut_info.self_kind,
