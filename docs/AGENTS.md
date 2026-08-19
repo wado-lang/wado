@@ -154,3 +154,4 @@ history is the SSoT for how the design got here.
 - [Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md)
 - [`core:icu` — Internationalization as One Facade](./wep-2026-08-09-core-icu.md)
 - [Declaration Identity — One Identity, One Scope, One Answer](./wep-2026-08-12-declaration-identity.md)
+- [Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md)
