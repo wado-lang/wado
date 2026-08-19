@@ -315,8 +315,10 @@ has no position polymorphism and stays `List<T>` (e.g. `wasi:http`'s
   slice no longer loses methods.
 - Rust muscle memory is intentionally broken at the iterator methods, where
   Wado's semantics genuinely differ. The rename is wide but mechanical.
-- Every view type must carry hand-written `Eq` / `Ord` / `Display` / `Inspect`;
-  falling through to structural derivation is a defect, not a default.
+- A view type has to write its own `Eq` / `Ord` / `Display` / `Inspect`. The
+  structural derivation is not wrong — `&T == &T` is reference identity by
+  design, so comparing the backing follows from it — but it answers about the
+  view rather than about the elements, which is not what a slice means.
 - The `Slice` name is claimed from the prelude and can no longer be user-defined.
 - `Sequence` default bodies are instantiated per implementor, but each is small
   and DCE removes unused ones.
@@ -325,32 +327,13 @@ has no position polymorphism and stays `List<T>` (e.g. `wasi:http`'s
 
 ## Roadmap
 
-The naming above is in place. The phases below are independent of each other.
+### Iterator adaptors
 
-### Phase B — `Sequence` / `AsSlice`
+- [ ] `sum` / `min` / `max` are bounded inherent methods on `SliceValueIter`
+      alone, so `xs.iter_value().map(f).sum()` does not compile. Give the
+      adaptors their own, or record the gap against the bound restriction above.
 
-- [ ] Introduce both traits, move the read-only surface onto `Slice` inherent
-      methods, implement for `Array` / `List` / `Slice`, and delete the
-      duplicated methods.
-- [ ] Give `Array` the `Sequence` shape it lacks: `get` returning `Option<T>`,
-      `get_unchecked` for the raw trapping access, and `as_slice`.
-
-### Phase C — Iteration
-
-- [ ] `iter_value()` / `iter_ref()` / `iter_ref_mut()` on all three types;
-      `for x of &mut xs` yielding `&mut T` for `T: RefMut`;
-      `SliceRefIter::iter_value()` replacing `copied()`.
-- [ ] Give the iterator adaptors the bounded inherent `sum` / `min` / `max` that
-      only `SliceValueIter` carries today, so they chain after `map` / `filter`.
-
-### Phase D — Trait implementations
-
-- [ ] Reject structural derivation of `Eq` / `Ord` / `Inspect` for a type
-      holding a reference. `Slice` now writes all four by hand, so nothing
-      depends on the derivation today, but the next view type would inherit
-      backing-identity equality silently.
-
-### Phase E — Boundary and documentation
+### Component Model boundary and documentation
 
 - [ ] Accept `Array<T>` in `cm_binding`, matching `wit_emit`.
 - [ ] Lower `Slice<T>` through the canonical ABI and map it in `wit_emit`, then
