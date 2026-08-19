@@ -1,0 +1,21 @@
+#![TODO]
+// An impl target whose function type carries an effect is registered under a
+// name no receiver produces — `fn()->()with(E)` against the receiver's
+// `fn()->()` — and WIR build then ICEs on the unresolved call. The construct is
+// unimplemented rather than mismangled: an effect has no reference site, so
+// neither side can tell a binder from a concrete effect.
+
+struct Slot<T> {
+    v: T,
+}
+
+impl<effect E> Slot<fn() with (E)> {
+    fn tag(self) -> i32 {
+        return 5;
+    }
+}
+
+test "an effect binder in an impl target resolves" {
+    let s = Slot { v: || {} };
+    assert s.tag() == 5;
+}

@@ -2492,21 +2492,21 @@ pub(super) fn written_type_arg(
                 .iter()
                 .map(|param| written_type_arg(param, resolutions).to_mangled())
                 .collect();
-            // An effect written here is a name like any other: resolved to its
-            // declaration, or kept as a spelling when it reaches none.
-            let mut with_clause: Vec<String> = ft
-                .effect_ids
-                .iter()
-                .map(|(id, _)| match resolutions.get(*id) {
-                    crate::resolve::Resolution::Def(def) => {
-                        name::FqTypeName::of_head(resolutions.defs(), def).to_mangled()
-                    }
-                    crate::resolve::Resolution::Binder(_)
-                    | crate::resolve::Resolution::Unresolved => String::new(),
-                })
-                .collect();
-            for (index, _) in ft.stores.iter().enumerate() {
-                with_clause.push(name::mangle_stores_member(index as u32));
+            // The written spelling, because an effect has no reference site: the
+            // resolve pass walks none, so asking it for one panics on the
+            // totality invariant, and minting an identity from the name is what
+            // that invariant exists to prevent. The resolved side qualifies a
+            // concrete effect by its module, so the two agree on a binder and
+            // not on a concrete effect — an impl target naming one will not
+            // match until effects carry a declaration identity.
+            let mut with_clause: Vec<String> = ft.effects.clone();
+            for entry in &ft.stores {
+                with_clause.push(match entry {
+                    ast::StoresEntry::Index(index) => name::mangle_stores_member(*index),
+                    // A name has no parameter position here, and inventing one
+                    // would name a parameter the type never mentions.
+                    ast::StoresEntry::Name(name) => format!("stores[{name}]"),
+                });
             }
             name::FqTypeName::builtin(&name::mangle_fn_type(
                 ft.is_mut,

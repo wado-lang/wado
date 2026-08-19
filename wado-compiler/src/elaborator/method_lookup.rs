@@ -319,9 +319,9 @@ impl TypeSystem {
             Type::Reference(inner) | Type::MutReference(inner) => self.arg_pins(inner),
             // `[]` is the unit type and pins by itself.
             Type::Tuple(elems) => nested_pin(elems),
-            // `Fn<arity, return>` is the whole of a function type's identity
-            // here, so only the return type has a head to name.
-            Type::Function(ft) => self.arg_pins(&ft.return_type),
+            // A function type is spelled by its whole shape, so a head in the
+            // parameter list names as much as the return type does.
+            Type::Function(ft) => nested_pin(&ft.params) && self.arg_pins(&ft.return_type),
             Type::Generic(g) => self.head_is_declared(arg) && nested_pin(&g.args),
             Type::NamespacedGeneric(ns) => self.head_is_declared(arg) && nested_pin(&ns.args),
             Type::Named(_) => self.head_is_declared(arg),
