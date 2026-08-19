@@ -2331,6 +2331,25 @@ mod tests {
         parse_test_export(name).unwrap_or_else(|| panic!("expected `test-` prefix in {name:?}"))
     }
 
+    /// A panic carries no `CompileResult`, so the attribute is read back off
+    /// the source; a path that cannot be read must stay a hard failure rather
+    /// than be downgraded to pending.
+    #[test]
+    fn only_a_readable_todo_module_is_one() {
+        let dir = std::env::temp_dir().join("wado-todo-module-at");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let todo = dir.join("todo.wado");
+        let plain = dir.join("plain.wado");
+        std::fs::write(&todo, "#![TODO]\ntest \"t\" {\n    assert false;\n}\n").expect("write");
+        std::fs::write(&plain, "test \"t\" {\n    assert true;\n}\n").expect("write");
+
+        assert!(todo_module_at(todo.to_str().expect("utf-8 path")));
+        assert!(!todo_module_at(plain.to_str().expect("utf-8 path")));
+        assert!(!todo_module_at(
+            dir.join("absent.wado").to_str().expect("utf-8 path")
+        ));
+    }
+
     #[test]
     fn parses_kind() {
         assert_eq!(parse("test-0-simple").kind, TestKind::Normal);

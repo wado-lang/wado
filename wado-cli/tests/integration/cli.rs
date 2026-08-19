@@ -790,25 +790,6 @@ fn test_test_no_run_surfaces_todo_compile_errors() {
 }
 
 #[test]
-fn test_test_todo_module_that_ices_is_pending() {
-    // An ICE is what a `#![TODO]` module is most likely to hit, so it has to
-    // land on the same pending axis as an expected compile error. The panic is
-    // caught either way; only the classification differs.
-    wado()
-        .args([
-            "test",
-            "--no-run",
-            "--format",
-            "verbose",
-            "wado-compiler/tests/fixtures/mono_closure_type_arg_collision.wado",
-        ])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("compile: 1 ok, 0 failed"))
-        .stdout(predicate::str::contains("todo:    1 pending"));
-}
-
-#[test]
 fn test_test_filter_drops_non_matching_path() {
     // No path matches the pattern, so no test files remain to run.
     wado()
