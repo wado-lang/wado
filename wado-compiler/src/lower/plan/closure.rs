@@ -2006,8 +2006,9 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
 /// true, subsequent visits short-circuit cheaply.
 /// A use that pins a fn-param to its declared `fn(...)` type.
 ///
-/// A struct field keeps that type; an assignment stores a value the
-/// specialization cannot narrow — a generic hands back the canonical closure.
+/// A struct field keeps that type, an assignment stores a value the
+/// specialization cannot narrow, and a return hands the bare functor to a
+/// caller whose own type says canonical closure.
 struct UnspecializableFnParam<'a> {
     fn_param_indices: &'a [u32],
     found: bool,
@@ -2020,6 +2021,19 @@ impl UnspecializableFnParam<'_> {
 }
 
 impl TirRefVisitor for UnspecializableFnParam<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if self.found {
+            return;
+        }
+        if let TirStmtKind::Return { value: Some(value) } = &stmt.kind
+            && self.is_fn_param(value)
+        {
+            self.found = true;
+            return;
+        }
+        self.walk_stmt(stmt);
+    }
+
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found {
             return;

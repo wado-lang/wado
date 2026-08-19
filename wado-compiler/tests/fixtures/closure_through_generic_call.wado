@@ -1,8 +1,6 @@
-#![TODO]
-// A closure passed through a generic type parameter and then called traps with
-// `cast failure`: the value comes back as the canonical closure while the call
-// site casts it to the functor struct. Independent of the `Fn<...>` mangling —
-// it reproduces with one instantiation, so no name collides.
+// Regression: the fn-param specialization retyped `v` to the functor struct and
+// returned it bare, so the caller — whose own type says canonical closure —
+// cast it and trapped.
 
 fn id<T>(v: T) -> T {
     return v;
