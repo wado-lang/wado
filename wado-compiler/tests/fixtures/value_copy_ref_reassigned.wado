@@ -1,0 +1,22 @@
+// Regression: `compute_ref_targets` recorded a reference's borrowed place from
+// its `Let` and never revisited it, so after `r = &b` the elider still believed
+// `r` pointed at `a` and dropped the copy `let y = r.xs` owes. `y` then aliased
+// live storage and saw the later `push`.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    xs: List<i32>,
+}
+
+export fn run() with Stdout {
+    let mut a = Holder { xs: [1, 2] };
+    let mut b = Holder { xs: [3] };
+    let mut r = &a;
+    r = &b;
+    let y = r.xs;
+    b.xs.push(99);
+    println(`${y.len()} ${y[0]}`);
+}
+
+__DATA__
+{"stdout": "1 3\n"}

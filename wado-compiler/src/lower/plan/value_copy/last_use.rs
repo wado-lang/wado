@@ -360,15 +360,24 @@ impl RefTargets {
 pub fn compute_ref_targets(func: &TirFunction) -> RefTargets {
     let mut walker = RefTargetWalker {
         targets: RefTargets::default(),
+        reassigned: IndexSet::default(),
     };
     if let Some(body) = &func.body {
         walker.visit_block(body);
+    }
+    // A reference that is assigned to after its `Let` no longer has one target
+    // this walk can name: which place it borrows depends on the path taken, and
+    // there is no control flow here to decide that. Dropping the entry costs
+    // the elision and keeps the copy.
+    for index in &walker.reassigned {
+        walker.targets.map.shift_remove(index);
     }
     walker.targets
 }
 
 struct RefTargetWalker {
     targets: RefTargets,
+    reassigned: IndexSet<u32>,
 }
 
 impl TirRefVisitor for RefTargetWalker {
@@ -381,6 +390,15 @@ impl TirRefVisitor for RefTargetWalker {
             self.targets.map.insert(*local_index, path);
         }
         self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Assign { target, .. } = &expr.kind
+            && let TirExprKind::Local { index, .. } = &target.kind
+        {
+            self.reassigned.insert(*index);
+        }
+        self.walk_expr(expr);
     }
 }
 
