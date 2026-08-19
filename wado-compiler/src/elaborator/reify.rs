@@ -3349,15 +3349,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // One rendered-text local per conditional slot, allocated for every
         // such slot (not only the emitted ones) so annotate's index accounting
         // in `desugar_assert` stays in lockstep.
-        let render_locals: Vec<(usize, u32)> = actx
+        let render_local_of: IndexMap<usize, u32> = actx
             .slots
             .iter()
             .enumerate()
             .filter(|(_, slot)| slot.conditional)
-            .map(|(i, slot)| (i, super::assert::render_local_name(&slot.name)))
-            .collect::<Vec<_>>()
-            .into_iter()
-            .map(|(i, name)| (i, ctx.add_local(name, string_type, false, None)))
+            .map(|(i, slot)| {
+                let name = super::assert::render_local_name(&slot.name);
+                (i, ctx.add_local(name, string_type, false, None))
+            })
             .collect();
 
         let cond_ref = TirExpr::new(
@@ -3429,7 +3429,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // A conditional slot renders through its cold-branch text local, which
         // carries the not-evaluated marker when the run never reached it.
-        let render_local_of: IndexMap<usize, u32> = render_locals.iter().copied().collect();
         let mut text_lets: Vec<TirStmt> = Vec::new();
         for (slot_idx, slot) in actx.slots.iter().enumerate() {
             if !slot.emitted {
