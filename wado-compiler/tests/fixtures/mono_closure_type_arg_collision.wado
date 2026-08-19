@@ -1,0 +1,15 @@
+#![TODO]
+// Two closure types differing only in their parameter types both mangle to
+// `Fn<1,i32>`, so a generic instantiated at each lands two functions under one
+// name and `monomorphize`'s duplicate check fires. The mangled name has to
+// tell instantiations apart even where the closure representation is shared.
+
+fn id<T>(v: T) -> T {
+    return v;
+}
+
+test "a generic instantiated at two closure types" {
+    let a = id(|x: i32| x + 1);
+    let b = id(|s: bool| 2);
+    assert a(1) + b(true) == 4;
+}

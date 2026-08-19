@@ -454,9 +454,9 @@ fi
 """
 
 [tasks.list-todo]
-description = "List E2E test fixtures marked with TODO: true"
+description = "List E2E test fixtures whose module or tests are marked #![TODO] / #[TODO]"
 run = """
-grep -l '"TODO": true' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
+grep -lE '^#!?\\[TODO\\]' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
 """
 
 [tasks.benchmark-all]
