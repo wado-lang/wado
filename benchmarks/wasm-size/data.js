@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787101602606,
+  "lastUpdate": 1787122524082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49381,6 +49381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d249ff27bd8b387e5145312cc5a960352359d036"
         },
         "date": 1787101601892,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "767e08f1ade68c815f4ecddc43fe6f9c9822ddee",
+          "message": "Merge pull request #1854 from wado-lang/claude/declaration-identity-d8hgv9\n\nfix(elaborator): one reading of an impl target, one body for a struct literal",
+          "timestamp": "2026-08-19T15:42:29+09:00",
+          "tree_id": "4d28122cf6bfe9f00c02614d893c331551f61b50",
+          "url": "https://github.com/wado-lang/wado/commit/767e08f1ade68c815f4ecddc43fe6f9c9822ddee"
+        },
+        "date": 1787122523471,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
