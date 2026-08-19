@@ -1302,23 +1302,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.type_contains_closure_inner(&type_table, type_id, &mut visited)
     }
 
-    /// Whether `type_id` is (or wraps, through newtypes and references) an
-    /// `Slice<T>` — a borrowed view, which has no Component Model
-    /// representation.
-    pub(super) fn type_is_slice_view(&self, type_id: TypeId) -> bool {
-        use crate::tir::ResolvedType;
+    /// Whether `type_id` is, or contains anywhere within it, a `Slice<T>` — a
+    /// reference view, which has no Component Model representation. A nested
+    /// one degrades just as loudly as a top-level one, so the search reaches
+    /// tuple members, struct fields, variant payloads, and type arguments.
+    pub(super) fn type_contains_slice_view(&self, type_id: TypeId) -> bool {
         let tt = self.tysys.type_table.borrow();
-        let base = tt.get_ultimate_base_type(type_id);
-        // A `&Slice<T>` is the same view behind a reference.
-        let base = if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(base) {
-            tt.get_ultimate_base_type(*inner)
-        } else {
-            base
-        };
-        let ResolvedType::GenericInstance { def, .. } = tt.get(base) else {
+        let mut visited: IndexSet<TypeId> = IndexSet::default();
+        self.type_contains_slice_view_inner(&tt, type_id, &mut visited)
+    }
+
+    fn type_contains_slice_view_inner(
+        &self,
+        type_table: &crate::tir::TypeTable,
+        type_id: TypeId,
+        visited: &mut IndexSet<TypeId>,
+    ) -> bool {
+        use crate::tir::ResolvedType;
+        if !visited.insert(type_id) {
             return false;
-        };
-        tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice) == Some(*def)
+        }
+        let base = type_table.get_ultimate_base_type(type_id);
+        if base != type_id && self.type_contains_slice_view_inner(type_table, base, visited) {
+            return true;
+        }
+        match type_table.get(base) {
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::Reactive(t) => {
+                self.type_contains_slice_view_inner(type_table, *t, visited)
+            }
+            ResolvedType::BuiltinArray(t) => {
+                self.type_contains_slice_view_inner(type_table, *t, visited)
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                self.type_contains_slice_view_inner(type_table, *base_type, visited)
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                if type_table.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
+                    == Some(*def)
+                {
+                    return true;
+                }
+                type_args
+                    .iter()
+                    .any(|t| self.type_contains_slice_view_inner(type_table, *t, visited))
+            }
+            ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.type_contains_slice_view_inner(type_table, *t, visited)),
+            ResolvedType::Struct { .. } => {
+                let field_types: Vec<TypeId> = self
+                    .struct_fields_of_type(base)
+                    .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
+                    .unwrap_or_default();
+                field_types
+                    .into_iter()
+                    .any(|t| self.type_contains_slice_view_inner(type_table, t, visited))
+            }
+            ResolvedType::Variant { .. } => {
+                let payloads: Vec<TypeId> = self
+                    .variant_of_type(base)
+                    .map(|info| info.cases.iter().map(|c| c.payload).collect())
+                    .unwrap_or_default();
+                payloads
+                    .into_iter()
+                    .any(|t| self.type_contains_slice_view_inner(type_table, t, visited))
+            }
+            _ => false,
+        }
     }
 
     fn type_contains_closure_inner(
@@ -2249,7 +2299,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A slice has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && scope.type_is_slice_view(type_id) {
+            if crosses_cm_boundary && scope.type_contains_slice_view(type_id) {
                 let _ = scope.emit(TypeError::SliceAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
@@ -2310,7 +2360,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: func.span,
             });
         }
-        if crosses_cm_boundary && scope.type_is_slice_view(declared_return_type) {
+        if crosses_cm_boundary && scope.type_contains_slice_view(declared_return_type) {
             let _ = scope.emit(TypeError::SliceAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
