@@ -1,9 +1,8 @@
-#![TODO]
-// A `fn mut` closure passed through a generic type parameter traps with `null
-// reference` before it is ever called, where the non-`mut` sibling passes.
-// Reproduces with one instantiation, so no name collides. It needs the CLI
-// world — the test world returns normally — and only `-O0` survives to run it;
-// some pass above O0 rewrites whatever is left null.
+// Regression: `resolve_closure` reserves the `__ref_v` slot a mutating capture
+// materialises into, and reify added a second one — so the `&mut` was written
+// to a slot the capture never read, and the one it read stayed null. Only a
+// closure literal written straight into an argument reached it; binding it to a
+// local first landed both on one slot.
 use { println, Stdout } from "core:cli";
 
 fn count<T>(v: T) -> i32 {
@@ -16,7 +15,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{
-    "stdout": "1\n",
-    "only_opt": ["O0"]
-}
+{"stdout": "1\n"}

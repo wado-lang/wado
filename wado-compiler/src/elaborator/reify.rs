@@ -6089,12 +6089,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut deref_overrides: crate::hashmap::IndexMap<String, (String, TypeId)> =
             crate::hashmap::IndexMap::default();
         for mc in &cap_info.mut_captures {
-            ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
+            // `resolve_closure` reserved this slot so the parent's local
+            // accounting matches what reify emits. Adding a second one writes
+            // the `&mut` into a slot the capture does not read, and the one it
+            // does read stays null.
+            let ref_index = match ctx.lookup(&mc.ref_name) {
+                Some(local) if local.type_id == mc.ref_type => local.index,
+                _ => {
+                    ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
+                    ctx.next_local - 1
+                }
+            };
             ctx.address_taken_locals.insert(mc.outer_index);
             ref_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: mc.ref_name.clone(),
-                    local_index: ctx.next_local - 1,
+                    local_index: ref_index,
                     is_mut: false,
                     is_reactive: false,
                     type_id: mc.ref_type,
