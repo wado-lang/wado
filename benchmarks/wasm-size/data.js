@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787153005951,
+  "lastUpdate": 1787172771758,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49489,6 +49489,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 254726,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3de0afb35c85d374f4f093dfa4611a5c3a2b3060",
+          "message": "Merge pull request #1858 from wado-lang/worktree-list-array-slice-wep\n\nfeat(prelude): one surface for Array, List, and Slice",
+          "timestamp": "2026-08-20T05:39:13+09:00",
+          "tree_id": "9d6c42c4346eee6df3ad648d1dfa6b42d9cb7830",
+          "url": "https://github.com/wado-lang/wado/commit/3de0afb35c85d374f4f093dfa4611a5c3a2b3060"
+        },
+        "date": 1787172770911,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254742,
             "unit": "bytes"
           }
         ]
