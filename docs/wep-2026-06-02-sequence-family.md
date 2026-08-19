@@ -192,6 +192,34 @@ forbids.
 not a hand-called method, and `for-of` already marks the axis in syntax
 (`for x of xs` / `&xs` / `&mut xs` yield `T` / `&T` / `&mut T`).
 
+The axis is not confined to sequences. `TreeMap` and `TreeSet` carry it too,
+since a caller reading either has the same choice to make:
+
+| Type                            | Item       | Reached by               |
+| ------------------------------- | ---------- | ------------------------ |
+| `TreeSetRefIter<T>`             | `&T`       | `iter_ref()`             |
+| `TreeSetValueIter<T>`           | `T`        | `iter_value()`           |
+| `TreeMapKeysRefIter<K, V>`      | `&K`       | `keys()`                 |
+| `TreeMapKeysValueIter<K, V>`    | `K`        | `keys().iter_value()`    |
+| `TreeMapValuesRefIter<K, V>`    | `&V`       | `values()`               |
+| `TreeMapValuesValueIter<K, V>`  | `V`        | `values().iter_value()`  |
+| `TreeMapEntriesRefIter<K, V>`   | `[&K, &V]` | `entries()`              |
+| `TreeMapEntriesValueIter<K, V>` | `[K, V]`   | `entries().iter_value()` |
+
+A map projection needs no axis suffix: `keys` already names what it yields, and
+`keys_ref` would repeat the `&K` the signature states. The three yield
+references, and reference is the only axis they offer — a `&mut` into a key
+would break the ordering invariant, and one into a value buys nothing over
+`m[k] = v`. Callers wanting owned elements take `iter_value()` off the
+reference iterator, exactly as with `SliceRefIter`. `TreeMapValuesValueIter`
+doubles the word because the axis meets a projection that is itself named
+`values`; the reading — the map's _values_, yielded by _value_ — is exact, and
+dropping either word would cost more than the repetition does.
+
+The iterators hold `&List<TreeMapEntry<K, V>>`, mirroring `Slice`'s
+`&Array<T>`. Holding it by value would deep-copy every entry at construction —
+which the pre-iterator `entries()` did, returning an eagerly built `List`.
+
 The index traits keep their four-way split — it follows from Wado's constraints,
 since `Output: Ref` / `Output: RefMut` bounds exclude scalars from `IndexRef`,
 and a scalar has no addressable cell, so `IndexAssign` cannot fold into a

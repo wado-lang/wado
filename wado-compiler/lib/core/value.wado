@@ -95,8 +95,8 @@ impl Eq for Value {
                     return false;
                 }
                 for let [k, v] of a.entries() {
-                    if let Some(other_v) = b.get(k) {
-                        if !(v == other_v) {
+                    if let Some(other_v) = b.get(*k) {
+                        if !(*v == other_v) {
                             return false;
                         }
                     } else {
@@ -134,8 +134,8 @@ impl Serialize for Value {
             Object(map) => {
                 let mut m = s.begin_map(map.len())?;
                 for let [key, val] of map.entries() {
-                    m.key(&key)?;
-                    m.value(&val)?;
+                    m.key(key)?;
+                    m.value(val)?;
                 }
                 m.end();
             },

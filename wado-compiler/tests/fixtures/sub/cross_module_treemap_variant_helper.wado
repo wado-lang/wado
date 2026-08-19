@@ -10,7 +10,7 @@ pub fn stringify(v: &Value) -> String {
         Str(s) => `"${s}"`,
         Obj(map) => {
             let mut result = "{";
-            let entries = map.entries();
+            let entries = map.entries().iter_value().collect();
             for let mut i = 0; i < entries.len(); i += 1 {
                 if i > 0 {
                     result = `${result},`;

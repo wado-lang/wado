@@ -62,17 +62,21 @@ Returns the value corresponding to the key, or null if not found.
 Removes a key from the map and returns true if the key was present.
 Preserves insertion order of remaining elements.
 
-#### `pub fn keys(&self) -> List<K>`
+#### `pub fn keys(&self) -> TreeMapKeysRefIter<K, V> with stores[self]`
 
-Returns all keys in insertion order.
+Returns an iterator over the keys, in insertion order.
 
-#### `pub fn values(&self) -> List<V>`
+The map's traversals yield references: reading is what a traversal is
+for, and a caller that wants the value dereferences. Unlike `iter`, the
+name already says what it yields, so it carries no axis suffix.
 
-Returns all values in insertion order.
+#### `pub fn values(&self) -> TreeMapValuesRefIter<K, V> with stores[self]`
 
-#### `pub fn entries(&self) -> List<[K, V]>`
+Returns an iterator over the values, in insertion order.
 
-Returns all key-value pairs in insertion order.
+#### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self]`
+
+Returns an iterator over the key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
 
@@ -170,16 +174,18 @@ Returns true if the value was present, false otherwise.
 
 Removes all elements from the set.
 
-#### `pub fn iter_value(&self) -> TreeSetIter<T>`
+#### `pub fn iter_ref(&self) -> TreeSetRefIter<T> with stores[self]`
 
-Returns an iterator over the elements in insertion order.
-Returns an iterator yielding each element by value, named for what it
-yields as the sequence family is (WEP-2026-06-02): a set holds no
-references to hand out, so the value iterator is the only one.
+Returns an iterator yielding a reference to each element, in insertion
+order.
+
+#### `pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self]`
+
+Returns an iterator yielding each element by value, in insertion order.
 
 #### `impl IntoIterator for TreeSet<T>`
 
-##### `fn into_iter(&self) -> TreeSetIter<T>`
+##### `fn into_iter(&self) -> TreeSetValueIter<T> with stores[self]`
 
 #### `impl SequenceLiteralBuilder for TreeSet<T>`
 

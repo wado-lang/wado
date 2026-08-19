@@ -278,7 +278,7 @@ test "context layer prepends fields and forwards the rest" {
     assert sink.events.len() == 1;
     if let Object(map) = sink.events[0].fields {
         assert map.len() == 2;
-        let entries = map.entries();
+        let entries = map.entries().iter_value().collect();
         assert entries[0][0] == "request_id";
         assert entries[1][0] == "k";
     } else {

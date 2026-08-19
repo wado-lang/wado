@@ -301,7 +301,7 @@ test "query_pairs" {
         assert pairs.get("a") matches { Some("1") };
         assert pairs.get("b") matches { Some("2") };
         assert pairs.get("c") matches { Some("3") };
-        let keys = pairs.keys();
+        let keys = pairs.keys().iter_value().collect();
         assert keys[0] == "a";
         assert keys[1] == "b";
         assert keys[2] == "c";
@@ -735,7 +735,7 @@ test "parse_query duplicate keys last wins" {
     assert params.len() == 2;
     assert params.get("a") matches { Some("3") };
     assert params.get("b") matches { Some("2") };
-    let keys = params.keys();
+    let keys = params.keys().iter_value().collect();
     assert keys[0] == "a";
     assert keys[1] == "b";
 }

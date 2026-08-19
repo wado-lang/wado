@@ -747,12 +747,12 @@ impl<T: Serialize> Log for Context<T> {
         let mut merged = TreeMap::<String, Value>::new();
         if let Object(base) = box_fields(self.fields) {
             for let [key, value] of base.entries() {
-                merged[key] = value;
+                merged[*key] = *value;
             }
         }
         if let Object(extra) = event.fields {
             for let [key, value] of extra.entries() {
-                merged[key] = value;
+                merged[*key] = *value;
             }
         }
         Log::event(Event {
@@ -870,7 +870,7 @@ fn write_fields_text(fields: &Value, out: &mut String) {
     if let Object(map) = fields {
         for let [key, value] of map.entries() {
             out.push_str(&` ${key}=`);
-            write_value_text(&value, out);
+            write_value_text(value, out);
         }
     }
 }

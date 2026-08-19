@@ -284,37 +284,23 @@ impl<K: Ord> TreeMap<K, V> {
         }
     }
 
-    /// Returns all keys in insertion order.
-    pub fn keys(&self) -> List<K> {
-        let mut result: List<K> = [];
-        for let entry of self.entries {
-            if !entry.deleted {
-                result.push(entry.key);
-            }
-        }
-        return result;
+    /// Returns an iterator over the keys, in insertion order.
+    ///
+    /// The map's traversals yield references: reading is what a traversal is
+    /// for, and a caller that wants the value dereferences. Unlike `iter`, the
+    /// name already says what it yields, so it carries no axis suffix.
+    pub fn keys(&self) -> TreeMapKeysRefIter<K, V> with stores[self] {
+        return TreeMapKeysRefIter { entries: &self.entries, index: 0 };
     }
 
-    /// Returns all values in insertion order.
-    pub fn values(&self) -> List<V> {
-        let mut result: List<V> = [];
-        for let entry of self.entries {
-            if !entry.deleted {
-                result.push(entry.value);
-            }
-        }
-        return result;
+    /// Returns an iterator over the values, in insertion order.
+    pub fn values(&self) -> TreeMapValuesRefIter<K, V> with stores[self] {
+        return TreeMapValuesRefIter { entries: &self.entries, index: 0 };
     }
 
-    /// Returns all key-value pairs in insertion order.
-    pub fn entries(&self) -> List<[K, V]> {
-        let mut result: List<[K, V]> = [];
-        for let entry of self.entries {
-            if !entry.deleted {
-                result.push([entry.key, entry.value]);
-            }
-        }
-        return result;
+    /// Returns an iterator over the key-value pairs, in insertion order.
+    pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self] {
+        return TreeMapEntriesRefIter { entries: &self.entries, index: 0 };
     }
 
     /// Removes all key-value pairs from the map.
@@ -391,7 +377,7 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
 
     fn insert_all(&mut self, base: TreeMap<String, V>) {
         for let [k, v] of base.entries() {
-            self.insert(k, v);
+            self.insert(*k, *v);
         }
     }
 
@@ -400,21 +386,208 @@ impl KeyValueLiteralBuilder for TreeMap<String, V> {
     }
 }
 
-/// An iterator over the elements of a `TreeSet<T>`, in insertion order.
-struct TreeSetIter<T> {
-    entries: List<TreeMapEntry<T, ()>>,
+// Every traversal below views the backing entry list rather than copying it,
+// and skips the tombstones a removal leaves behind. Holding the `List` by value
+// would deep-copy every entry when the iterator is built, which is what the
+// eager `keys()` / `values()` / `entries()` did before they were iterators.
+
+/// An iterator over references to a `TreeSet<T>`'s elements, in insertion order.
+struct TreeSetRefIter<T> {
+    entries: &List<TreeMapEntry<T, ()>>,
     index: i32,
 }
 
-impl<T> Iterator for TreeSetIter<T> {
+impl<T> Iterator for TreeSetRefIter<T> {
+    type Item = &T;
+
+    fn next(&mut self) -> Option<&T> with stores[self] {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some(&self.entries[i].key);
+            }
+        }
+        return null;
+    }
+}
+
+impl TreeSetRefIter<T> {
+    /// The value iterator over the same remaining range, as
+    /// `SliceRefIter::iter_value` is for a slice: a caller that wants owned
+    /// elements out of a traversal drops to values here rather than
+    /// dereferencing each one.
+    pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self] {
+        return TreeSetValueIter { entries: self.entries, index: self.index };
+    }
+}
+
+/// An iterator over a `TreeSet<T>`'s elements by value, in insertion order.
+struct TreeSetValueIter<T> {
+    entries: &List<TreeMapEntry<T, ()>>,
+    index: i32,
+}
+
+impl<T> Iterator for TreeSetValueIter<T> {
     type Item = T;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<T> {
         while self.index < self.entries.len() {
-            let entry = &self.entries[self.index];
-            self.index = self.index + 1;
-            if !entry.deleted {
-                return Option::Some(entry.key);
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some(self.entries[i].key);
+            }
+        }
+        return null;
+    }
+}
+
+/// An iterator over references to a `TreeMap<K, V>`'s keys, in insertion order.
+struct TreeMapKeysRefIter<K, V> {
+    entries: &List<TreeMapEntry<K, V>>,
+    index: i32,
+}
+
+impl<K, V> Iterator for TreeMapKeysRefIter<K, V> {
+    type Item = &K;
+
+    fn next(&mut self) -> Option<&K> with stores[self] {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some(&self.entries[i].key);
+            }
+        }
+        return null;
+    }
+}
+
+impl TreeMapKeysRefIter<K, V> {
+    /// The value iterator over the same remaining range.
+    pub fn iter_value(&self) -> TreeMapKeysValueIter<K, V> with stores[self] {
+        return TreeMapKeysValueIter { entries: self.entries, index: self.index };
+    }
+}
+
+/// An iterator over a `TreeMap<K, V>`'s keys by value, in insertion order.
+struct TreeMapKeysValueIter<K, V> {
+    entries: &List<TreeMapEntry<K, V>>,
+    index: i32,
+}
+
+impl<K, V> Iterator for TreeMapKeysValueIter<K, V> {
+    type Item = K;
+
+    fn next(&mut self) -> Option<K> {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some(self.entries[i].key);
+            }
+        }
+        return null;
+    }
+}
+
+/// An iterator over references to a `TreeMap<K, V>`'s values, in insertion order.
+struct TreeMapValuesRefIter<K, V> {
+    entries: &List<TreeMapEntry<K, V>>,
+    index: i32,
+}
+
+impl<K, V> Iterator for TreeMapValuesRefIter<K, V> {
+    type Item = &V;
+
+    fn next(&mut self) -> Option<&V> with stores[self] {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some(&self.entries[i].value);
+            }
+        }
+        return null;
+    }
+}
+
+impl TreeMapValuesRefIter<K, V> {
+    /// The value iterator over the same remaining range.
+    pub fn iter_value(&self) -> TreeMapValuesValueIter<K, V> with stores[self] {
+        return TreeMapValuesValueIter { entries: self.entries, index: self.index };
+    }
+}
+
+/// An iterator over a `TreeMap<K, V>`'s values by value, in insertion order.
+/// The doubled word is the axis meeting the field's own name: these are the
+/// map's *values*, yielded by *value*.
+struct TreeMapValuesValueIter<K, V> {
+    entries: &List<TreeMapEntry<K, V>>,
+    index: i32,
+}
+
+impl<K, V> Iterator for TreeMapValuesValueIter<K, V> {
+    type Item = V;
+
+    fn next(&mut self) -> Option<V> {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some(self.entries[i].value);
+            }
+        }
+        return null;
+    }
+}
+
+/// An iterator over references to a `TreeMap<K, V>`'s key-value pairs, in
+/// insertion order.
+struct TreeMapEntriesRefIter<K, V> {
+    entries: &List<TreeMapEntry<K, V>>,
+    index: i32,
+}
+
+impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
+    type Item = [&K, &V];
+
+    fn next(&mut self) -> Option<[&K, &V]> with stores[self] {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some([&self.entries[i].key, &self.entries[i].value]);
+            }
+        }
+        return null;
+    }
+}
+
+impl TreeMapEntriesRefIter<K, V> {
+    /// The value iterator over the same remaining range.
+    pub fn iter_value(&self) -> TreeMapEntriesValueIter<K, V> with stores[self] {
+        return TreeMapEntriesValueIter { entries: self.entries, index: self.index };
+    }
+}
+
+/// An iterator over a `TreeMap<K, V>`'s key-value pairs by value, in insertion
+/// order.
+struct TreeMapEntriesValueIter<K, V> {
+    entries: &List<TreeMapEntry<K, V>>,
+    index: i32,
+}
+
+impl<K, V> Iterator for TreeMapEntriesValueIter<K, V> {
+    type Item = [K, V];
+
+    fn next(&mut self) -> Option<[K, V]> {
+        while self.index < self.entries.len() {
+            let i = self.index;
+            self.index += 1;
+            if !self.entries[i].deleted {
+                return Option::Some([self.entries[i].key, self.entries[i].value]);
             }
         }
         return null;
@@ -476,27 +649,24 @@ impl<T: Ord> TreeSet<T> {
         self.inner.clear();
     }
 
-    /// Returns an iterator over the elements in insertion order.
-    /// Returns an iterator yielding each element by value, named for what it
-    /// yields as the sequence family is (WEP-2026-06-02): a set holds no
-    /// references to hand out, so the value iterator is the only one.
-    pub fn iter_value(&self) -> TreeSetIter<T> {
-        return TreeSetIter {
-            entries: self.inner.entries,
-            index: 0,
-        };
+    /// Returns an iterator yielding a reference to each element, in insertion
+    /// order.
+    pub fn iter_ref(&self) -> TreeSetRefIter<T> with stores[self] {
+        return TreeSetRefIter { entries: &self.inner.entries, index: 0 };
+    }
+
+    /// Returns an iterator yielding each element by value, in insertion order.
+    pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self] {
+        return TreeSetValueIter { entries: &self.inner.entries, index: 0 };
     }
 }
 
 impl<T: Ord> IntoIterator for TreeSet<T> {
     type Item = T;
-    type Iter = TreeSetIter<T>;
+    type Iter = TreeSetValueIter<T>;
 
-    fn into_iter(&self) -> TreeSetIter<T> {
-        return TreeSetIter {
-            entries: self.inner.entries,
-            index: 0,
-        };
+    fn into_iter(&self) -> TreeSetValueIter<T> with stores[self] {
+        return TreeSetValueIter { entries: &self.inner.entries, index: 0 };
     }
 }
 
