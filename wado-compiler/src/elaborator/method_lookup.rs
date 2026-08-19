@@ -2612,7 +2612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexRef",
             "index_ref",
-            "Elem",
+            "Output",
             expected_index_type,
         )
         .map(
@@ -2818,7 +2818,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexAssign",
             "index_assign",
-            "Elem",
+            "Output",
             None,
         )
         .map(
@@ -2844,7 +2844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexRefMut",
             "index_ref_mut",
-            "Elem",
+            "Output",
             None,
         )
         .map(
@@ -2873,7 +2873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexValue",
             "index_value",
-            "Elem",
+            "Output",
             expected_index_type,
         )
         .map(

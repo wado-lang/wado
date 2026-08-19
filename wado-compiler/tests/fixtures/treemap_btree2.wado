@@ -333,9 +333,9 @@ impl<K, V> TreeMap<K, V> {
 
 // IndexValue trait implementation for TreeMap - read access with map[key]
 impl<K, V> IndexValue<K> for TreeMap<K, V> {
-    type Elem = V;
+    type Output = V;
 
-    fn index_value(&self, key: K) -> Self::Elem {
+    fn index_value(&self, key: K) -> Self::Output {
         if let Some(val) = self.get(&key) {
             return val;
         }
@@ -345,9 +345,9 @@ impl<K, V> IndexValue<K> for TreeMap<K, V> {
 
 // IndexAssign trait implementation for TreeMap - write access with map[key] = value
 impl<K, V> IndexAssign<K> for TreeMap<K, V> {
-    type Elem = V;
+    type Output = V;
 
-    fn index_assign(&mut self, key: K, value: Self::Elem) {
+    fn index_assign(&mut self, key: K, value: Self::Output) {
         self.insert(key, value);
     }
 }

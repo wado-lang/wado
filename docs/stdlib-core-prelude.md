@@ -58,7 +58,7 @@ Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
 value element is read through `IndexValue`.
 
-#### `fn index_ref(&self, index: IndexType) -> &Self::Elem`
+#### `fn index_ref(&self, index: IndexType) -> &Self::Output`
 
 Returns a reference to the element at the given index.
 
@@ -68,7 +68,7 @@ Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Elem`
+#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
 
@@ -78,7 +78,7 @@ Value-assignment indexing: `container[i] = value`.
 Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `fn index_assign(&mut self, index: IndexType, value: Self::Elem)`
+#### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
 Assigns a value to the element at the given index.
 
@@ -88,7 +88,7 @@ Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
 aliased by reference (scalars, resources).
 
-#### `fn index_value(&self, index: IndexType) -> Self::Elem`
+#### `fn index_value(&self, index: IndexType) -> Self::Output`
 
 Returns a copy of the element at the given index.
 
@@ -398,7 +398,7 @@ Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
 value element is read through `IndexValue`.
 
-#### `fn index_ref(&self, index: IndexType) -> &Self::Elem`
+#### `fn index_ref(&self, index: IndexType) -> &Self::Output`
 
 Returns a reference to the element at the given index.
 
@@ -408,7 +408,7 @@ Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 element (`variant`, `fn`) cannot be handed out mutably by reference.
 
-#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Elem`
+#### `fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output`
 
 Returns a mutable reference to the element at the given index.
 
@@ -418,7 +418,7 @@ Value-assignment indexing: `container[i] = value`.
 Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 writing it by value is a distinct operation from handing out a `&mut`.
 
-#### `fn index_assign(&mut self, index: IndexType, value: Self::Elem)`
+#### `fn index_assign(&mut self, index: IndexType, value: Self::Output)`
 
 Assigns a value to the element at the given index.
 
@@ -428,7 +428,7 @@ Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
 aliased by reference (scalars, resources).
 
-#### `fn index_value(&self, index: IndexType) -> Self::Elem`
+#### `fn index_value(&self, index: IndexType) -> Self::Output`
 
 Returns a copy of the element at the given index.
 
@@ -3201,14 +3201,6 @@ Also the byte-length anchor for the synthesised `FieldSchema::lookup`
 (on `Slice<u8>`), routed through `#[compiler_item]` so a rename
 here cannot silently break code generation.
 
-#### `pub fn is_empty(&self) -> bool`
-
-Returns true if the slice has no elements.
-
-#### `pub fn get(&self, index: i32) -> Option<T>`
-
-Returns a copy of the element at `index`, or None if out of bounds.
-
 #### `pub fn get_unchecked(&self, index: i32) -> T`
 
 Returns the element at `index` without bounds checking.
@@ -3229,6 +3221,17 @@ to its bounds.
 
 Returns a by-value iterator over the slice.
 
+#### `pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self]`
+
+Returns an iterator over overlapping windows of `size` consecutive
+elements. Panics if `size` is not positive.
+
+#### `pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self]`
+
+Returns an iterator over non-overlapping chunks of up to `size`
+elements. The last chunk may be shorter. Panics if `size` is not
+positive.
+
 #### `pub fn to_array(&self) -> Array<T>`
 
 Copies the slice's elements into a new `Array<T>`.
@@ -3237,9 +3240,23 @@ Copies the slice's elements into a new `Array<T>`.
 
 Copies the slice's elements into a new `List<T>`.
 
+#### `pub fn contains(&self, value: &T) -> bool`
+
+Returns true if the slice contains the given value.
+
+#### `impl Sequence for Slice<T>`
+
+##### `fn len(&self) -> i32`
+
+##### `fn get_unchecked(&self, index: i32) -> T`
+
+#### `impl AsSlice for Slice<T>`
+
+##### `fn as_slice(&self) -> Slice<T> with stores[self]`
+
 #### `impl IndexValue<i32> for Slice<T>`
 
-##### `fn index_value(&self, index: i32) -> Self::Elem`
+##### `fn index_value(&self, index: i32) -> Self::Output`
 
 #### `impl IndexRef<i32> for Slice<T>`
 
@@ -3865,8 +3882,6 @@ Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 #### `pub fn len(&self) -> i32`
 
-#### `pub fn is_empty(&self) -> bool`
-
 #### `pub fn capacity(&self) -> i32`
 
 Returns the total number of elements the list can hold without reallocating.
@@ -3884,19 +3899,6 @@ instead of one per element. The Wasm array bounds check still guards the
 store, so an under-reserved call traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
-
-#### `pub fn first(&self) -> Option<T>`
-
-Returns the first element, or None if empty.
-
-#### `pub fn last(&self) -> Option<T>`
-
-#### `pub fn get(&self, index: i32) -> Option<T>`
-
-#### `pub fn get_unchecked(&self, index: i32) -> T`
-
-Element at `index` without the `[]` power-assert. The caller must
-guarantee `0 <= index < len()`; out of range reads a stale slot or traps.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
@@ -3966,31 +3968,12 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 Returns true if the list contains the given value.
 
-#### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
-
-Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
-
-#### `pub fn as_slice(&self) -> Slice<T>`
-
-Returns a view over the whole list.
-
 #### `pub fn iter(&self) -> SliceRefIter<T>`
 
 Returns an iterator over references to the list's elements (`&T`),
 mirroring Rust's `iter()`. For owned values use `into_iter()` or
 `for let x of list` (both yield `T`); to turn a reference iterator back
 into values, chain `copied()`.
-
-#### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
-
-Returns an iterator over overlapping windows of `size` consecutive
-elements. Panics if `size` is not positive.
-
-#### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
-
-Returns an iterator over non-overlapping chunks of up to `size`
-elements. The last chunk may be shorter. Panics if `size` is not
-positive.
 
 #### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering)`
 
@@ -4008,11 +3991,11 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexValue<i32> for List<T>`
 
-##### `fn index_value(&self, index: i32) -> Self::Elem`
+##### `fn index_value(&self, index: i32) -> Self::Output`
 
 #### `impl IndexAssign<i32> for List<T>`
 
-##### `fn index_assign(&mut self, index: i32, value: Self::Elem) with stores[value]`
+##### `fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value]`
 
 #### `impl IndexRef<i32> for List<T>`
 
@@ -4021,6 +4004,16 @@ Joins elements into a string with the given separator.
 #### `impl IndexRefMut<i32> for List<T>`
 
 ##### `fn index_ref_mut(&mut self, index: i32) -> &mut T`
+
+#### `impl Sequence for List<T>`
+
+##### `fn len(&self) -> i32`
+
+##### `fn get_unchecked(&self, index: i32) -> T`
+
+#### `impl AsSlice for List<T>`
+
+##### `fn as_slice(&self) -> Slice<T> with stores[self]`
 
 #### `impl Eq for List<T>`
 

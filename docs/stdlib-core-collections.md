@@ -80,11 +80,11 @@ Removes all key-value pairs from the map.
 
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
-##### `fn index_assign(&mut self, key: K, value: Self::Elem)`
+##### `fn index_assign(&mut self, key: K, value: Self::Output)`
 
 #### `impl IndexValue<K> for TreeMap<K, V>`
 
-##### `fn index_value(&self, key: K) -> Self::Elem`
+##### `fn index_value(&self, key: K) -> Self::Output`
 
 #### `impl IndexRef<K> for TreeMap<K, V>`
 

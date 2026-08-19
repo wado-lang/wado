@@ -79,56 +79,63 @@ GC has no interior references. Two consequences are normative and belong in
 Both are memory-safe under GC. Element access through a view is always a value
 copy.
 
-### `Sequence<T>` and `AsSlice<T>`
+### `Sequence` and `AsSlice`
 
-Two traits, split by whether the implementor has a contiguous backing.
+Two traits, split by whether the implementor has a contiguous backing. The
+element type is an associated type, not a type parameter, because a trait bound
+takes no positional type arguments — `<S: Sequence<i32>>` does not parse, only
+the associated-type form `<S: Sequence<Elem = i32>>` does. This is the same shape
+`Iterator` already uses for `Item`.
 
 ```wado
 /// Read-only sequence algorithms. Needs no contiguous backing.
-internal trait Sequence<T> {
+internal trait Sequence {
+    type Elem;
+
     fn len(&self) -> i32;
-    fn get_unchecked(&self, index: i32) -> T;
+    fn get_unchecked(&self, index: i32) -> Self::Elem;
 
     // default bodies, written against `len` + `get_unchecked` only
     fn is_empty(&self) -> bool;
-    fn get(&self, index: i32) -> Option<T>;
-    fn first(&self) -> Option<T>;
-    fn last(&self) -> Option<T>;
-    fn position(&self, pred: fn mut(T) -> bool) -> Option<i32>;
+    fn get(&self, index: i32) -> Option<Self::Elem>;
+    fn first(&self) -> Option<Self::Elem>;
+    fn last(&self) -> Option<Self::Elem>;
+    fn position(&self, pred: fn mut(Self::Elem) -> bool) -> Option<i32>;
 }
 
 /// Contiguously-backed sequences. View-producing operations live here.
-internal trait AsSlice<T>: Sequence<T> {
-    fn as_slice(&self) -> Slice<T> with stores[self];
+internal trait AsSlice: Sequence {
+    fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
 
     // default bodies forwarding to `Slice`'s inherent implementations
-    fn slice(&self, start: i32, end: i32) -> Slice<T>;
-    fn iter_value(&self) -> SliceValueIter<T>;
-    fn iter_ref(&self) -> SliceRefIter<T>;
-    fn windows(&self, size: i32) -> SliceWindows<T>;
-    fn chunks(&self, size: i32) -> SliceChunks<T>;
+    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>;
+    fn iter_value(&self) -> SliceValueIter<Self::Elem>;
+    fn iter_ref(&self) -> SliceRefIter<Self::Elem>;
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem>;
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>;
 }
 ```
 
-`Array<T>`, `List<T>`, and `Slice<T>` implement both. Inherent methods shadow
-trait methods ([Overload Resolution](./wep-2026-07-31-overload-resolution.md)),
-so `Slice`'s own bodies win for `Slice` and the defaults do not recurse.
+`Sequence` lives beside the other core traits; `AsSlice` lives with `Slice`,
+which it names. `Array<T>`, `List<T>`, and `Slice<T>` implement both. Inherent
+methods shadow trait methods
+([Overload Resolution](./wep-2026-07-31-overload-resolution.md)), so `Slice`'s
+own bodies win for `Slice` and the defaults do not recurse.
 
-Only unbounded methods can be default bodies. A trait's type parameter takes no
-bound — `trait SequenceEq<T: Eq>: Sequence<T>` does not parse — so `contains`,
-`binary_search`, `starts_with`, and `ends_with`, which need `T: Eq` or `T: Ord`,
-stay bounded inherent impls (`impl<T: Eq> Slice<T> { … }`) with thin bounded
-forwarders on `Array` and `List`. `Iterator` already hits this wall: `sum` /
-`min` / `max` live on `impl<T: Add> SliceValueIter<T>` rather than on the trait, which
-is why `xs.iter().map(f).sum()` does not compile. Lifting the restriction needs
-bounds on trait type parameters and associated types — a separate proposal, and
-the enabler that would fold these methods back in.
+Only methods with no element bound can be default bodies. An associated type
+carries no bound, so `contains`, `binary_search`, `starts_with`, and `ends_with`,
+which need `Elem: Eq` or `Elem: Ord`, stay bounded inherent impls
+(`impl<T: Eq> Slice<T> { … }`) with thin bounded forwarders on `Array` and
+`List`. `Iterator` already hits this wall: `sum` / `min` / `max` live on
+`impl<T: Add> SliceValueIter<T>` rather than on the trait, which is why
+`xs.iter().map(f).sum()` does not compile. Lifting the restriction needs bounds
+on associated types — a separate proposal, and the enabler that would fold these
+methods back in.
 
-`Sequence` default bodies must not construct a `Slice`. `sroa_param` scalarizes
-single-field structs only, so a three-field `Slice` survives unless inlining
-removes it; routing `list.first()` through `as_slice()` would turn an
-`array.get` into a GC allocation. View-producing operations are exempt —
-constructing the view is the operation.
+`Sequence` default bodies are written against `len` + `get_unchecked` and do not
+construct a `Slice`: a `first()` that goes through `as_slice()` turns an
+`array.get` into a three-field struct the optimizer then has to remove.
+View-producing operations are exempt — constructing the view is the operation.
 
 Mutation is deliberately absent from both traits: `set`, `sort`, `reverse`, and
 `[i] = v` need a mutable backing that `Slice` does not have, and length-changing
@@ -137,7 +144,7 @@ implementors, a `SequenceMut` trait would not pay for itself.
 
 `String` implements neither. Its byte view stays on the existing `AsByteSlice` /
 `as_byte_slice()`, whose name is honest about returning bytes. A future
-`String: Sequence<char>` is left expressible — this is why `as_slice()` sits on
+`String: Sequence` with `Elem = char` is left expressible — this is why `as_slice()` sits on
 `AsSlice` and not on `Sequence`, since UTF-8 has no contiguous `char` backing —
 but is out of scope: `len()` and `get_unchecked()` over UTF-8 are O(n), which
 would silently make every `Sequence` default body O(n²).
@@ -186,16 +193,24 @@ not a hand-called method, and `for-of` already marks the axis in syntax
 (`for x of xs` / `&xs` / `&mut xs` yield `T` / `&T` / `&mut T`).
 
 The index traits keep their four-way split — it follows from Wado's constraints,
-since `Elem: Ref` / `Elem: RefMut` bounds exclude scalars from `IndexRef`, and a
-scalar has no addressable cell, so `IndexAssign` cannot fold into a `&mut`. All
-four name the same element type, so all four call it `Elem`.
+since `Output: Ref` / `Output: RefMut` bounds exclude scalars from `IndexRef`,
+and a scalar has no addressable cell, so `IndexAssign` cannot fold into a
+`&mut`. All four call their associated type `Output`, as Rust does with the one
+`Index::Output` its `IndexMut` inherits.
 
-| Trait                              | Element access |
-| ---------------------------------- | -------------- |
-| `IndexValue<I>` / `index_value`    | reads `T`      |
-| `IndexRef<I>` / `index_ref`        | reads `&T`     |
-| `IndexRefMut<I>` / `index_ref_mut` | reads `&mut T` |
-| `IndexAssign<I>` / `index_assign`  | writes `T`     |
+`Output`, not `Elem`: what a subscript yields is the element only when the
+subscript is one position. `IndexValue<RangeExclusive<i32>>` yields a
+`Slice<T>`, so `Elem` would be false there. `Output` claims only that it is what
+the operation produces, which holds for all four — loosely for `IndexAssign`,
+whose value travels inward, but never falsely. `Sequence::Elem` keeps the name
+because a sequence's elements really are elements.
+
+| Trait                              | Subscript   | `Output`    |
+| ---------------------------------- | ----------- | ----------- |
+| `IndexValue<I>` / `index_value`    | `c[i]`      | read `T`    |
+| `IndexRef<I>` / `index_ref`        | `&c[i]`     | `&T`        |
+| `IndexRefMut<I>` / `index_ref_mut` | `&mut c[i]` | `&mut T`    |
+| `IndexAssign<I>` / `index_assign`  | `c[i] = v`  | written `T` |
 
 The internal intrinsics follow the same axis: `array_get_value`, `array_get_ref`,
 `array_get_ref_mut` (and `array_get_value_u8`). Naming them this way breaks no
@@ -267,13 +282,13 @@ taking `Slice<T>` plus a thin Wado wrapper:
 ```wado
 fn send_raw(&self, data: Slice<u8>, …) -> …;
 
-pub fn send<S: AsSlice<u8>>(&self, data: S, …) -> … {
+pub fn send<S: AsSlice<Elem = u8>>(&self, data: S, …) -> … {
     return self.send_raw(data.as_slice(), …);
 }
 ```
 
 Callers keep writing `f(xs)`, and a sub-range crosses the boundary without the
-`to_list()` copy it needs today. The alternative — making `AsSlice<T>` a
+`to_list()` copy it needs today. The alternative — making `AsSlice` a
 WIT-representable bound projecting to `list<T>` — would add a bound-to-WIT
 projection plus a position-dependent legality rule to the language, at the one
 place where "one declaration, no overloading, no implicit conversion" binds
@@ -307,8 +322,8 @@ The naming above is in place. The phases below are independent of each other.
 - [ ] Introduce both traits, move the read-only surface onto `Slice` inherent
       methods, implement for `Array` / `List` / `Slice`, and delete the
       duplicated methods.
-- [ ] Benchmark `list.first()` and `list.windows(n)` against today to confirm no
-      `Slice` allocation survives inlining.
+- [ ] Give `Array` the `Sequence` shape it lacks: `get` returning `Option<T>`,
+      `get_unchecked` for the raw trapping access, and `as_slice`.
 
 ### Phase C — Iteration
 

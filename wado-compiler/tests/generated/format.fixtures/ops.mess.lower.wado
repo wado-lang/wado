@@ -696,6 +696,18 @@ struct "SliceValueIter<u8>" {
     end: i32,
 }
 
+struct "SliceValueIter<i32>" {
+    repr: &Array<i32>,
+    index: i32,
+    end: i32,
+}
+
+struct "Slice<i32>" {
+    repr: &Array<i32>,
+    start: i32,
+    end: i32,
+}
+
 struct "RangeInclusive<i32>" {
     pub start: i32,
     pub end: i32,
@@ -746,6 +758,38 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,bool>" {
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/Slice<i32>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/Slice<i32>,&Array<i32>>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<i32>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<i32>,&Array<i32>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1711,6 +1755,10 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharI
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>" {
     value: Option<StrUtf8ByteIter>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<&Array<i32>>>" {
+    value: Option<&Array<i32>>,
 }
 
 struct __Closure_0 {
@@ -2890,7 +2938,7 @@ fn __test_0() {
         }
     }
     __assert_2: {
-        let __cond: bool = match primes."core:prelude/list.wado/List<i32>::get"(1) {
+        let __cond: bool = match primes."core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get"(1) {
             Some(v) => (v == 3),
             _ => false,
         };
@@ -2911,7 +2959,7 @@ fn __test_0() {
         }
     }
     __assert_3: {
-        let __cond: bool = match primes."core:prelude/list.wado/List<i32>::get"(9) {
+        let __cond: bool = match primes."core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get"(9) {
             None => true,
             _ => false,
         };
@@ -3031,15 +3079,15 @@ fn "core:prelude/bytes.wado/ByteSlice^core:prelude/bytes.wado/AsByteSlice::as_by
 }
 
 fn "core:prelude/bytes.wado/ByteList^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &List<u8>) -> Slice<u8> with stores[self] {
-    return self."core:prelude/list.wado/List<u8>::as_slice"() as Slice<u8>;
+    return self."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>;
 }
 
 fn "core:prelude/bytes.wado/ByteArray^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &Array<u8>) -> Slice<u8> with stores[self] {
-    return self."Array<u8>::slice"(0, self."Array<u8>::len"()) as Slice<u8>;
+    return self."Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>;
 }
 
 pub fn "core:prelude/bytes.wado/ByteList::get_byte_unchecked"(self: &List<u8>, index: i32) -> u8 {
-    return self."core:prelude/list.wado/List<u8>::get_unchecked"(index);
+    return self."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/Sequence::get_unchecked"(index);
 }
 
 pub fn "core:prelude/bytes.wado/ByteList::to_hex"(self: &List<u8>) -> String {
@@ -3050,7 +3098,7 @@ pub fn "core:prelude/bytes.wado/ByteList::to_hex"(self: &List<u8>) -> String {
             break;
         }
         __for_0_body: {
-            let byte: u8 = self."core:prelude/list.wado/List<u8>::get_unchecked"(i);
+            let byte: u8 = self."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/Sequence::get_unchecked"(i);
             s."core:prelude/string.wado/String::push_str"(&__tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
                 let mut __f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, zero_pad: true, width: 2, precision: -2, indent: 0, buf: &mut __r };
@@ -14218,6 +14266,10 @@ pub fn "core:prelude/list.wado/List<char>::with_capacity"(capacity: i32) -> List
     return List<char> { repr: core::builtin::array_new::<char>(capacity), used: 0 };
 }
 
+pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
+    return core::builtin::array_len::<u8>(self);
+}
+
 fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[repr] {
     return Slice<u8> { repr: repr, start: start, end: end };
 }
@@ -14390,7 +14442,7 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/list.wado", used: 22 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 354 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 310 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"index out of bounds", used: 19 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -14490,22 +14542,15 @@ pub fn "core:prelude/list.wado/List<u8>::len"(self: &List<u8>) -> i32 {
     return self.used;
 }
 
-pub fn "core:prelude/list.wado/List<u8>::get_unchecked"(self: &List<u8>, index: i32) -> u8 {
+fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/Sequence::get_unchecked"(self: &List<u8>, index: i32) -> u8 {
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
-pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
-    return core::builtin::array_len::<u8>(self);
+fn "Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &Array<u8>) -> Slice<u8> with stores[self] {
+    return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(self, 0, core::builtin::array_len::<u8>(self));
 }
 
-pub fn "Array<u8>::slice"(self: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[self] {
-    let len: i32 = core::builtin::array_len::<u8>(self);
-    let s: i32 = core::rt::i32_clamp(start, 0, len);
-    let e: i32 = core::rt::i32_clamp(end, s, len);
-    return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(self, s, e);
-}
-
-pub fn "core:prelude/list.wado/List<u8>::as_slice"(self: &List<u8>) -> Slice<u8> {
+fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &List<u8>) -> Slice<u8> with stores[self] {
     return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr, 0, self.used);
 }
 
@@ -14523,14 +14568,14 @@ fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuil
 
 pub fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"(bytes: List<u8>) -> Result<String, String> {
     let collected: List<u8> = bytes."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IntoIterator::into_iter"()."core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<u8>>"();
-    return "core::prelude/string.wado::core:prelude/string.wado/String::from_utf8_slice"(collected."core:prelude/list.wado/List<u8>::as_slice"() as Slice<u8>);
+    return "core::prelude/string.wado::core:prelude/string.wado/String::from_utf8_slice"(collected."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>);
 }
 
-pub fn "core:prelude/list.wado/List<i32>::get"(self: &List<i32>, index: i32) -> Option<i32> {
-    if ((index < 0) || (index >= self.used)) {
+pub fn "core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get"(self: &List<i32>, index: i32) -> Option<i32> {
+    if ((index < 0) || (index >= self."core:prelude/list.wado/List<i32>::len"())) {
         return null;
     }
-    return Option<i32>::Some(self.repr."Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index));
+    return Option<i32>::Some(self."core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get_unchecked"(index));
 }
 
 pub fn "core:prelude/list.wado/List<i32>::len"(self: &List<i32>) -> i32 {
@@ -14563,8 +14608,8 @@ pub fn "core:prelude/list.wado/List<i32>::push"(self: &mut List<i32>, value: i32
     self.used = (used + 1);
 }
 
-fn "Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    return core::builtin::array_get_value::<i32>(self, index);
+fn "core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get_unchecked"(self: &List<i32>, index: i32) -> i32 {
+    return self.repr."Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IntoIterator::into_iter"(self: &List<u8>) -> SliceValueIter<u8> {
@@ -14855,6 +14900,10 @@ fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_
 
 fn "core:prelude/slice.wado/SliceValueIter<u8>::internal_new"(repr: &Array<u8>, index: i32, end: i32) -> SliceValueIter<u8> with stores[repr] {
     return SliceValueIter<u8> { repr: repr, index: index, end: end };
+}
+
+fn "Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    return core::builtin::array_get_value::<i32>(self, index);
 }
 
 fn "Array<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<i32>, index: i32, value: i32) with stores[value] {
@@ -15322,6 +15371,36 @@ pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$&Array<u8>"(v: &Sl
 pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$i32"(v: &SliceValueIter<u8>, index: i32) -> i32 {
     return match index {
         1 => v.index,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<i32>$&Array<i32>"(v: &SliceValueIter<i32>, index: i32) -> &Array<i32> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<i32>$i32"(v: &SliceValueIter<i32>, index: i32) -> i32 {
+    return match index {
+        1 => v.index,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/Slice<i32>$&Array<i32>"(v: &Slice<i32>, index: i32) -> &Array<i32> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/Slice<i32>$i32"(v: &Slice<i32>, index: i32) -> i32 {
+    return match index {
+        1 => v.start,
         2 => v.end,
         _ => core::builtin::unreachable(),
     };
@@ -18695,6 +18774,44 @@ pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>"(self: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>) -> i32 {
+    return __variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<i32>>$&Array<i32>"(v: Box<core:prelude/types.wado/Option<&Array<i32>>>, index: i32) -> &Array<i32> {
+    if (__variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => __variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<i32>>$&Array<i32>"(payload: &Array<i32>, index: i32) -> Option<&Array<i32>> {
+    return match index {
+        0 => Option<&Array<i32>>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<i32>>$()"(v: Box<core:prelude/types.wado/Option<&Array<i32>>>, index: i32) {
+    if (__variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => __variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<i32>>$()"(payload: (), index: i32) -> Option<&Array<i32>> {
+    return match index {
+        1 => Option<&Array<i32>>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<i32>>"(self: Box<core:prelude/types.wado/Option<&Array<i32>>>) -> i32 {
     return __variant_tag(self.value);
 }
 

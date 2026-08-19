@@ -30,7 +30,7 @@ use {
     Inspect,
     InspectAlt,
 } from "core:prelude/traits.wado";
-use { Slice, SliceValueIter, SliceRefIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
+use { AsSlice, Sequence, Slice, SliceValueIter, SliceRefIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { i32_clamp, i32_min } from "core:rt";
@@ -59,12 +59,6 @@ impl Array<T> {
         return builtin::array_len(self);
     }
 
-    /// Returns a copy of the element at `index` (`array.get`).
-    /// Traps if `index` is out of bounds.
-    pub fn get(&self, index: i32) -> T {
-        return builtin::array_get_value(self, index);
-    }
-
     /// Sets the element at `index` to `value` (`array.set`).
     /// Traps if `index` is out of bounds.
     pub fn set(&mut self, index: i32, value: T) with stores[value] {
@@ -82,31 +76,35 @@ impl Array<T> {
         builtin::array_copy(self, dst, src, src_off, len);
     }
 
-    /// Returns a zero-copy view over `[start, end)`, clamped to the array's
-    /// bounds.
-    pub fn slice(&self, start: i32, end: i32) -> Slice<T> with stores[self] {
-        let len = builtin::array_len(self);
-        let s = i32_clamp(start, 0, len);
-        let e = i32_clamp(end, s, len);
-        return Slice::internal_new(self, s, e);
-    }
-
     /// Returns a by-value iterator over the array's elements.
     pub fn iter(&self) -> SliceValueIter<T> with stores[self] {
         return SliceValueIter::internal_new(self, 0, builtin::array_len(self));
     }
 
-    /// Returns an iterator over overlapping windows of `size` consecutive
-    /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self] {
-        return SliceWindows::internal_new(self, 0, builtin::array_len(self), size);
+}
+
+impl<T> Sequence for Array<T> {
+    type Elem = T;
+
+    fn len(&self) -> i32 {
+        return builtin::array_len(self);
     }
 
-    /// Returns an iterator over non-overlapping chunks of up to `size`
-    /// elements. The last chunk may be shorter. Panics if `size` is not
-    /// positive.
-    pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self] {
-        return SliceChunks::internal_new(self, 0, builtin::array_len(self), size);
+    fn get_unchecked(&self, index: i32) -> T {
+        return builtin::array_get_value(self, index);
+    }
+}
+
+impl<T> AsSlice for Array<T> {
+    fn as_slice(&self) -> Slice<T> with stores[self] {
+        return Slice::internal_new(self, 0, builtin::array_len(self));
+    }
+}
+
+impl<T: Eq> Array<T> {
+    /// Returns true if the array contains the given value.
+    pub fn contains(&self, value: &T) -> bool {
+        return self.as_slice().contains(value);
     }
 }
 
@@ -130,23 +128,23 @@ impl<T> IntoIterator for &Array<T> {
 }
 
 impl IndexValue<i32> for Array<T> {
-    type Elem = T;
+    type Output = T;
 
-    fn index_value(&self, index: i32) -> Self::Elem {
+    fn index_value(&self, index: i32) -> Self::Output {
         return builtin::array_get_value(self, index);
     }
 }
 
 impl IndexAssign<i32> for Array<T> {
-    type Elem = T;
+    type Output = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Elem) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
         builtin::array_set(self, index, value);
     }
 }
 
 impl<T: Ref> IndexRef<i32> for Array<T> {
-    type Elem = T;
+    type Output = T;
 
     fn index_ref(&self, index: i32) -> &T {
         return builtin::array_get_ref(self, index);
@@ -154,7 +152,7 @@ impl<T: Ref> IndexRef<i32> for Array<T> {
 }
 
 impl<T: RefMut> IndexRefMut<i32> for Array<T> {
-    type Elem = T;
+    type Output = T;
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T {
         return builtin::array_get_ref_mut(self, index);
@@ -162,7 +160,7 @@ impl<T: RefMut> IndexRefMut<i32> for Array<T> {
 }
 
 impl IndexValue<RangeExclusive<i32>> for Array<T> {
-    type Elem = Slice<T>;
+    type Output = Slice<T>;
 
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
         return self.slice(range.start, range.end);
@@ -170,7 +168,7 @@ impl IndexValue<RangeExclusive<i32>> for Array<T> {
 }
 
 impl IndexValue<RangeInclusive<i32>> for Array<T> {
-    type Elem = Slice<T>;
+    type Output = Slice<T>;
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {
         return self.slice(range.start, range.end + 1);

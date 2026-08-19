@@ -27,7 +27,7 @@ use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { write_seq_inspect, write_seq_inspect_alt } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
-use { Slice, SliceValueIter, SliceRefIter, SliceRefMutIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
+use { AsSlice, Sequence, Slice, SliceValueIter, SliceRefIter, SliceRefMutIter, SliceWindows, SliceChunks } from "core:prelude/slice.wado";
 use { panic, i32_min, i32_max, i32_clamp } from "core:rt";
 
 #[compiler_item("list")]
@@ -80,10 +80,6 @@ impl List<T> {
         return self.used;
     }
 
-    pub fn is_empty(&self) -> bool {
-        return self.used == 0;
-    }
-
     /// Returns the total number of elements the list can hold without reallocating.
     pub fn capacity(&self) -> i32 {
         return self.repr.len();
@@ -133,34 +129,6 @@ impl List<T> {
         }
         self.used -= 1;
         return Option::Some(self.repr[self.used]);
-    }
-
-    /// Returns the first element, or None if empty.
-    pub fn first(&self) -> Option<T> {
-        if self.used == 0 {
-            return null;
-        }
-        return Option::Some(self.repr[0]);
-    }
-
-    pub fn last(&self) -> Option<T> {
-        if self.used == 0 {
-            return null;
-        }
-        return Option::Some(self.repr[self.used - 1]);
-    }
-
-    pub fn get(&self, index: i32) -> Option<T> {
-        if index < 0 || index >= self.used {
-            return null;
-        }
-        return Option::Some(self.repr[index]);
-    }
-
-    /// Element at `index` without the `[]` power-assert. The caller must
-    /// guarantee `0 <= index < len()`; out of range reads a stale slot or traps.
-    pub fn get_unchecked(&self, index: i32) -> T {
-        return self.repr[index];
     }
 
     /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
@@ -335,38 +303,26 @@ impl List<T> {
     }
 }
 
-impl<T: Eq> List<T> {
-    /// Returns true if the list contains the given value.
-    pub fn contains(&self, value: &T) -> bool {
-        for let mut i = 0; i < self.used; i += 1 {
-            if self.repr[i] == *value {
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
 impl IndexValue<i32> for List<T> {
-    type Elem = T;
+    type Output = T;
 
-    fn index_value(&self, index: i32) -> Self::Elem {
+    fn index_value(&self, index: i32) -> Self::Output {
         assert index < self.used, "index out of bounds";
         return self.repr[index];
     }
 }
 
 impl IndexAssign<i32> for List<T> {
-    type Elem = T;
+    type Output = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Elem) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
         assert index < self.used, "index out of bounds";
         self.repr[index] = value;
     }
 }
 
 impl<T: Ref> IndexRef<i32> for List<T> {
-    type Elem = T;
+    type Output = T;
 
     fn index_ref(&self, index: i32) -> &T {
         assert index < self.used, "index out of bounds";
@@ -375,11 +331,36 @@ impl<T: Ref> IndexRef<i32> for List<T> {
 }
 
 impl<T: RefMut> IndexRefMut<i32> for List<T> {
-    type Elem = T;
+    type Output = T;
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T {
         assert index < self.used, "index out of bounds";
         return builtin::array_get_ref_mut(&mut self.repr, index);
+    }
+}
+
+impl<T> Sequence for List<T> {
+    type Elem = T;
+
+    fn len(&self) -> i32 {
+        return self.used;
+    }
+
+    fn get_unchecked(&self, index: i32) -> T {
+        return self.repr[index];
+    }
+}
+
+impl<T> AsSlice for List<T> {
+    fn as_slice(&self) -> Slice<T> with stores[self] {
+        return Slice::internal_new(&self.repr, 0, self.used);
+    }
+}
+
+impl<T: Eq> List<T> {
+    /// Returns true if the list contains the given value.
+    pub fn contains(&self, value: &T) -> bool {
+        return self.as_slice().contains(value);
     }
 }
 
@@ -421,37 +402,12 @@ impl<T: Ord> Ord for List<T> {
 }
 
 impl List<T> {
-    /// Returns a zero-copy view over `[start, end)`, clamped to `[0, len())`.
-    pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
-        let s = i32_clamp(start, 0, self.used);
-        let e = i32_clamp(end, s, self.used);
-        return Slice::internal_new(&self.repr, s, e);
-    }
-
-    /// Returns a view over the whole list.
-    pub fn as_slice(&self) -> Slice<T> {
-        return Slice::internal_new(&self.repr, 0, self.used);
-    }
-
     /// Returns an iterator over references to the list's elements (`&T`),
     /// mirroring Rust's `iter()`. For owned values use `into_iter()` or
     /// `for let x of list` (both yield `T`); to turn a reference iterator back
     /// into values, chain `copied()`.
     pub fn iter(&self) -> SliceRefIter<T> {
         return SliceRefIter::internal_new(&self.repr, 0, self.used);
-    }
-
-    /// Returns an iterator over overlapping windows of `size` consecutive
-    /// elements. Panics if `size` is not positive.
-    pub fn windows(&self, size: i32) -> SliceWindows<T> {
-        return SliceWindows::internal_new(&self.repr, 0, self.used, size);
-    }
-
-    /// Returns an iterator over non-overlapping chunks of up to `size`
-    /// elements. The last chunk may be shorter. Panics if `size` is not
-    /// positive.
-    pub fn chunks(&self, size: i32) -> SliceChunks<T> {
-        return SliceChunks::internal_new(&self.repr, 0, self.used, size);
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
@@ -507,7 +463,7 @@ impl List<T> {
 }
 
 impl IndexValue<RangeExclusive<i32>> for List<T> {
-    type Elem = Slice<T>;
+    type Output = Slice<T>;
 
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
@@ -515,7 +471,7 @@ impl IndexValue<RangeExclusive<i32>> for List<T> {
 }
 
 impl IndexValue<RangeInclusive<i32>> for List<T> {
-    type Elem = Slice<T>;
+    type Output = Slice<T>;
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);

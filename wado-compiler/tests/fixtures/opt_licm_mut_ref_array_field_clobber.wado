@@ -7,7 +7,7 @@
 
 #[inline("never")]
 fn bump(p: &mut Array<i32>) {
-    p.set(0, p.get(0) + 1);
+    p.set(0, p[0] + 1);
 }
 
 struct Buf {
@@ -19,7 +19,7 @@ impl Buf {
     #[inline("never")]
     fn go(&mut self) {
         let r = &mut self.arr;
-        while self.arr.get(0) < 5 {
+        while self.arr[0] < 5 {
             bump(r);
         }
     }
@@ -28,7 +28,7 @@ impl Buf {
 export fn run() {
     let mut b = Buf { arr: Array::filled(1, 0), tag: 7 };
     b.go();
-    assert b.arr.get(0) == 5, `v = ${b.arr.get(0)}`;
+    assert b.arr[0] == 5, `v = ${b.arr[0]}`;
     assert b.tag == 7;
 }
 

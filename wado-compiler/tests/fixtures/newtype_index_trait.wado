@@ -8,8 +8,8 @@ struct IntStore {
 }
 
 impl<i32> IndexValue<i32> for IntStore {
-    type Elem = i32;
-    fn index_value(&self, index: i32) -> Self::Elem {
+    type Output = i32;
+    fn index_value(&self, index: i32) -> Self::Output {
         if index == 0 {
             return self.a;
         } else if index == 1 {
@@ -21,7 +21,7 @@ impl<i32> IndexValue<i32> for IntStore {
 }
 
 impl<i32> IndexAssign<i32> for IntStore {
-    type Elem = i32;
+    type Output = i32;
     fn index_assign(&mut self, index: i32, value: i32) {
         if index == 0 {
             self.a = value;
