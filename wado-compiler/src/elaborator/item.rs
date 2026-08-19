@@ -815,6 +815,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         let resolved_self_type = self.resolve_type(impl_type);
         self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
+        // The trait this block implements qualifies `Self::Assoc` inside the
+        // signatures of the defaults it inherits, where `Self` is concrete and
+        // carries no bound to read the declaring trait off.
+        self.annotate_ctx.trait_ctx.self_trait = trait_type.and_then(|t| {
+            let name = self.get_type_name(t);
+            self.trait_decl_at(t.id()?, &name)
+        });
         impl_type_params
     }
 

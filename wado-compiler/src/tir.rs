@@ -130,6 +130,30 @@ impl SubstitutionContext {
             } => {
                 // Substitute the underlying type param to get the concrete type
                 let concrete_id = self.substitute(param_id, type_table);
+                // A projection that knows its trait is answered by identity:
+                // the entry is keyed by the declaring `DefId`, so two traits
+                // declaring the same associated-type name on one implementor
+                // stay apart (WEP-2026-08-12). The name-keyed chain below gives
+                // up on exactly that case, so it must not be reached first.
+                if let Some(trait_key) = &owning_trait {
+                    if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                        concrete_id,
+                        trait_key,
+                        &assoc_name,
+                    ) {
+                        return resolved;
+                    }
+                    let base_id = type_table.get_ultimate_base_type(concrete_id);
+                    if base_id != concrete_id
+                        && let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                            base_id,
+                            trait_key,
+                            &assoc_name,
+                        )
+                    {
+                        return resolved;
+                    }
+                }
                 if let Some(resolved) =
                     type_table.resolve_assoc_type_qualified(concrete_id, &owning_trait, &assoc_name)
                 {
@@ -1291,6 +1315,16 @@ impl TypeTable {
         let type_id = self.peel_refs(type_id);
         if let Some(key) = self.symbol_by_type.get(type_id) {
             return Some(*key);
+        }
+        // `Array<T>` is declared definitionless (`type Array<T>;`), so an
+        // instantiation is a `BuiltinArray` that carries no `def` and that
+        // `symbol_by_type` does not key. The `array` compiler item names its
+        // declaration by identity — a primitive needs no such step because its
+        // declaration and its instantiation are the same type.
+        if matches!(self.get(type_id), ResolvedType::BuiltinArray(_)) {
+            return self
+                .compiler_items
+                .decl(crate::compiler_item::CompilerItem::Array);
         }
         // An instantiation records the declaration it came from, so the
         // answer is read off the type rather than re-derived from a spelling
@@ -2504,8 +2538,12 @@ impl TypeTable {
         concrete_id: TypeId,
         assoc_name: &str,
     ) -> Option<TypeId> {
+        // `Array<T>` is definitionless, so it resolves to a `BuiltinArray`
+        // rather than a `GenericInstance`; its element type is its sole
+        // type argument.
         let type_args = match self.get(concrete_id).clone() {
             ResolvedType::GenericInstance { type_args, .. } => type_args,
+            ResolvedType::BuiltinArray(elem) => vec![elem],
             _ => return None,
         };
         let (_, def_type_id) =
@@ -2596,8 +2634,11 @@ impl TypeTable {
         if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
             return Some(resolved);
         }
+        // `Array<T>` is definitionless, so it is a `BuiltinArray` rather than a
+        // `GenericInstance`; its element type is its sole type argument.
         let type_args = match self.get(concrete_id).clone() {
             ResolvedType::GenericInstance { type_args, .. } => type_args,
+            ResolvedType::BuiltinArray(elem) => vec![elem],
             _ => return None,
         };
         let def_key = (
@@ -2842,6 +2883,20 @@ impl TypeTable {
                     // projecting: a `D` inferred as `&mut MyDe` still projects
                     // `D::Acc` to `MyDe`'s associated type.
                     let concrete = self.peel_refs(substituted_base);
+                    // Identity before spelling: a projection that names its
+                    // trait is answered exactly, so two traits declaring the
+                    // same associated-type name on one implementor stay apart
+                    // (WEP-2026-08-12). The name-keyed forms below give up on
+                    // that case rather than choosing.
+                    if let Some(trait_key) = &owning_trait
+                        && let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
+                            concrete,
+                            trait_key,
+                            &assoc_name,
+                        )
+                    {
+                        return resolved;
+                    }
                     if let Some(resolved) =
                         self.resolve_assoc_type_qualified(concrete, &owning_trait, &assoc_name)
                     {

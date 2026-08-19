@@ -1,0 +1,80 @@
+// A trait default body may name the super trait's associated type in its own
+// signature, including when the implementor is generic.
+//
+// Regression: `resolve_namespaced_generic_type` reached the assoc-type
+// resolution for `Self::Elem` only when `Self` carried no type parameter, so a
+// generic implementor (`Cell<T>`) fell through every branch to
+// `error: unknown type 'Self::Elem'`. A non-generic implementor resolved fine,
+// which is why the stdlib hit this and small examples did not.
+
+struct Held<T> {
+    value: T,
+}
+
+trait Base {
+    type Elem;
+
+    fn one(&self) -> Self::Elem;
+}
+
+trait Derived: Base {
+    fn held(&self) -> Held<Self::Elem> {
+        return Held { value: self.one() };
+    }
+}
+
+struct Cell<T> {
+    x: T,
+}
+
+impl<T> Base for Cell<T> {
+    type Elem = T;
+
+    fn one(&self) -> T {
+        return self.x;
+    }
+}
+
+// Deliberately does not override `held`, so the default body's signature must
+// resolve against the generic `Self`.
+impl<T> Derived for Cell<T> {
+}
+
+struct Plain {
+    x: i32,
+}
+
+impl Base for Plain {
+    type Elem = i32;
+
+    fn one(&self) -> i32 {
+        return self.x;
+    }
+}
+
+impl Derived for Plain {
+}
+
+test "generic implementor uses the inherited default" {
+    let c = Cell { x: 5 };
+    assert c.held().value == 5;
+
+    let s = Cell { x: "wado" };
+    assert s.held().value == "wado";
+}
+
+test "non-generic implementor still works" {
+    let p = Plain { x: 7 };
+    assert p.held().value == 7;
+}
+
+test "a generic default is reachable through a bound" {
+    assert take(&Cell { x: 3 }) == 3;
+}
+
+fn take<D: Derived<Elem = i32>>(d: &D) -> i32 {
+    return d.held().value;
+}
+
+__DATA__
+{"test": {}}

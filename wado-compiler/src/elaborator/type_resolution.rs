@@ -135,12 +135,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: &str,
         assoc_name: &str,
     ) -> Option<crate::defs::DefId> {
-        self.annotate_ctx
+        let bounds = self
+            .annotate_ctx
             .trait_ctx
             .type_param_bounds
-            .get(param_name)
-            .into_iter()
-            .flatten()
+            .get(param_name)?;
+        bounds
+            .iter()
             .filter(|bound| {
                 self.trait_assoc_type_decl(&bound.name, assoc_name)
                     .is_some()
@@ -148,6 +149,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The bound's own reference site says which trait it names, so an
             // aliased bound and another module's same-named trait stay apart.
             .find_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+            // A bound inherits its supertraits' associated types, so
+            // `T: Ord` answers for `Eq`'s. Searched after the direct bounds so
+            // a trait redeclaring the name still wins for itself.
+            .or_else(|| {
+                bounds
+                    .iter()
+                    .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+                    .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl))
+                    .find(|inherited| {
+                        self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
+                            .is_some()
+                    })
+                    .map(|inherited| inherited.decl)
+            })
+    }
+
+    /// Which trait declares `assoc_name` for the `impl` block being elaborated:
+    /// the trait it names, or the supertrait the name is inherited from.
+    fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<crate::defs::DefId> {
+        let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
+        if self
+            .trait_assoc_type_decl(self.tysys.trait_env.defs.name(self_trait), assoc_name)
+            .is_some()
+        {
+            return Some(self_trait);
+        }
+        self.tysys
+            .trait_env
+            .supertrait_closure(&self_trait)
+            .iter()
+            .find(|inherited| {
+                self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
+                    .is_some()
+            })
+            .map(|inherited| inherited.decl)
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
@@ -178,6 +214,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .resolve_assoc_type(self_type, &namespaced.name)
+                {
+                    return resolved;
+                }
+                if let Some(resolved) = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .resolve_generic_assoc_type_mono(self_type, &namespaced.name)
+                {
+                    return resolved;
+                }
+            }
+            // `Self` is a generic instance (`Cell<T>` elaborating a default body
+            // it does not override), so the concrete-keyed lookup above is
+            // skipped. The generic definition still answers: it substitutes the
+            // instance's own arguments, which may themselves be type parameters.
+            //
+            // Qualified by the trait being implemented — or the supertrait that
+            // declares the name — because the unqualified form gives up when two
+            // traits declare it differently (WEP-2026-08-12).
+            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type {
+                if let Some(trait_key) = self.self_trait_declaring_assoc_type(&namespaced.name)
+                    && let Some(resolved) = self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .resolve_trait_assoc_type_of_instance(
+                            self_type,
+                            &trait_key,
+                            &namespaced.name,
+                        )
                 {
                     return resolved;
                 }
