@@ -207,24 +207,15 @@ impl TypeSystem {
                         .zip(recv_elems)
                         .all(|(e, r)| self.arg_matches(e, r))
             }
-            // Parameters are part of the shape, though the mangled `Fn` head
-            // spells only arity and return type.
-            Type::Function(ft) => match resolved {
-                ResolvedType::Function {
-                    params,
-                    return_type,
-                    ..
-                } => {
-                    params.len() == ft.params.len()
-                        && self.arg_matches(&ft.return_type, return_type)
-                        && ft
-                            .params
-                            .iter()
-                            .zip(params)
-                            .all(|(p, r)| self.arg_matches(p, r))
-                }
-                _ => false,
-            },
+            // The impl is registered under the written spelling and the call
+            // site looks one up under the receiver's, so it applies exactly
+            // where the two agree. Looser, and the call has no impl to name.
+            Type::Function(_) => {
+                let written_name =
+                    super::trait_env::written_type_arg(written, &self.resolutions).to_mangled();
+                let recv_name = self.type_table.borrow().mangle_type_arg_for_generic(recv);
+                written_name == recv_name
+            }
             // A pack, an `_`, a parse error: nothing written to match against.
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => true,
             // The arms below read the receiver through readers that see past a
@@ -319,9 +310,9 @@ impl TypeSystem {
             Type::Reference(inner) | Type::MutReference(inner) => self.arg_pins(inner),
             // `[]` is the unit type and pins by itself.
             Type::Tuple(elems) => nested_pin(elems),
-            // `Fn<arity, return>` is the whole of a function type's identity
-            // here, so only the return type has a head to name.
-            Type::Function(ft) => self.arg_pins(&ft.return_type),
+            // A function type is spelled by its whole shape, so a head in the
+            // parameter list names as much as the return type does.
+            Type::Function(ft) => nested_pin(&ft.params) && self.arg_pins(&ft.return_type),
             Type::Generic(g) => self.head_is_declared(arg) && nested_pin(&g.args),
             Type::NamespacedGeneric(ns) => self.head_is_declared(arg) && nested_pin(&ns.args),
             Type::Named(_) => self.head_is_declared(arg),

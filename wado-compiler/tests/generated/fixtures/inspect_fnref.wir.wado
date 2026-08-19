@@ -8,7 +8,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<Fn<1,i32>> {  // TypeId(2)
+struct core:prelude/types.wado//Box<fn(i32)->i32> {  // TypeId(2)
     mut value: ref struct,
 }
 
@@ -123,7 +123,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(45)
 
-type "functype//inspect_fnref.wado/Fn<1,i32>^core:prelude/traits.wado/InspectAlt::inspect_alt" = fn(ref "core:prelude/types.wado//Box<Fn<1,i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//inspect_fnref.wado/Fn<1,i32>^core:prelude/traits.wado/InspectAlt::inspect_alt" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(47)
 
@@ -184,7 +184,7 @@ fn "inspect_fnref.wado/__test_2_explicit__fn_ref_deref_____matches_the_bare_form
     f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_fnref.wado//__Closure_4" {  }, inspect: ref.func "closure/inspect_fnref.wado/__closure_inspect_wrapper_0", inspect_alt: ref.func "closure/inspect_fnref.wado/__closure_inspect_alt_wrapper_0", func: ref.func "closure/inspect_fnref.wado/__closure_wrapper_0" };
     __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __f = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __r };
-    "inspect_fnref.wado/Fn<1,i32>^core:prelude/traits.wado/InspectAlt::inspect_alt"(struct.new "core:prelude/types.wado//Box<Fn<1,i32>>" { value: f }, __f);
+    "inspect_fnref.wado/Fn<1,i32>^core:prelude/traits.wado/InspectAlt::inspect_alt"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f }, __f);
     __cond = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__r, global:inspect_fnref.wado::__const_obj_21);
     if @unlikely(__cond == 0) {
         cold_path;

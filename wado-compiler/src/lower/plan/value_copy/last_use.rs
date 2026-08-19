@@ -360,15 +360,23 @@ impl RefTargets {
 pub fn compute_ref_targets(func: &TirFunction) -> RefTargets {
     let mut walker = RefTargetWalker {
         targets: RefTargets::default(),
+        reassigned: IndexSet::default(),
     };
     if let Some(body) = &func.body {
         walker.visit_block(body);
+    }
+    // Which place a reassigned reference borrows depends on the path taken, and
+    // there is no control flow here to decide that. Dropping the entry costs
+    // the elision and keeps the copy.
+    for index in &walker.reassigned {
+        walker.targets.map.shift_remove(index);
     }
     walker.targets
 }
 
 struct RefTargetWalker {
     targets: RefTargets,
+    reassigned: IndexSet<u32>,
 }
 
 impl TirRefVisitor for RefTargetWalker {
@@ -381,6 +389,15 @@ impl TirRefVisitor for RefTargetWalker {
             self.targets.map.insert(*local_index, path);
         }
         self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Assign { target, .. } = &expr.kind
+            && let TirExprKind::Local { index, .. } = &target.kind
+        {
+            self.reassigned.insert(*index);
+        }
+        self.walk_expr(expr);
     }
 }
 
@@ -552,14 +569,17 @@ impl ShareCollector<'_> {
                 pos,
             });
         } else {
+            // Resolved like the branch above: a write rooted at the reference
+            // and a read rooted at the referent would never meet.
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
             for r in roots {
+                let path = self.resolve(AccessPath {
+                    root: r,
+                    selectors: Vec::new(),
+                });
                 self.mutated.push(Mutation {
-                    path: AccessPath {
-                        root: r,
-                        selectors: Vec::new(),
-                    },
+                    path,
                     rebinds_place: false,
                     pos,
                 });

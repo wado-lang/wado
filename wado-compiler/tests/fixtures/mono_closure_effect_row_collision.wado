@@ -1,0 +1,15 @@
+// Regression: `Fn<0,()>` spelled neither the effect row nor the module a
+// concrete effect is declared in, so two closure types differing only in their
+// effects monomorphized a generic to one name.
+use { eprintln, println, Stdout, Stderr } from "core:cli";
+
+fn count<T>(v: T) -> i32 {
+    return 1;
+}
+
+export fn run() with (Stdout, Stderr) {
+    println(`${count(|| { println("x"); }) + count(|| { eprintln("y"); })}`);
+}
+
+__DATA__
+{"stdout": "2\n"}

@@ -1,0 +1,12 @@
+// Regression: the fn-param specialization retyped `v` to the functor struct and
+// returned it bare, so the caller — whose own type says canonical closure —
+// cast it and trapped.
+
+fn id<T>(v: T) -> T {
+    return v;
+}
+
+test "a closure survives a round trip through a generic" {
+    let f = id(|x: i32| x + 1);
+    assert f(1) == 2;
+}

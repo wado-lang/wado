@@ -193,11 +193,14 @@ struct TypeBuilder {
     /// `GenericInstance` whose name is one of these is a variant
     /// and needs boxing.
     variant_names: IndexSet<String>,
+    /// `(arity, return type)` → the function `TypeId` its `Box` is keyed on.
+    fn_box_repr: IndexMap<(usize, TypeId), TypeId>,
 }
 
 impl TypeBuilder {
     fn new(box_module_source: ModuleSource) -> Self {
         Self {
+            fn_box_repr: IndexMap::default(),
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
@@ -207,6 +210,27 @@ impl TypeBuilder {
     }
 
     /// Get or create a Box<T> struct type for the given inner type.
+    /// The `TypeId` a `Box` is keyed on: itself, or for a function type the
+    /// first one seen with its `(arity, return type)`.
+    ///
+    /// Every `Box<fn(...)>` holds one `ref struct` field whatever the
+    /// signature, and the `Fn<N,Ret>^Inspect` stubs share one receiver across
+    /// a signature, so one wrapper serves them all.
+    fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
+        let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = type_table.get(inner)
+        else {
+            return inner;
+        };
+        *self
+            .fn_box_repr
+            .entry((params.len(), *return_type))
+            .or_insert(inner)
+    }
+
     fn get_or_create_box_type(
         &mut self,
         inner_type_id: TypeId,
@@ -311,9 +335,14 @@ impl TypeBuilder {
             }
         }
 
-        // Create Box<T> struct types for each type that needs boxing
+        // Create Box<T> struct types for each type that needs boxing. A
+        // function type shares its signature's wrapper, but every id still maps
+        // to it: `box_struct_types` is what the body lowering asks, and an id
+        // missing from it is one whose `&` never becomes a box.
         for base_type_id in needs_box_base {
-            self.get_or_create_box_type(base_type_id, type_table);
+            let key = self.box_key(base_type_id, type_table);
+            let box_type = self.get_or_create_box_type(key, type_table);
+            self.box_struct_types.insert(base_type_id, box_type);
         }
     }
 
@@ -335,7 +364,8 @@ impl TypeBuilder {
                 ResolvedType::MutRef(inner) => (inner, false),
                 _ => continue,
             };
-            if let Some(&box_type_id) = self.box_struct_types.get(&inner) {
+            let key = self.box_key(inner, type_table);
+            if let Some(&box_type_id) = self.box_struct_types.get(&key) {
                 replacements.push(BoxRewrite {
                     type_id,
                     box_type: type_table.get(box_type_id).clone(),

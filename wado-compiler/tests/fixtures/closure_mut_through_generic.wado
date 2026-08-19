@@ -1,0 +1,18 @@
+// Regression: `resolve_closure` reserves the `__ref_v` slot a mutating capture
+// materialises into, and reify added a second one — so the `&mut` was written
+// to a slot the capture never read, and the one it read stayed null. Only a
+// closure literal written straight into an argument reached it; binding it to a
+// local first landed both on one slot.
+use { println, Stdout } from "core:cli";
+
+fn count<T>(v: T) -> i32 {
+    return 1;
+}
+
+export fn run() with Stdout {
+    let mut n = 0;
+    println(`${count(|| { n += 1; })}`);
+}
+
+__DATA__
+{"stdout": "1\n"}
