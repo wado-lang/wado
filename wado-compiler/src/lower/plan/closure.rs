@@ -1076,11 +1076,10 @@ impl ClosureLowerer {
                 .map(|(arg_idx, _)| arg_idx + param_offset)
                 .collect();
 
-            // Bail when a fn-param flows into a struct field — the field
-            // type stays `fn(...)`, so we can't retype the param to
-            // `&__Closure_N`.
+            // Bail where a use pins the param to its declared `fn(...)` type,
+            // so it cannot be retyped to `&__Closure_N`.
             if let Some(body) = &callee.body {
-                let mut check = StructFieldFnParamCheck {
+                let mut check = UnspecializableFnParam {
                     fn_param_indices: &fn_param_indices,
                     found: false,
                 };
@@ -2005,25 +2004,37 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
 /// Recurses through nested struct literals so a fn-param wrapped inside
 /// `Foo { inner: Bar { f: param } }` still counts. Once `found` flips to
 /// true, subsequent visits short-circuit cheaply.
-struct StructFieldFnParamCheck<'a> {
+/// A use that pins a fn-param to its declared `fn(...)` type.
+///
+/// A struct field keeps that type; an assignment stores a value the
+/// specialization cannot narrow — a generic hands back the canonical closure.
+struct UnspecializableFnParam<'a> {
     fn_param_indices: &'a [u32],
     found: bool,
 }
 
-impl TirRefVisitor for StructFieldFnParamCheck<'_> {
+impl UnspecializableFnParam<'_> {
+    fn is_fn_param(&self, expr: &TirExpr) -> bool {
+        matches!(&expr.kind, TirExprKind::Local { index, .. } if self.fn_param_indices.contains(index))
+    }
+}
+
+impl TirRefVisitor for UnspecializableFnParam<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found {
             return;
         }
-        if let TirExprKind::StructLiteral { fields, .. } = &expr.kind {
-            for field in fields {
-                if let TirExprKind::Local { index, .. } = &field.value.kind
-                    && self.fn_param_indices.contains(index)
-                {
-                    self.found = true;
-                    return;
-                }
-            }
+        if let TirExprKind::StructLiteral { fields, .. } = &expr.kind
+            && fields.iter().any(|field| self.is_fn_param(&field.value))
+        {
+            self.found = true;
+            return;
+        }
+        if let TirExprKind::Assign { target, .. } = &expr.kind
+            && self.is_fn_param(target)
+        {
+            self.found = true;
+            return;
         }
         self.walk_expr(expr);
     }
