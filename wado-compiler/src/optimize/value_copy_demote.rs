@@ -1105,7 +1105,7 @@ impl ElementImmutable<'_, '_, '_> {
                     let Some(a) = a.as_expr() else { continue };
                     if is_builtin {
                         // The `array_*` intrinsics take `&` / `&mut` first
-                        // parameters (WEP-2026-06-02 Phase 1). A `&mut
+                        // parameters (WEP-2026-06-02). A `&mut
                         // self.repr` arg to a spine builtin is a spine
                         // handoff, not an element-mutating escape, so peel the
                         // reference wrapper before recursing.

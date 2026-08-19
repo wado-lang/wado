@@ -224,7 +224,7 @@ fn build_copy_body(
     // A bare `Array<T>` deep-copies via `array_clone::<T>(&v)`,
     // the same intrinsic `make_field_copy` emits for the `repr` field of
     // `List<T>` / `String`. This is what gives the raw array value
-    // semantics (WEP-2026-06-02 Phase 2).
+    // semantics (WEP-2026-06-02).
     if let ResolvedType::BuiltinArray(elem_type) = resolved {
         let clone = build_array_clone(v_local.clone(), type_id, *elem_type, None, type_table, span);
         return single_return_block(clone, span);

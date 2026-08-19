@@ -249,4 +249,4 @@ fix to conform; none should be preserved.
 - [Indexing Traits Design](./wep-2026-01-20-indexing-traits.md)
 - [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md)
 - [128-bit Integer Types (i128/u128)](./wep-2026-01-24-i128-u128-types.md)
-- [Redesign `builtin::array` into a First-Class `List<T>`](./wep-2026-06-02-builtin-array-redesign.md)
+- [The Sequence Family — `Array<T>` / `List<T>` / `Slice<T>`](./wep-2026-06-02-sequence-family.md)

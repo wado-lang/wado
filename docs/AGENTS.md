@@ -121,7 +121,7 @@ history is the SSoT for how the design got here.
 - [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
 - [`NirExprKind::ArrayLiteral` — a NIR-Materialized List Node](./wep-2026-05-31-nir-array-literal.md)
 - [Diagnostic Reason Chains for Type and Trait Errors](./wep-2026-06-02-diagnostic-reason-chains.md)
-- [Redesign `builtin::array` into a First-Class `List<T>`](./wep-2026-06-02-builtin-array-redesign.md)
+- [The Sequence Family — `Array<T>` / `List<T>` / `Slice<T>`](./wep-2026-06-02-sequence-family.md)
 - [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)
 - [Temporal Standard Library (`core:temporal`)](./wep-2026-06-05-core-temporal.md)
