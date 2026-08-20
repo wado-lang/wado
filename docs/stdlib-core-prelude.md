@@ -345,6 +345,38 @@ Returns an adapter that yields all elements of `self`, then all elements of `oth
 
 Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
 
+#### `fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S>`
+
+Adds the remaining elements. None for an empty iterator.
+
+#### `fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P>`
+
+Multiplies the remaining elements. None for an empty iterator.
+
+#### `fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
+
+The smallest remaining element, the first on ties. None for an empty iterator.
+
+#### `fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
+
+The largest remaining element, the last on ties. None for an empty iterator.
+
+#### `fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item>`
+
+The smallest remaining element under `cmp`, the first on ties.
+
+#### `fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item>`
+
+The largest remaining element under `cmp`, the last on ties.
+
+#### `fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item>`
+
+The remaining element with the smallest `key`, the first on ties.
+
+#### `fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item>`
+
+The remaining element with the largest `key`, the last on ties.
+
 ### `pub trait IntoIterator`
 
 Conversion into an Iterator.
@@ -354,6 +386,29 @@ Types implementing this trait can be used in `for-of` loops directly.
 
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
+
+### `pub trait Sum`
+
+Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
+bound. Implemented for every `Add`.
+
+#### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+
+### `pub trait Product`
+
+Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
+element bound. Implemented for every `Mul`.
+
+#### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+
+### `pub trait Extremum`
+
+Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
+`max`'s element bound. Implemented for every `Ord`.
+
+#### `fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+
+#### `fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
 ### `pub trait FromIterator`
 
@@ -685,6 +740,38 @@ Returns an adapter that yields all elements of `self`, then all elements of `oth
 
 Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
 
+#### `fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S>`
+
+Adds the remaining elements. None for an empty iterator.
+
+#### `fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P>`
+
+Multiplies the remaining elements. None for an empty iterator.
+
+#### `fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
+
+The smallest remaining element, the first on ties. None for an empty iterator.
+
+#### `fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
+
+The largest remaining element, the last on ties. None for an empty iterator.
+
+#### `fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item>`
+
+The smallest remaining element under `cmp`, the first on ties.
+
+#### `fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item>`
+
+The largest remaining element under `cmp`, the last on ties.
+
+#### `fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item>`
+
+The remaining element with the smallest `key`, the first on ties.
+
+#### `fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item>`
+
+The remaining element with the largest `key`, the last on ties.
+
 ### `pub trait IntoIterator`
 
 Conversion into an Iterator.
@@ -694,6 +781,29 @@ Types implementing this trait can be used in `for-of` loops directly.
 
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
+
+### `pub trait Sum`
+
+Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
+bound. Implemented for every `Add`.
+
+#### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+
+### `pub trait Product`
+
+Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
+element bound. Implemented for every `Mul`.
+
+#### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+
+### `pub trait Extremum`
+
+Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
+`max`'s element bound. Implemented for every `Ord`.
+
+#### `fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+
+#### `fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
 ### `pub trait FromIterator`
 
@@ -3293,12 +3403,6 @@ _Fields are private._
 #### `pub fn collect(&mut self) -> List<T>`
 
 One bulk copy of the remaining range, not an element-at-a-time loop.
-
-#### `pub fn sum(&mut self) -> Option<T>`
-
-#### `pub fn min(&mut self) -> Option<T>`
-
-#### `pub fn max(&mut self) -> Option<T>`
 
 #### `impl Iterator for SliceValueIter<T>`
 

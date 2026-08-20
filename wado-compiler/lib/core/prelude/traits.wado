@@ -50,6 +50,19 @@ internal trait Ord: Eq {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
+
+impl<T: Ord> Ord for &T {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        return (*self).cmp(&**other);
+    }
+}
+
+impl<T: Ord> Ord for &mut T {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        return (*self).cmp(&**other);
+    }
+}
+
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
@@ -1070,6 +1083,88 @@ internal trait Iterator {
     fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> {
         return IterZip { first: *self, second: other };
     }
+
+    /// Adds the remaining elements. None for an empty iterator.
+    fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S> {
+        return S::sum_iter(self);
+    }
+
+    /// Multiplies the remaining elements. None for an empty iterator.
+    fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P> {
+        return P::product_iter(self);
+    }
+
+    /// The smallest remaining element, the first on ties. None for an empty iterator.
+    fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E> {
+        return E::min_iter(self);
+    }
+
+    /// The largest remaining element, the last on ties. None for an empty iterator.
+    fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E> {
+        return E::max_iter(self);
+    }
+
+    /// The smallest remaining element under `cmp`, the first on ties.
+    fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            while let Some(item) = self.next() {
+                if let Less = cmp(&item, &best) {
+                    best = item;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The largest remaining element under `cmp`, the last on ties.
+    fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            while let Some(item) = self.next() {
+                if cmp(&best, &item) != Ordering::Greater {
+                    best = item;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The remaining element with the smallest `key`, the first on ties.
+    fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            let mut best_key = key(first);
+            while let Some(item) = self.next() {
+                let item_key = key(item);
+                if let Less = item_key.cmp(&best_key) {
+                    best = item;
+                    best_key = item_key;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The remaining element with the largest `key`, the last on ties.
+    fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            let mut best_key = key(first);
+            while let Some(item) = self.next() {
+                let item_key = key(item);
+                if best_key.cmp(&item_key) != Ordering::Greater {
+                    best = item;
+                    best_key = item_key;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
 }
 
 /// Generic map iterator adapter that wraps any Iterator.
@@ -1330,6 +1425,56 @@ impl ConvertError {
     }
 }
 
+
+/// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
+/// bound. Implemented for every `Add`.
+internal trait Sum {
+    type Elem;
+    fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+}
+
+impl<T: Add> Sum for T {
+    type Elem = T;
+
+    fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.reduce(|a: T, b: T| a + b);
+    }
+}
+
+/// Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
+/// element bound. Implemented for every `Mul`.
+internal trait Product {
+    type Elem;
+    fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+}
+
+impl<T: Mul> Product for T {
+    type Elem = T;
+
+    fn product_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.reduce(|a: T, b: T| a * b);
+    }
+}
+
+/// Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
+/// `max`'s element bound. Implemented for every `Ord`.
+internal trait Extremum {
+    type Elem;
+    fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+    fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+}
+
+impl<T: Ord> Extremum for T {
+    type Elem = T;
+
+    fn min_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.min_by(|a: &T, b: &T| a.cmp(b));
+    }
+
+    fn max_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.max_by(|a: &T, b: &T| a.cmp(b));
+    }
+}
 
 /// Trait for creating a collection from any iterator of `Elem`.
 internal trait FromIterator {

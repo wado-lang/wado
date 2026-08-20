@@ -356,42 +356,6 @@ impl SliceValueIter<T> {
     }
 }
 
-impl<T: Add> SliceValueIter<T> {
-    pub fn sum(&mut self) -> Option<T> {
-        return self.reduce(|a: T, b: T| a + b);
-    }
-}
-
-impl<T: Ord> SliceValueIter<T> {
-    pub fn min(&mut self) -> Option<T> {
-        if let Some(first) = self.next() {
-            let mut result = first;
-            for let item of self {
-                if let Less = item.cmp(&result) {
-                    result = item;
-                }
-            }
-            return Option::Some(result);
-        } else {
-            return null;
-        }
-    }
-
-    pub fn max(&mut self) -> Option<T> {
-        if let Some(first) = self.next() {
-            let mut result = first;
-            for let item of self {
-                if let Greater = item.cmp(&result) {
-                    result = item;
-                }
-            }
-            return Option::Some(result);
-        } else {
-            return null;
-        }
-    }
-}
-
 /// A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
 /// points to a fresh copy of the element — Wasm GC has no interior references —
 /// so it reads but never writes the backing array. Backs `for x of &list`.

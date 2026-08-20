@@ -3073,34 +3073,20 @@ pub trait IntoIterator {
 #### FromIterator - Collection Construction
 
 ```wado
-/// Types that can be constructed from an iterator
-pub trait FromIterator<T> {
-    type Iter;
-    fn from_iter(iter: Self::Iter) -> Self;
+/// Types that can be constructed from an iterator of `Elem`
+pub trait FromIterator {
+    type Elem;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
 }
 ```
 
-#### ListIter
+#### SliceValueIter
 
-The prelude provides `ListIter<T>` as the iterator type for `List<T>`:
+`SliceValueIter<T>` is the by-value iterator for the whole sequence family — `Array<T>`, `List<T>`, and `Slice<T>` all reach it through `iter_value()`. See [The Sequence Family](./wep-2026-06-02-sequence-family.md) for the `Value` / `Ref` / `RefMut` axis and the rest of the family's iterators.
 
-```wado
-/// Iterator over List<T> elements
-pub struct ListIter<T> {
-    // internal fields
-}
+#### Terminals
 
-impl Iterator for ListIter<T> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> { ... }
-}
-
-impl IntoIterator for List<T> {
-    type Item = T;
-    type Iter = ListIter<T>;
-    fn into_iter(&self) -> ListIter<T> { ... }
-}
-```
+Every combinator and terminal `Iterator` declares is available on every implementor, adapters included — including the ones bounded by their element type (`sum` and `product` need `Item: Add` / `Mul`, `min` and `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
 
 #### Usage
 
@@ -3113,15 +3099,18 @@ for let x of arr {
 }
 
 // Explicit iterator
-let mut iter = arr.iter();
+let mut iter = arr.iter_value();
 while let Some(x) = iter.next() {
     println(`${x}`);
 }
 
 // Collect remaining elements
-let mut iter2 = arr.iter();
-iter2.next();  // skip first
-let rest = iter2.collect();  // [2, 3, 4, 5]
+let mut rest_iter = arr.iter_value();
+rest_iter.next();  // skip first
+let rest = rest_iter.collect();  // [2, 3, 4, 5]
+
+// Terminals compose with the adapters
+let total = arr.iter_value().filter(|x: i32| x % 2 == 1).sum();  // Some(9)
 ```
 
 #### Value Semantics
