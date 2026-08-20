@@ -928,7 +928,7 @@ impl JsonDeserializer {
         self.depth += 1;
         if self.depth > self.max_depth {
             builtin::cold_path();
-            return Result::Err(DeserializeError::malformed(
+            return Result::Err(DeserializeError::depth_limit(
                 `exceeded maximum nesting depth of ${self.max_depth}`,
                 self.pos as i64,
             ));
@@ -2563,8 +2563,9 @@ pub fn from_string<T: Deserialize>(
 /// §8.1) — skipped and key tokens included — reporting invalid bytes as
 /// `MalformedInput`.
 ///
-/// `max_depth` bounds container nesting; input past it is `MalformedInput`
-/// rather than a stack-exhausting trap. Raise it only for a trusted source.
+/// `max_depth` bounds container nesting; input past it is
+/// `DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
+/// a trusted source.
 pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     input: S,
     max_depth: i32 = DEFAULT_MAX_DEPTH,

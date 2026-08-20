@@ -111,6 +111,9 @@ pub enum DeserializeErrorKind {
     TrailingData,
     Eof,
     Custom,
+    /// Nesting ran past the deserializer's depth limit. A resource bound, not
+    /// a spec violation: the input may be perfectly well-formed.
+    DepthLimitExceeded,
 }
 
 #[compiler_item("deserialize_error")]
@@ -151,6 +154,10 @@ impl DeserializeError {
 
     pub fn overflow(msg: String, offset: i64) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::Overflow, message: msg, offset };
+    }
+
+    pub fn depth_limit(msg: String, offset: i64) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg, offset };
     }
 }
 

@@ -797,7 +797,7 @@ test "nesting up to the default depth limit is accepted" {
 test "nesting past the default depth limit is an error, not a trap" {
     let text = nested(DEFAULT_MAX_DEPTH + 1, '[', ']');
     let r: Result<Value, DeserializeError> = from_string(text);
-    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded };
 }
 
 test "an object nests as deeply as an array" {
@@ -810,7 +810,7 @@ test "an object nests as deeply as an array" {
         deep.push('}');
     }
     let r: Result<Value, DeserializeError> = from_string(deep);
-    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded };
 }
 
 test "a skipped unknown member is depth-limited too" {
@@ -821,7 +821,7 @@ test "a skipped unknown member is depth-limited too" {
     text.push_str(&nested(DEFAULT_MAX_DEPTH + 1, '[', ']'));
     text.push_str(&`,"a":"x"\}`);
     let r: Result<Utf8Rec, DeserializeError> = from_string(text);
-    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded };
 }
 
 test "max_depth is caller-tunable" {

@@ -765,10 +765,11 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
     return Result::Ok(buf as ByteList);
 }
 
-// Maximum nesting depth for arrays/maps/tags. A bounded recursion guard
-// (RFC 8949 §10): a small header can claim deeply nested structure, so the
-// decoder caps the depth rather than exhausting the native stack.
-global MAX_DEPTH: i32 = 256;
+/// Default nesting limit for arrays/maps/tags. A bounded recursion guard
+/// (RFC 8949 §10): a small header can claim deeply nested structure — one byte
+/// per level — so the decoder caps the depth rather than exhausting the native
+/// stack. Matches `core:json`'s default.
+pub global DEFAULT_MAX_DEPTH: i32 = 100;
 
 /// Reconstruct `2^e` exactly as an `f64` by writing its IEEE-754 exponent
 /// field directly. Used by the binary16 widening path; `e` stays within the
@@ -828,7 +829,8 @@ fn is_passthrough_tag(tag: u64) -> bool {
 pub struct CborDeserializer {
     input: ByteSlice,
     pos: i32,
-    depth: i32,
+    depth: i32 = 0,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
     strict: bool,
 }
 
@@ -853,10 +855,10 @@ impl CborDeserializer {
 
     fn enter(&mut self) -> Result<(), DeserializeError> {
         self.depth += 1;
-        if self.depth > MAX_DEPTH {
+        if self.depth > self.max_depth {
             builtin::cold_path();
-            return Result::Err(DeserializeError::malformed(
-                "maximum nesting depth exceeded",
+            return Result::Err(DeserializeError::depth_limit(
+                `exceeded maximum nesting depth of ${self.max_depth}`,
                 self.pos as i64,
             ));
         }
@@ -2077,11 +2079,19 @@ impl Deserializer for CborDeserializer {
 /// `strict` (default `true`) rejects items the target cannot represent; set
 /// `strict = false` only when deserializing into `core:value`'s `Value`, where
 /// unrepresentable items fall to `Value::Unknown` instead of erroring.
-pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError> {
+///
+/// `max_depth` bounds container nesting; input past it is
+/// `DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
+/// a trusted source.
+pub fn from_bytes<T: Deserialize, B: AsByteSlice>(
+    input: B,
+    strict: bool = true,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
     let mut de = CborDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
-        depth: 0,
+        max_depth,
         strict,
     };
     let v = T::deserialize(&mut de)?;
