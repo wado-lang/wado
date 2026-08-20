@@ -468,10 +468,9 @@ impl AstVisitor for SiteCollector {
         self.in_closure(params, |s| walk_expr(s, expr));
     }
 
-    /// The statements that scope a binding over a body, plus `else if`: it is
-    /// an `else` block holding one `If` whose span starts at the `if` keyword,
-    /// and a guard offered there splits the chain, so that `If` is visited
-    /// directly and only the position in front of it is lost.
+    /// The statements that scope a binding over a body. An `else if` is an
+    /// `else` block holding one `If`, and a guard injected in front of it would
+    /// split the chain, so that `If` is visited directly instead.
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::If(if_stmt) => {

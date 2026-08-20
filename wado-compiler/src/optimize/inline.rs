@@ -1150,8 +1150,6 @@ pub fn inline_functions(
             let mut inlined_funcs: Vec<FuncId> = Vec::new();
             // Splice-point re-valuation records (Method A): one per inlined block.
             let mut reval: Vec<InlineRevalInfo> = Vec::new();
-            // Take ownership of the frame to avoid borrow conflicts with the
-            // `&mut func.body` walk below.
             let mut frame = CallerFrame {
                 local_count: func.local_count(),
                 locals: std::mem::take(&mut func.locals),
@@ -1619,10 +1617,8 @@ fn build_inlined_labeled_block(
     }
     frame.local_count += new_locals_needed;
 
-    // An annotation is about a local, and the splice renumbers locals: a callee
-    // local the alias analysis must keep treating as aliased carries over under
-    // its caller index. Dropping one lets a read of a boxed local forward past
-    // a write through the alias.
+    // An annotation names a local and the splice renumbers locals. Dropping one
+    // lets a read of a boxed local forward past a write through the alias.
     let carry =
         |local: &u32| remap_local_index(*local, &param_to_local, param_offset, callee_param_count);
     frame

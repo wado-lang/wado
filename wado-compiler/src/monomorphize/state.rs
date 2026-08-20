@@ -671,8 +671,8 @@ impl Monomorphizer {
             ResolvedType::Struct { def, type_args } => {
                 Some((type_table.struct_head_name(*def), type_args.clone()))
             }
-            // A generic newtype's own arguments name the methods it declares;
-            // a base may re-shape them, and answers only for what it inherits.
+            // A generic newtype declares its own methods; only what it
+            // inherits comes from the base arm below.
             ResolvedType::Newtype { def, type_args, .. } if !type_args.is_empty() => {
                 Some((type_table.decl_render_name(*def), type_args.clone()))
             }

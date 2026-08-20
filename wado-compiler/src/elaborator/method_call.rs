@@ -907,10 +907,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_head(method_impl_type_id)
                     .expect("a newtype names a declaration");
-                // The newtype's own arguments, which is what every other
-                // spelling of it carries: a base may re-shape them
-                // (`type Pair<T> = List<[T, i32]>`), and a name built from the
-                // base would not answer for the type the `impl` header names.
+                // Not the base's: a base may re-shape them, and the `impl`
+                // header names the newtype.
                 let type_args = newtype_args;
                 let head = self
                     .tysys

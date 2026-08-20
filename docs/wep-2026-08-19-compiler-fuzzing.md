@@ -97,8 +97,8 @@ Work is sharded so every run covers the whole corpus, and findings fail the run.
 
 ## Roadmap
 
-Ordered by yield per cost. The harness reports the corpus it drew and the sites
-each payload reached; a run is the only place those counts are true.
+Ordered by yield per cost. Each run reports the corpus it drew and the sites
+each payload reached.
 
 - [x] Opaque read payload. Its first full run found three bugs: two colliding
       mangled names (`&&T` spelled as `&T`, a generic newtype spelled without

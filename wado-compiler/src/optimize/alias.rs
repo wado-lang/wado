@@ -44,7 +44,6 @@ impl AliasGroups {
         self.root_of.is_empty()
     }
 
-    /// The same classes as the frame's lookup table.
     pub fn to_classes(&self) -> crate::niri::AliasClasses {
         crate::niri::AliasClasses::new(self.root_of.clone(), self.members_of.clone())
     }
@@ -152,16 +151,9 @@ pub(super) fn build_alias_info(
     }
 }
 
-/// Which locals name one another's storage, for a consumer holding a value per
-/// local — [`crate::niri`]'s frame.
-///
-/// Only the copies a body writes. The type-based
-/// [`same_pointee_reference_edges`] the value graph also seeds from say two
-/// same-shaped references *may* meet; a frame value denotes an object the frame
-/// itself built in this body, which another name reaches only by flowing from
-/// the binding that built it — a copy, an aggregate that stores it, or a call
-/// it is passed to, and the latter two disqualify the local outright
-/// ([`crate::niri::AliasClasses`], `aggregate_safe_locals`).
+/// Which locals name one another's storage, for [`crate::niri`]'s frame. Only
+/// the copies a body writes: a frame value is an object that body built, and an
+/// aggregate storing it or a call taking it disqualifies the local outright.
 pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups {
     let mut edges = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {

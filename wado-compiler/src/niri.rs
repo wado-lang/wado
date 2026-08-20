@@ -270,8 +270,6 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
-    /// The locals that may name one another's storage. A write through one
-    /// member lands in what every member names.
     alias_classes: AliasClasses,
     /// What this frame folded a node to, read back by
     /// [`Interpreter::expr_to_lattice`]. Load-bearing on both backends: the
@@ -464,8 +462,6 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
-    /// Record which locals may name one another's storage, so a write through
-    /// any of them drops what the frame holds for all of them.
     pub fn record_alias_classes(&mut self, classes: AliasClasses) {
         self.frame.alias_classes = classes;
     }
@@ -604,10 +600,8 @@ impl<'a> Interpreter<'a> {
         self.frame.env.insert(index, Lattice::NonConst);
     }
 
-    /// Drop what the frame knows about the storage `place` writes into, and
-    /// about every local that may name the same storage: `let r = b; r.f = v`
-    /// writes `b`'s object, and the frame tracks values per local, not per
-    /// object.
+    /// Drop what the frame holds for the storage `place` writes into and for
+    /// every local naming it: the frame tracks values per local, not per object.
     pub fn invalidate_place(&mut self, body: &Body, place: Operand) {
         let Some((root, _)) = self.frame_place_of(body, place) else {
             // A place no frame root names — through a call result, a global —
@@ -624,8 +618,7 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-/// Locals that may name one another's storage, held once per class rather than
-/// once per member.
+/// Locals that may name one another's storage.
 #[derive(Default, Clone, Debug)]
 pub struct AliasClasses {
     root_of: IndexMap<u32, u32>,

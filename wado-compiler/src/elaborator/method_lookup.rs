@@ -745,9 +745,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_head(base_type_id)
                     .expect("a newtype names a declaration");
-                // The newtype's own arguments: a base may re-shape them
-                // (`type Pair<T> = List<[T, i32]>`), and the method is named
-                // after the type the `impl` header writes.
+                // Not the base's: a base may re-shape them, and the `impl`
+                // header names the newtype.
                 let own_type_args = (!newtype_args.is_empty()).then(|| newtype_args.clone());
                 let head = name.clone();
                 (

@@ -2476,8 +2476,6 @@ impl FqTypeName {
         &self.args
     }
 
-    /// The `&` / `&mut` this name stands behind, outermost first. Empty for a
-    /// value name.
     #[must_use]
     pub fn references(&self) -> &[RefKind] {
         &self.reference
