@@ -1,6 +1,6 @@
-// A field no write anywhere reaches holds one value for the program's run, so
-// a binding out of it aliases that storage rather than copying it — reached
-// through a `&mut self` receiver like through any other handle.
+// A call writing one field leaves a read of another undisturbed, so the read
+// aliases the field's storage rather than copying it — through a `&mut self`
+// receiver like through any other handle.
 struct Reader {
     buf: List<i32>,
     pos: i32,

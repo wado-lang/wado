@@ -1,7 +1,6 @@
-//! What a call writes into its receiver, as fields of the receiver's type. A
-//! caller reading one field while a call writes another needs no defensive
-//! copy; a callee this analysis cannot read through still writes everything,
-//! which is the answer every call used to get.
+//! What a call writes into its receiver, as fields of the receiver's type, so
+//! a read of one field survives a call that writes another. A callee this
+//! analysis cannot read through writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::place::{Names, Place, Resolver, ReturnPaths, Selector, could_write_through};
@@ -82,8 +81,8 @@ pub fn compute_mod_ref(
     returns_owned: &FuncKeySet,
 ) -> ModRef {
     let type_table = flat.type_table.borrow();
-    // A body this scan reads. One without — an import, a builtin — reaches the
-    // caller only through what it is handed, which the call site answers for.
+    // A body this scan reads. One without reaches the caller only through what
+    // it is handed, which the call site answers for.
     let mut defined = FuncKeySet::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
@@ -134,7 +133,6 @@ fn scan(
     returns_owned: &FuncKeySet,
 ) -> (Writes, Vec<(ModuleSource, String)>) {
     if func.body.is_none() {
-        // No body to read: whatever it does, it does where nothing can see.
         return (
             Writes {
                 opaque: true,
@@ -166,12 +164,9 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    /// Record a write to what `names` stands for.
-    ///
-    /// A path through fields names them; one that stops at a root names the
-    /// whole of what the caller lent, or nothing where the root is a local of
-    /// this function's own. A place the resolver could not follow is every
-    /// write at once.
+    /// Record a write to what `names` stands for. A path stopping at a root
+    /// names the whole of what the caller lent, or nothing where the root is
+    /// this function's own.
     fn record(&mut self, names: &Names) {
         match names {
             Names::Place(place) => {
@@ -215,8 +210,7 @@ impl TirRefVisitor for Walker<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            // Re-seating a reference writes no storage; what it now names the
-            // resolver already recorded.
+            // Re-seating a reference writes no storage.
             TirExprKind::Assign { target, .. } => {
                 let reseats = matches!(target.kind, TirExprKind::Local { .. })
                     && super::place::is_reference(target.type_id, self.type_table);
@@ -226,8 +220,7 @@ impl TirRefVisitor for Walker<'_> {
                 }
             }
             // The callee's own writes arrive through the call graph; what it
-            // writes through a handle it is given lands in the place this body
-            // lent it.
+            // writes through a handle lands in the place this body lent it.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
                 if known {
@@ -246,9 +239,8 @@ impl TirRefVisitor for Walker<'_> {
                     }
                 }
             }
-            // A closure reaches this function's storage only through what it is
-            // handed: a capture of a place is a borrow taken where the closure
-            // was built, in the body that lent the storage.
+            // A closure reaches this storage only through what it is handed: a
+            // captured place is a borrow marked where the closure was built.
             TirExprKind::IndirectCall { args, .. } => {
                 for arg in args
                     .iter()

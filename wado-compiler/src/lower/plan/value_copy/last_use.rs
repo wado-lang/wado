@@ -306,8 +306,7 @@ fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
 }
 
 /// The root each reference local is taken over, so a read through it is asked
-/// about the place that owns it. Derived from the one resolver, which knows
-/// every binder that hands out a name.
+/// about the place that owns it. Derived from the one resolver.
 #[derive(Default)]
 pub struct RefTargets {
     roots: IndexMap<u32, u32>,
@@ -456,9 +455,8 @@ struct ShareCollector<'a> {
 
 impl ShareCollector<'_> {
     /// Record what a `&mut self` call writes into its receiver: the fields the
-    /// callee names, re-rooted at the receiver's own path. A callee this
-    /// analysis cannot read writes the whole receiver, which is the answer
-    /// every such call used to get.
+    /// callee names, re-rooted at the receiver's own path. One this analysis
+    /// cannot read writes the whole receiver.
     fn record_call_mutation(&mut self, func: &crate::tir::FunctionRef, receiver: &TirExpr) {
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
         let owner = self.type_table.peel_refs(receiver.type_id);
@@ -513,8 +511,6 @@ impl ShareCollector<'_> {
             let mut roots: IndexSet<u32> = IndexSet::default();
             collect_local_roots(place, &mut roots);
             for r in roots {
-                // The root as the resolver names it: a write rooted at a
-                // reference and a read rooted at its referent must meet.
                 let path = match self.resolver.binding(r) {
                     Some(Names::Place(place)) => place,
                     _ => AccessPath::local(r),
@@ -542,8 +538,6 @@ impl ShareCollector<'_> {
     /// The access path a binding's value projects: a direct place, or a
     /// receiver-aliasing accessor call whose receiver / first arg is a place.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
-        // A fresh value shares nothing, and a place the resolver cannot follow
-        // is one this analysis will not share either.
         if let Names::Place(p) = self.resolver.names(value) {
             return Some(p);
         }

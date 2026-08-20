@@ -278,6 +278,17 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
+What a call writes is read off the callee rather than assumed: `modref.rs`
+collects each function's writes as fields of the type carrying them and closes
+them over the call graph, so a read of one field survives a `&mut self` call
+that writes another. A callee with no body reaches only the `&mut` arguments it
+is handed; anything this cannot name writes everything.
+
+Every analysis here asks one resolver what an expression names (`place.rs`).
+Its answer separates a value of its own from a place the walk cannot follow, so
+a shape no arm covers costs an elision rather than becoming a write nobody
+records.
+
 ### Which helpers exist
 
 `$value_copy$T` is additive synthesis, so the helpers are created in `plan` —

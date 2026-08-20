@@ -1,8 +1,6 @@
-//! What an expression names, for every analysis in this module that asks.
-//!
-//! One resolver, and an answer that keeps "a value of its own" apart from "a
-//! place this walk cannot follow": an analysis may ignore the first and must
-//! not ignore the second.
+//! What an expression names, for every analysis in this module that asks. The
+//! answer keeps "a value of its own" apart from "a place this walk cannot
+//! follow": an analysis may ignore the first and must not ignore the second.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use crate::hashmap::IndexMap;
@@ -15,8 +13,8 @@ use crate::tir_visitor::TirRefVisitor;
 /// One step of a projection.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Selector {
-    /// A struct field, with the type carrying it — the identity an
-    /// interprocedural consumer keys on, a local one ignores.
+    /// A struct field, with the type carrying it: what an interprocedural
+    /// consumer keys on.
     Field {
         owner: TypeId,
         index: u32,
@@ -66,10 +64,9 @@ pub enum Names {
     Unknown,
 }
 
-/// What each local stands for, so a read or a write through a name reaches the
-/// storage it was taken over. Covers every binder that hands out a name: a
-/// borrow, a receiver-projecting accessor's result, a destructuring pattern,
-/// and a reference re-seated by assignment.
+/// What each local stands for. Covers every binder that hands out a name: a
+/// borrow, an accessor's result, a destructuring pattern, a re-seated
+/// reference.
 #[derive(Default)]
 pub struct Bindings {
     map: IndexMap<u32, Names>,
@@ -85,9 +82,8 @@ impl Bindings {
     }
 }
 
-/// Which projection of its receiver each accessor returns: `list[i]` returns
-/// the element, `self.get()` the field it borrows. A call with no entry returns
-/// storage this walk cannot place.
+/// Which projection of its receiver each accessor returns. A call with no
+/// entry returns storage this walk cannot place.
 pub type ReturnPaths = FuncKeyMap<Vec<Selector>>;
 
 /// The projection each function returns out of its first parameter, for the
@@ -127,8 +123,7 @@ pub fn compute_return_paths(
     paths
 }
 
-/// The single place a body returns, or `None` where it returns more than one
-/// shape — which is a shape this walk does not place.
+/// The single place a body returns, or `None` where it returns more than one.
 struct ReturnedPlace<'r, 'a> {
     resolver: &'r Resolver<'a>,
     names: Option<Names>,
@@ -153,9 +148,8 @@ pub struct Resolver<'a> {
     type_table: &'a TypeTable,
     /// What each accessor returns out of its receiver.
     return_paths: &'a ReturnPaths,
-    /// Callees whose result is storage of its own. Every other call hands back
-    /// something this walk cannot place — a projection of an argument it does
-    /// not follow — and says so.
+    /// Callees whose result is storage of its own. Every other hands back
+    /// something this walk will not guess at.
     returns_owned: &'a FuncKeySet,
     /// Parameters naming storage the caller lent, by the type lent. The only
     /// roots a write in this body reaches out through.
@@ -165,8 +159,7 @@ pub struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     /// Walk `func` once, recording what each of its locals stands for. A
-    /// parameter of reference shape stands for storage its caller lent, which
-    /// is the one root a write can reach out through.
+    /// reference parameter stands for storage its caller lent.
     #[must_use]
     pub fn new(
         func: &TirFunction,
@@ -236,14 +229,11 @@ impl<'a> Resolver<'a> {
                 ..
             } => self.project(inner, Selector::Variant(*case_index)),
             TirExprKind::Index { expr: inner, .. } => self.project(inner, Selector::Index),
-            // A cast converts nothing about storage, and a borrow names what it
-            // is taken over.
             TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: inner,
             } => self.names(inner),
-            // Reading through a reference reaches what the reference names.
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -251,10 +241,6 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
-            // A call naming storage names its receiver's, at the projection it
-            // returns. One that builds its result names a value of its own; one
-            // that hands back storage this walk cannot place names nothing it
-            // can answer for.
             TirExprKind::Call { func, args, .. } => {
                 match self.return_paths.get(&func.module_source, &func.name) {
                     Some(selectors) => match args.first().map(|r| self.names(&r.expr)) {
@@ -271,7 +257,6 @@ impl<'a> Resolver<'a> {
                     None => Names::Unknown,
                 }
             }
-            // Shapes that build their own storage.
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }
             | TirExprKind::BoolLiteral(_)
@@ -293,7 +278,6 @@ impl<'a> Resolver<'a> {
                 place.selectors.push(selector);
                 Names::Place(place)
             }
-            // A projection out of a fresh value is storage of that value's own.
             Names::Value => Names::Value,
             Names::Unknown => Names::Unknown,
         }
@@ -302,7 +286,7 @@ impl<'a> Resolver<'a> {
     fn bind_pattern(&mut self, pattern: &TirPattern, base: &Names) {
         match pattern {
             TirPattern::Binding { local_index, .. } => {
-                self.bindings.set(*local_index, base.clone())
+                self.bindings.set(*local_index, base.clone());
             }
             TirPattern::Struct {
                 struct_type,
@@ -326,8 +310,6 @@ impl<'a> Resolver<'a> {
                     self.bind_pattern(&field.pattern, &nested);
                 }
             }
-            // An element, a payload and an alternative name storage inside the
-            // place destructured, which that place answers for.
             TirPattern::Tuple(sub, _)
             | TirPattern::Variant { bindings: sub, .. }
             | TirPattern::Or(sub) => {
@@ -344,9 +326,8 @@ impl<'a> Resolver<'a> {
     }
 }
 
-/// The root local a place expression is taken over, where the shape says so.
-/// Types are not needed to answer, so a consumer wanting only the root need not
-/// build a resolver.
+/// The root local a place expression is taken over. Needs no types, so a
+/// consumer wanting only the root needs no resolver.
 #[must_use]
 pub fn place_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
@@ -395,8 +376,6 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                // A binding of reference shape stands for what its value names;
-                // one out of a value owns storage of its own.
                 let names = if is_reference(value.type_id, self.resolver.type_table) {
                     self.resolver.names(value)
                 } else {
@@ -415,7 +394,6 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            // Re-seating a reference makes it stand for what it now names.
             TirExprKind::Assign { target, value } => {
                 if let TirExprKind::Local { index, .. } = &target.kind
                     && is_reference(target.type_id, self.resolver.type_table)
