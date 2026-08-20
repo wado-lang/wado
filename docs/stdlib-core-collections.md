@@ -4,8 +4,9 @@
 # core:collections
 
 Collection types: `TreeMap<K, V>` and `TreeSet<T>`, both iterating in
-insertion order. `TreeMap` has no `insert` method — write `map[key] = value`
-or build one from a `{ key: value, ... }` literal. `TreeSet` has `insert`.
+insertion order. Write `map[key] = value` to overwrite, or build a map from
+a `{ key: value, ... }` literal; `try_insert` / `get_or_insert` insert only
+when the key is absent. `TreeSet` has `insert`.
 
 ## Synopsis
 
@@ -48,6 +49,26 @@ Returns the number of key-value pairs in the map.
 #### `pub fn is_empty(&self) -> bool`
 
 Returns true if the map contains no elements.
+
+#### `pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value]`
+
+Inserts only if `key` is absent, and reports whether it was inserted.
+
+The losing insert leaves the existing value untouched — the difference
+from `map[key] = value`, which is last-wins. That makes this the
+duplicate-key primitive: one lookup answers both "is it there" and
+"put it there if not".
+
+Mirrors `TreeSet::insert`, which reports the same way.
+
+#### `pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value]`
+
+The value already stored under `key`, or `value` inserted and returned.
+
+The upsert shape of TC39's `Map.prototype.getOrInsert`. It answers with
+the value rather than with whether it inserted; when the caller needs
+that instead — duplicate detection — `try_insert` reports it and copies
+nothing back out.
 
 #### `pub fn contains_key(&self, key: K) -> bool`
 

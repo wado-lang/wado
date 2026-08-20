@@ -1,7 +1,8 @@
 #![stdlib("core:collections")]
 //! Collection types: `TreeMap<K, V>` and `TreeSet<T>`, both iterating in
-//! insertion order. `TreeMap` has no `insert` method — write `map[key] = value`
-//! or build one from a `{ key: value, ... }` literal. `TreeSet` has `insert`.
+//! insertion order. Write `map[key] = value` to overwrite, or build a map from
+//! a `{ key: value, ... }` literal; `try_insert` / `get_or_insert` insert only
+//! when the key is absent. `TreeSet` has `insert`.
 
 
 use {
@@ -193,29 +194,62 @@ impl<K: Ord> TreeMap<K, V> {
         return Option::Some(new_idx);
     }
 
+    /// Appends `key` as a new entry. The caller has established the key is
+    /// absent, so this never overwrites; a previously removed key re-enters at
+    /// the end, which is what keeps iteration in insertion order.
+    fn append_entry(&mut self, key: K, value: V) with stores[key, value] {
+        let new_index = self.entries.len();
+        self.entries.push(TreeMapEntry {
+            key,
+            value,
+            deleted: false,
+        });
+        // insert_node will update the index if the key already exists in tree
+        self.root = self.insert_node(self.root, key, new_index);
+        self.size = self.size + 1;
+    }
+
     /// Inserts a key-value pair into the map.
     /// If the key already exists, updates the value (preserving insertion order).
     /// If the key was previously removed, re-inserts it at the end.
     fn insert(&mut self, key: K, value: V) with stores[key, value] {
-        // Check if key already exists (non-deleted)
         let existing_index = self.find_index(key);
         if existing_index >= 0 {
-            // Update existing entry (preserves insertion order)
             self.entries[existing_index].value = value;
             return;
         }
+        self.append_entry(key, value);
+    }
 
-        // New key or reinsertion: always append to end for insertion-order semantics
-        let new_index = self.entries.len();
-        let entry = TreeMapEntry {
-            key,
-            value,
-            deleted: false,
-        };
-        self.entries.push(entry);
-        // insert_node will update the index if the key already exists in tree
-        self.root = self.insert_node(self.root, key, new_index);
-        self.size = self.size + 1;
+    /// Inserts only if `key` is absent, and reports whether it was inserted.
+    ///
+    /// The losing insert leaves the existing value untouched — the difference
+    /// from `map[key] = value`, which is last-wins. That makes this the
+    /// duplicate-key primitive: one lookup answers both "is it there" and
+    /// "put it there if not".
+    ///
+    /// Mirrors `TreeSet::insert`, which reports the same way.
+    pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value] {
+        if self.find_index(key) >= 0 {
+            return false;
+        }
+        self.append_entry(key, value);
+        return true;
+    }
+
+    /// The value already stored under `key`, or `value` inserted and returned.
+    ///
+    /// The upsert shape of TC39's `Map.prototype.getOrInsert`. It answers with
+    /// the value rather than with whether it inserted; when the caller needs
+    /// that instead — duplicate detection — `try_insert` reports it and copies
+    /// nothing back out.
+    pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value] {
+        let existing_index = self.find_index(key);
+        if existing_index >= 0 {
+            return self.entries[existing_index].value;
+        }
+        self.append_entry(key, value);
+        return value;
     }
 
     /// Returns true if the map contains a value for the specified key.
@@ -612,9 +646,7 @@ impl<T: Ord> TreeSet<T> {
     ///
     /// Returns true if the value was newly inserted, false if it was already present.
     pub fn insert(&mut self, value: T) -> bool with stores[value] {
-        let before = self.inner.len();
-        self.inner.insert(value, ());
-        return self.inner.len() > before;
+        return self.inner.try_insert(value, ());
     }
 
     /// Returns true if the set contains the given value.
