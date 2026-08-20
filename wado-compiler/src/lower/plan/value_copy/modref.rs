@@ -76,9 +76,12 @@ impl ModRef {
 /// Collect each body's own writes, then close over the call graph: a caller
 /// writes what its callees write.
 #[must_use]
-pub fn compute_mod_ref(flat: &FlatPackage, returns_owned: &FuncKeySet) -> ModRef {
+pub fn compute_mod_ref(
+    flat: &FlatPackage,
+    return_paths: &ReturnPaths,
+    returns_owned: &FuncKeySet,
+) -> ModRef {
     let type_table = flat.type_table.borrow();
-    let return_paths = super::place::compute_return_paths(flat, &type_table, returns_owned);
     // A body this scan reads. One without — an import, a builtin — reaches the
     // caller only through what it is handed, which the call site answers for.
     let mut defined = FuncKeySet::default();
@@ -92,7 +95,7 @@ pub fn compute_mod_ref(flat: &FlatPackage, returns_owned: &FuncKeySet) -> ModRef
     let mut direct: Vec<(ModuleSource, String, Writes, Vec<(ModuleSource, String)>)> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees) = scan(&func, &type_table, &defined, &return_paths, returns_owned);
+        let (writes, callees) = scan(&func, &type_table, &defined, return_paths, returns_owned);
         direct.push((
             func.module_source.clone(),
             func.name.clone(),

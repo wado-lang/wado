@@ -92,6 +92,9 @@ pub struct ValueCopyPlan {
     /// What each call writes into its receiver, as fields of the receiver's
     /// type: a read of one field is undisturbed by a call that writes another.
     pub mod_ref: modref::ModRef,
+    /// The projection each accessor returns out of its receiver, so a name
+    /// taken from one resolves to the storage it stands for.
+    pub return_paths: place::ReturnPaths,
     pub returns_owned: FuncKeySet,
     /// Functions whose every returned value is owned *or* a projection of the
     /// receiver / first parameter (`build(&self) -> List { return *self }`). A
@@ -157,11 +160,14 @@ pub fn plan(
         );
     }
     let returns_receiver_alias = ownership::compute_receiver_alias(flat);
+    let return_paths =
+        place::compute_return_paths(flat, &flat.type_table.borrow(), &conventions.returns_owned);
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
         helpers,
-        mod_ref: modref::compute_mod_ref(flat, &conventions.returns_owned),
+        mod_ref: modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned),
+        return_paths,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         stored_params,

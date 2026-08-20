@@ -197,6 +197,12 @@ impl<'a> Resolver<'a> {
         resolver
     }
 
+    /// What `local` stands for, where a binder gave it a name.
+    #[must_use]
+    pub fn binding(&self, local: u32) -> Option<Names> {
+        self.bindings.get(local).cloned()
+    }
+
     /// The type `local` was lent, for a parameter naming a caller's storage.
     #[must_use]
     pub fn lent(&self, local: u32) -> Option<TypeId> {
@@ -335,6 +341,25 @@ impl<'a> Resolver<'a> {
             | TirPattern::ConstantValue { .. }
             | TirPattern::Range { .. } => {}
         }
+    }
+}
+
+/// The root local a place expression is taken over, where the shape says so.
+/// Types are not needed to answer, so a consumer wanting only the root need not
+/// build a resolver.
+#[must_use]
+pub fn place_root(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        } => place_root(inner),
+        _ => None,
     }
 }
 

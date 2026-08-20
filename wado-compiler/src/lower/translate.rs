@@ -406,7 +406,12 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
         let ref_targets = if needs_copy_analysis {
-            value_copy::last_use::compute_ref_targets(func)
+            value_copy::last_use::compute_ref_targets(
+                func,
+                &base.type_table.borrow(),
+                &base.value_copy.return_paths,
+                &base.value_copy.returns_owned,
+            )
         } else {
             value_copy::last_use::RefTargets::default()
         };
@@ -417,9 +422,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.mut_receiver_methods,
                 &base.value_copy.ref_receiver_methods,
                 &base.value_copy.returns_receiver_alias,
-                &ref_targets,
                 &base.value_copy.mod_ref,
                 &base.type_table.borrow(),
+                &base.value_copy.return_paths,
+                &base.value_copy.returns_owned,
             )
         } else {
             IndexSet::default()
