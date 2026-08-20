@@ -128,6 +128,15 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
     /// [`infer_hole`].
     pub(super) infer_holes: infer_hole::InferHoleTable,
+    /// Bound failures already reported, keyed by what the message states. A
+    /// defaulted method type parameter is both enforced at its call site and
+    /// swept as a hole at finalize, and one failure is one diagnostic.
+    pub(super) reported_bound_failures: crate::hashmap::IndexSet<(
+        crate::tir::TypeId,
+        crate::defs::DefId,
+        String,
+        crate::token::Span,
+    )>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {

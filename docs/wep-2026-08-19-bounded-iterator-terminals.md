@@ -166,8 +166,10 @@ worked, none specific to iterators. Each is pinned by a fixture under
   chain.
 - Three carrier traits enter the prelude namespace (`Sum`, `Product`,
   `Extremum`) as `internal`.
-- `T: Add` does not pin `Add::Output = T`; the `reduce` body does, so a type
-  whose `Add` widens is rejected inside `sum_iter` rather than at the bound.
+- An operator trait's bound now requires `Output` to be the implementing type,
+  since a generic body's `a + b` is typed as `Self`. A widening `Mul` (`Cm * Cm
+  -> Area`) keeps working where it is written out, and no longer reaches a
+  `T: Mul` bound — which had accepted it and miscompiled.
 - `fold` keeps its place. The `fold` call sites left in the tree are `fold`'s own
   tests and closure demonstrations, not sums written the long way.
 

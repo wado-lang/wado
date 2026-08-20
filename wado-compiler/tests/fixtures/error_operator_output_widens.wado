@@ -1,0 +1,32 @@
+// A generic body's `a * b` is typed as `Self`, so an operator trait whose
+// `Output` widens does not satisfy a bound on it. Writing the multiplication
+// out keeps working — only the bound refuses.
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+impl Mul for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Cm) -> Area {
+        return Area { v: self.v * rhs.v };
+    }
+}
+
+fn squared<T: Mul>(x: T) -> T {
+    return x * x;
+}
+
+export fn run() {
+    let a = Cm { v: 2 };
+    let area: Area = a * a;
+    assert area.v == 4;
+    assert squared(a).v == 4;
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Mul'" }

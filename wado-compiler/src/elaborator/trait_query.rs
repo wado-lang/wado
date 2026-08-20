@@ -593,7 +593,63 @@ impl TypeSystem {
 
         ctx.trait_check_stack.borrow_mut().pop();
 
-        result
+        result && self.operator_output_is_self(type_id, &trait_name, trait_)
+    }
+
+    /// Whether an operator trait's `Output` is the implementing type. A bound
+    /// on one is what a generic body's `a + b` dispatches through, and that
+    /// expression is typed as `Self` — a widening `Output` would reach codegen
+    /// as the wrong type, so the bound does not hold for it.
+    fn operator_output_is_self(&self, type_id: TypeId, trait_name: &str, trait_: DefId) -> bool {
+        if !self.is_prelude_operator_trait(trait_name, trait_) {
+            return true;
+        }
+        // An unresolvable projection is a compiler-supplied impl (`i32 + i32`)
+        // or a type with no impl at all, neither of which widens.
+        self.type_table
+            .borrow_mut()
+            .resolve_trait_assoc_type_of_instance(type_id, &trait_, "Output")
+            .is_none_or(|output| output == type_id)
+    }
+
+    /// [`Self::operator_output_is_self`] for a blanket's bound, which names its
+    /// receiver as an impl key rather than a `TypeId`. The header's `Output`
+    /// binding and its target are spelled from one module, so their heads
+    /// compare directly.
+    fn receiver_operator_output_is_self(
+        &self,
+        type_key: &Receiver,
+        bound: &super::trait_env::BlanketBound,
+    ) -> bool {
+        let Some(trait_) = bound.decl_ref else {
+            return true;
+        };
+        if !self.is_prelude_operator_trait(&bound.name, trait_) {
+            return true;
+        }
+        let trait_env = self.trait_env.clone();
+        trait_env
+            .entries_by_receiver_vec(type_key)
+            .into_iter()
+            .filter_map(|entry| trait_env.impl_headers.get(&entry))
+            .filter(|header| header.trait_ref == Some(trait_))
+            .all(|header| {
+                let target = super::trait_env::get_type_name_static(&header.ty);
+                header
+                    .associated_types
+                    .iter()
+                    .filter(|b| b.name == "Output")
+                    .all(|b| super::trait_env::get_type_name_static(&b.ty) == target)
+            })
+    }
+
+    /// Whether `trait_` is one of the prelude's arithmetic operator traits —
+    /// the ones whose `Output` a generic body's operator assumes is `Self`.
+    fn is_prelude_operator_trait(&self, trait_name: &str, trait_: DefId) -> bool {
+        matches!(
+            trait_name,
+            "Add" | "Sub" | "Mul" | "Div" | "Rem" | "BitAnd" | "BitOr" | "BitXor"
+        ) && self.is_prelude_trait_decl(Some(trait_))
     }
 
     /// Explain *why* `type_id` does not implement `trait_name` by walking the
@@ -1360,7 +1416,7 @@ impl TypeSystem {
         &self,
         scope: &TypeLookup,
         type_key: &Receiver,
-        trait_name: &str,
+        bound: &super::trait_env::BlanketBound,
     ) -> bool {
         let Receiver::Type(fq) = type_key else {
             return false;
@@ -1372,25 +1428,23 @@ impl TypeSystem {
             return false;
         }
         matches!(
-            self.classify_on_bound_trait(scope, trait_name),
+            self.classify_on_bound_trait(scope, &bound.name),
             Some(OnBoundTrait::Eq | OnBoundTrait::Ord)
-        ) || (self.is_prelude_trait(scope, trait_name)
-            && primitive_name_has_arithmetic(name, trait_name))
+        ) || (self.is_prelude_trait_decl(bound.decl_ref)
+            && primitive_name_has_arithmetic(name, &bound.name))
     }
 
-    /// Whether `trait_name` binds to the prelude's own declaration in `scope`.
-    /// The operator traits carry no compiler item, so a same-named user trait
-    /// is told apart by the module its declaration comes from.
-    fn is_prelude_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
-        let prelude = {
-            let tt = self.type_table.borrow();
-            let Some(module) = tt.compiler_items().trait_module(CompilerItem::Ord) else {
-                return false;
-            };
-            module.clone()
+    /// Whether the bound's reference site reached the prelude's own trait
+    /// declaration. The operator traits carry no compiler item, so a same-named
+    /// user trait is told apart by the module its declaration comes from — read
+    /// off the bound's own resolution, since the blanket's module, not the
+    /// asking one, is where the name was written.
+    fn is_prelude_trait_decl(&self, decl: Option<DefId>) -> bool {
+        let tt = self.type_table.borrow();
+        let Some(prelude) = tt.compiler_items().trait_module(CompilerItem::Ord) else {
+            return false;
         };
-        self.scoped_trait_decl_module(scope, trait_name)
-            .is_none_or(|module| *module == prelude)
+        decl.is_none_or(|def| self.resolutions.defs().module(def) == prelude)
     }
 
     fn blanket_trait_impl_applies(
@@ -1422,9 +1476,10 @@ impl TypeSystem {
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
-                    || self.primitive_satisfies_builtin_trait(scope, type_key, &bound.name)
+                    || self.primitive_satisfies_builtin_trait(scope, type_key, bound)
                     || bound.decl_ref.is_some_and(|trait_| {
                         self.find_trait_impl_for_type(ctx, scope, type_key, trait_)
+                            && self.receiver_operator_output_is_self(type_key, bound)
                     })
             });
             if bounds_satisfied {
@@ -2014,6 +2069,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         if !self.check_and_register_bound(type_arg, trait_) {
+            if !self.reported_bound_failures.insert((
+                type_arg,
+                trait_,
+                param_name.to_string(),
+                span,
+            )) {
+                return;
+            }
             let type_name = self.tysys.type_id_to_string(type_arg);
             let reason = self.tysys.trait_unimpl_reason_chain(
                 &self.annotate_ctx,

@@ -1,0 +1,23 @@
+// A user trait spelled like an operator trait shadows the name here, but the
+// prelude's `impl<T: Add> Sum for T` resolved its bound where the blanket is
+// written. Reading that bound's spelling back in the asking module made `i32`
+// stop satisfying it, and `sum()` stopped compiling.
+use { println } from "core:cli";
+
+trait Add {
+    fn plus_one(&self) -> i32;
+}
+
+trait Mul {
+    fn twice(&self) -> i32;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3];
+    assert xs.iter_value().sum() matches { Some(v) && v == 6 };
+    assert xs.iter_value().product() matches { Some(v) && v == 6 };
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
