@@ -32,7 +32,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             in_progress: IndexSet::default(),
         });
 
-        let cond_type = self.resolve_expr(&assert_stmt.condition, ctx, None);
+        let cond_type = self.resolve_condition_expr(&assert_stmt.condition, ctx);
 
         // Reserved here because `reify_assert` allocates `__cond` at this
         // point too, and the two walks must stay in local-index lockstep.
