@@ -5,8 +5,9 @@
 //! value into it needs no defensive copy. Two escape channels per parameter —
 //! `ret` (flows into a returned value) and `side` (written to lasting storage) —
 //! reach a least fixpoint; a parameter is confined iff neither is raised. The
-//! analysis over-approximates escape: unmodelled constructs and functions with a
-//! closure / handler / `resume` body mark every parameter escaping.
+//! analysis over-approximates escape: unmodelled constructs, a closure's
+//! captures, and functions with a handler / `resume` body mark the parameters
+//! they reach escaping.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
@@ -219,6 +220,16 @@ impl TirRefVisitor for SinkWalker<'_> {
                 let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.raise_call_sides(func, &operands);
             }
+            // The body indexes locals of its own, so this walk cannot read it.
+            // Its captures are what it reaches here, and the closure may hand
+            // any of them to storage outliving the call.
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    let t = self.taint.get(&c.outer_index).cloned().unwrap_or_default();
+                    raise(&t, &mut self.pe.side);
+                }
+                return;
+            }
             _ => {}
         }
         self.walk_expr(expr);
@@ -313,6 +324,9 @@ impl TirRefVisitor for BindingWalker {
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind
         {
@@ -368,6 +382,13 @@ fn taint_of(ctx: &Ctx, taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
             let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
             call_result_taint(ctx, taint, func, &operands)
         }
+        // The body's `Local` indices are the closure's own; the captures name
+        // what it carries out of this frame.
+        TirExprKind::Closure { captures, .. } => {
+            captures.iter().fold(Taint::default(), |acc, c| {
+                union(acc, taint.get(&c.outer_index).cloned().unwrap_or_default())
+            })
+        }
         _ => subtree_local_taint(taint, expr),
     }
 }
@@ -403,6 +424,14 @@ fn subtree_local_taint(taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
     }
     impl TirRefVisitor for Walk<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Closure { captures, .. } = &expr.kind {
+                for c in captures {
+                    if let Some(t) = self.taint.get(&c.outer_index) {
+                        self.acc.extend(t.iter().copied());
+                    }
+                }
+                return;
+            }
             if let TirExprKind::Local { index, .. } = &expr.kind
                 && let Some(t) = self.taint.get(index)
             {
@@ -419,6 +448,9 @@ fn subtree_local_taint(taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
     w.acc
 }
 
+/// A handler or `resume` re-enters this frame, so nothing it holds can be
+/// tracked. A closure does not: it reaches the frame only through its captures,
+/// which every walk here raises wholesale, leaving the other parameters decided.
 fn body_defies_model(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,
@@ -427,9 +459,7 @@ fn body_defies_model(body: &TirBlock) -> bool {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if matches!(
                 expr.kind,
-                TirExprKind::Closure { .. }
-                    | TirExprKind::WithHandler { .. }
-                    | TirExprKind::Resume { .. }
+                TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. }
             ) {
                 self.found = true;
             }

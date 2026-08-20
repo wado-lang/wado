@@ -9,6 +9,8 @@
 mod common;
 
 mod box_local_unwrap;
+mod closure_confinement;
+mod closure_frame_moves;
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;
@@ -29,6 +31,7 @@ mod guest_effect_import;
 mod kiln_generator_world;
 mod kiln_loader_redirect;
 mod kiln_options;
+mod labeled_block_exits;
 mod lexer_recovery;
 mod lib_async_task_return_free;
 mod lib_sync_lift_post_return;
@@ -38,6 +41,7 @@ mod match_place_scrutinee;
 mod niri;
 mod redundant_bce;
 mod remarks;
+mod scalar_read_move;
 mod semantics;
 mod serde_positional;
 mod stores_check_sem;

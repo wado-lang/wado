@@ -1,0 +1,60 @@
+// A value-producing labeled block — what an expression-position `if let` or `?`
+// lowers to — is a break target. Its `break`s resume right after the block, so
+// what is live there is what a read inside it must respect.
+
+struct S {
+    items: List<i32>,
+}
+
+fn some(n: i32) -> Option<i32> {
+    if n > 0 {
+        return Option::Some(n);
+    }
+    return null;
+}
+
+test "a value live past the block is copied by a read inside it" {
+    let src = S { items: [1] };
+    let mut out: List<S> = [];
+    let n = if let Some(v) = some(1) {
+        out.push(src);
+        v;
+    } else {
+        0;
+    };
+    out.push(src);
+    out[0].items.push(2);
+    assert n == 1;
+    assert out[0].items.len() == 2;
+    assert out[1].items.len() == 1;
+}
+
+test "a value dead past the block moves out of it" {
+    let src = S { items: [1] };
+    let mut out: List<S> = [];
+    let n = if let Some(v) = some(1) {
+        out.push(src);
+        v;
+    } else {
+        0;
+    };
+    out[0].items.push(2);
+    assert n == 1;
+    assert out[0].items.len() == 2;
+}
+
+test "a block reached through the else arm keeps the same rule" {
+    let src = S { items: [1] };
+    let mut out: List<S> = [];
+    let n = if let Some(v) = some(0) {
+        v;
+    } else {
+        out.push(src);
+        0;
+    };
+    out.push(src);
+    out[1].items.push(2);
+    assert n == 0;
+    assert out[0].items.len() == 1;
+    assert out[1].items.len() == 2;
+}

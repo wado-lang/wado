@@ -2,8 +2,8 @@
 //! every body and unioned with the source-level pass's `moved_local_spans`. One
 //! backward liveness pass yields both facts a move needs: every read is a final
 //! use, and nothing the value derives from is still live at the binding. A
-//! function containing a closure, handler or `resume` is skipped, either being
-//! able to re-observe.
+//! function containing a handler or `resume` is skipped, either being able to
+//! re-observe; a closure only costs its captures.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -762,6 +762,15 @@ impl ShareCollector<'_> {
                 self.walk_block(block);
             }
             TirExprKind::GlobalVarSet { value, .. } => self.walk_value(value),
+            // The body is in the closure's own local namespace; its captures are
+            // the outer locals it reaches, and it may read or write any of them
+            // after this point.
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    self.mark_local_mutated(c.outer_index);
+                    self.consumed.insert(c.outer_index);
+                }
+            }
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut children);
@@ -803,9 +812,11 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
-/// Closures / effect handlers / `resume` / an unexpanded variadic for-of defeat
-/// the single-observation model. Detected up front so the whole function falls
-/// back to copies.
+/// Effect handlers, `resume` and an unexpanded variadic for-of defeat the
+/// single-observation model — each can re-enter this frame and read a local a
+/// second time. Detected up front so the whole function falls back to copies.
+/// A closure does not: it reaches this frame only through its `captures`, which
+/// every walk here treats as escaped, so the rest of the body still decides.
 fn has_unsupported_form(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,
@@ -820,9 +831,7 @@ fn has_unsupported_form(body: &TirBlock) -> bool {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if matches!(
                 expr.kind,
-                TirExprKind::Closure { .. }
-                    | TirExprKind::WithHandler { .. }
-                    | TirExprKind::Resume { .. }
+                TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. }
             ) {
                 self.found = true;
             }
@@ -1291,6 +1300,11 @@ impl Analyzer<'_> {
                 }
                 None => self.scan_place_uses(place, conflict),
             },
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    conflict.insert(c.outer_index);
+                }
+            }
             _ => {
                 let mut kids: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut kids);
@@ -1540,8 +1554,19 @@ impl Analyzer<'_> {
                 *live = union(&then_live, &else_live);
                 self.walk_expr(condition, live, record);
             }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            TirExprKind::Block(block) => self.walk_block(block, live, record),
+            // A value-producing labeled block is a break target like the
+            // statement form: without its entry on the stack every `break` it
+            // holds resolves to "every local live", and one such block — the
+            // shape an expression-position `if let` lowers to — costs its whole
+            // function every move.
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.exits.push(Exit {
+                    label: Some(label.clone()),
+                    live: live.clone(),
+                });
                 self.walk_block(block, live, record);
+                self.exits.pop();
             }
             // Calls classify each `&`/`&mut` argument as a transient borrow (see
             // `walk_call_arg`); the callee / receiver is an ordinary read.
@@ -1622,6 +1647,30 @@ impl Analyzer<'_> {
                 for e in elements.iter().rev() {
                     self.walk_expr(e, live, record);
                 }
+            }
+            // A closure's body indexes locals of its own, so this walk cannot
+            // read it, and the call may land at any later point. What it names
+            // here is its captures: each escapes wholesale, which keeps it live
+            // and unmovable while the rest of the body still decides.
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    live.insert(c.outer_index);
+                    if record {
+                        self.mark_escaped(c.outer_index, None);
+                    }
+                }
+            }
+            // A projection to a scalar hands back bits, not the aggregate's
+            // storage. It keeps the root live — so a read placed *after* it
+            // still sees the root live and is not mistaken for a final use —
+            // but it consumes nothing itself, leaving a later whole-value
+            // move as the root's last use (`if c.pos == 0 { … } else { out.push(c) }`).
+            TirExprKind::FieldAccess { .. }
+            | TirExprKind::VariantPayload { .. }
+            | TirExprKind::Index { .. }
+                if is_scalar_type(expr.type_id, self.type_table) =>
+            {
+                self.borrow_read(expr, live, record);
             }
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();
@@ -1794,6 +1843,16 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
         }
         _ => {}
     }
+}
+
+/// A value of this type is its own bits: reading one out of an aggregate
+/// produces something independent of that aggregate's storage.
+fn is_scalar_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_primitive_like(type_id)
+        || matches!(
+            type_table.get(type_id),
+            ResolvedType::Enum { .. } | ResolvedType::Unit
+        )
 }
 
 /// A `&T` / `&mut T` parameter borrows the caller's storage, so it is never a
