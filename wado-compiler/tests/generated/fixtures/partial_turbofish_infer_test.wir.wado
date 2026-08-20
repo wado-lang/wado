@@ -3096,7 +3096,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     let __qm_v_2: ref "core:cbor//CborSeqSerializer";
     let __qm_e_8: ref "core:serde//SerializeError";
     let end: i32;
-    let ref_val: ref "core:prelude/types.wado//Box<i32>";
+    let ref_val: i32;
     let v_34: i64;
     let __sroa_ser_buf: ref "core:prelude//List<u8>";
     let __sroa___iter_5_repr: ref Array<i32>;
@@ -3111,10 +3111,10 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
     b366: block {
         l367: loop {
             break_if b366 __sroa___iter_5_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(__sroa___iter_5_repr, __sroa___iter_5_index) };
+            ref_val = builtin::array_get_value<i32>(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
             __sroa_ser_buf = __qm_v_2.buf;
-            v_34 = builtin::i64_extend_i32_s(ref_val.value);
+            v_34 = builtin::i64_extend_i32_s(ref_val);
             if v_34 >= 0_i64 {
                 "core:cbor/write_head"(__sroa_ser_buf, 0, v_34);
             } else {

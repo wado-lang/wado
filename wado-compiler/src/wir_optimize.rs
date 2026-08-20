@@ -36,7 +36,7 @@ use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
 use elide_local::elide_write_only_locals;
-use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments};
+use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments, unwrap_box_locals};
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
@@ -134,6 +134,9 @@ fn optimize_scoped(
     // `StructGet` use of a `Box<T>` local `lower::plan::boxing` minted.
     wir_pass(scope, "elide_adjacent_box_locals", module, profiler, |m| {
         elide_adjacent_box_locals(m);
+    });
+    wir_pass(scope, "unwrap_box_locals", module, profiler, |m| {
+        unwrap_box_locals(m);
     });
 
     // Phase 3: forward constant struct fields. List literals arrive as

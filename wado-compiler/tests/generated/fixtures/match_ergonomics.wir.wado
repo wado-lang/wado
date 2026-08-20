@@ -267,9 +267,7 @@ fn "match_ergonomics.wado/match_ergonomics_if_let"() with Stdout {
         "wasi/future-drop-readable:transmission-cli"(handle_25);
     } else {
     }
-    let __match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
-    __match_scrut_1 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-    if __match_scrut_1.discriminant == 1 {
+    block {
         block {
             rx_126 = builtin::i32_wrap_i64(local.tee packed_125("wasi/stream-new"()));
             tx_127 = builtin::i32_wrap_i64(packed_125 >> 32_i64);
@@ -277,8 +275,7 @@ fn "match_ergonomics.wado/match_ergonomics_if_let"() with Stdout {
             "core:cli/write_to_stream"(tx_127, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("got none"), used: 8 }, 1);
             "wasi/future-drop-readable:transmission-cli"(handle_110);
         };
-    } else {
-    }
+    };
     let __match_scrut_2: ref "core:prelude/types.wado//Option<i32>";
     __match_scrut_2 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     is_none = ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_2);

@@ -278,6 +278,10 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
+A `match` over a place needs no temp of its own: the arms project the place
+where it lies and each binding asks the fold for itself. Only a non-place
+scrutinee is hoisted for `labeled_block_fusion`, whose temp the fold defends.
+
 ### Which helpers exist
 
 `$value_copy$T` is additive synthesis, so the helpers are created in `plan` —
@@ -401,6 +405,8 @@ Verified against the tree.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
       deep-copying the error it propagates.
 - [x] A place repointed after a binding read it releases that binding.
+- [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
+      counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
       kind).
