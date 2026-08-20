@@ -3422,7 +3422,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let condition_source = crate::unparse::unparse_expr_simple(&assert_stmt.condition);
+        let condition_source = crate::unparse::unparse_expr_source(&assert_stmt.condition);
         parts.push(TirTemplatePart::Literal(format!(
             "\ncondition: {condition_source}\n"
         )));

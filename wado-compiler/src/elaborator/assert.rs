@@ -163,7 +163,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // locals in the same order and is the side that emits their bindings.
         if conditional {
             ctx.add_local(cap_name.clone(), type_id, true, None);
-            ctx.add_local(seen_local_name(&cap_name), crate::tir::TypeTable::BOOL, true, None);
+            ctx.add_local(
+                seen_local_name(&cap_name),
+                crate::tir::TypeTable::BOOL,
+                true,
+                None,
+            );
         } else {
             ctx.add_local(cap_name, type_id, false, None);
         }
@@ -295,8 +300,7 @@ impl CaptureScanner {
                 self.scan(&b.left);
                 // The right operand of `&&` / `||` runs only when the left one
                 // does not decide the result.
-                self.conditional =
-                    conditional || matches!(b.op, BinaryOp::And | BinaryOp::Or);
+                self.conditional = conditional || matches!(b.op, BinaryOp::And | BinaryOp::Or);
                 self.scan(&b.right);
                 self.conditional = conditional;
                 if !is_root {

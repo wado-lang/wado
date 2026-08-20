@@ -1,5 +1,6 @@
-// Test: Assert output when condition involves if expression
-// If expressions in binary conditions: only surrounding identifiers are extracted
+// Test: Assert output when condition involves if expression.
+// The `condition:` line quotes the source; an `if` operand is not itself a
+// capture slot, so only the surrounding identifiers are extracted.
 
 export fn run() with Stdout {
     let x = 3;
@@ -10,5 +11,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "trapped": true,
-    "stderr_contains": ["condition: if x > 0 { x * 2;", "limit: 10"]
+    "stderr_contains": ["condition: if x > 0 { x * 2 } else { 0 } > limit", "limit: 10"]
 }

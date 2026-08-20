@@ -89,6 +89,9 @@ that failed:
 | `(if a > 0 { a } else { b }) == 5` | `if a > 0 { a; } else { b; } == 5` |
 | `l: { break l: a == 5 }`           | `<labeled-block>`                  |
 
+The formatter's own `Unparser` prints all three correctly, so the fix is to
+render the line with it.
+
 ## Decision
 
 Three rules, in priority order. Each is a property of the whole `assert`
@@ -147,15 +150,15 @@ than a paragraph that goes stale.
 
 ### The `condition:` line is source, not a paraphrase
 
-It is rendered by the formatter's `Unparser`, not by `unparse_expr_simple`.
-The formatter already keeps the parentheses the simple path drops — it prints
-`(0..<5).contains(&i)` and `(a + b) * 3` intact — so the fix is to expose its
-expression path, not to write a third renderer. `unparse_expr_simple`'s
-readability trade stays right for its own callers.
+It is rendered by the formatter's `Unparser`, not by `unparse_expr_simple`,
+whose readability trade stays right for its own callers. A block-carrying
+condition renders over several lines there, so the line breaks collapse to
+single spaces — the quote is one line, and a string literal's escapes are
+already 2-char sequences at that point, so no literal text folds.
 
-The formatter drops one paren the parse needs, on an `if` used as an operand
-(`(if a > 0 { a } else { b }) == 5`). That is a formatter round-trip bug and is
-fixed there, which fixes the `condition:` line with it.
+The formatter drops the parentheses around an `if` used as an operand. That is
+not a fidelity loss: both spellings parse to the same tree and evaluate the
+same, which is why the formatter drops them.
 
 ## Roadmap
 
@@ -175,9 +178,8 @@ missing line, and a missing line outranks a misrendered one.
       `TupleLiteral`, `StructLiteral`, `Matches` (the scrutinee), and the index
       operand of `Index`. Each is a recursion the scanner does not do; no new
       machinery.
-- [ ] **Condition-line fidelity.** Render the line with the formatter's
-      `Unparser`, and fix the `if`-as-operand paren the formatter itself drops,
-      with both as format fixtures.
+- [x] **Condition-line fidelity.** The line is rendered with the formatter's
+      `Unparser`.
 - [ ] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. Skipped today on
       a stale `Inspect` claim; the work is to capture them and fix whatever the
       claim was really standing in for.

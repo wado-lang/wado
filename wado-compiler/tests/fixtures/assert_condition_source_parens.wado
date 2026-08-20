@@ -1,0 +1,16 @@
+// Test: the `condition:` line quotes the condition as source. A receiver that
+// binds looser than `.` keeps its parentheses, which the readability-first
+// unparse used for other diagnostics drops.
+
+export fn run() with Stdout {
+    let i = 7;
+    assert (0..<5).contains(&i), "out of range";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: (0..<5).contains(&i)"
+    ]
+}
