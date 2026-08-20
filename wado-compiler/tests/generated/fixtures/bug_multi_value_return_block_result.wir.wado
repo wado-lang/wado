@@ -173,8 +173,8 @@ fn "bug_multi_value_return_block_result.wado/find"(m, k) {
 }
 
 fn "bug_multi_value_return_block_result.wado/resolve"(a, b, sel) {
-    let n: ref "core:prelude/types.wado//Box<i32>";
-    let t: ref "core:prelude/types.wado//Box<i32>";
+    let n: i32;
+    let t: i32;
     let i_7: i32;
     let i_10: i32;
     let __v1_13: i32;
@@ -184,9 +184,9 @@ fn "bug_multi_value_return_block_result.wado/resolve"(a, b, sel) {
     let __local_4_23: ref "core:prelude/string.wado//String";
     let __local_5_24: ref "core:prelude/format.wado//Formatter";
     if ref.test "bug_multi_value_return_block_result.wado//Sel::A"(sel) {
-        n = struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "bug_multi_value_return_block_result.wado//Sel::A"(sel).payload_0 };
+        n = ref.cast "bug_multi_value_return_block_result.wado//Sel::A"(sel).payload_0;
         block {
-            i_7 = "bug_multi_value_return_block_result.wado/find"(a, n.value);
+            i_7 = "bug_multi_value_return_block_result.wado/find"(a, n);
             if i_7 >= 0 {
                 return 0, __v1_13 = a.used; if @unlikely(i_7 >= __v1_13) {
                     cold_path;
@@ -197,9 +197,9 @@ fn "bug_multi_value_return_block_result.wado/resolve"(a, b, sel) {
             return 1, 0;
         };
     } else {
-        t = struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "bug_multi_value_return_block_result.wado//Sel::B"(sel).payload_0 };
+        t = ref.cast "bug_multi_value_return_block_result.wado//Sel::B"(sel).payload_0;
         block {
-            i_10 = "bug_multi_value_return_block_result.wado/find"(b, t.value);
+            i_10 = "bug_multi_value_return_block_result.wado/find"(b, t);
             if i_10 >= 0 {
                 return 0, __v1_21 = b.used; if @unlikely(i_10 >= __v1_21) {
                     cold_path;

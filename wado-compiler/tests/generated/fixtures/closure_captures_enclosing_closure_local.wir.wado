@@ -211,9 +211,8 @@ global global:core:prelude/primitive.wado::__const_obj_26: ref null "core:prelud
 
 fn "closure_captures_enclosing_closure_local.wado/count_matching"(rows, probe) {
     let total: i32;
-    let want: i32;
     let end_11: i32;
-    let ref_val: ref "core:prelude/types.wado//Box<i32>";
+    let ref_val: i32;
     let self_16: ref "core:prelude/slice.wado//SliceRefIter<i32>";
     let pred: ref struct;
     let self_18: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>>";
@@ -228,10 +227,9 @@ fn "closure_captures_enclosing_closure_local.wado/count_matching"(rows, probe) {
     b0: block {
         l1: loop {
             break_if b0 __sroa___iter_3_index >= end_11;
-            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(__sroa___iter_3_repr, __sroa___iter_3_index) };
+            ref_val = builtin::array_get_value<i32>(__sroa___iter_3_repr, __sroa___iter_3_index);
             __sroa___iter_3_index = __sroa___iter_3_index + 1;
-            want = ref_val.value;
-            total = total + self_16 = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: probe.repr, index: 0, end: probe.used }; pred = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_captures_enclosing_closure_local.wado//__Closure_2" { __capture_0: want }, func: ref.func "closure/closure_captures_enclosing_closure_local.wado/__closure_wrapper_1" }; self_18 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: self_16.repr, index: 0, end: self_16.end }), pred: pred }; n = 0; b2: block {
+            total = total + self_16 = struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: probe.repr, index: 0, end: probe.used }; pred = struct.new "canonical//CanonicalClosure_0" { env: struct.new "closure_captures_enclosing_closure_local.wado//__Closure_2" { __capture_0: ref_val }, func: ref.func "closure/closure_captures_enclosing_closure_local.wado/__closure_wrapper_1" }; self_18 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceRefIter<i32>>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//SliceRefIter<i32>" { repr: self_16.repr, index: 0, end: self_16.end }), pred: pred }; n = 0; b2: block {
                 l3: loop {
                     __local_2 = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceRefIter<i32>>^core:prelude/traits.wado/Iterator::next"(self_18);
                     if ref.is_null(__local_2) == 0 {
@@ -1020,7 +1018,7 @@ fn "closure_captures_enclosing_closure_local.wado/closure_captures_enclosing_clo
     let want: i32;
     let self_3: ref "core:prelude/slice.wado//SliceRefIter<i32>";
     let list: ref "core:prelude//List<i32>";
-    let ref_val: ref "core:prelude/types.wado//Box<i32>";
+    let ref_val: i32;
     let _licm_end_13: i32;
     let _licm_repr_14: ref Array<i32>;
     want = r.value;
@@ -1032,9 +1030,9 @@ fn "closure_captures_enclosing_closure_local.wado/closure_captures_enclosing_clo
         b94: block {
             l95: loop {
                 break_if b94 self_3.index >= _licm_end_13;
-                ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(_licm_repr_14, self_3.index) };
+                ref_val = builtin::array_get_value<i32>(_licm_repr_14, self_3.index);
                 self_3.index = self_3.index + 1;
-                if ref_val.value == want {
+                if ref_val == want {
                     break __inline_core_prelude_slice_wado_SliceRefIter_i32__core_prelude_traits_wado_Iterator__any___Closure_1_0: 1;
                 }
                 continue l95;

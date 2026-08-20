@@ -176,7 +176,7 @@ fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let end: i32;
-    let ref_val: ref "core:prelude/types.wado//Box<i32>";
+    let ref_val: i32;
     let new_used: i32;
     let start_41: i32;
     let handle: i32;
@@ -201,9 +201,9 @@ fn "licm_reloadable_hoist_alias.wado/run"() with Stdout {
     b4: block {
         l5: loop {
             break_if b4 __sroa___iter_5_index >= end;
-            ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(__sroa___iter_5_repr, __sroa___iter_5_index) };
+            ref_val = builtin::array_get_value<i32>(__sroa___iter_5_repr, __sroa___iter_5_index);
             __sroa___iter_5_index = __sroa___iter_5_index + 1;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(s, __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(ref_val.value, __local_8); new_used = __local_7.used + 1; if @unlikely(new_used > builtin::array_len(__local_7.repr)) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(s, __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(ref_val, __local_8); new_used = __local_7.used + 1; if @unlikely(new_used > builtin::array_len(__local_7.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used);
             }; start_41 = __local_7.used; __local_7.used = new_used; builtin::array_set_u8(__local_7.repr, start_41, 32); __local_7);

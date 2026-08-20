@@ -58,7 +58,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // string-literal expressions (string-literal pattern guards) the
     // data section must register.
     {
-        let pattern = pattern::Lowering::new(&flat);
+        let pattern = pattern::Lowering::new(&flat, &value_copy.returns_receiver_alias);
         let type_table = flat.type_table.borrow();
         for func_rc in &flat.functions {
             pattern.lower_function(&mut func_rc.borrow_mut(), &type_table);

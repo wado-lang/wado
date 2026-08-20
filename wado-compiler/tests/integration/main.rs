@@ -8,7 +8,12 @@
 #[path = "../common.rs"]
 mod common;
 
+<<<<<<< HEAD
 mod assert_capture_plan;
+||||||| 3de0afb35
+=======
+mod box_local_unwrap;
+>>>>>>> origin/main
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;
@@ -34,6 +39,7 @@ mod lib_async_task_return_free;
 mod lib_sync_lift_post_return;
 mod literals;
 mod loader_canonical_identity;
+mod match_place_scrutinee;
 mod niri;
 mod redundant_bce;
 mod remarks;
