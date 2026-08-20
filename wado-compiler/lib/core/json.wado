@@ -732,9 +732,21 @@ impl Serializer for PrettyJsonSerializer {
     }
 }
 
+/// Default nesting limit for `from_bytes` / `from_string`.
+///
+/// Both the typed path and `skip_value` recurse per container, so an unbounded
+/// input exhausts the Wasm stack and traps — unrecoverable, unlike an error.
+/// Measured trap depths are ~2,200 (typed) and ~6,600 (skip); 100 leaves ample
+/// headroom while covering realistic documents.
+pub global DEFAULT_MAX_DEPTH: i32 = 100;
+
 pub struct JsonDeserializer {
     pub input: ByteSlice,
     pub pos: i32,
+    /// Containers currently open. `enter_container` / `leave_container` keep it
+    /// in step with the recursion.
+    pub depth: i32 = 0,
+    pub max_depth: i32 = DEFAULT_MAX_DEPTH,
 }
 
 /// A scanned JSON number token: sign, leading digits, the digit counts
@@ -910,6 +922,25 @@ struct StringRunScan {
 }
 
 impl JsonDeserializer {
+    /// Counts one container in. Errors past `max_depth` so a deeply nested
+    /// input returns a `DeserializeError` instead of exhausting the stack.
+    internal fn enter_container(&mut self) -> Result<(), DeserializeError> {
+        self.depth += 1;
+        if self.depth > self.max_depth {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::malformed(
+                `exceeded maximum nesting depth of ${self.max_depth}`,
+                self.pos as i64,
+            ));
+        }
+        return Result::Ok(());
+    }
+
+    internal fn leave_container(&mut self) {
+        assert self.depth > 0;
+        self.depth -= 1;
+    }
+
     pub fn peek(&self) -> i32 {
         if self.pos >= self.input.len() {
             return -1;
@@ -1592,6 +1623,86 @@ impl JsonDeserializer {
         return Result::Err(DeserializeError::malformed("expected 'null'", self.pos as i64));
     }
 
+    /// Skips array elements up to and including the closing `]`. The caller
+    /// has consumed the `[` and counted the container in.
+    fn skip_array_body(&mut self) -> Result<(), DeserializeError> {
+        self.skip_whitespace();
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == ']' as i32 {
+            self.pos += 1;
+            return Result::Ok(());
+        }
+        loop {
+            self.skip_value()?;
+            self.skip_whitespace();
+            if self.pos >= self.input.len() {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::eof(self.pos as i64));
+            }
+            match self.input.get_unchecked(self.pos) as u8 as char {
+                ']' => {
+                    self.pos += 1;
+                    return Result::Ok(());
+                },
+                ',' => {
+                    self.pos += 1;
+                },
+                _ => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::malformed(
+                        "expected ',' or ']'",
+                        self.pos as i64,
+                    ));
+                },
+            }
+        }
+        unreachable();
+    }
+
+    /// Skips object members up to and including the closing `}`. The caller
+    /// has consumed the `{` and counted the container in.
+    fn skip_object_body(&mut self) -> Result<(), DeserializeError> {
+        self.skip_whitespace();
+        if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '}' as i32 {
+            self.pos += 1;
+            return Result::Ok(());
+        }
+        loop {
+            self.skip_whitespace();
+            if self.pos >= self.input.len() || self.input.get_unchecked(self.pos) as i32 != '"' as i32 {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::malformed(
+                    "expected string key",
+                    self.pos as i64,
+                ));
+            }
+            self.skip_string()?;
+            self.expect_char(':' as i32)?;
+            self.skip_value()?;
+            self.skip_whitespace();
+            if self.pos >= self.input.len() {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::eof(self.pos as i64));
+            }
+            match self.input.get_unchecked(self.pos) as u8 as char {
+                '}' => {
+                    self.pos += 1;
+                    return Result::Ok(());
+                },
+                ',' => {
+                    self.pos += 1;
+                },
+                _ => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::malformed(
+                        "expected ',' or '}'",
+                        self.pos as i64,
+                    ));
+                },
+            }
+        }
+        unreachable();
+    }
+
     /// Skips the next JSON value without allocating.
     pub fn skip_value(&mut self) -> Result<(), DeserializeError> {
         self.skip_whitespace();
@@ -1615,77 +1726,17 @@ impl JsonDeserializer {
             },
             '[' => {
                 self.pos += 1;
-                self.skip_whitespace();
-                if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == ']' as i32 {
-                    self.pos += 1;
-                    return Result::Ok(());
-                }
-                loop {
-                    self.skip_value()?;
-                    self.skip_whitespace();
-                    if self.pos >= self.input.len() {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::eof(self.pos as i64));
-                    }
-                    match self.input.get_unchecked(self.pos) as u8 as char {
-                        ']' => {
-                            self.pos += 1;
-                            return Result::Ok(());
-                        },
-                        ',' => {
-                            self.pos += 1;
-                        },
-                        _ => {
-                            builtin::cold_path();
-                            return Result::Err(DeserializeError::malformed(
-                                "expected ',' or ']'",
-                                self.pos as i64,
-                            ));
-                        },
-                    }
-                }
+                self.enter_container()?;
+                self.skip_array_body()?;
+                self.leave_container();
+                return Result::Ok(());
             },
             '{' => {
                 self.pos += 1;
-                self.skip_whitespace();
-                if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '}' as i32 {
-                    self.pos += 1;
-                    return Result::Ok(());
-                }
-                loop {
-                    self.skip_whitespace();
-                    if self.pos >= self.input.len() || self.input.get_unchecked(self.pos) as i32 != '"' as i32 {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::malformed(
-                            "expected string key",
-                            self.pos as i64,
-                        ));
-                    }
-                    self.skip_string()?;
-                    self.expect_char(':' as i32)?;
-                    self.skip_value()?;
-                    self.skip_whitespace();
-                    if self.pos >= self.input.len() {
-                        builtin::cold_path();
-                        return Result::Err(DeserializeError::eof(self.pos as i64));
-                    }
-                    match self.input.get_unchecked(self.pos) as u8 as char {
-                        '}' => {
-                            self.pos += 1;
-                            return Result::Ok(());
-                        },
-                        ',' => {
-                            self.pos += 1;
-                        },
-                        _ => {
-                            builtin::cold_path();
-                            return Result::Err(DeserializeError::malformed(
-                                "expected ',' or '}'",
-                                self.pos as i64,
-                            ));
-                        },
-                    }
-                }
+                self.enter_container()?;
+                self.skip_object_body()?;
+                self.leave_container();
+                return Result::Ok(());
             },
             '-' => {
                 self.skip_number();
@@ -1764,7 +1815,9 @@ impl DeserializeSeq for JsonSeqAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char(']' as i32);
+        self.de.expect_char(']' as i32)?;
+        self.de.leave_container();
+        return Result::Ok(());
     }
 }
 
@@ -1801,7 +1854,9 @@ impl DeserializeMap for JsonMapAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char('}' as i32);
+        self.de.expect_char('}' as i32)?;
+        self.de.leave_container();
+        return Result::Ok(());
     }
 }
 
@@ -1882,7 +1937,9 @@ impl DeserializeStruct for JsonStructAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char('}' as i32);
+        self.de.expect_char('}' as i32)?;
+        self.de.leave_container();
+        return Result::Ok(());
     }
 }
 
@@ -1910,7 +1967,8 @@ impl DeserializeVariant for JsonVariantAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         if self.is_object {
-            return self.de.expect_char('}' as i32);
+            self.de.expect_char('}' as i32)?;
+            self.de.leave_container();
         }
         return Result::Ok(());
     }
@@ -2088,6 +2146,7 @@ impl Deserializer for JsonDeserializer {
 
     fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> with stores[self] {
         self.expect_char('[' as i32)?;
+        self.enter_container()?;
         return Result::Ok(JsonSeqAccess {
             de: self,
             first: true,
@@ -2096,6 +2155,7 @@ impl Deserializer for JsonDeserializer {
 
     fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
+        self.enter_container()?;
         return Result::Ok(JsonMapAccess {
             de: self,
             first: true,
@@ -2108,6 +2168,7 @@ impl Deserializer for JsonDeserializer {
         num_fields: i32,
     ) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
         self.expect_char('{' as i32)?;
+        self.enter_container()?;
         return Result::Ok(JsonStructAccess {
             de: self,
             first: true,
@@ -2136,6 +2197,7 @@ impl Deserializer for JsonDeserializer {
             },
             '{' => {
                 self.pos += 1;
+                self.enter_container()?;
                 let name = self.read_json_string()?;
                 self.expect_char(':' as i32)?;
                 return Result::Ok(JsonVariantAccess {
@@ -2486,8 +2548,11 @@ pub fn to_string_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = n
 
 /// Deserializes a value from a JSON string. Convenience wrapper over
 /// `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
-pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
-    return from_bytes(input);
+pub fn from_string<T: Deserialize>(
+    input: String,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
+    return from_bytes(input, max_depth);
 }
 
 /// Deserializes a value from UTF-8 JSON bytes — the primary entry point.
@@ -2497,10 +2562,17 @@ pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>
 /// input bytes in place; every string token is validated as UTF-8 (RFC 8259
 /// §8.1) — skipped and key tokens included — reporting invalid bytes as
 /// `MalformedInput`.
-pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError> {
+///
+/// `max_depth` bounds container nesting; input past it is `MalformedInput`
+/// rather than a stack-exhausting trap. Raise it only for a trusted source.
+pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
+    input: S,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
     let mut de = JsonDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
+        max_depth,
     };
     let v = T::deserialize(&mut de)?;
     de.skip_whitespace();

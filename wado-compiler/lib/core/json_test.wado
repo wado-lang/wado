@@ -22,7 +22,9 @@ use {
     from_bytes,
     write_escaped_string,
     PrettyJsonSerializer,
+    DEFAULT_MAX_DEPTH,
 } from "core:json";
+use { Value } from "core:value";
 
 fn assert_bytes_eq_string<B: AsByteSlice>(bytes: &B, s: &String) {
     let actual = bytes.as_byte_slice();
@@ -773,4 +775,73 @@ test "Option<()> collapses, as it does in Rust serde" {
 
     let back: Result<Option<()>, DeserializeError> = from_string(some_unit);
     assert back matches { Ok(None) };
+}
+
+fn nested(depth: i32, open: char, close: char) -> String {
+    let mut s = String::new();
+    for let mut i = 0; i < depth; i += 1 {
+        s.push(open);
+    }
+    for let mut i = 0; i < depth; i += 1 {
+        s.push(close);
+    }
+    return s;
+}
+
+test "nesting up to the default depth limit is accepted" {
+    let text = nested(DEFAULT_MAX_DEPTH, '[', ']');
+    let r: Result<Value, DeserializeError> = from_string(text);
+    assert r matches { Ok(_) };
+}
+
+test "nesting past the default depth limit is an error, not a trap" {
+    let text = nested(DEFAULT_MAX_DEPTH + 1, '[', ']');
+    let r: Result<Value, DeserializeError> = from_string(text);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "an object nests as deeply as an array" {
+    let mut deep = String::new();
+    for let mut i = 0; i < DEFAULT_MAX_DEPTH + 1; i += 1 {
+        deep.push_str(&`\{"a":`);
+    }
+    deep.push('1');
+    for let mut i = 0; i < DEFAULT_MAX_DEPTH + 1; i += 1 {
+        deep.push('}');
+    }
+    let r: Result<Value, DeserializeError> = from_string(deep);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "a skipped unknown member is depth-limited too" {
+    // The struct has no `unknown` field, so the payload is only ever skipped —
+    // `skip_value` must count depth just as the typed path does.
+    let mut text = String::new();
+    text.push_str(&`\{"unknown":`);
+    text.push_str(&nested(DEFAULT_MAX_DEPTH + 1, '[', ']'));
+    text.push_str(&`,"a":"x"\}`);
+    let r: Result<Utf8Rec, DeserializeError> = from_string(text);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "max_depth is caller-tunable" {
+    let text = nested(8, '[', ']');
+    assert from_bytes::<Value, String>(text, 8) matches { Ok(_) };
+    assert from_bytes::<Value, String>(text, 7) matches { Err(_) };
+    assert from_string::<Value>(text, 7) matches { Err(_) };
+}
+
+test "sibling containers do not accumulate depth" {
+    // Depth is nesting, not a running total: 200 siblings at depth 2 are fine.
+    let mut text = String::new();
+    text.push('[');
+    for let mut i = 0; i < 200; i += 1 {
+        if i > 0 {
+            text.push(',');
+        }
+        text.push_str(&"[1]");
+    }
+    text.push(']');
+    let r: Result<Value, DeserializeError> = from_string(text);
+    assert r matches { Ok(_) };
 }

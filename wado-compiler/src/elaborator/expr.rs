@@ -670,14 +670,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify resolves the fallback-module global / `FuncRef` its own
         // way; project the type only. This default-expr path is never an
         // assignment target, so no place is recorded.
-        if let Some((ty, _)) = self.tysys.signatures.global(fallback, name) {
+        let (owner, name) = self.declaring_module_of_ident(name, fallback);
+        if let Some((ty, _)) = self.tysys.signatures.global(&owner, &name) {
             return Some(ty);
         }
-        let sig = self.tysys.signatures.function_sig(fallback, name)?.clone();
+        let sig = self.tysys.signatures.function_sig(&owner, &name)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
         )
+    }
+
+    /// Where `name` is *declared*, as seen from `fallback`. The signature
+    /// tables are keyed by declaring module, so a name `fallback` only
+    /// imported (`use { X } from ...`) is not found under `fallback` itself —
+    /// the import is followed to the module that wrote it, which is what the
+    /// declaration-scope rule for defaults asks for (WEP: Default Arguments,
+    /// "Name Resolution: Declaration Scope").
+    fn declaring_module_of_ident(
+        &self,
+        name: &str,
+        fallback: &ModuleSource,
+    ) -> (ModuleSource, String) {
+        if self.tysys.signatures.global(fallback, name).is_some()
+            || self.tysys.signatures.function_sig(fallback, name).is_some()
+        {
+            return (fallback.clone(), name.to_string());
+        }
+        match self.symbols.imported(fallback, name) {
+            Some(symbol) => (symbol.module.clone(), symbol.name.clone()),
+            None => (fallback.clone(), name.to_string()),
+        }
     }
 
     /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly

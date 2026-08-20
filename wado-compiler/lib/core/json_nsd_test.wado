@@ -363,3 +363,34 @@ test "deserialize trailing data" {
     let r: Result<i32, DeserializeError> = from_string("42 extra");
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
 }
+
+variant Tree {
+    Leaf(i32),
+    Node(List<Tree>),
+}
+impl Deserialize for Tree;
+
+fn nested_tree(depth: i32) -> String {
+    // NSD variant payload form: [disc, payload]. `Node` wraps a one-element list.
+    let mut s = String::new();
+    for let mut i = 0; i < depth; i += 1 {
+        s.push_str(&"[1,[");
+    }
+    s.push_str(&"[0,7]");
+    for let mut i = 0; i < depth; i += 1 {
+        s.push_str(&"]]");
+    }
+    return s;
+}
+
+test "a recursive type is depth-limited, not stack-exhausting" {
+    // The input drives the recursion here, so NSD needs the same bound as the
+    // self-describing form.
+    let r: Result<Tree, DeserializeError> = from_string(nested_tree(400));
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
+}
+
+test "nesting within max_depth still parses" {
+    let r: Result<Tree, DeserializeError> = from_string(nested_tree(3));
+    assert r matches { Ok(_) };
+}
