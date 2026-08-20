@@ -1,0 +1,27 @@
+// A shadowed box parameter, captured by a closure. Inlining renumbered the
+// locals but left the callee's address-taken annotation behind, and the frame
+// held a constant for a box a call could write through, so both reads folded
+// to the value the parameter came in with.
+fn read_back(mut n: i32) -> i32 {
+    let r = &mut n;
+    *r = 5;
+    let read = || {
+        return n;
+    };
+    return read();
+}
+
+fn write_through(mut n: i32) -> i32 {
+    let r = &mut n;
+    let mut bump = || {
+        n = n + 1;
+    };
+    bump();
+    bump();
+    return *r;
+}
+
+test "a closure names an address-taken parameter" {
+    assert read_back(0) == 5;
+    assert write_through(10) == 12;
+}

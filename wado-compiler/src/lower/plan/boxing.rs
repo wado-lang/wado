@@ -548,9 +548,17 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
             remap_locals_in_block(body, remap);
         }
         TirExprKind::Resume { value } => remap_locals_in_expr(value, remap),
-        // Closure bodies and Capture references live in the closure's own
-        // local-index scope; do not descend.
-        TirExprKind::Closure { .. } | TirExprKind::Capture { .. } => {}
+        // A closure body and a `Capture` read live in the closure's own
+        // local-index scope, so neither is descended into. What a capture
+        // *names* is a local here, which shadowing a parameter moves.
+        TirExprKind::Closure { captures, .. } => {
+            for capture in captures {
+                if let Some(&new_idx) = remap.get(&capture.outer_index) {
+                    capture.outer_index = new_idx;
+                }
+            }
+        }
+        TirExprKind::Capture { .. } => {}
         // Leaf nodes with no sub-expressions or no Local references.
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
