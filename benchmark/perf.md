@@ -63,10 +63,10 @@ all of them.
 
 gale-gen, best of 3 back to back, `-O2`:
 
-| | globalization on (default) | `WADO_SKIP_PASS=nir/const_object_globalization` |
-| --- | --- | --- |
-| before | 154.09 KB/s | 155.32 KB/s |
-| after | 143.72 KB/s | 150.58 KB/s |
+|        | globalization on (default) | `WADO_SKIP_PASS=nir/const_object_globalization` |
+| ------ | -------------------------- | ----------------------------------------------- |
+| before | 154.09 KB/s                | 155.32 KB/s                                     |
+| after  | 143.72 KB/s                | 150.58 KB/s                                     |
 
 Slower either way, and the WIR is otherwise identical — same 1657 functions,
 same 122933 lines, only the literal expressions replaced. Fixing the copy moves
