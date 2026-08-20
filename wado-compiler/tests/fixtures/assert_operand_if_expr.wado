@@ -1,0 +1,20 @@
+// Test: an `if` used as an operand renders its own value and the condition
+// that chose the branch. The branch bodies are not descended into — the value
+// of the branch taken is what the `if`'s own capture shows.
+
+export fn run() with Stdout {
+    let a = 1;
+    let b = 2;
+    assert (if a > 0 { a } else { b }) == 5, "branch value";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: if a > 0 { a } else { b } == 5",
+        "a: 1",
+        "a > 0: true",
+        "if a > 0 { a } else { b }: 1"
+    ]
+}

@@ -9,7 +9,7 @@
 //! anything below a `&&` / `||` — is written where the operand sits, so the
 //! short-circuit still decides whether it runs.
 
-use crate::ast::{AssertStmt, AstId, BinaryOp, Expr, Literal, UnaryOp};
+use crate::ast::{self, AssertStmt, AstId, BinaryOp, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::TypeId;
@@ -418,12 +418,69 @@ impl CaptureScanner {
                 // template is rendered.
                 self.add(unparse_expr_source(expr), ast_id);
             }
-            // Every other `Expr` variant is treated as an opaque leaf:
-            // it is neither captured nor recursed into. This keeps
-            // the failure-message shape predictable on shapes (`If`,
-            // `Match`, `Closure`, …) whose children are not
-            // meaningfully inspectable in isolation.
-            _ => {}
+            Expr::If(i) => {
+                // The branch bodies are not descended into: the value of the
+                // branch the run took is what this node's own capture renders.
+                // Its condition decided which one, so that is scanned.
+                match &i.condition {
+                    ast::Condition::Expr(cond) => self.scan(cond),
+                    ast::Condition::LetChain { elements, .. } => {
+                        for element in elements {
+                            match element {
+                                ast::ConditionElement::Let { expr, .. } => self.scan(expr),
+                                ast::ConditionElement::Expr(cond) => self.scan(cond),
+                            }
+                        }
+                    }
+                }
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            Expr::Match(m) => {
+                // Arms are not descended into, for the reason `If` branches
+                // are not. The scrutinee chose the arm, so it is scanned.
+                self.scan(&m.expr);
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            Expr::Block(_) | Expr::LabeledBlock(_) => {
+                // Statements are not walked: a block's value is what this
+                // capture renders, and a binding inside it is not an operand
+                // of the condition.
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            Expr::Range(r) => {
+                self.scan(&r.start);
+                self.scan(&r.end);
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            Expr::TryOp(t) => {
+                self.scan(&t.expr);
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            // The rest are neither captured nor recursed into. A `Literal` has
+            // no value to add that the source text does not already show; the
+            // children of a `Closure`, `WithHandler` or `Resume` are not values
+            // in isolation; `Spread` only appears inside a literal this scanner
+            // already walks; and an `Assign` / `CompoundAssign` in a condition
+            // is a mutation, not an operand.
+            Expr::Literal(_)
+            | Expr::Closure(_)
+            | Expr::WithHandler(_)
+            | Expr::Resume(_)
+            | Expr::Spread(_, _)
+            | Expr::Assign(_)
+            | Expr::CompoundAssign(_)
+            | Expr::TupleComprehension(_)
+            | Expr::Error(_) => {}
         }
     }
 }

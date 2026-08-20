@@ -67,11 +67,14 @@ closed; every other row is the state after it:
 | `Cast`                                                                            | captured; operand recursed                                       |
 | `TupleLiteral`, `StructLiteral`                                                   | not captured (shape comes from the expected type); elements recursed |
 | `Matches`                                                                         | captured; scrutinee recursed                                     |
-| `If`, `Match`, `Block`, `LabeledBlock`, `Range`                                   | **nothing**                                                      |
-| `TryOp`, `Spread`, `Closure`, `WithHandler`, `Resume`, `Assign`, `CompoundAssign` | **nothing**                                                      |
+| `If`, `Match`                                                                     | captured; the condition / scrutinee recursed, bodies not         |
+| `Block`, `LabeledBlock`                                                           | captured; statements not walked                                  |
+| `Range`                                                                           | captured; bounds recursed                                        |
+| `TryOp`                                                                           | captured; operand recursed                                       |
+| `Literal`, `Closure`, `WithHandler`, `Resume`, `Spread`, `Assign`, `CompoundAssign` | not captured — see below                                       |
 
-The table is the state after this WEP's roadmap; the rows still reading
-**nothing** are what it has left to do.
+Every operand position in a condition is now captured. What the last row
+leaves out, and why, is under *Deliberately out of scope*.
 
 ### The `condition:` line is not the condition
 
@@ -179,8 +182,8 @@ missing line, and a missing line outranks a misrendered one.
 - [x] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. The `Inspect`
       claim that had held them back was stale, and nothing else stood behind
       it.
-- [ ] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`.
-      Arms are conditional slots, so this rests on the P0 item.
+- [x] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`,
+      plus `Range` and `TryOp`.
 - [ ] **Dump the capture plan** so the covered-forms table is generated and
       tested rather than written down.
 
@@ -188,8 +191,20 @@ missing line, and a missing line outranks a misrendered one.
 
 The children of `Closure`, `WithHandler` and `Resume` are not captured: they
 are not values in isolation, and a slot for one would report a sub-expression
-that never had a value at the moment the condition failed. The closure itself is
-an operand like any other and is captured where it appears.
+that never had a value at the moment the condition failed. The same reasoning
+stops the walk at the body of an `If` / `Match` branch and at the statements of
+a block: the value of the branch the run took is what that node's own capture
+renders, so descending would report the same value twice under a second name.
+
+A `Literal` adds nothing the source text does not already show. An `Assign` or
+`CompoundAssign` in a condition is a mutation rather than an operand. A `Spread`
+only appears inside a literal this scanner already walks.
+
+Two narrower exclusions are worth naming because they are not principled, only
+unresolved. A bare identifier in call-argument position stays uncaptured because
+it may be a function-reference coercion site, and `&<ident>` likewise: the
+scanner runs before types are known, so it cannot tell `&value` from `&fn_name`.
+`assert takes(&a)` therefore still does not show `a`.
 
 ## Consequences
 

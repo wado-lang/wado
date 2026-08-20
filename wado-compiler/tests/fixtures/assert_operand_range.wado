@@ -1,0 +1,20 @@
+// Test: a range's bounds are operands, and the range itself is one.
+
+export fn run() with Stdout {
+    let i = 7;
+    let lo = 0;
+    let hi = 5;
+    assert (lo..<hi).contains(&i), "out of range";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: (lo..<hi).contains(&i)",
+        "lo: 0",
+        "hi: 5",
+        "lo..<hi: RangeExclusive { start: 0, end: 5 }",
+        "(lo..<hi).contains(&i): false"
+    ]
+}
