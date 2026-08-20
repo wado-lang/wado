@@ -1,9 +1,8 @@
 //! A by-reference `for` over a `List` of a boxable element allocates nothing
 //! per iteration.
 //!
-//! `&variant` lowers to `Box<T>`, so the loop mints one per element, and the
-//! box reads the very index the next statement bumps — adjacency cannot move
-//! its initializer to the use, `unwrap_box_locals` does not have to.
+//! `&variant` lowers to `Box<T>`, and the box reads the very index the next
+//! statement bumps — adjacency cannot move its initializer to the use.
 
 use std::path::Path;
 

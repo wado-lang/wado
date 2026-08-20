@@ -1,5 +1,6 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::funcset::FuncKeySet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
@@ -134,18 +135,14 @@ pub struct Lowering {
     string_struct_name: FqTypeName,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
-    /// Callees whose every return aliases the receiver, so a call to one names
-    /// the receiver's storage rather than fresh storage of its own.
-    returns_receiver_alias: crate::lower::plan::value_copy::funcset::FuncKeySet,
+    /// Callees whose every return aliases the receiver.
+    returns_receiver_alias: FuncKeySet,
 }
 
 impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
-    pub fn new(
-        flat: &FlatPackage,
-        returns_receiver_alias: &crate::lower::plan::value_copy::funcset::FuncKeySet,
-    ) -> Self {
+    pub fn new(flat: &FlatPackage, returns_receiver_alias: &FuncKeySet) -> Self {
         let mut variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>> =
             IndexMap::default();
         for variant in &flat.variants {
@@ -241,17 +238,14 @@ struct PatternLowerer<'a> {
     struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
-    /// See [`Lowering::returns_receiver_alias`].
-    returns_receiver_alias: &'a crate::lower::plan::value_copy::funcset::FuncKeySet,
+    returns_receiver_alias: &'a FuncKeySet,
     /// Locals bound to a scrutinee here. Their `Let` goes through the fold, so
     /// each already reads a place nothing can write.
     owned_temps: IndexSet<u32>,
 }
 
-/// A projection chain rooted at a local. Anything else is a temporary the
-/// expression alone holds. `PatternLowerer::place_is_writable` answers over the
-/// same grammar: a shape one admits and the other cannot read would be a place
-/// matched where it lies with nothing asking whether it can be written.
+/// `PatternLowerer::place_is_writable` must read the same grammar: a shape only
+/// this one admits is a place nobody asks about.
 fn is_place(expr: &TirExpr) -> bool {
     match &expr.kind {
         TirExprKind::Local { .. } => true,
@@ -315,7 +309,7 @@ impl<'a> PatternLowerer<'a> {
         variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
-        returns_receiver_alias: &'a crate::lower::plan::value_copy::funcset::FuncKeySet,
+        returns_receiver_alias: &'a FuncKeySet,
     ) -> Self {
         Self {
             local_count,
@@ -1595,8 +1589,7 @@ impl<'a> PatternLowerer<'a> {
                 // `(Let, Match)` pair and stops firing on an inline scrutinee,
                 // and an owning arm binding needs a scrutinee nothing can
                 // write. A place scrutinee needs neither: the arms project it
-                // where it lies, and fusion's producers are calls. Hoisting one
-                // made `match *r` deep-copy what `match r` reads in place.
+                // where it lies, and fusion's producers are calls.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,
@@ -1742,9 +1735,8 @@ impl<'a> PatternLowerer<'a> {
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 ) || self.place_is_writable(inner, type_table)
             }
-            // `xs[0]` is `xs.index_value(0)` by now, and every such accessor
-            // hands back a piece of its receiver — writable exactly when the
-            // receiver is.
+            // `xs[0]` is `xs.index_value(0)` by now, and such an accessor hands
+            // back a piece of its receiver.
             TirExprKind::Call { func, args, .. }
                 if self
                     .returns_receiver_alias

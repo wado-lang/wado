@@ -1,8 +1,7 @@
-//! `match *r` reads the referent in place.
+//! `match *r` reads the referent in place, as `match r` does.
 //!
-//! Pattern lowering hoisted every non-`Local` scrutinee into a temp the fold
-//! then defends, so `match *rule` deep-copied the whole variant to read one
-//! field while `match rule` copied nothing.
+//! The temp pattern lowering minted for a non-`Local` scrutinee is one the fold
+//! defends, so `match *rule` deep-copied the whole variant to read one field.
 
 use std::path::Path;
 

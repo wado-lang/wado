@@ -4,10 +4,9 @@
 //! unconditional — targeting the `Box<T>` locals minted during NIR→WIR lowering,
 //! which NIR's own `elide_box_local` never sees.
 //!
-//! `unwrap_box_locals` takes the ones adjacency cannot reach, retyping the local
-//! to the field it wraps rather than moving anything — the by-reference `for`
-//! loop, whose box holds an element read at the very index the next statement
-//! bumps.
+//! `unwrap_box_locals` takes the ones adjacency cannot reach — the by-reference
+//! `for` loop, whose box holds an element read at the very index the next
+//! statement bumps — retyping the local to the field it wraps instead.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirType};
@@ -512,8 +511,7 @@ mod adjacent_box_tests {
 }
 
 /// Retype a single-field (`Box<T>`) struct local to its field, dropping the
-/// `StructNew`: one def, and every read through the same `StructGet` field.
-/// Nothing moves, so an intervening write is no obstacle.
+/// `StructNew`. Nothing moves, so an intervening write is no obstacle.
 pub(super) fn unwrap_box_locals(module: &mut WirPackage) {
     for func in &mut module.functions {
         let params: IndexSet<String> = func.param_names.iter().cloned().collect();
@@ -553,7 +551,7 @@ pub(super) fn unwrap_box_locals(module: &mut WirPackage) {
 }
 
 /// Rewrites the def and the reads, recording each local's new type from the
-/// `result_ty` of the `StructGet` it replaces.
+/// `StructGet` it replaces.
 struct BoxUnwrapper {
     targets: IndexMap<String, (String, Option<WirType>)>,
 }
