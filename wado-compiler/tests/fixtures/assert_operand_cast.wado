@@ -1,0 +1,19 @@
+// Test: a cast's operand is an ordinary operand. Before, `x as i64 == y`
+// rendered `y` and dropped `x` entirely.
+
+export fn run() with Stdout {
+    let x: i32 = 3;
+    let y: i64 = 9;
+    assert x as i64 == y, "widened compare";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: x as i64 == y",
+        "x: 3",
+        "x as i64: 3",
+        "y: 9"
+    ]
+}

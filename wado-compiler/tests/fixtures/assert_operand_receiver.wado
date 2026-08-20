@@ -1,0 +1,30 @@
+// Test: the receiver of a method call, a field access and a subscript is an
+// operand like any other. It was skipped on the claim that its type might have
+// no `Inspect`; `Inspect` is total (WEP-2026-06-25 Trait Derivation).
+
+struct Inner {
+    v: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+export fn run() with Stdout {
+    let s = "hello";
+    let o = Outer { inner: Inner { v: 1 } };
+    assert s.len() == o.inner.v, "receivers";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: s.len() == o.inner.v",
+        "s: \"hello\"",
+        "s.len(): 5",
+        "o: Outer { inner: Inner { v: 1 } }",
+        "o.inner: Inner { v: 1 }",
+        "o.inner.v: 1"
+    ]
+}

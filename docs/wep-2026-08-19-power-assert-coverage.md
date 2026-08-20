@@ -49,31 +49,29 @@ the assertion it was written for. The guard idiom does not guard. This is a
 wrong-code bug: instrumentation that is supposed to observe the condition
 decides it instead.
 
-### What is covered today
+### What the scanner covers
 
-Read from the scanner at `3de0afb35` and checked by running one program per
-form:
+Read from the scanner and checked by running one program per form. The
+**nothing** rows are what this WEP measured at `3de0afb35` and has not yet
+closed; every other row is the state after it:
 
 | Condition form                                                                    | Operand lines rendered                                           |
 | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `Ident`, `Binary`, `Unary`                                                        | captured; operands recursed                                      |
 | `Call`, `StaticMethodCall`                                                        | captured whole; arguments recursed, except a bare-ident argument |
-| `MethodCall`                                                                      | captured whole; arguments recursed; **receiver not**             |
-| `FieldAccess`                                                                     | captured whole; **receiver not recursed**                        |
-| `Index`                                                                           | captured whole; **receiver and index operand not recursed**      |
+| `MethodCall`                                                                      | captured whole; receiver and arguments recursed                  |
+| `FieldAccess`                                                                     | captured whole; receiver recursed                                |
+| `Index`                                                                           | captured whole; receiver and index operand recursed              |
 | `TemplateString`                                                                  | captured whole                                                   |
 | `ComparisonChain`                                                                 | captured; operands recursed                                      |
-| `Cast`                                                                            | **nothing** — `x as i64 == y` renders `y` and loses `x`          |
-| `TupleLiteral`                                                                    | **nothing** — `[a, b] == [3, 4]` renders no operand              |
-| `StructLiteral`                                                                   | **nothing** — `P { x: x } == P { x: 2 }` renders no operand      |
-| `Matches`                                                                         | **nothing** — `s matches { Point }` loses the scrutinee          |
+| `Cast`                                                                            | captured; operand recursed                                       |
+| `TupleLiteral`, `StructLiteral`                                                   | not captured (shape comes from the expected type); elements recursed |
+| `Matches`                                                                         | captured; scrutinee recursed                                     |
 | `If`, `Match`, `Block`, `LabeledBlock`, `Range`                                   | **nothing**                                                      |
 | `TryOp`, `Spread`, `Closure`, `WithHandler`, `Resume`, `Assign`, `CompoundAssign` | **nothing**                                                      |
 
-Five forms render no operand line at all when one of them is the condition:
-`TupleLiteral`, `StructLiteral`, `Matches`, `If` and `Match`. `Cast` drops the
-operand on its side of a comparison and prints the other. The three receiver
-rows drop a value that is in scope and inspectable.
+The table is the state after this WEP's roadmap; the rows still reading
+**nothing** are what it has left to do.
 
 ### The `condition:` line is not the condition
 
@@ -173,15 +171,14 @@ missing line, and a missing line outranks a misrendered one.
 - [x] **Comparison chains** ([#1855](https://github.com/wado-lang/wado/issues/1855)).
       Unblocks the uniform `0 <= index` bound on the index traits that
       WEP-2026-06-02 Phase D reverted.
-- [ ] **Structural leaves that lose operands already in scope**: `Cast`,
+- [x] **Structural leaves that lose operands already in scope**: `Cast`,
       `TupleLiteral`, `StructLiteral`, `Matches` (the scrutinee), and the index
-      operand of `Index`. Each is a recursion the scanner does not do; no new
-      machinery.
+      operand of `Index`.
 - [x] **Condition-line fidelity.** The line is rendered with the formatter's
       `Unparser`.
-- [ ] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. Skipped today on
-      a stale `Inspect` claim; the work is to capture them and fix whatever the
-      claim was really standing in for.
+- [x] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. The `Inspect`
+      claim that had held them back was stale, and nothing else stood behind
+      it.
 - [ ] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`.
       Arms are conditional slots, so this rests on the P0 item.
 - [ ] **Dump the capture plan** so the covered-forms table is generated and

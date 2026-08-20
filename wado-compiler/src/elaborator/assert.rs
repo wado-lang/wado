@@ -344,13 +344,7 @@ impl CaptureScanner {
                 self.add(unparse_expr_source(expr), ast_id);
             }
             Expr::MethodCall(m) => {
-                // Receiver recursion is intentionally skipped:
-                // extracting `<recv>` into a temp forces auto-derived
-                // `Inspect` on the receiver's type, which trips
-                // unrelated gaps (`Fn<…>` and CM resource handles
-                // have no `Inspect`; receiver-module-dispatch keyed
-                // by bare mangled name confuses same-name generics
-                // across modules).
+                self.scan(&m.receiver);
                 for arg in &m.args {
                     self.in_call_arg = true;
                     self.scan(arg);
@@ -378,9 +372,42 @@ impl CaptureScanner {
                     self.add(unparse_expr_source(expr), ast_id);
                 }
             }
-            Expr::FieldAccess(_) | Expr::Index(_) => {
-                // Receiver / index recursion deferred (same reason as
-                // a method call): capture the access whole.
+            Expr::Cast(c) => {
+                self.scan(&c.expr);
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            Expr::Matches(m) => {
+                // The scrutinee is the value the pattern rejected, so it is
+                // the one the reader needs.
+                self.scan(&m.expr);
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
+            }
+            Expr::Index(i) => {
+                self.scan(&i.expr);
+                self.scan(&i.index);
+                self.add(unparse_expr_source(expr), ast_id);
+            }
+            Expr::TupleLiteral(t) => {
+                // The literal itself is not captured: it takes its shape from
+                // the expected type (`TupleToSequence`), which a `let` binding
+                // would drop. Its elements are ordinary operands.
+                for elem in &t.elements {
+                    self.scan(elem);
+                }
+            }
+            Expr::StructLiteral(sl) => {
+                // Not captured, for the reason `TupleLiteral` is not
+                // (`StructToMap`, and a named literal's own inference).
+                for field in &sl.fields {
+                    self.scan(&field.value);
+                }
+            }
+            Expr::FieldAccess(f) => {
+                self.scan(&f.expr);
                 self.add(unparse_expr_source(expr), ast_id);
             }
             Expr::TemplateString(_) => {
