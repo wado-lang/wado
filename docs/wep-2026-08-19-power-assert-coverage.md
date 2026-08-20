@@ -18,20 +18,36 @@ indistinguishable from one that has nothing to show.
 Three rules, in priority order. Each is a property of the whole `assert`
 statement, testable per condition form.
 
-### 1. Instrumentation is evaluation-preserving
+### 1. The condition runs as if the `assert` were not there
 
-`assert e` evaluates `e` exactly as `let _ = e` would: the same sub-expressions,
-in the same order, and no others. It is a correctness invariant, and it outranks
-every rendering concern below.
+`assert e` evaluates `e` exactly as `if !e` written by hand would: the same
+sub-expressions, on the same objects, in the same order, no more and no fewer.
+This is the whole of the rule. It admits no exception, and it outranks every
+rendering concern below — an operand that cannot be captured without breaking it
+is not thereby out of scope, it is an operand whose capture is not yet
+implemented.
 
-A capture is **unconditional** when no short-circuit lies between it and the
-condition root. Those are bound ahead of the condition, which is free.
+Two corollaries the mechanism keeps getting wrong, so both are stated:
 
-A capture below a short-circuit is **conditional**, and is taken where the
-operand sits rather than hoisted, so the short-circuit still decides whether it
-runs. The boundaries are the right operand of `&&` and `||`, and every operand
-of a comparison chain past the first comparison (`a < b < c` runs as
-`(a < b) && (b < c)`).
+A capture may not reorder. Binding an operand ahead of the condition moves it
+ahead of everything the instrumentation left in place — a method call's receiver
+is evaluated before its arguments, and a subscript's receiver before its index,
+so hoisting either sibling inverts that pair. An operand may be bound ahead of
+the condition only when nothing evaluated before it stays behind; otherwise the
+capture is taken where the operand sits.
+
+A capture may not copy. Value semantics deep-copy on binding, so a captured
+receiver would take the copy's mutation and leave the original untouched. The
+answer is to capture without copying — in place, or by re-reading a binding the
+failure branch can reach — never to drop the operand and call the gap a
+deliberate exclusion.
+
+Short-circuits are the same corollary seen from the other side. A capture is
+**unconditional** when no short-circuit lies between it and the condition root. A
+capture below one is **conditional** and is taken where the operand sits, so the
+short-circuit still decides whether it runs. The boundaries are the right operand
+of `&&` and `||`, and every operand of a comparison chain past the first
+comparison (`a < b < c` runs as `(a < b) && (b < c)`).
 
 ### 2. Rendering reports reach, not just value
 
@@ -94,49 +110,50 @@ A `Literal` adds nothing the source text does not already show. An `Assign` or
 `CompoundAssign` in a condition is a mutation rather than an operand. A `Spread`
 only appears inside a literal the scanner already walks.
 
-A method call's receiver is held back by the optimizer item below, not by
-anything about method calls. A receiver that is a plain binding needs no binding
-of its own — the failure branch re-reads it — so nothing stands between the call
-and the object it mutates, and what stops the capture is the same failure-branch
-read that stops a projection.
-
-Binding does intercept, which narrows one case on rule 1: a receiver that is an
-lvalue but not a binding, as in `assert s.field.next_if(..) matches { .. }`,
-would have its `&mut self` mutation land on the captured copy and leave
-`s.field` unadvanced. Telling that apart needs the method's `self` kind, which
-the scan does not have because it runs ahead of resolution — an ordering this
-design chose rather than one it is owed.
-
-A projection receiver, a subscript receiver and a `matches` scrutinee wait on
-one optimizer capability, and it is not a trade against diagnostic value.
-Rendering an operand whose value is an aggregate is a genuine _use_ of that
-aggregate in the failure branch, and the escape and scalarization analyses are
-right to count it. `builtin::cold_path()` cannot excuse them: it produces no
-Wasm and changes no semantics, so an analysis that dropped a real use on its
-word would scalarize an aggregate the cold branch still has to read. Measured:
-capturing `List<T>::index_value`'s `self` stops const-object globalization, LICM
-and array-append collapse; capturing the scrutinee of
-`assert ok matches { Ok(6) }` stops variant-return scalarization. Binding is not
-what costs — the read is, so re-reading in the failure branch instead of binding
-regresses identically.
-
-What lifts it is rematerialization, not permission to ignore the use. The hot
-path may scalarize or globalize as though the cold use were absent so long as
-the cold branch reconstructs what it needs from what survives; soundness comes
-from the reconstruction, and the hint only says the cost is rarely paid. Power
-assert makes that reconstruction cheap, since the failure branch wants a
-rendering rather than the aggregate itself, and scalarization leaves exactly the
-fields `Inspect` would walk.
-
-- [ ] **Rematerialize a cold-path use** in the escape and scalarization
-      analyses. All three land together behind it, and nothing else stands
-      between this WEP and rendering every operand.
-
 Two narrower exclusions are unresolved rather than principled. A bare identifier
 in call-argument position stays uncaptured because it may be a
 function-reference coercion site, and `&<ident>` likewise: the scanner runs
 before types are known, so it cannot tell `&value` from `&fn_name`.
 `assert takes(&a)` therefore does not show `a`.
+
+## Known gaps
+
+Not exclusions. Each is the mechanism failing rule 1 or paying too much for it,
+and each is a defect to fix rather than a boundary to document.
+
+- [ ] **Stop hoisting a capture past an operand left in place.** A method call's
+      receiver is evaluated before its arguments and a subscript's receiver
+      before its index, but neither receiver is captured, so binding the sibling
+      ahead of the condition inverts the pair: `assert recv().take(arg())` runs
+      `arg` first where `if !recv().take(arg())` runs `recv` first. An operand
+      may be bound ahead of the condition only when nothing evaluated before it
+      stays behind; otherwise it is captured where it sits, as a conditional
+      slot already is.
+
+- [ ] **Capture a receiver and a `matches` scrutinee.** Value semantics copy on
+      binding, so a bound receiver takes its own `&mut self` mutation and leaves
+      the original untouched. Capturing in place, or re-reading a binding from
+      the failure branch, changes no evaluation — the copy is the mechanism's
+      choice, not the operand's nature. Deciding which method mutates needs the
+      `self` kind, which the scan does not have because it runs ahead of
+      resolution: an ordering this design chose and can revisit.
+
+- [ ] **Rematerialize a cold-path use** in the escape and scalarization
+      analyses. This one is cost, not correctness, and it is not a trade against
+      diagnostic value either. Rendering an aggregate operand is a genuine _use_
+      of that aggregate in the failure branch, and the analyses are right to
+      count it — `builtin::cold_path()` produces no Wasm and changes no
+      semantics, so an analysis that dropped a real use on its word would
+      scalarize an aggregate the cold branch still has to read. Measured:
+      capturing `List<T>::index_value`'s `self` stops const-object
+      globalization, LICM and array-append collapse; capturing the scrutinee of
+      `assert ok matches { Ok(6) }` stops variant-return scalarization. Binding
+      is not what costs — the read is, so re-reading instead of binding
+      regresses identically. What lifts it is letting the hot path scalarize as
+      though the cold use were absent and reconstructing at the cold use from
+      what survives; power assert makes that cheap, since the failure branch
+      wants a rendering and scalarization leaves exactly the fields `Inspect`
+      would walk.
 
 ## Consequences
 
