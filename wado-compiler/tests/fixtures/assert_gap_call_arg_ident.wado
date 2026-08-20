@@ -1,0 +1,18 @@
+// Gap: a bare identifier in call-argument position renders nothing, because the
+// scanner runs before types are known and it may be a function-reference
+// coercion site.
+
+fn twice(n: i32) -> i32 {
+    return n * 2;
+}
+
+export fn run() {
+    let a = 7;
+    assert twice(a) == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["twice(a): 14", "a: 7"]
+}

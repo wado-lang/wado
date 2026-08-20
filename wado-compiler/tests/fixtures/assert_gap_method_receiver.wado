@@ -1,0 +1,23 @@
+// Gap: a method call's receiver renders nothing. `Inspect` is total, so `p` has
+// a rendering and the failure message should carry it.
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() {
+    let p = Counter { n: 7 };
+    assert p.get() == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["p.get(): 7", "p: Counter"]
+}

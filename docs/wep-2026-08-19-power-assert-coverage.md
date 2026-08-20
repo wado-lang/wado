@@ -112,7 +112,8 @@ a defect or an open question, never a boundary.
       `arg` first where `if !recv().take(arg())` runs `recv` first. An operand
       may be bound ahead of the condition only when nothing evaluated before it
       stays behind; otherwise it is captured where it sits, as a conditional
-      slot already is.
+      slot already is. Red: `assert_eval_order_method_receiver`,
+      `assert_eval_order_subscript_receiver`.
 
 - [ ] **Capture a receiver and a `matches` scrutinee.** Value semantics copy on
       binding, so a bound receiver takes its own `&mut self` mutation and leaves
@@ -120,7 +121,9 @@ a defect or an open question, never a boundary.
       the failure branch, changes no evaluation — the copy is the mechanism's
       choice, not the operand's nature. Deciding which method mutates needs the
       `self` kind, which the scan does not have because it runs ahead of
-      resolution: an ordering this design chose and can revisit.
+      resolution: an ordering this design chose and can revisit. Red:
+      `assert_gap_method_receiver`, `assert_gap_subscript_receiver`,
+      `assert_gap_matches_scrutinee`.
 
 ### Rule 3: operand positions that render nothing
 
@@ -129,28 +132,32 @@ a defect or an open question, never a boundary.
       { return x * 2; }, n)` could show `|i32| -> i32` and shows nothing today.
       Their _children_ stay unwalked for a separate reason that does hold: a
       sub-expression of a closure body has no value at the moment the condition
-      failed.
+      failed. Red: `assert_gap_closure_operand`, which pins the closure half
+      only — `WithHandler` and `Resume` are unpinned.
 
 - [ ] **Capture a bare identifier in call-argument position, and `&<ident>`.**
       Either may be a function-reference coercion site, and the scanner runs
       before types are known, so it cannot tell `&value` from `&fn_name`.
       `assert takes(&a)` therefore does not show `a`. Resolving it means
-      deciding after types are known.
+      deciding after types are known. Red: `assert_gap_call_arg_ident`,
+      `assert_gap_ref_ident`.
 
 - [ ] **Decide whether a `Literal` operand should render.** Its value is its
       source text, so a slot would repeat what the `condition:` line already
-      shows. Left uncaptured on that reading, not on a principle.
+      shows. Left uncaptured on that reading, not on a principle. Unpinned: a
+      red test here would answer the question rather than record it.
 
 - [ ] **Decide whether an `Assign` / `CompoundAssign` in a condition should
       render.** It is a mutation rather than an operand, so what a slot would
-      report is unclear rather than settled.
+      report is unclear rather than settled. Unpinned, for the same reason.
 
 - [ ] **Confirm the walk's stopping points are coverage, not omission.** The
       scan does not descend into an `If` / `Match` branch body, the statements
       of a block, or a `Spread` inside a literal it already walks. In each case
       the enclosing node's own capture is believed to render the value the run
       produced, so descending would report it twice under a second name — but
-      that is an argument, and no test pins it.
+      that is an argument, and no test pins it. Pinning it means first deciding
+      what the second name would even say.
 
 ### Cost
 
@@ -169,7 +176,8 @@ a defect or an open question, never a boundary.
       though the cold use were absent and reconstructing at the cold use from
       what survives; power assert makes that cheap, since the failure branch
       wants a rendering and scalarization leaves exactly the fields `Inspect`
-      would walk.
+      would walk. Unpinned by an e2e fixture: the regression it describes only
+      appears once the receiver entry above lands.
 
 ## Consequences
 
