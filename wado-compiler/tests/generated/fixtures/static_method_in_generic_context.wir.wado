@@ -6,7 +6,7 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:serde//enum:SerializeErrorKind { UnsupportedValue = 0, Custom = 1 };  // TypeId(1)
 
-enum core:serde//enum:DeserializeErrorKind { UnexpectedType = 0, MissingField = 1, UnknownVariant = 2, DuplicateField = 3, InvalidValue = 4, Overflow = 5, MalformedInput = 6, TrailingData = 7, Eof = 8, Custom = 9 };  // TypeId(2)
+enum core:serde//enum:DeserializeErrorKind { UnexpectedType = 0, MissingField = 1, UnknownVariant = 2, DuplicateField = 3, InvalidValue = 4, Overflow = 5, MalformedInput = 6, TrailingData = 7, Eof = 8, Custom = 9, DepthLimitExceeded = 10 };  // TypeId(2)
 
 struct core:prelude/types.wado//Box<char> {  // TypeId(3)
     mut value: char,
@@ -19,6 +19,8 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(4)
 struct core:json//JsonDeserializer {  // TypeId(5)
     mut input: ref "core:prelude/slice.wado//Slice<u8>",
     mut pos: i32,
+    mut depth: i32,
+    mut max_depth: i32,
 }
 
 struct core:prelude/string.wado//StrCharIter {  // TypeId(6)
@@ -122,7 +124,7 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:json/write_escaped_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "static_method_in_generic_context.wado//Foo", ref null "core:serde//DeserializeError"];  // TypeId(39)
+type "functype//core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", i32) -> [i32, ref null "static_method_in_generic_context.wado//Foo", ref null "core:serde//DeserializeError"];  // TypeId(39)
 
 type "functype//core:base64/__initialize_module" = fn();  // TypeId(40)
 
@@ -288,7 +290,7 @@ fn "static_method_in_generic_context.wado/__test_0_roundtrip"() {
         let restored_mv_0: i32;
         let restored_mv_1: ref null "static_method_in_generic_context.wado//Foo";
         let restored_mv_2: ref null "core:serde//DeserializeError";
-        multivalue_bind [restored_mv_0, restored_mv_1, restored_mv_2] = "core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/string.wado/String>"(input);
+        multivalue_bind [restored_mv_0, restored_mv_1, restored_mv_2] = "core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/string.wado/String>"(input, 100);
         if @likely(restored_mv_0 == 0) {
             f = ref.as_non_null(restored_mv_1);
             __v0 = f.value;
@@ -686,30 +688,30 @@ fn "core:json/write_escaped_string"(buf, s) {
     builtin::array_set_u8(buf.repr, start_65, 34);
 }
 
-fn "core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/string.wado/String>"(input) {
+fn "core:json/core/json/from_bytes<static_method_in_generic_context.wado/Foo,core:prelude/string.wado/String>"(input, max_depth) {
     let de: ref "core:json//JsonDeserializer";
     let __qm_v: ref "static_method_in_generic_context.wado//Foo";
     let __qm_e: ref "core:serde//DeserializeError";
     let v: ref "static_method_in_generic_context.wado//Foo";
-    let self_7: ref "core:prelude/slice.wado//Slice<u8>";
+    let self_8: ref "core:prelude/slice.wado//Slice<u8>";
     let repr: ref Array<u8>;
-    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(repr = input.repr; struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr, start: 0, end: input.used }), pos: 0 };
-    let __vr_5_mv_0: i32;
-    let __vr_5_mv_1: ref null "static_method_in_generic_context.wado//Foo";
-    let __vr_5_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [__vr_5_mv_0, __vr_5_mv_1, __vr_5_mv_2] = "static_method_in_generic_context.wado/static_method_in_generic_context.wado/Foo^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>"(de);
-    v = (if __vr_5_mv_0 == 0 -> ref "static_method_in_generic_context.wado//Foo" {
-        __qm_v = ref.as_non_null(__vr_5_mv_1);
+    de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(repr = input.repr; struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr, start: 0, end: input.used }), pos: 0, depth: 0, max_depth: max_depth };
+    let __vr_6_mv_0: i32;
+    let __vr_6_mv_1: ref null "static_method_in_generic_context.wado//Foo";
+    let __vr_6_mv_2: ref null "core:serde//DeserializeError";
+    multivalue_bind [__vr_6_mv_0, __vr_6_mv_1, __vr_6_mv_2] = "static_method_in_generic_context.wado/static_method_in_generic_context.wado/Foo^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>"(de);
+    v = (if __vr_6_mv_0 == 0 -> ref "static_method_in_generic_context.wado//Foo" {
+        __qm_v = ref.as_non_null(__vr_6_mv_1);
         __qm_v;
-    } else if @unlikely(__vr_5_mv_0 == 1) -> ref "static_method_in_generic_context.wado//Foo" {
-        __qm_e = ref.as_non_null(__vr_5_mv_2);
+    } else if @unlikely(__vr_6_mv_0 == 1) -> ref "static_method_in_generic_context.wado//Foo" {
+        __qm_e = ref.as_non_null(__vr_6_mv_2);
         cold_path;
         return 1, ref.null none, __qm_e;
     } else {
         unreachable;
     });
     "core:json/core:json/JsonDeserializer::skip_whitespace"(de);
-    if @unlikely(de.pos < self_7 = de.input; self_7.end - self_7.start) {
+    if @unlikely(de.pos < self_8 = de.input; self_8.end - self_8.start) {
         cold_path;
         return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s(de.pos));
     }
