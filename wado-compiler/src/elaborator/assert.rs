@@ -372,7 +372,12 @@ impl CaptureScanner {
                 self.add(unparse_expr_source(expr), ast_id);
             }
             Expr::MethodCall(m) => {
-                self.scan(&m.receiver);
+                // The receiver is not captured. A method taking `&mut self`
+                // would mutate the captured copy instead of the receiver —
+                // `assert p.next_if(..) matches { .. }` would stop advancing
+                // `p` — and the scanner runs before the method's `self` kind is
+                // known. A field access and a subscript are projections, so
+                // theirs are captured.
                 for arg in &m.args {
                     self.in_call_arg = true;
                     self.scan(arg);

@@ -59,7 +59,7 @@ closed; every other row is the state after it:
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `Ident`, `Binary`, `Unary`                                                          | captured; operands recursed                                          |
 | `Call`, `StaticMethodCall`                                                          | captured whole; arguments recursed, except a bare-ident argument     |
-| `MethodCall`                                                                        | captured whole; receiver and arguments recursed                      |
+| `MethodCall`                                                                        | captured whole; arguments recursed; receiver not                     |
 | `FieldAccess`                                                                       | captured whole; receiver recursed                                    |
 | `Index`                                                                             | captured whole; receiver and index operand recursed                  |
 | `TemplateString`                                                                    | captured whole                                                       |
@@ -141,7 +141,15 @@ never a power-assert degradation to document.
 
 The scanner's comments used to claim otherwise, and that is what had kept
 receivers uncaptured: they said `Fn<…>` and CM resource handles have no
-`Inspect`. The claim was stale — `${f:?}` on a closure prints `|i32| -> i32`.
+`Inspect`. Both halves were wrong — `${f:?}` on a closure prints `|i32| -> i32`,
+and an assert on a `wasi:http` `Fields` receiver compiles. Capturing receivers
+did surface a real `Inspect` gap, but a separate one, reachable with no `assert`
+in sight: `${list_of_fns:?}` failed to resolve. Every closure of one arity and
+return type shares a single `Fn<N,Ret>^Inspect` vtable — a representation key,
+coarser than the type's own name (`crate::name::fn_type_arg_names`) — and
+substituting a `fn(..)` type for a type parameter named the receiver by that own
+name instead, so `T^Inspect::inspect` reached WIR build unresolved. Fixed in
+`monomorphize`, where the substitution happens.
 
 So one cause remains: the scanner does not descend into a shape. That is a bug
 against this WEP, closed by teaching the scanner, not by reporting. Two things
@@ -199,9 +207,9 @@ scope_.
       operand of `Index`.
 - [x] **Condition-line fidelity.** The line is rendered with the formatter's
       `Unparser`.
-- [x] **Receivers** of `MethodCall`, `FieldAccess` and `Index`. The `Inspect`
-      claim that had held them back was stale, and nothing else stood behind
-      it.
+- [x] **Receivers** of `FieldAccess` and `Index`. The `Inspect` claim that had
+      held them back was stale; what does hold back a _method_ receiver is rule
+      1 — see _Deliberately out of scope_.
 - [x] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`,
       plus `Range` and `TryOp`.
 - [x] **Dump the capture plan** so the covered-forms table is tested rather
@@ -219,6 +227,14 @@ renders, so descending would report the same value twice under a second name.
 A `Literal` adds nothing the source text does not already show. An `Assign` or
 `CompoundAssign` in a condition is a mutation rather than an operand. A `Spread`
 only appears inside a literal this scanner already walks.
+
+A method call's receiver is not captured, and this one is rule 1, not a gap.
+Wado is a value-semantics language, so binding the receiver copies it: a method
+taking `&mut self` would mutate the copy and leave the receiver untouched —
+`assert p.next_if(..) matches { .. }` would stop advancing `p`. The scanner runs
+before the method's `self` kind is known, so it cannot capture only the
+non-mutating ones. A field access and a subscript are projections and carry no
+such risk, so their receivers are captured.
 
 Two narrower exclusions are worth naming because they are not principled, only
 unresolved. A bare identifier in call-argument position stays uncaptured because

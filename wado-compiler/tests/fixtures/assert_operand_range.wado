@@ -1,20 +1,25 @@
-// Test: a range's bounds are operands, and the range itself is one.
+// Test: a range's bounds are operands, and the range itself is one. It sits in
+// argument position here — as a method receiver it would not be captured, for
+// the reason a method receiver never is.
+
+fn span(r: RangeExclusive<i32>) -> i32 {
+    return r.end - r.start;
+}
 
 export fn run() with Stdout {
-    let i = 7;
     let lo = 0;
     let hi = 5;
-    assert (lo..<hi).contains(&i), "out of range";
+    assert span(lo..<hi) == 9, "wrong span";
 }
 
 __DATA__
 {
     "trapped": true,
     "stderr_contains": [
-        "condition: (lo..<hi).contains(&i)",
+        "condition: span(lo..<hi) == 9",
         "lo: 0",
         "hi: 5",
         "lo..<hi: RangeExclusive { start: 0, end: 5 }",
-        "(lo..<hi).contains(&i): false"
+        "span(lo..<hi): 5"
     ]
 }

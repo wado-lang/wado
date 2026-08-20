@@ -183,6 +183,31 @@ fn dispatch_receiver_identity(tt: &TypeTable, type_id: TypeId) -> Option<crate::
     }
 }
 
+/// The receiver a type substituted for a type parameter dispatches through.
+///
+/// For a `fn(..)` type that is not its canonical type name but the coarser
+/// *representation* key `Fn<arity,ret>` (see [`crate::name::fn_type_arg_names`]):
+/// every closure of one arity and return type shares a single
+/// `Fn<N,Ret>^Inspect` vtable, so naming the receiver by its own spelling names
+/// a function nothing generates. That is how `T^Inspect::inspect` monomorphized
+/// at a `fn` type reached WIR build unresolved.
+pub(crate) fn substituted_receiver_name(
+    tt: &TypeTable,
+    type_id: TypeId,
+) -> crate::name::FqTypeName {
+    if let ResolvedType::Function {
+        params,
+        return_type,
+        ..
+    } = tt.get_unerased(type_id)
+    {
+        return crate::name::FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT).with_args(
+            crate::name::fn_type_args(params.len(), &tt.fq_type_name(*return_type)),
+        );
+    }
+    tt.fq_type_name(type_id)
+}
+
 /// The receiver *head* a dispatch template is named after: no type arguments,
 /// for keys that carry them in `impl_type_args`. Prefer it over a
 /// struct-instantiation key's `name`, which carries no module.

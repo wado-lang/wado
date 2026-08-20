@@ -1,6 +1,6 @@
-// Test: the receiver of a method call, a field access and a subscript is an
-// operand like any other. It was skipped on the claim that its type might have
-// no `Inspect`; `Inspect` is total (WEP-2026-06-25 Trait Derivation).
+// Test: the receiver of a field access and of a subscript is an operand like
+// any other. A method call's receiver is not captured — a `&mut self` method
+// would mutate the captured copy instead of the receiver.
 
 struct Inner {
     v: i32,
@@ -11,20 +11,20 @@ struct Outer {
 }
 
 export fn run() with Stdout {
-    let s = "hello";
     let o = Outer { inner: Inner { v: 1 } };
-    assert s.len() == o.inner.v, "receivers";
+    let list: List<i32> = [10, 20];
+    assert o.inner.v == list[0], "receivers";
 }
 
 __DATA__
 {
     "trapped": true,
     "stderr_contains": [
-        "condition: s.len() == o.inner.v",
-        "s: \"hello\"",
-        "s.len(): 5",
+        "condition: o.inner.v == list[0]",
         "o: Outer { inner: Inner { v: 1 } }",
         "o.inner: Inner { v: 1 }",
-        "o.inner.v: 1"
+        "o.inner.v: 1",
+        "list: [10, 20]",
+        "list[0]: 10"
     ]
 }
