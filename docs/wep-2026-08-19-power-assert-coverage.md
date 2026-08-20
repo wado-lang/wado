@@ -94,25 +94,43 @@ A `Literal` adds nothing the source text does not already show. An `Assign` or
 `CompoundAssign` in a condition is a mutation rather than an operand. A `Spread`
 only appears inside a literal the scanner already walks.
 
-A method call's receiver is rule 1: value semantics make the capture a copy, so
-a `&mut self` method would mutate the copy and leave the receiver untouched —
-`assert p.next_if(..) matches { .. }` would stop advancing `p`. The scanner runs
-before the method's `self` kind is known, so it cannot capture only the
-non-mutating ones.
+A method call's receiver is held back by the optimizer item below, not by
+anything about method calls. A receiver that is a plain binding needs no binding
+of its own — the failure branch re-reads it — so nothing stands between the call
+and the object it mutates, and what stops the capture is the same failure-branch
+read that stops a projection.
+
+Binding does intercept, which narrows one case on rule 1: a receiver that is an
+lvalue but not a binding, as in `assert s.field.next_if(..) matches { .. }`,
+would have its `&mut self` mutation land on the captured copy and leave
+`s.field` unadvanced. Telling that apart needs the method's `self` kind, which
+the scan does not have because it runs ahead of resolution — an ordering this
+design chose rather than one it is owed.
 
 A projection receiver, a subscript receiver and a `matches` scrutinee wait on
 one optimizer capability, and it is not a trade against diagnostic value.
-Rendering an operand whose value is an aggregate is a _use_ of that aggregate in
-the failure branch, and the escape and scalarization analyses count that use
-even though `builtin::cold_path()` marks the branch. Measured: capturing
-`List<T>::index_value`'s `self` stops const-object globalization, LICM and
-array-append collapse; capturing the scrutinee of `assert ok matches { Ok(6) }`
-stops variant-return scalarization. Binding is not what costs — the read is, so
-re-reading in the failure branch instead of binding regresses identically.
+Rendering an operand whose value is an aggregate is a genuine _use_ of that
+aggregate in the failure branch, and the escape and scalarization analyses are
+right to count it. `builtin::cold_path()` cannot excuse them: it produces no
+Wasm and changes no semantics, so an analysis that dropped a real use on its
+word would scalarize an aggregate the cold branch still has to read. Measured:
+capturing `List<T>::index_value`'s `self` stops const-object globalization, LICM
+and array-append collapse; capturing the scrutinee of
+`assert ok matches { Ok(6) }` stops variant-return scalarization. Binding is not
+what costs — the read is, so re-reading in the failure branch instead of binding
+regresses identically.
 
-- [ ] **Discount a use dominated by `builtin::cold_path()`** in the escape and
-      scalarization analyses. All three land together behind it, and nothing
-      else stands between this WEP and rendering every operand.
+What lifts it is rematerialization, not permission to ignore the use. The hot
+path may scalarize or globalize as though the cold use were absent so long as
+the cold branch reconstructs what it needs from what survives; soundness comes
+from the reconstruction, and the hint only says the cost is rarely paid. Power
+assert makes that reconstruction cheap, since the failure branch wants a
+rendering rather than the aggregate itself, and scalarization leaves exactly the
+fields `Inspect` would walk.
+
+- [ ] **Rematerialize a cold-path use** in the escape and scalarization
+      analyses. All three land together behind it, and nothing else stands
+      between this WEP and rendering every operand.
 
 Two narrower exclusions are unresolved rather than principled. A bare identifier
 in call-argument position stays uncaptured because it may be a
