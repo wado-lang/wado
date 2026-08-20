@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787233673297,
+  "lastUpdate": 1787257033650,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49665,6 +49665,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 254727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "60cb41ea666fcd2874a59ebb908603eab9422126",
+          "message": "Merge pull request #1863 from wado-lang/claude/power-assert-support-expansion-2wy6w8\n\nfix(elaborator): expand power-assert coverage",
+          "timestamp": "2026-08-21T05:03:40+09:00",
+          "tree_id": "7f0ec6693eab72ff8e3ed65521f75c47843b57ee",
+          "url": "https://github.com/wado-lang/wado/commit/60cb41ea666fcd2874a59ebb908603eab9422126"
+        },
+        "date": 1787257032824,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16629,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
             "unit": "bytes"
           }
         ]
