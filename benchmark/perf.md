@@ -108,3 +108,20 @@ is live from every config that borrowed it. GC goes from 18% of the run to 77%.
 
 Generalizes: price a "share instead of copy" idea against the live set it
 creates, not the allocations it removes.
+
+## Making an expression-position labeled block a break target (2026-08-20)
+
+`Analyzer::walk_expr` pushes no exit entry for a value-producing labeled block,
+so every `break` it holds resolves to "every local live". Pushing one is more
+precise and does unlock moves — `build_sll_node`'s loop binding among them.
+
+It costs more than it returns. The precise live set also admits place moves the
+coarse one refused, and a place move marks its root moved, which retires every
+immutable share of that root: `Rebuild::rebuild` trades three shares of a member
+tuple for one element move. gale-gen, best of four alternating pairs:
+**182.6 KB/s without the change vs 168.0 with it**, and the golden corpus grows
+from 34 changed fixtures to 132.
+
+Not pursued. Making it pay needs the share analysis keyed on liveness (the
+standing item in [WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md)),
+so the two elisions can be priced against each other instead of racing.

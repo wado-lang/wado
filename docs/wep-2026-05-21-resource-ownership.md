@@ -409,14 +409,12 @@ Verified against the tree.
       counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
 - [x] A closure costs its captures their move, their share and their
       confinement, not its whole frame's.
-- [x] A value-producing labeled block is a break target like the statement form.
-      Without its entry every `break` it held resolved to "every local live".
 - [x] A projection to a scalar keeps its root live without consuming it, so
       `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
       kind; `closure_capture_move`, `closure_confinement`,
-      `labeled_block_exit_live`, `scalar_read_before_move`).
+      `scalar_read_before_move`).
 - [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
       The share analysis is a forward walk with no liveness and no control flow,
       so a write anywhere refuses the binding.

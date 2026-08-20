@@ -225,7 +225,7 @@ fn "value_copy_variant_payload.wado/__test_0_option_copy_is_payload_independent"
     let __sroa_b_value: ref null "core:prelude//List<i32>";
     let __sroa_a_value: ref null "core:prelude//List<i32>";
     list = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    __sroa_a_value = list;
+    __sroa_a_value = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = list.repr; let __array_clone_len_18: i32; __array_clone_len_18 = 3; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: 3 };
     __sroa_b_value = (if ref.is_null(__sroa_a_value) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0 = ref.as_non_null(__sroa_a_value);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = __vc_payload_0.repr; let __array_clone_len_18: i32; __array_clone_len_18 = __vc_payload_0.used; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: __vc_payload_0.used };
@@ -296,7 +296,7 @@ fn "value_copy_variant_payload.wado/__test_2_user_variant_copy_is_payload_indepe
     let __sroa_b_value: ref null "core:prelude//List<i32>";
     let __sroa_a_value: ref null "core:prelude//List<i32>";
     list = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
-    __sroa_a_value = list;
+    __sroa_a_value = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = list.repr; let __array_clone_len_18: i32; __array_clone_len_18 = 1; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: 1 };
     __sroa_b_value = (if ref.is_null(__sroa_a_value) == 0 -> ref null "core:prelude//List<i32>" {
         __vc_payload_0 = ref.as_non_null(__sroa_a_value);
         struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = __vc_payload_0.repr; let __array_clone_len_18: i32; __array_clone_len_18 = __vc_payload_0.used; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: __vc_payload_0.used };
@@ -396,10 +396,10 @@ fn "value_copy_variant_payload.wado/__test_5_result_payloads_copy_independently"
     let __sroa_b_value: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>";
     let __sroa_a_value: ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>";
     list = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
-    __sroa_a_value = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: list };
+    __sroa_a_value = struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = list.repr; let __array_clone_len_18: i32; __array_clone_len_18 = 1; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: 1 } };
     __sroa_b_value = (if ref.test "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Ok"(__sroa_a_value) -> ref "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>" {
         __vc_payload_0 = ref.cast "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Ok"(__sroa_a_value).payload_0;
-        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = __vc_payload_0.repr; let __array_clone_len_18: i32; __array_clone_len_18 = __vc_payload_0.used; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: __vc_payload_0.used } };
+        struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_18: ref Array<i32>; __array_clone_src_18 = __vc_payload_0.repr; let __array_clone_len_18: i32; __array_clone_len_18 = 1; let __array_clone_dst_18: ref Array<i32>; __array_clone_dst_18 = builtin::array_new<i32>(__array_clone_len_18); builtin::array_copy<i32>(__array_clone_dst_18, 0, __array_clone_src_18, 0, __array_clone_len_18); __array_clone_dst_18), used: 1 } };
     } else {
         __vc_payload_1 = ref.cast "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Err"(__sroa_a_value).payload_0;
         struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = __vc_payload_1.repr; let __array_clone_len_9: i32; __array_clone_len_9 = __vc_payload_1.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: __vc_payload_1.used } };
@@ -422,7 +422,6 @@ fn "value_copy_variant_payload.wado/__test_5_result_payloads_copy_independently"
 }
 
 fn "value_copy_variant_payload.wado/__test_6_string_payload_copy_keeps_values_independent"() {
-    let s: ref "core:prelude/string.wado//String";
     let v_3: ref "core:prelude/string.wado//String";
     let __v1_5: ref "core:prelude/string.wado//String";
     let __cond_6: bool;
@@ -434,8 +433,7 @@ fn "value_copy_variant_payload.wado/__test_6_string_payload_copy_keeps_values_in
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/format.wado//Formatter";
     let __sroa_a_value: ref null "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    __sroa_a_value = s;
+    __sroa_a_value = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     if ref.is_null(__sroa_a_value) == 0 {
         v_3 = ref.as_non_null(__sroa_a_value);
         __v1_5 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_9: ref Array<u8>; __array_clone_src_9 = v_3.repr; let __array_clone_len_9: i32; __array_clone_len_9 = v_3.used; let __array_clone_dst_9: ref Array<u8>; __array_clone_dst_9 = builtin::array_new<u8>(__array_clone_len_9); builtin::array_copy<u8>(__array_clone_dst_9, 0, __array_clone_src_9, 0, __array_clone_len_9); __array_clone_dst_9), used: v_3.used };

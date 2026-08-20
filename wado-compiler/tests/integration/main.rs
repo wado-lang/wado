@@ -31,7 +31,6 @@ mod guest_effect_import;
 mod kiln_generator_world;
 mod kiln_loader_redirect;
 mod kiln_options;
-mod labeled_block_exits;
 mod lexer_recovery;
 mod lib_async_task_return_free;
 mod lib_sync_lift_post_return;

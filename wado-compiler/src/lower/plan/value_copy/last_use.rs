@@ -1550,16 +1550,8 @@ impl Analyzer<'_> {
                 *live = union(&then_live, &else_live);
                 self.walk_expr(condition, live, record);
             }
-            TirExprKind::Block(block) => self.walk_block(block, live, record),
-            // A break target like the statement form: without its entry every
-            // `break` it holds resolves to "every local live".
-            TirExprKind::LabeledBlock { label, block, .. } => {
-                self.exits.push(Exit {
-                    label: Some(label.clone()),
-                    live: live.clone(),
-                });
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
                 self.walk_block(block, live, record);
-                self.exits.pop();
             }
             // Calls classify each `&`/`&mut` argument as a transient borrow (see
             // `walk_call_arg`); the callee / receiver is an ordinary read.
