@@ -63,7 +63,9 @@ nothing for it.
 ### 3. No silent degradation
 
 Every operand position in a condition is captured, save what _Known gaps_
-lists as not yet reached. There is no second outcome to report for a
+lists as not yet reached. A `Literal` is the one position needing no slot of its
+own: its value is its source text, which the `condition:` line already shows.
+There is no second outcome to report for a
 type: `Inspect` is total (WEP-2026-06-25), so a `T: Inspect` obligation always
 holds and every operand has a rendering. An operand the compiler declines to
 inspect is a bug in `Inspect` derivation, at the priority every compiler bug
@@ -142,22 +144,17 @@ a defect or an open question, never a boundary.
       deciding after types are known. Red: `assert_gap_call_arg_ident`,
       `assert_gap_ref_ident`.
 
-- [ ] **Decide whether a `Literal` operand should render.** Its value is its
-      source text, so a slot would repeat what the `condition:` line already
-      shows. Left uncaptured on that reading, not on a principle. Unpinned: a
-      red test here would answer the question rather than record it.
+- [ ] **Capture the operands inside the branch a run took.** The scan stops at
+      an `If` / `Match` branch body and at a block's statements, on the argument
+      that the enclosing node's own capture already renders what the run
+      produced. That holds only when the body is a single leaf. Measured:
+      `assert (if c { f() + g() } else { 0 }) == 99` renders `c` and the `if`'s
+      value `5`, and nothing for `f()`, `g()` or `f() + g()`. What a compound
+      body should show — every operand, or only the sub-expression that is the
+      body's value — is undecided, so this stays unpinned.
 
-- [ ] **Decide whether an `Assign` / `CompoundAssign` in a condition should
-      render.** It is a mutation rather than an operand, so what a slot would
-      report is unclear rather than settled. Unpinned, for the same reason.
-
-- [ ] **Confirm the walk's stopping points are coverage, not omission.** The
-      scan does not descend into an `If` / `Match` branch body, the statements
-      of a block, or a `Spread` inside a literal it already walks. In each case
-      the enclosing node's own capture is believed to render the value the run
-      produced, so descending would report it twice under a second name — but
-      that is an argument, and no test pins it. Pinning it means first deciding
-      what the second name would even say.
+      A `Spread` needs nothing: it only ever sits inside a literal the scan
+      already walks.
 
 ### Cost
 
