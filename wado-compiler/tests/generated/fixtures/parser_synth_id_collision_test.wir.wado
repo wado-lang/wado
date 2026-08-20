@@ -238,7 +238,7 @@ global global:core:prelude/string.wado::__const_obj_15: ref null "core:prelude/s
 global global:core:prelude/string.wado::__const_obj_16: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 833 };
 global global:parser_synth_id_collision_test.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:parser_synth_id_collision_test.wado::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:parser_synth_id_collision_test.wado::__const_obj_23: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 308 };
+global global:parser_synth_id_collision_test.wado::__const_obj_23: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
 global global:parser_synth_id_collision_test.wado::__const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:parser_synth_id_collision_test.wado::__const_obj_25: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 
@@ -286,11 +286,10 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
     let p: ref "parser_synth_id_collision_test.wado//DescriptorPair";
     let __match_21: ref null "core:prelude/string.wado//String";
     let __match_22: ref null "parser_synth_id_collision_test.wado//DescriptorPair";
-    let __local_23: ref "core:prelude/string.wado//String";
-    let self_39: ref "core:prelude/string.wado//String";
+    let self_38: ref "core:prelude/string.wado//String";
     let new_used: i32;
-    let start_45: i32;
-    let v_60: ref "core:prelude/string.wado//String";
+    let start_44: i32;
+    let v_59: ref "core:prelude/string.wado//String";
     let __sroa_processed_repr: ref Array<u8>;
     let __sroa_processed_used: i32;
     let __sroa_v_repr: ref Array<u8>;
@@ -316,15 +315,15 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
                     current_value = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(256), used: 0 };
                 } else {
                     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(current_value, line);
-                    self_39 = current_value;
-                    new_used = self_39.used + 1;
-                    if @unlikely(new_used > builtin::array_len(self_39.repr)) {
+                    self_38 = current_value;
+                    new_used = self_38.used + 1;
+                    if @unlikely(new_used > builtin::array_len(self_38.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_39, new_used);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, new_used);
                     }
-                    start_45 = self_39.used;
-                    self_39.used = new_used;
-                    builtin::array_set_u8(self_39.repr, start_45, 10);
+                    start_44 = self_38.used;
+                    self_38.used = new_used;
+                    builtin::array_set_u8(self_38.repr, start_44, 10);
                 }
             } else {
                 break b9;
@@ -348,30 +347,31 @@ fn "parser_synth_id_collision_test.wado/parse_descriptor_text"(text) {
             __match_22 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<parser_synth_id_collision_test.wado/DescriptorPair>^core:prelude/traits.wado/Iterator::next"(__iter_18);
             if ref.is_null(__match_22) == 0 {
                 p = ref.as_non_null(__match_22);
-                v_60 = "parser_synth_id_collision_test.wado/post_process"(p.value);
+                v_59 = "parser_synth_id_collision_test.wado/post_process"(p.value);
                 let __array_clone_src_7: ref Array<u8>;
-                __array_clone_src_7 = v_60.repr;
+                __array_clone_src_7 = v_59.repr;
                 let __array_clone_len_7: i32;
-                __array_clone_len_7 = v_60.used;
+                __array_clone_len_7 = v_59.used;
                 let __array_clone_dst_7: ref Array<u8>;
                 __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7);
                 builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7);
                 __sroa_processed_repr = __array_clone_dst_7;
-                __sroa_processed_used = v_60.used;
-                __local_23 = p.name;
-                if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("grammar"), used: 7 }) {
+                __sroa_processed_used = v_59.used;
+                let __match_scrut_3: ref "core:prelude/string.wado//String";
+                __match_scrut_3 = p.name;
+                if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("grammar"), used: 7 }) {
                     grammar = "parser_synth_id_collision_test.wado/unescape_st_text"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used });
-                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("slaveGrammar"), used: 12 }) {
+                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("slaveGrammar"), used: 12 }) {
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(slaves, "parser_synth_id_collision_test.wado/unescape_st_text"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used }));
-                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 121, 112, 101), used: 4 }) {
+                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 121, 112, 101), used: 4 }) {
                     descriptor_type = "core:prelude/string.wado/core:prelude/string.wado/String::trim_end"("core:prelude/string.wado/core:prelude/string.wado/String::trim_start"(struct.new "core:prelude/string.wado//String" { repr: __sroa_processed_repr, used: __sroa_processed_used }));
-                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("input"), used: 5 }) {
+                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("input"), used: 5 }) {
                     input = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __sroa_processed_repr; let __array_clone_len_7: i32; __array_clone_len_7 = __sroa_processed_used; let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __sroa_processed_used };
-                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("output"), used: 6 }) {
+                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("output"), used: 6 }) {
                     output = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __sroa_processed_repr; let __array_clone_len_7: i32; __array_clone_len_7 = __sroa_processed_used; let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __sroa_processed_used };
-                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("errors"), used: 6 }) {
+                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("errors"), used: 6 }) {
                     errors = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __sroa_processed_repr; let __array_clone_len_7: i32; __array_clone_len_7 = __sroa_processed_used; let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __sroa_processed_used };
-                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__local_23, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("start"), used: 5 }) {
+                } else if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__match_scrut_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("start"), used: 5 }) {
                     start_17 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<u8>; __array_clone_src_7 = __sroa_processed_repr; let __array_clone_len_7: i32; __array_clone_len_7 = __sroa_processed_used; let __array_clone_dst_7: ref Array<u8>; __array_clone_dst_7 = builtin::array_new<u8>(__array_clone_len_7); builtin::array_copy<u8>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: __sroa_processed_used };
                 } else {
                 }

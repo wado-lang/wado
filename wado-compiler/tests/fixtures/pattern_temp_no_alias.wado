@@ -3,8 +3,12 @@
 // safety cannot depend on where its `match` was written.
 //
 // The matrix: {let destructure, statement match, expression match, if let,
-// while let} x {mut local, field of a mut local, through a `&mut`, immutable}
-// x {owning binding, reference binding}.
+// while let} x {mut local, field of a mut local, element of a mut list, through
+// a `&mut`, immutable} x {owning binding, reference binding}.
+//
+// An element is the row that answers for a scrutinee the elaborator has already
+// turned into an accessor call: `xs[0]` is `xs.index_value(0)`, which names its
+// receiver's storage, not storage of its own.
 
 struct S {
     items: List<i32>,
@@ -62,6 +66,27 @@ test "a statement-match binding does not alias a field of a mut local" {
             assert items.len() == 1;
         }
     }
+}
+
+test "a statement-match binding does not alias an element of a mut list" {
+    let mut xs: List<S> = [S { items: [1] }];
+    match xs[0] {
+        S { items } => {
+            xs[0].items.push(3);
+            assert items.len() == 1;
+        }
+    }
+}
+
+test "an expression-match binding does not alias an element of a mut list" {
+    let mut xs: List<S> = [S { items: [1] }];
+    let n = match xs[0] {
+        S { items } => {
+            xs[0].items.push(3);
+            items.len()
+        }
+    };
+    assert n == 1;
 }
 
 test "a statement-match binding does not alias a mut local" {

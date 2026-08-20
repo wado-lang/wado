@@ -134,12 +134,18 @@ pub struct Lowering {
     string_struct_name: FqTypeName,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
+    /// Callees whose every return aliases the receiver, so a call to one names
+    /// the receiver's storage rather than fresh storage of its own.
+    returns_receiver_alias: crate::lower::plan::value_copy::funcset::FuncKeySet,
 }
 
 impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
-    pub fn new(flat: &FlatPackage) -> Self {
+    pub fn new(
+        flat: &FlatPackage,
+        returns_receiver_alias: &crate::lower::plan::value_copy::funcset::FuncKeySet,
+    ) -> Self {
         let mut variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>> =
             IndexMap::default();
         for variant in &flat.variants {
@@ -182,6 +188,7 @@ impl Lowering {
             eq_trait_name,
             string_struct_name,
             const_int_globals,
+            returns_receiver_alias: returns_receiver_alias.clone(),
         }
     }
 
@@ -202,6 +209,7 @@ impl Lowering {
             &self.variant_case_map,
             &self.struct_fields_map,
             &self.const_int_globals,
+            &self.returns_receiver_alias,
         );
         lowerer.lower_block(&mut body, type_table);
 
@@ -233,13 +241,17 @@ struct PatternLowerer<'a> {
     struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
+    /// See [`Lowering::returns_receiver_alias`].
+    returns_receiver_alias: &'a crate::lower::plan::value_copy::funcset::FuncKeySet,
     /// Locals bound to a scrutinee here. Their `Let` goes through the fold, so
     /// each already reads a place nothing can write.
     owned_temps: IndexSet<u32>,
 }
 
 /// A projection chain rooted at a local. Anything else is a temporary the
-/// expression alone holds.
+/// expression alone holds. `PatternLowerer::place_is_writable` answers over the
+/// same grammar: a shape one admits and the other cannot read would be a place
+/// matched where it lies with nothing asking whether it can be written.
 fn is_place(expr: &TirExpr) -> bool {
     match &expr.kind {
         TirExprKind::Local { .. } => true,
@@ -303,6 +315,7 @@ impl<'a> PatternLowerer<'a> {
         variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
+        returns_receiver_alias: &'a crate::lower::plan::value_copy::funcset::FuncKeySet,
     ) -> Self {
         Self {
             local_count,
@@ -313,6 +326,7 @@ impl<'a> PatternLowerer<'a> {
             variant_case_map,
             struct_fields_map,
             const_int_globals,
+            returns_receiver_alias,
             owned_temps: IndexSet::default(),
         }
     }
@@ -1716,6 +1730,9 @@ impl<'a> PatternLowerer<'a> {
                 .get(*index as usize)
                 .is_none_or(|local| local.is_mut),
             TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
                 expr: inner,
@@ -1724,6 +1741,17 @@ impl<'a> PatternLowerer<'a> {
                     type_table.get(inner.type_id),
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 ) || self.place_is_writable(inner, type_table)
+            }
+            // `xs[0]` is `xs.index_value(0)` by now, and every such accessor
+            // hands back a piece of its receiver — writable exactly when the
+            // receiver is.
+            TirExprKind::Call { func, args, .. }
+                if self
+                    .returns_receiver_alias
+                    .contains(&func.module_source, &func.name) =>
+            {
+                args.first()
+                    .is_some_and(|a| self.place_is_writable(&a.expr, type_table))
             }
             _ => false,
         }
