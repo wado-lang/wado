@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787203382526,
+  "lastUpdate": 1787233673297,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49601,6 +49601,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2ed1003b5b816e8caaf4a9e9937a9315da665887"
         },
         "date": 1787203381745,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16629,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254727,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77289c794dd1b866d8d6f45317bfe0cae0b723cd",
+          "message": "Merge pull request #1861 from wado-lang/claude/benchmark-gale-gen-optimization-dbmzcu\n\nperf(lower): decide ownership per local, not per frame",
+          "timestamp": "2026-08-20T22:36:46+09:00",
+          "tree_id": "3b97fee05034a0422923c1346dbba937ee8800c9",
+          "url": "https://github.com/wado-lang/wado/commit/77289c794dd1b866d8d6f45317bfe0cae0b723cd"
+        },
+        "date": 1787233672634,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
