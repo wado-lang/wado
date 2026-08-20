@@ -1,7 +1,5 @@
-// Regression: a mangle spelled a function type as `Fn<arity, return>`, so these
-// two impls minted one name for two bodies and coherence rejected the second as
-// a duplicate. The spelling carries the parameter types now, so they are two
-// instantiations and each dispatches to its own body.
+// A function type's spelling carries its parameter types, so these two impls
+// are two instantiations and each dispatches to its own body.
 use { println, Stdout } from "core:cli";
 
 struct Slot<T> {

@@ -1328,28 +1328,28 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
     let __disc_20: i32;
     let __option_result: ref null "core:prelude/string.wado//String";
     let v: ref "core:prelude//List<u8>";
-    let ptr_43: i32;
-    let len_44: i32;
+    let ptr_41: i32;
+    let len_42: i32;
     let arr: ref Array<u8>;
-    let _licm_repr_47: ref "Array<core:prelude/list.wado/List<u8>>";
-    let len_51: i32;
-    let bytes_52: ref Array<u8>;
-    let ptr_53: i32;
+    let _licm_repr_45: ref "Array<core:prelude/list.wado/List<u8>>";
+    let len_49: i32;
+    let bytes_50: ref Array<u8>;
+    let ptr_51: i32;
     let __sroa___value_elem_used: i32;
-    len_51 = name.used;
-    bytes_52 = name.repr;
-    ptr_53 = "mem/realloc"(0, 0, 1, len_51);
-    "core:rt/gc_array_to_memory"(bytes_52, 0, ptr_53, len_51);
-    __name_packed = builtin::i64_extend_i32_s(ptr_53) | (builtin::i64_extend_i32_s(len_51) << 32_i64);
+    len_49 = name.used;
+    bytes_50 = name.repr;
+    ptr_51 = "mem/realloc"(0, 0, 1, len_49);
+    "core:rt/gc_array_to_memory"(bytes_50, 0, ptr_51, len_49);
+    __name_packed = builtin::i64_extend_i32_s(ptr_51) | (builtin::i64_extend_i32_s(len_49) << 32_i64);
     __value_len = value.used;
     __value_base = "mem/realloc"(0, 0, 4, __value_len * 8);
     __value_i = 0;
-    _licm_repr_47 = value.repr;
+    _licm_repr_45 = value.repr;
     b107: block {
         l108: loop {
             break_if b107 __value_i >= __value_len;
             __value_addr = __value_base + (__value_i * 8);
-            v = builtin::array_get_value<ref "core:prelude//List<u8>">(_licm_repr_47, __value_i);
+            v = builtin::array_get_value<ref "core:prelude//List<u8>">(_licm_repr_45, __value_i);
             let __array_clone_src_4: ref Array<u8>;
             __array_clone_src_4 = v.repr;
             let __array_clone_len_4: i32;
@@ -1397,7 +1397,7 @@ fn "http_fields_immutable_errors.wado/__cm_binding__Fields_set"(self, name, valu
             __disc_20 = builtin::load_u8((__outptr + 4) + 4);
             __option_result = ref.null none;
             if __disc_20 != 0 {
-                __option_result = ref.as_non_null(ptr_43 = builtin::load_i32(((__outptr + 4) + 4) + 4); len_44 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr_43, len_44); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_44 });
+                __option_result = ref.as_non_null(ptr_41 = builtin::load_i32(((__outptr + 4) + 4) + 4); len_42 = builtin::load_i32((((__outptr + 4) + 4) + 4) + 4); arr = "core:rt/memory_to_gc_array"(ptr_41, len_42); struct.new "core:prelude/string.wado//String" { repr: arr, used: len_42 });
                 drop("mem/realloc"(builtin::load_i32(((__outptr + 4) + 4) + 4), builtin::load_i32((((__outptr + 4) + 4) + 4) + 4), 1, 0));
             }
             __vresult = struct.new "wasi:http/types.wado//HeaderError::Other" { discriminant: 4, payload_0: __option_result };

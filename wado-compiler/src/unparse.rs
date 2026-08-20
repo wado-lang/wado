@@ -3149,6 +3149,28 @@ fn escape_char(c: char) -> String {
 
 /// Unparse an AST expression to a string without comments.
 /// Used by the desugar phase for generating error messages.
+/// Unparse one expression as a single line of source, keeping the parentheses
+/// the parse needs. Quotes the condition on an `assert` failure, where
+/// [`unparse_expr_simple`] would print a different expression.
+pub fn unparse_expr_source(expr: &Expr) -> String {
+    let mut unparser = Unparser::new();
+    unparser.unparse_expr(expr);
+    let mut out = String::with_capacity(unparser.output.len());
+    let mut lines = unparser
+        .output
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty());
+    if let Some(first) = lines.next() {
+        out.push_str(first);
+        for line in lines {
+            out.push(' ');
+            out.push_str(line);
+        }
+    }
+    out
+}
+
 pub fn unparse_expr_simple(expr: &Expr) -> String {
     let mut output = String::new();
     unparse_expr_into(expr, &mut output);

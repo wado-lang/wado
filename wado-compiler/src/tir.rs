@@ -3600,8 +3600,8 @@ impl TypeTable {
 
     /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
     /// where [`Self::type_name`] would give the human-readable `[i32, String]`.
-    /// A generic renders as `Name<T1,T2,…>`, a function as
-    /// `Fn<paramCount,returnType>`, and references are stripped.
+    /// A generic renders as `Name<T1,T2,…>`, a function as [`crate::name::mangle_fn_type`]
+    /// spells it, and references are stripped.
     #[must_use]
     pub fn mangle_type_name(&self, id: TypeId) -> String {
         let info = self.get_type_name_info(id);
@@ -3737,9 +3737,48 @@ impl TypeTable {
             ResolvedType::BuiltinArray(_) => builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => builtin(Self::UNIT_TYPE_NAME),
             ResolvedType::Primitive(prim) => builtin(prim.as_str()),
-            ResolvedType::Function { .. } => builtin(crate::name::CLOSURE_FN_TRAIT),
+            ResolvedType::Function { .. } => Receiver::Type(self.fn_receiver_name(self.get(id))),
             _ => builtin(&self.base_type_name(id)),
         }
+    }
+
+    /// A `fn(..)` type's spelling. Shared by [`Self::mangle_type_name`] and
+    /// [`Self::fn_receiver_name`], so a stub's name and a call site's are one.
+    fn fn_type_name_info(
+        &self,
+        is_mut: bool,
+        params: &[TypeId],
+        return_type: TypeId,
+        effects: &[EffectRef],
+        stores: &[u32],
+    ) -> TypeNameInfo {
+        let mut with_clause: Vec<String> =
+            effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
+        with_clause.extend(stores.iter().map(|i| crate::name::mangle_stores_member(*i)));
+        TypeNameInfo::Function {
+            is_mut,
+            params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
+            return_type: self.mangle_type_name(return_type),
+            return_is_function: matches!(self.get(return_type), ResolvedType::Function { .. }),
+            with_clause,
+        }
+    }
+
+    /// The receiver a `fn(..)` value dispatches through: its own name.
+    #[must_use]
+    pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> crate::name::FqTypeName {
+        let ResolvedType::Function {
+            is_mut,
+            params,
+            return_type,
+            effects,
+            stores,
+        } = resolved
+        else {
+            panic!("fn_receiver_name expects a function type");
+        };
+        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects, stores);
+        crate::name::FqTypeName::builtin(&crate::name::format_type_name(info))
     }
 
     /// The declaration a type's head names, with any arguments dropped.
@@ -3759,7 +3798,7 @@ impl TypeTable {
             }
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
             ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
-            ResolvedType::Function { .. } => FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
+            ResolvedType::Function { .. } => self.fn_receiver_name(self.get(id)),
             // Tuples, primitives and function types are builtin shapes: no
             // module declares them and every mangler spells them bare.
             _ => FqTypeName::builtin(&self.base_type_name(id)),
@@ -3903,21 +3942,7 @@ impl TypeTable {
                 return_type,
                 effects,
                 stores,
-            } => {
-                let mut with_clause: Vec<String> =
-                    effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
-                with_clause.extend(stores.iter().map(|i| crate::name::mangle_stores_member(*i)));
-                TypeNameInfo::Function {
-                    is_mut: *is_mut,
-                    params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
-                    return_type: self.mangle_type_name(*return_type),
-                    return_is_function: matches!(
-                        self.get(*return_type),
-                        ResolvedType::Function { .. }
-                    ),
-                    with_clause,
-                }
-            }
+            } => self.fn_type_name_info(*is_mut, params, *return_type, effects, stores),
             ResolvedType::BuiltinArray(elem) => {
                 TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
             }
@@ -5054,20 +5079,18 @@ pub enum ReturnAbi {
     },
 }
 
-/// Semantic category of a `TirFunction`. Carries the type operand so the
-/// optimizer can reason about the call without re-deriving it from the
-/// signature.
-/// Identifies which `Fn<N, Ret>` trait method an auto-derived
-/// dispatch stub implements. Recovered from
-/// [`FunctionKind::FnCanonicalDispatch`] so WIR build can choose
-/// the right vtable slot (`inspect` vs `inspect_alt`) without
-/// re-parsing mangled names.
+/// Which dispatch-stub trait method a `FunctionKind::FnCanonicalDispatch`
+/// implements, so WIR build can pick the vtable slot without re-parsing
+/// mangled names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FnDispatchTrait {
     Inspect,
     InspectAlt,
 }
 
+/// Semantic category of a `TirFunction`. Carries the type operand so the
+/// optimizer can reason about the call without re-deriving it from the
+/// signature.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum FunctionKind {
     /// Ordinary user-defined or synthesized function.
@@ -5077,8 +5100,8 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` dispatch stub (or
-    /// its `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub (or its
+    /// `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
     /// function to be registered and the call resolvable — and WIR build
     /// supplies the real one, a `call_ref` through `CanonicalClosure_K`'s vtable
     /// slot. `(arity, return_type)` are structured so nobody parses the mangle.
@@ -5144,10 +5167,8 @@ impl TirFunction {
         }
     }
 
-    /// Returns the dispatch coordinates if this is an auto-derived
-    /// `Fn<arity, return_type>^Inspect` / `^InspectAlt` stub.
-    /// WIR build uses the result to supply the indirect-call body
-    /// without scanning mangled function names.
+    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` / `^InspectAlt`
+    /// stub, which WIR build turns into the indirect-call body.
     #[inline]
     pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {
         match self.kind {

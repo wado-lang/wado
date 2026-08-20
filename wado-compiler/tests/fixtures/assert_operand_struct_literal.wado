@@ -1,0 +1,20 @@
+// A struct literal's field values are rendered.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let x = 1;
+    assert Point { x: x, y: 0 } == Point { x: 2, y: 0 }, "point mismatch";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: Point { x: x, y: 0 } == Point { x: 2, y: 0 }",
+        "x: 1"
+    ]
+}

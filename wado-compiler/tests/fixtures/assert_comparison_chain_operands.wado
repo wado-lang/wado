@@ -1,0 +1,20 @@
+// A chained comparison renders its operands: the chain runs as
+// `(0 <= index) && (index < used)`, so both are reached here. Issue #1855.
+
+export fn run() with Stdout {
+    let index = 5;
+    let used = 3;
+    assert 0 <= index < used, "index out of bounds";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "Assertion failed in run at",
+        ": index out of bounds",
+        "condition: 0 <= index < used",
+        "index: 5",
+        "used: 3"
+    ]
+}

@@ -511,7 +511,7 @@ pub struct WirStructType {
     /// Optional supertype (for `(type $T (sub $S (struct ...)))`).
     /// Currently used only to share an inspectable closure base across
     /// all per-signature `CanonicalClosure_K` instances so the
-    /// `Fn<N, Ret>^Inspect` dispatch stub can `ref.cast` to one common
+    /// `fn(..)^Inspect` dispatch stub can `ref.cast` to one common
     /// type rather than one per parameter shape.
     pub supertype: Option<WirTypeId>,
 }

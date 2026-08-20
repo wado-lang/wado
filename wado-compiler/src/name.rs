@@ -207,13 +207,6 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 
-/// Canonical name of the synthesised closure-trait family (`Fn<N, Ret>`).
-/// Like [`CLOSURE_CALL_METHOD`] / [`CLOSURE_STRUCT_PREFIX`], the trait is
-/// compiler-internal — there is no Wado-side `trait Fn { ... }` declaration
-/// to attach a `#[compiler_item("...")]` to — so a `const` is the right
-/// anchor shape.
-pub const CLOSURE_FN_TRAIT: &str = "Fn";
-
 /// Prefix every compiler-synthesised block label carries.
 ///
 /// Reserved in source — the parser rejects a label that starts with it — so a
@@ -994,9 +987,9 @@ impl LocalMethodName {
 
     /// True for the synthesized `__call` on a `__Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
-    /// `Fn<arity, ret>` canonical type, whose Wasm signature is fixed — so a
-    /// caller that reshapes ABIs must filter them out or the signature will no
-    /// longer match the vtable slot they are installed into.
+    /// closure's canonical type, whose Wasm signature is fixed — so a caller
+    /// that reshapes ABIs must filter them out or the signature will no longer
+    /// match the vtable slot they are installed into.
     pub fn is_closure_call(&self) -> bool {
         self.method_name == CLOSURE_CALL_METHOD
             && self
@@ -1679,8 +1672,7 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 /// Spell a function type the way source does, minus the optional whitespace.
 ///
 /// A function type names no declaration, so the rendering *is* the identity
-/// and owes injectivity over everything `ResolvedType::Function` interns on —
-/// which `Fn<N,Ret>`, spelling two of the five, did not.
+/// and owes injectivity over everything `ResolvedType::Function` interns on.
 ///
 /// Examples:
 /// - `mangle_fn_type(false, &["i32"], "i32", false, &[])` → `"fn(i32)->i32"`
@@ -1711,6 +1703,13 @@ pub fn mangle_fn_type(
     out
 }
 
+/// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
+/// it — the receiver a closure value dispatches through.
+#[must_use]
+pub fn is_fn_type_name(name: &str) -> bool {
+    name.starts_with("fn(") || name.starts_with("fn mut(")
+}
+
 /// A `stores[...]` member of a `with` clause, by parameter position.
 ///
 /// The type carries positions where source writes parameter names; a mangle is
@@ -1718,25 +1717,6 @@ pub fn mangle_fn_type(
 #[must_use]
 pub fn mangle_stores_member(param_index: u32) -> String {
     format!("stores[{param_index}]")
-}
-
-/// Canonical struct-type-argument names for a closure / [`CLOSURE_FN_TRAIT`]
-/// receiver: `[arity, return-type]`.
-///
-/// A *representation* key, not a type name, and deliberately coarser than
-/// [`mangle_fn_type`]: every closure of one arity and return type shares a
-/// `CanonicalClosure_K` and one `Fn<N,Ret>^Inspect` vtable.
-///
-/// Examples:
-/// - `fn_type_arg_names(2, "i32")` → `["2", "i32"]`
-pub fn fn_type_arg_names(arity: usize, return_type_name: &str) -> Vec<String> {
-    vec![arity.to_string(), return_type_name.to_string()]
-}
-
-/// [`fn_type_arg_names`] in the structured namespace.
-#[must_use]
-pub fn fn_type_args(arity: usize, return_type: &FqTypeName) -> Vec<FqTypeName> {
-    vec![FqTypeName::arity(arity), return_type.clone()]
 }
 
 /// Build an Option type name from inner type name.
@@ -2245,8 +2225,8 @@ mod tests {
 /// mangler spells it the same way wherever it appears. See
 /// [`FqTypeName::builtin`].
 ///
-/// An instantiated shape is its head: `Fn<1,i32>`, `Array<u8>` and `[]<A,B>`
-/// are as module-less as the heads they instantiate.
+/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>` are as
+/// module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
     fn head_of(name: &str) -> &str {
@@ -2318,8 +2298,8 @@ pub enum TypeHead {
 
 impl TypeHead {
     /// A monomorphized instantiation, named by the fused spelling it mangles to
-    /// (`Fn<1,i32>`, `List<…/Token>`). No declaration names one, so its
-    /// rendering is its identity — the same rule [`Self::Shape`] carries.
+    /// (`List<…/Token>`). No declaration names one, so its rendering is its
+    /// identity — the same rule [`Self::Shape`] carries.
     #[must_use]
     pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
         Self::Shape {
@@ -2434,13 +2414,6 @@ impl FqTypeName {
             return Self::of_head_kind(TypeHead::Tuple);
         }
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
-    }
-
-    /// The arity that spells a [`CLOSURE_FN_TRAIT`] head's first argument
-    /// (`Fn<2,i32>`). It names no type, so it mangles bare like a builtin shape.
-    #[must_use]
-    pub fn arity(arity: usize) -> Self {
-        Self::of_head_kind(TypeHead::Builtin(arity.to_string()))
     }
 
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,

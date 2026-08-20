@@ -91,7 +91,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(32)
 
-type "functype//inspect_closure_escaped_to_fn_param.wado/Fn<1,i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+type "functype//inspect_closure_escaped_to_fn_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
 
@@ -157,7 +157,7 @@ fn "inspect_closure_escaped_to_fn_param.wado/run"() with Stdout {
     __local_1.used = new_used;
     builtin::array_set_u8(__local_1.repr, start_22, 32);
     __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 };
-    "inspect_closure_escaped_to_fn_param.wado/Fn<1,i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: g }, __local_2);
+    "inspect_closure_escaped_to_fn_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: g }, __local_2);
     rx_32 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_33 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "inspect_closure_escaped_to_fn_param.wado/__cm_binding__Stdout_write_via_stream"(rx_32);
@@ -413,7 +413,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_uncheck
     builtin::array_set_u8(self.repr, start_6, byte);
 }
 
-fn "inspect_closure_escaped_to_fn_param.wado/Fn<1,i32>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+fn "inspect_closure_escaped_to_fn_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let __typed_self: ref "canonical//CanonicalInspectableBase";
     __typed_self = ref.cast "canonical//CanonicalInspectableBase"(self.value);
     call_ref "functype/$canonical_callback_fn"(__typed_self.inspect, __typed_self.env, f);
