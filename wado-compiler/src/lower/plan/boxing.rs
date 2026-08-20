@@ -214,7 +214,7 @@ impl TypeBuilder {
     /// first one seen with its `(arity, return type)`.
     ///
     /// Every `Box<fn(...)>` holds one `ref struct` field whatever the
-    /// signature, and the `Fn<N,Ret>^Inspect` stubs share one receiver across
+    /// signature, and the `fn(..)^Inspect` stubs take the type's own receiver, so
     /// a signature, so one wrapper serves them all.
     fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
         let ResolvedType::Function {

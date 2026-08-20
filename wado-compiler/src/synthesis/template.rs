@@ -1191,7 +1191,7 @@ fn trait_impl_module(
     // Fallbacks for impls `TraitEnv` cannot index. An auto-derived impl lands in
     // the receiver type's module, so the type's `module_source` is right. A
     // function type is anonymous and has no defining module, so its
-    // `Fn<N, Ret>^Inspect` impl is auto-derived per-module and, after `link()`,
+    // `fn(..)^Inspect` impl is auto-derived per-module and, after `link()`,
     // lives under the current module's namespace.
     if let Some(m) = type_module {
         return m;

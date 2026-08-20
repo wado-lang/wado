@@ -415,7 +415,7 @@ pub enum ReturnAbi {
 /// Semantic category of a `NirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
-/// Identifies which `Fn<N, Ret>` trait method an auto-derived
+/// Identifies which `fn(..)` dispatch-stub trait method an auto-derived
 /// dispatch stub implements. Recovered from
 /// [`FunctionKind::FnCanonicalDispatch`] so WIR build can choose
 /// the right vtable slot (`inspect` vs `inspect_alt`) without
@@ -435,7 +435,7 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` dispatch stub. Its
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. Its
     /// NIR body is `unreachable()`, a placeholder making the call resolvable;
     /// WIR build recognises the kind and supplies a `call_ref` through the
     /// matching `CanonicalClosure_K` vtable slot. `(arity, return_type)` are
@@ -550,7 +550,7 @@ impl NirFunction {
     }
 
     /// Returns the dispatch coordinates if this is an auto-derived
-    /// `Fn<arity, return_type>^Inspect` / `^InspectAlt` stub.
+    /// `fn(..)^Inspect` / `^InspectAlt` stub.
     /// WIR build uses the result to supply the indirect-call body
     /// without scanning mangled function names.
     #[inline]

@@ -4017,7 +4017,7 @@ fn generate_newtype_fmt_fn(
     )
 }
 
-/// Generate `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)` as a dispatch
+/// Generate `fn(..)^Inspect::inspect(&self, &mut Formatter)` as a dispatch
 /// stub with no TIR body — the entry exists only so call sites resolve, and
 /// being bodyless it bypasses the inliner and the other body walkers. WIR build
 /// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
@@ -4045,7 +4045,7 @@ fn generate_fn_inspect_fn(
     )
 }
 
-/// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
+/// Twin of [`generate_fn_inspect_fn`] for `fn(..)^InspectAlt`.
 fn generate_fn_inspect_alt_fn(
     receiver: &FqTypeName,
     arity: usize,
@@ -4219,9 +4219,9 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_impl(receiver, &inspect_fq.canonical().expect(KEYED)) {
             return true;
         }
-        // The receiver is spelled as written — an instantiation (`Fn<1,i32>`)
-        // has no declaration whose head could carry it — so the probe is a
-        // rendering against the emitted function names, not an identity.
+        // The receiver is spelled as written — a shape no declaration names
+        // has no head to carry it — so the probe is a rendering against the
+        // emitted function names, not an identity.
         let mangled = MethodName::format_local(
             &FqTypeName::shape(&module_source, receiver.rendered()),
             Some(&inspect_fq),

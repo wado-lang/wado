@@ -987,7 +987,7 @@ impl LocalMethodName {
 
     /// True for the synthesized `__call` on a `__Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
-    /// `Fn<arity, ret>` canonical type, whose Wasm signature is fixed — so a
+    /// closure's canonical type, whose Wasm signature is fixed — so a
     /// caller that reshapes ABIs must filter them out or the signature will no
     /// longer match the vtable slot they are installed into.
     pub fn is_closure_call(&self) -> bool {
@@ -1673,7 +1673,6 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 ///
 /// A function type names no declaration, so the rendering *is* the identity
 /// and owes injectivity over everything `ResolvedType::Function` interns on —
-/// which `Fn<N,Ret>`, spelling two of the five, did not.
 ///
 /// Examples:
 /// - `mangle_fn_type(false, &["i32"], "i32", false, &[])` → `"fn(i32)->i32"`
@@ -2228,7 +2227,7 @@ mod tests {
 /// mangler spells it the same way wherever it appears. See
 /// [`FqTypeName::builtin`].
 ///
-/// An instantiated shape is its head: `Fn<1,i32>`, `Array<u8>` and `[]<A,B>`
+/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>`
 /// are as module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
@@ -2301,7 +2300,7 @@ pub enum TypeHead {
 
 impl TypeHead {
     /// A monomorphized instantiation, named by the fused spelling it mangles to
-    /// (`Fn<1,i32>`, `List<…/Token>`). No declaration names one, so its
+    /// (`List<…/Token>`). No declaration names one, so its
     /// rendering is its identity — the same rule [`Self::Shape`] carries.
     #[must_use]
     pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
@@ -2420,7 +2419,7 @@ impl FqTypeName {
     }
 
     /// The arity that spells a [`CLOSURE_FN_TRAIT`] head's first argument
-    /// (`Fn<2,i32>`). It names no type, so it mangles bare like a builtin shape.
+    /// It names no type, so it mangles bare like a builtin shape.
     #[must_use]
     pub fn arity(arity: usize) -> Self {
         Self::of_head_kind(TypeHead::Builtin(arity.to_string()))

@@ -1364,7 +1364,7 @@ impl<'a> DceWalker<'a> {
             )));
 
         // Per-functor `__Closure_N^Inspect` / `^InspectAlt` impls only
-        // need to stay alive when their matching `Fn<arity, ret>^Inspect[Alt]`
+        // need to stay alive when their matching `fn(..)^Inspect[Alt]`
         // dispatch stub is reachable — tracked independently per trait so a
         // program using only `:?` doesn't keep `^InspectAlt` (and its
         // per-literal source-string constant) alive. The gating set isn't

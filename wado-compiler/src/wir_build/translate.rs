@@ -851,7 +851,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let tir_func = pending_body.tir_func.borrow();
         let type_table = pending_body.type_table.borrow();
 
-        // `Fn<arity, ret>^Inspect / InspectAlt` dispatch stubs carry
+        // `fn(..)^Inspect / InspectAlt` dispatch stubs carry
         // an empty TIR placeholder body; substitute the real body
         // (vtable indirect call through `CanonicalClosure_K`) here
         // instead of translating the placeholder. Skipping the

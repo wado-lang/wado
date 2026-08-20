@@ -235,7 +235,7 @@ The `FunctionRef::Builtin("inspect")` variant acts as the marker. The `synthesiz
 Wado closures lower to two complementary representations (see WEP: Closure Implementation):
 
 1. Specialised: the local has type `&__Closure_N` (the per-literal functor struct). Used when every reference to the local is in callee position.
-2. Canonical: the value is wrapped in `CanonicalClosure_K` so any holder of an `Fn<N, Ret>` value can invoke or inspect it. The lowering escape analysis demotes a local to canonical as soon as it appears in any non-callee position (struct field, fn argument, return value, global assignment, or rebinding).
+2. Canonical: the value is wrapped in `CanonicalClosure_K` so any holder of a `fn(..)` value can invoke or inspect it. The lowering escape analysis demotes a local to canonical as soon as it appears in any non-callee position (struct field, fn argument, return value, global assignment, or rebinding).
 
 The canonical struct carries the runtime vtable for inspectable signatures. To make a single dispatch stub serve every parameter shape with the same `(N, Ret)`, all inspectable canonical structs share a Wasm GC supertype:
 
@@ -269,16 +269,16 @@ Per-literal canonical-path wrappers (registered in WIR build for inspectable sig
 
 Dispatch stubs (one pair per inspectable `(N, Ret)`):
 
-- `Fn<N, Ret>^Inspect::inspect(&self, &mut Formatter)`: cast `self` to `$canonical_inspectable_base`, load `inspect`, `call_ref` with `(env, f)`. Same shape for `InspectAlt`.
+- `fn(..)^Inspect::inspect(&self, &mut Formatter)`: cast `self` to `$canonical_inspectable_base`, load `inspect`, `call_ref` with `(env, f)`. Same shape for `InspectAlt`.
 - The stub is emitted as `FunctionKind::FnCanonicalDispatch` with a bodyless TIR placeholder; WIR build installs the instructions directly. Bodyless functions bypass the inliner and other TIR-body walkers, so no `inline(never)` workaround is needed.
 
-The specialised path takes a redirect at lowering: `Fn<N, Ret>^Inspect[Alt]` calls on a known-local closure receiver rewrite to direct calls on `__Closure_N^Inspect[Alt]`. The dispatch stub and canonical vtable are bypassed entirely; standard DCE then removes the per-literal impls when no inspect call site survives.
+The specialised path takes a redirect at lowering: `fn(..)^Inspect[Alt]` calls on a known-local closure receiver rewrite to direct calls on `__Closure_N^Inspect[Alt]`. The dispatch stub and canonical vtable are bypassed entirely; standard DCE then removes the per-literal impls when no inspect call site survives.
 
 #### Zero Overhead When Unused
 
 Two whole-program gates keep programs that don't inspect closures from paying for the runtime-dispatch machinery:
 
-1. Schema gate (per `(N, Ret)`): only signatures with a reachable `Fn<N, Ret>^Inspect` or `^InspectAlt` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect/inspect\_alt fields, and no per-literal wrappers.
+1. Schema gate (per `(N, Ret)`): only call shapes with a reachable `fn(..)^Inspect` or `^InspectAlt` dispatch stub get the inspectable canonical layout. Other signatures use the slim `(struct env func)` shape with no shared supertype, no inspect/inspect\_alt fields, and no per-literal wrappers.
 2. Per-functor gate (per `(N, Ret)`, per trait method): a pre-DCE scan classifies each `(arity, return_type)` as "inspected", "inspect-alt-ed", or both. The TIR DCE roots `__Closure_N^Inspect` from `ClosureToCanonical` only when the signature is "inspected", and `^InspectAlt` only when it is "inspect-alt-ed". A program that uses only `:?` drops every `__Closure_N^InspectAlt` impl and its per-literal source-string constant; the symmetric case applies to a `:#?`-only program.
 
 The schema gate is a lowering decision rather than a DCE decision — `ref.func` initialisers baked into the canonical struct's `inspect` / `inspect_alt` fields would otherwise keep the wrappers reachable and defeat post-emission DCE.

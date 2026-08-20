@@ -3769,9 +3769,6 @@ impl TypeTable {
     /// The receiver a value of a `fn(..)` type dispatches through: the type's
     /// own name, carrying no arguments.
     ///
-    /// Closures used to share one fabricated `Fn<arity,ret>` receiver, which no
-    /// declaration backed and every consumer had to reproduce — so a consumer
-    /// that spelled the type its own way silently missed the dispatch.
     #[must_use]
     pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> crate::name::FqTypeName {
         let ResolvedType::Function {
@@ -5089,7 +5086,7 @@ pub enum ReturnAbi {
 /// Semantic category of a `TirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
-/// Identifies which `Fn<N, Ret>` trait method an auto-derived
+/// Identifies which `fn(..)` dispatch-stub trait method an auto-derived
 /// dispatch stub implements. Recovered from
 /// [`FunctionKind::FnCanonicalDispatch`] so WIR build can choose
 /// the right vtable slot (`inspect` vs `inspect_alt`) without
@@ -5109,7 +5106,7 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `Fn<arity, return_type>^Inspect::inspect` dispatch stub (or
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub (or
     /// its `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
     /// function to be registered and the call resolvable — and WIR build
     /// supplies the real one, a `call_ref` through `CanonicalClosure_K`'s vtable
@@ -5177,7 +5174,7 @@ impl TirFunction {
     }
 
     /// Returns the dispatch coordinates if this is an auto-derived
-    /// `Fn<arity, return_type>^Inspect` / `^InspectAlt` stub.
+    /// `fn(..)^Inspect` / `^InspectAlt` stub.
     /// WIR build uses the result to supply the indirect-call body
     /// without scanning mangled function names.
     #[inline]

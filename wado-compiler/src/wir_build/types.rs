@@ -1059,7 +1059,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     // Each entry carries `(param_wirs, result_wirs, is_inspectable,
     // fn_struct_name)` so we can pick the right `CanonicalClosure_K`
     // schema (slim `{ env, func }` vs fat `{ env, func, inspect,
-    // inspect_alt }`) up front based on whether `Fn<arity, ret>^Inspect
+    // inspect_alt }`) up front based on whether `fn(..)^Inspect
     // / InspectAlt` survived DCE for that signature, and so we can
     // map `(arity, return_type)` back to the canonical struct type
     // id for the WIR-level dispatch body.
@@ -1125,7 +1125,7 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 
     // Register canonical closure types for each signature. Inspectable
     // signatures share the supertype `$canonical_inspectable_base`,
-    // which is what the `Fn<N, Ret>^Inspect` dispatch stub `ref.cast`s
+    // which is what the `fn(..)^Inspect` dispatch stub `ref.cast`s
     // to — so no per-`(N, Ret)` struct map is needed.
     for (param_wirs, result_wirs, is_inspectable, _arity, _return_type) in fn_sigs {
         ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
