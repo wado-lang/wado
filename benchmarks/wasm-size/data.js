@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787172771758,
+  "lastUpdate": 1787192171929,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49513,6 +49513,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3de0afb35c85d374f4f093dfa4611a5c3a2b3060"
         },
         "date": 1787172770911,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16637,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254742,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08469555591b7530d6a19f4e304d2b5946d564b3",
+          "message": "Merge pull request #1859 from wado-lang/chore/refresh-gale-kiln-metadata\n\nchore(gale): refresh the recorded generator source hash",
+          "timestamp": "2026-08-20T11:03:38+09:00",
+          "tree_id": "2e9b52c151f9c3751f6e3fd1249f243271b4e3de",
+          "url": "https://github.com/wado-lang/wado/commit/08469555591b7530d6a19f4e304d2b5946d564b3"
+        },
+        "date": 1787192171375,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
