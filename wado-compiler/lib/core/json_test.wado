@@ -888,3 +888,30 @@ test "the duplicate error names the wire field" {
         panic("expected a duplicate-field error");
     }
 }
+
+test "a repeated map key is rejected by default" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`\{"a":1,"a":2\}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "a repeated Value key is rejected by default" {
+    // The proxy/application split in the article: both read the same bytes,
+    // and a repeat is what makes them disagree.
+    let r: Result<Value, DeserializeError> = from_string(`\{"role":"user","role":"admin"\}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "a repeated key nested inside a Value is rejected" {
+    let r: Result<Value, DeserializeError> = from_string(`\{"outer":\{"a":1,"a":2\}\}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "distinct map keys still parse" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`\{"a":1,"b":2\}`);
+    assert r matches { Ok(m) && m.len() == 2 };
+}
+
+test "a repeated key in a nested map is rejected" {
+    let r: Result<TreeMap<String, Value>, DeserializeError> = from_string(`\{"a":\{"b":1,"b":2\}\}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}

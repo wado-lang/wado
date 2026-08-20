@@ -14,6 +14,7 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     SerializeErrorKind,
+    report_duplicate_key,
 } from "core:serde";
 
 #[synopsis]
@@ -720,13 +721,20 @@ impl<V: Serialize> Serialize for TreeMap<String, V> {
 
 impl<V: Deserialize> Deserialize for TreeMap<String, V> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<TreeMap<String, V>, DeserializeError> {
+        let on_duplicate = d.on_duplicate_key();
         let mut map = d.begin_map()?;
         let mut result: TreeMap<String, V> = {};
         loop {
             let key_opt = map.next_key_string()?;
             if let Some(key) = key_opt {
                 let val = map.next_value::<V>()?;
-                result.insert(key, val);
+                // `try_insert` answers "was it already there" with the lookup
+                // the insert needs anyway; the losing insert keeps the first
+                // value, so a lenient policy re-assigns to take the last.
+                if !result.try_insert(key, val) {
+                    report_duplicate_key(on_duplicate, &key)?;
+                    result[key] = val;
+                }
             } else {
                 map.end()?;
                 return Result::Ok(result);

@@ -98,6 +98,14 @@ realistic documents with ample headroom.
 
 ## Functions
 
+### `pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError>`
+
+Applies `policy` to a key the wire has already written. Returns `Err` under
+`Error`; otherwise the caller keeps the last occurrence.
+
+Detecting the repeat is the caller's job, because what it costs differs: a
+struct tests a bit, a map asks `try_insert`.
+
 ### `pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError>`
 
 One nesting level deeper, or `DepthLimitExceeded` at the limit. `offset`
@@ -351,6 +359,12 @@ byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 #### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
+#### `fn on_duplicate_key(&self) -> DuplicateKeyPolicy`
+
+What this format does when the wire repeats a field or key. The
+mechanism is shared — detection lives in the derived struct
+deserialization — but the default is the format's to pick.
+
 #### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self]`
 
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self]`
@@ -402,6 +416,8 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `pub fn depth_limit(msg: String, offset: i64) -> DeserializeError`
 
+#### `pub fn duplicate_field(name: String) -> DeserializeError`
+
 ## Enums
 
 ### `pub enum SerializeErrorKind`
@@ -436,3 +452,18 @@ Used by variadic tuple deserialization via type pack expansion.
 
 Nesting ran past the deserializer's depth limit. A resource bound, not
 a spec violation: the input may be perfectly well-formed.
+
+### `pub enum DuplicateKeyPolicy`
+
+What to do when the wire repeats a field or key.
+
+A repeat is how two readers of the same bytes are made to disagree — a
+proxy authorizing on the first occurrence, the application acting on the
+last — so rejecting is the default. `Warn` and `PassThru` both keep the
+last occurrence; they differ only in whether anything is said about it.
+
+#### `Error`
+
+#### `Warn`
+
+#### `PassThru`

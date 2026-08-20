@@ -186,6 +186,30 @@ pub enum DuplicateKeyPolicy {
     PassThru,
 }
 
+/// Applies `policy` to a key the wire has already written. Returns `Err` under
+/// `Error`; otherwise the caller keeps the last occurrence.
+///
+/// Detecting the repeat is the caller's job, because what it costs differs: a
+/// struct tests a bit, a map asks `try_insert`.
+pub fn report_duplicate_key(
+    policy: DuplicateKeyPolicy,
+    name: &String,
+) -> Result<(), DeserializeError> {
+    match policy {
+        DuplicateKeyPolicy::Error => {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::duplicate_field(*name));
+        },
+        DuplicateKeyPolicy::Warn => {
+            builtin::cold_path();
+            log_stderr(`warning: duplicate key: ${name}`);
+        },
+        DuplicateKeyPolicy::PassThru => {
+        },
+    }
+    return Result::Ok(());
+}
+
 /// Default nesting limit shared by every self-describing format.
 ///
 /// A deserializer recurses once per open container, so unbounded nesting
@@ -1064,19 +1088,10 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                     // matches no arm, so it owns no bit.
                     let bit: i64 = (1 as i64) << (i as i64);
                     if (seen & bit) != 0 {
-                        match on_duplicate {
-                            DuplicateKeyPolicy::Error => {
-                                return Result::Err(DeserializeError::duplicate_field(
-                                    wire_name(&ReflectStruct::<T>::members()[i], policy),
-                                ));
-                            },
-                            DuplicateKeyPolicy::Warn => {
-                                let name = wire_name(&ReflectStruct::<T>::members()[i], policy);
-                                log_stderr(`warning: duplicate field: ${name}`);
-                            },
-                            DuplicateKeyPolicy::PassThru => {
-                            },
-                        }
+                        report_duplicate_key(
+                            on_duplicate,
+                            &wire_name(&ReflectStruct::<T>::members()[i], policy),
+                        )?;
                     }
                     seen |= bit;
                     let value: F = sd.value()?;
