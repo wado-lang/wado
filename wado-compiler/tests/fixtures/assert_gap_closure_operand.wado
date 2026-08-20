@@ -1,0 +1,17 @@
+// Gap: a closure operand renders nothing. `Inspect` is total and a `fn(..)`
+// value inspects as its signature, so the slot has a rendering to show.
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+export fn run() {
+    let n = 3;
+    assert apply(|x: i32| -> i32 { return x * 2; }, n) == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["|i32| -> i32"]
+}
