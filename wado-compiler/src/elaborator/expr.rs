@@ -189,6 +189,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id
     }
 
+    /// Resolve an expression standing in condition position, which must be
+    /// `bool`. Nothing coerces to it, so a non-`bool` condition is a type error
+    /// rather than a value to test for truthiness.
+    pub(super) fn resolve_condition_expr(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let type_id = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+        if type_id == TypeTable::BOOL
+            || type_id == TypeTable::UNKNOWN
+            || type_id == TypeTable::ERROR
+        {
+            return type_id;
+        }
+        let (expected, found) = self
+            .tysys
+            .type_table
+            .borrow()
+            .type_names_for_mismatch(TypeTable::BOOL, type_id);
+        let _ = self.emit(TypeError::TypeMismatch {
+            expected,
+            found,
+            span: expr.span(),
+        });
+        TypeTable::BOOL
+    }
+
     fn resolve_expr_inner(
         &mut self,
         expr: &Expr,
@@ -1826,7 +1854,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve the condition and both blocks for their facts; reify
                 // rebuilds the `If` node. The result type is inferred from the
                 // AST (`ast_block_result_type`) below.
-                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(expr, ctx);
                 self.resolve_block_value(&if_expr.then_block, ctx, expected_type);
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);

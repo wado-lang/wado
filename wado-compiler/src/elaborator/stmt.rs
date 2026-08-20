@@ -1309,7 +1309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
-                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(expr, ctx);
                 self.resolve_block_with_position(
                     &if_stmt.then_block,
                     ctx,
@@ -2851,7 +2851,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match &w.condition {
             Condition::Expr(cond_expr) => {
                 self.record_desugar(w.id, super::sem::types::DesugarKind::While);
-                self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(cond_expr, ctx);
                 self.resolve_block(&w.body, ctx, None);
             }
             Condition::LetChain {
