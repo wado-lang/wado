@@ -1,8 +1,7 @@
 //! A scalar read out of a binding is not a use that costs it its move.
 //!
-//! `if it.tag == -1 { … } else { out.push(it) }` read `it.tag` with `it` live in
-//! the other arm, and the whole-value read was then no longer a final use — so
-//! the element the iterator had already copied was copied a second time.
+//! `if it.tag == -1 { … } else { out.push(it) }` made the whole-value read
+//! non-final, so the element the iterator had already copied was copied twice.
 
 use std::path::Path;
 

@@ -82,48 +82,29 @@ sells a permanent root, so a constant that is small and rarely read loses.
 `const_object_globalization` is already near break-even on gale-gen without the
 extra hoists.
 
-## Demoting a `List<Variant>` value copy to a shallow spine copy (2026-08-20)
+## Sharing list elements instead of deep-copying them (2026-08-20)
 
-`value_copy_demote` refuses any helper that transitively runs a variant deep
-copy, since a `match` payload binding aliases the payload storage in place. On
-gale-gen that exclusion covers `List<Element>`, whose deep copy is the single
-largest leaf in the profile (`$value_copy$RuleRefElement` 4.5%,
-`TokenRefElement` 1.9%, `Element` 1.1%).
+`value_copy_demote` refuses any helper reaching a variant deep copy, which on
+gale-gen covers `List<Element>` — 9.6% of the profile.
 
-Lifting the exclusion outright is a strict no-op, not a small win.
-`WADO_TRACE=demote` counts what the pass sees and what it converts:
+Lifting that gate is a strict no-op: the candidate set grows from 26 helpers to
+44 and demotes the same 3, for byte-identical Wasm (`WADO_TRACE=demote`). It
+never blocked these copies — `demote_candidate` retargets only a
+`let x = $value_copy$T(arg)` binding, and gale's are struct fields
+(`SllConfig { ..*c, pos }`).
 
-|                | candidate `List<E>` helpers | demoted |
-| -------------- | --------------------------- | ------- |
-| gate (default) | 25-26                       | 3       |
-| gate lifted    | 44                          | 3       |
-
-The 18 variant-element helpers it admits convert none, and the emitted Wasm is
-byte-identical.
-
-The gate is not what blocks these copies. `demote_candidate` retargets only a
-`let x = $value_copy$T(arg)` binding, and gale's `List<Element>` copies are
-struct _fields_ — `SllConfig { ..*c, pos }` in `sll_step`, `elements:
-alt.elements` in `sll_advance` — so there is no binding to retarget.
-
-Extending the pass to expression position is the obvious next step, and it is
-the wrong one. Forcing every element clone shallow — the upper bound of any
-element-sharing scheme, whatever proves it — is **3x slower** on gale-gen, and
-splitting the run by collector says why:
+Extending the pass to expression position is the obvious next step and the wrong
+one. Forcing every element clone shallow — the upper bound of any sharing scheme
+— runs gale-gen 3x slower:
 
 |                     | `copying` | `null` (no GC) |
 | ------------------- | --------- | -------------- |
 | deep copy (default) | 171 KB/s  | 208 KB/s       |
 | shared elements     | 60 KB/s   | 260 KB/s       |
 
-Sharing is the faster program — the mutator does 25% less work. It is the
-slower one under a collector, because it trades the cheap kind of allocation
-for the expensive kind: a deep-copied element dies in the nursery and costs a
-copying collector nothing, while a shared one is reachable from every config
-that borrowed it and is re-traced and re-copied at every cycle. GC goes from
-18% of the run to 77% of it.
+Sharing is the faster program and the slower one under a collector: a deep-copied
+element dies in the nursery and costs a copying collector nothing, a shared one
+is live from every config that borrowed it. GC goes from 18% of the run to 77%.
 
-So element sharing is not an optimization here, and the variant gate costs
-nothing worth recovering. Generalizes to any "share instead of copy" idea on
-this collector: price it against the live set it creates, not the allocations it
-removes.
+Generalizes: price a "share instead of copy" idea against the live set it
+creates, not the allocations it removes.

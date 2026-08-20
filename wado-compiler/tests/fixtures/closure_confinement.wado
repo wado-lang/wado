@@ -1,6 +1,5 @@
-// Confinement asks whether a callee lets a by-value parameter outlive the call.
-// A closure in that callee reaches the frame only through its captures, so the
-// other parameters still answer for themselves.
+// A closure in a callee reaches the frame only through its captures, so the
+// callee's other by-value parameters still answer confinement for themselves.
 
 fn stash(out: &mut List<List<i32>>, xs: List<i32>, tag: i32) -> i32 {
     let bump = || tag + 1;

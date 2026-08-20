@@ -140,8 +140,7 @@ impl<K: Ord> TreeMap<K, V> {
         let mut current = self.root;
         while let Some(n_idx) = current {
             let n = &self.nodes[n_idx];
-            // One `cmp` decides all three outcomes: `==` then `<` would compare
-            // the keys twice at every node it walks past.
+            // `==` then `<` compares the keys twice at every node walked past.
             match key.cmp(&n.key) {
                 Ordering::Equal => {
                     let entry = &self.entries[n.index];
@@ -164,7 +163,6 @@ impl<K: Ord> TreeMap<K, V> {
         if let Some(n_idx) = node {
             match key.cmp(&self.nodes[n_idx].key) {
                 Ordering::Equal => {
-                    // Key already exists, just update the entries index.
                     self.nodes[n_idx].index = index;
                     return Option::Some(n_idx);
                 },

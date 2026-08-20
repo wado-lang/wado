@@ -408,13 +408,9 @@ Verified against the tree.
 - [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
       counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
 - [x] A closure costs its captures their move, their share and their
-      confinement, not its whole frame's. The walks cannot read a closure body —
-      its `Local` indices are the closure's own — so the captures escape and
-      everything else still decides.
+      confinement, not its whole frame's.
 - [x] A value-producing labeled block is a break target like the statement form.
-      Without its entry on the exit stack every `break` it held resolved to
-      "every local live", so one sequence literal or string template after a loop
-      pinned the whole function.
+      Without its entry every `break` it held resolved to "every local live".
 - [x] A projection to a scalar keeps its root live without consuming it, so
       `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures

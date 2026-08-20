@@ -3,7 +3,7 @@
 //! backward liveness pass yields both facts a move needs: every read is a final
 //! use, and nothing the value derives from is still live at the binding. A
 //! function containing a handler or `resume` is skipped, either being able to
-//! re-observe; a closure only costs its captures.
+//! re-observe.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -762,9 +762,7 @@ impl ShareCollector<'_> {
                 self.walk_block(block);
             }
             TirExprKind::GlobalVarSet { value, .. } => self.walk_value(value),
-            // The body is in the closure's own local namespace; its captures are
-            // the outer locals it reaches, and it may read or write any of them
-            // after this point.
+            // Not walked into: the body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
                 for c in captures {
                     self.mark_local_mutated(c.outer_index);
@@ -812,11 +810,9 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
-/// Effect handlers, `resume` and an unexpanded variadic for-of defeat the
-/// single-observation model — each can re-enter this frame and read a local a
-/// second time. Detected up front so the whole function falls back to copies.
-/// A closure does not: it reaches this frame only through its `captures`, which
-/// every walk here treats as escaped, so the rest of the body still decides.
+/// Effect handlers, `resume` and an unexpanded variadic for-of can re-enter this
+/// frame and read a local a second time, so the whole function falls back to
+/// copies. A closure cannot: it reaches the frame only through its `captures`.
 fn has_unsupported_form(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,
@@ -1555,11 +1551,8 @@ impl Analyzer<'_> {
                 self.walk_expr(condition, live, record);
             }
             TirExprKind::Block(block) => self.walk_block(block, live, record),
-            // A value-producing labeled block is a break target like the
-            // statement form: without its entry on the stack every `break` it
-            // holds resolves to "every local live", and one such block — the
-            // shape an expression-position `if let` lowers to — costs its whole
-            // function every move.
+            // A break target like the statement form: without its entry every
+            // `break` it holds resolves to "every local live".
             TirExprKind::LabeledBlock { label, block, .. } => {
                 self.exits.push(Exit {
                     label: Some(label.clone()),
@@ -1648,10 +1641,7 @@ impl Analyzer<'_> {
                     self.walk_expr(e, live, record);
                 }
             }
-            // A closure's body indexes locals of its own, so this walk cannot
-            // read it, and the call may land at any later point. What it names
-            // here is its captures: each escapes wholesale, which keeps it live
-            // and unmovable while the rest of the body still decides.
+            // Not walked into: the body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
                 for c in captures {
                     live.insert(c.outer_index);
@@ -1660,11 +1650,8 @@ impl Analyzer<'_> {
                     }
                 }
             }
-            // A projection to a scalar hands back bits, not the aggregate's
-            // storage. It keeps the root live — so a read placed *after* it
-            // still sees the root live and is not mistaken for a final use —
-            // but it consumes nothing itself, leaving a later whole-value
-            // move as the root's last use (`if c.pos == 0 { … } else { out.push(c) }`).
+            // A scalar projection hands back bits, not the aggregate's storage,
+            // so a later whole-value read is still the root's final use.
             TirExprKind::FieldAccess { .. }
             | TirExprKind::VariantPayload { .. }
             | TirExprKind::Index { .. }
@@ -1845,8 +1832,8 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
     }
 }
 
-/// A value of this type is its own bits: reading one out of an aggregate
-/// produces something independent of that aggregate's storage.
+/// A value of this type is its own bits, independent of any aggregate it is
+/// read out of.
 fn is_scalar_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
     type_table.is_primitive_like(type_id)
         || matches!(

@@ -1,8 +1,7 @@
 //! A value-producing labeled block is a break target.
 //!
 //! Without its entry on the exit stack every `break` it holds resolved to "every
-//! local live", so one sequence literal after a loop — the shape `[tk]` lowers to
-//! — left the whole function copying.
+//! local live", so one sequence literal after a loop left the frame copying.
 
 use std::path::Path;
 
