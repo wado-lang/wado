@@ -1,0 +1,51 @@
+// An accessor hands back a borrow of a field; a write through it reaches the
+// field, so a read taken before the call keeps its own copy.
+struct Holder {
+    items: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn get(&mut self) -> &mut List<i32> {
+        return &mut self.items;
+    }
+
+    #[inline("never")]
+    fn push_through(&mut self) {
+        let p = self.get();
+        p.push(99);
+    }
+
+    #[inline("never")]
+    fn replace_through(&mut self) {
+        let p = self.get();
+        *p = [9, 9];
+    }
+
+    #[inline("never")]
+    fn read_push(&mut self) -> i32 {
+        let raw = self.items;
+        self.push_through();
+        return raw.len();
+    }
+
+    #[inline("never")]
+    fn read_replace(&mut self) -> i32 {
+        let raw = self.items;
+        self.replace_through();
+        return raw.len();
+    }
+}
+
+test "a write through a returned borrow reaches the field" {
+    let mut h = Holder { items: [1, 2, builtin::black_box(3)] };
+    assert h.read_push() == 3;
+}
+
+test "a replace through a returned borrow reaches the field" {
+    let mut h = Holder { items: [1, 2, builtin::black_box(3)] };
+    assert h.read_replace() == 3;
+}
+
+__DATA__
+{"test": {}}
