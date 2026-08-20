@@ -235,10 +235,10 @@ fn "value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep"()
     let __sroa_b_value: ref "value_copy_variant_recursive.wado//Tree";
     let __sroa_a_value: ref "value_copy_variant_recursive.wado//Tree";
     leaves = struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: array.new_fixed<ref "value_copy_variant_recursive.wado//Tree">(struct.new "value_copy_variant_recursive.wado//Tree::Leaf" { discriminant: 1, payload_0: 1 }), used: 1 };
-    __sroa_a_value = struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "value_copy_variant_recursive.wado//Tree">(leaves.repr, 1)), used: 1 } };
+    __sroa_a_value = struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: leaves };
     __sroa_b_value = (if ref.test "value_copy_variant_recursive.wado//Tree::Branch"(__sroa_a_value) -> ref "value_copy_variant_recursive.wado//Tree" {
         __vc_payload_0 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"(__sroa_a_value).payload_0;
-        struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "value_copy_variant_recursive.wado//Tree">(__vc_payload_0.repr, 1)), used: 1 } };
+        struct.new "value_copy_variant_recursive.wado//Tree::Branch" { discriminant: 0, payload_0: struct.new "core:prelude//List<value_copy_variant_recursive.wado/Tree>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "value_copy_variant_recursive.wado//Tree">(__vc_payload_0.repr, __vc_payload_0.used)), used: __vc_payload_0.used } };
     } else {
         __vc_payload_1 = ref.cast "value_copy_variant_recursive.wado//Tree::Leaf"(__sroa_a_value).payload_0;
         struct.new "value_copy_variant_recursive.wado//Tree::Leaf" { discriminant: 1, payload_0: __vc_payload_1 };
