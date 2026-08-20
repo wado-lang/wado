@@ -1402,6 +1402,44 @@ impl TraitEnv {
     /// synthesis layer records both receiver namespaces, so preferring it would
     /// return a different module. When several modules implement the trait for
     /// same-named receivers, `type_module` picks the entry whose module matches.
+    /// The trait `header` implements, named as a bound can reach it. See
+    /// [`args_without_declared_defaults`] for why an argument may drop out.
+    pub(super) fn fq_trait_of_impl(
+        &self,
+        header: &ImplHeader,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> Option<name::FqTraitName> {
+        let fq = header.fq_trait(resolutions)?;
+        let trait_type = header.trait_type.as_ref()?;
+        Some(self.fq_trait_named_by_impl(fq, trait_type, &header.ty, resolutions))
+    }
+
+    /// [`Self::fq_trait_of_impl`] for a caller holding the written trait
+    /// reference and the impl's target rather than a built header.
+    pub(super) fn fq_trait_named_by_impl(
+        &self,
+        fq: name::FqTraitName,
+        trait_type: &ast::Type,
+        target: &ast::Type,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> name::FqTraitName {
+        let Some(params) = fq
+            .canonical()
+            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .map(|header| &header.type_params)
+        else {
+            return fq;
+        };
+        let args = args_without_declared_defaults(
+            fq.args().to_vec(),
+            trait_type,
+            target,
+            params,
+            resolutions,
+        );
+        fq.with_args(args)
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
@@ -2469,6 +2507,48 @@ pub(super) fn written_type_args(
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// A trait argument list with every trailing argument that only restates the
+/// trait's declared default dropped, `Self` meaning the impl's own target.
+///
+/// A bound is a bare name — the parser reads `<...>` after one as
+/// associated-type bindings — so `impl Add<Cm> for Cm` is reachable from
+/// `T: Add` only if it names the same trait as `impl Add for Cm` does.
+/// `impl Add<Inch> for Cm` keeps its argument and stays a distinct impl.
+fn args_without_declared_defaults(
+    written: Vec<name::FqTypeName>,
+    trait_type: &ast::Type,
+    target: &ast::Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+) -> Vec<name::FqTypeName> {
+    let ast_args: &[ast::Type] = match trait_type {
+        ast::Type::Generic(generic) => &generic.args,
+        ast::Type::NamespacedGeneric(ns) => &ns.args,
+        _ => return written,
+    };
+    let mut kept = written;
+    while let Some(last) = kept.len().checked_sub(1) {
+        let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {
+            break;
+        };
+        let Some(default) = param.default.as_ref() else {
+            break;
+        };
+        let restates_default = match default {
+            ast::Type::Named(named) if named.name == "Self" => {
+                matches!(arg, ast::Type::Named(a) if a.name == "Self")
+                    || written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
+            }
+            _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
+        };
+        if !restates_default {
+            break;
+        }
+        kept.truncate(last);
+    }
+    kept
 }
 
 /// One written type argument as the identity it names.

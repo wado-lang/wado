@@ -1855,10 +1855,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Resolve impl block methods with mangled names
         let struct_name = scope.get_type_name(&impl_block.ty);
-        let trait_name = impl_block
-            .trait_type
-            .as_ref()
-            .map(|t| scope.fq_trait_name(t));
+        let trait_name = impl_block.trait_type.as_ref().map(|t| {
+            let fq = scope.fq_trait_name(t);
+            scope.tysys.trait_env.fq_trait_named_by_impl(
+                fq,
+                t,
+                &impl_block.ty,
+                &scope.tysys.resolutions,
+            )
+        });
 
         // Register type parameters from impl block's generic type FIRST
         // e.g., impl IndexValue<i32> for Triple<T> needs T registered

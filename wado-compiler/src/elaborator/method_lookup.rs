@@ -2073,6 +2073,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (sig, m.type_params.clone())
             });
         let trait_type_for_name = header.trait_type.as_ref().unwrap().clone();
+        let target_for_name = header.ty.clone();
         // The trait's identity, resolved in the impl's own frame: the decl key
         // from the impl module's imports (so an alias resolves to the declaring
         // module), the arguments with the impl's bound type params substituted
@@ -2184,11 +2185,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name: crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
-                    super::trait_env::written_type_args(
-                        &trait_type_for_name,
-                        &scope.tysys.resolutions,
-                    ),
+                trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
+                    crate::name::FqTraitName::declared(&defs, trait_decl),
+                    &trait_type_for_name,
+                    &target_for_name,
+                    &scope.tysys.resolutions,
                 ),
                 trait_decl,
                 trait_args: trait_args.clone(),
@@ -2240,11 +2241,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
-                        super::trait_env::written_type_args(
-                            &trait_type_for_name,
-                            &scope.tysys.resolutions,
-                        ),
+                    trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
+                        crate::name::FqTraitName::declared(&defs, trait_decl),
+                        &trait_type_for_name,
+                        &target_for_name,
+                        &scope.tysys.resolutions,
                     ),
                     trait_decl,
                     trait_args: trait_args.clone(),
@@ -2988,7 +2989,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
                     // path records `IndexValue<i32>`.
-                    trait_name: header.fq_trait(&s.tysys.resolutions)?,
+                    trait_name: s
+                        .tysys
+                        .trait_env
+                        .fq_trait_of_impl(header, &s.tysys.resolutions)?,
                     rhs_type,
                 })
             },
@@ -3099,7 +3103,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                let trait_name = header.fq_trait(&s.tysys.resolutions)?;
+                let trait_name = s
+                    .tysys
+                    .trait_env
+                    .fq_trait_of_impl(header, &s.tysys.resolutions)?;
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
                 // bindings.

@@ -2453,7 +2453,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .impl_headers
                     .get(&(b.module.clone(), b.ast_id))?;
                 Some((
-                    header.fq_trait(&self.tysys.resolutions)?,
+                    self.tysys
+                        .trait_env
+                        .fq_trait_of_impl(header, &self.tysys.resolutions)?,
                     b.param.clone(),
                     b.module.clone(),
                     b.bounds.clone(),
@@ -3223,7 +3225,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // names the declaration alone.
         let resolve_trait_name =
             |header: &super::trait_env::ImplHeader| -> Option<crate::name::FqTraitName> {
-                let fq = header.fq_trait(&self.tysys.resolutions)?;
+                let fq = self
+                    .tysys
+                    .trait_env
+                    .fq_trait_of_impl(header, &self.tysys.resolutions)?;
                 Some(if is_from_or_try_from(fq.base_name()) {
                     fq
                 } else {
