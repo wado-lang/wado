@@ -27,12 +27,16 @@ changes, rewrite the affected sections. Do not append an update log, keep
 superseded alternatives, or leave a checklist of what already landed — the git
 history is the SSoT for how the design got here.
 
-An "out of scope" section is forbidden. It reads as a boundary of the design
-when it is almost always an unfinished mechanism, and it invites reasoning from
-what the implementation happens to do back to what the language means. Record
-the shortfall under "Known gaps" instead, as something to be closed: what is
-missing, what closing it takes, and — where it is a defect rather than an open
-question — a red test pinning it.
+An "out of scope" or "non-goals" section is forbidden, under any spelling. Such
+a list reads as a boundary of the design when it is almost always an unfinished
+mechanism, and it invites reasoning from what the implementation happens to do
+back to what the language means. Record the shortfall under "Known gaps"
+instead, as something to be closed: what is missing, what closing it takes, and
+— where it is a defect rather than an open question — a red test pinning it.
+
+A genuine decision not to have something is not a gap and does not go in a list
+of refusals either. State it in Decision, positively and with its reasoning, the
+way any other decision is stated.
 
 ### Index of WEPs
 
