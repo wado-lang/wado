@@ -140,17 +140,18 @@ impl<K: Ord> TreeMap<K, V> {
         let mut current = self.root;
         while let Some(n_idx) = current {
             let n = &self.nodes[n_idx];
-            if key == n.key {
-                let entry = &self.entries[n.index];
-                if entry.deleted {
-                    return -1;
-                }
-                return n.index;
-            }
-            if key < n.key {
-                current = n.left;
-            } else {
-                current = n.right;
+            // One `cmp` decides all three outcomes: `==` then `<` would compare
+            // the keys twice at every node it walks past.
+            match key.cmp(&n.key) {
+                Ordering::Equal => {
+                    let entry = &self.entries[n.index];
+                    if entry.deleted {
+                        return -1;
+                    }
+                    return n.index;
+                },
+                Ordering::Less => current = n.left,
+                Ordering::Greater => current = n.right,
             }
         }
         return -1;
@@ -161,20 +162,22 @@ impl<K: Ord> TreeMap<K, V> {
     // is not yet present in the subtree.
     fn insert_node(&mut self, node: Option<i32>, key: K, index: i32) -> Option<i32> {
         if let Some(n_idx) = node {
-            if key == self.nodes[n_idx].key {
-                // Key already exists, just update the entries index.
-                self.nodes[n_idx].index = index;
-                return Option::Some(n_idx);
-            }
-
-            if key < self.nodes[n_idx].key {
-                let left = self.nodes[n_idx].left;
-                let new_left = self.insert_node(left, key, index);
-                self.nodes[n_idx].left = new_left;
-            } else {
-                let right = self.nodes[n_idx].right;
-                let new_right = self.insert_node(right, key, index);
-                self.nodes[n_idx].right = new_right;
+            match key.cmp(&self.nodes[n_idx].key) {
+                Ordering::Equal => {
+                    // Key already exists, just update the entries index.
+                    self.nodes[n_idx].index = index;
+                    return Option::Some(n_idx);
+                },
+                Ordering::Less => {
+                    let left = self.nodes[n_idx].left;
+                    let new_left = self.insert_node(left, key, index);
+                    self.nodes[n_idx].left = new_left;
+                },
+                Ordering::Greater => {
+                    let right = self.nodes[n_idx].right;
+                    let new_right = self.insert_node(right, key, index);
+                    self.nodes[n_idx].right = new_right;
+                },
             }
 
             let after_skew = self.skew(Option::Some(n_idx));
