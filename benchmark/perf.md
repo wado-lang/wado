@@ -104,8 +104,26 @@ byte-identical.
 The gate is not what blocks these copies. `demote_candidate` retargets only a
 `let x = $value_copy$T(arg)` binding, and gale's `List<Element>` copies are
 struct _fields_ — `SllConfig { ..*c, pos }` in `sll_step`, `elements:
-alt.elements` in `sll_advance` — so there is no binding to retarget. Teaching
-the element-immutability analysis about variants buys nothing until the pass can
-demote a copy in expression position, and until then lifting the gate only ships
-an unsound relaxation (a `match` payload binding aliases the payload in place)
-with no reachable use.
+alt.elements` in `sll_advance` — so there is no binding to retarget.
+
+Extending the pass to expression position is the obvious next step, and it is
+the wrong one. Forcing every element clone shallow — the upper bound of any
+element-sharing scheme, whatever proves it — is **3x slower** on gale-gen, and
+splitting the run by collector says why:
+
+|                     | `copying` | `null` (no GC) |
+| ------------------- | --------- | -------------- |
+| deep copy (default) | 171 KB/s  | 208 KB/s       |
+| shared elements     | 60 KB/s   | 260 KB/s       |
+
+Sharing is the faster program — the mutator does 25% less work. It is the
+slower one under a collector, because it trades the cheap kind of allocation
+for the expensive kind: a deep-copied element dies in the nursery and costs a
+copying collector nothing, while a shared one is reachable from every config
+that borrowed it and is re-traced and re-copied at every cycle. GC goes from
+18% of the run to 77% of it.
+
+So element sharing is not an optimization here, and the variant gate costs
+nothing worth recovering. Generalizes to any "share instead of copy" idea on
+this collector: price it against the live set it creates, not the allocations it
+removes.
