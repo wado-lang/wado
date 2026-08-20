@@ -8,12 +8,8 @@
 #[path = "../common.rs"]
 mod common;
 
-<<<<<<< HEAD
 mod assert_capture_plan;
-||||||| 3de0afb35
-=======
 mod box_local_unwrap;
->>>>>>> origin/main
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;
