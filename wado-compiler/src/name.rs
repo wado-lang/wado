@@ -622,7 +622,6 @@ impl Receiver {
     }
 }
 
-/// The reference prefix a mangled name carries, and the rest.
 /// Write a receiver's reference prefix. `&` binds directly to the pointee;
 /// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
 /// `TypeTable::mangle_type_arg_for_generic` spell it the same way, and a
@@ -2512,9 +2511,6 @@ impl FqTypeName {
         out
     }
 
-    /// The declaration namespace: the name as source writes it, which is what
-    /// an `impl` header spells and what every by-name declaration lookup keys
-    /// on. Also the form diagnostics show.
     /// This name with every occurrence of the type `old` replaced by `new` —
     /// the whole name when it *is* `old`, and otherwise each argument,
     /// recursively.
