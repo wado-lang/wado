@@ -316,6 +316,18 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An associated type name reachable through more than one of a type
+    /// parameter's bounds, so `T::Output` names two types. Reported where it
+    /// is written: the same two traits are unambiguous on a parameter whose
+    /// bounds name only one of them.
+    AmbiguousAssocType {
+        assoc: String,
+        param: String,
+        /// The bounds that declare it, in bound-list order.
+        traits: Vec<String>,
+        span: Span,
+    },
+
     /// One trait implemented for a receiver at two different argument lists,
     /// so a call on it names two signatures. Reported where it is called: the
     /// impls are individually fine, and coherence permits them.
@@ -1040,6 +1052,24 @@ impl TypeError {
                         .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousAssocType {
+                assoc,
+                param,
+                traits,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous associated type '{param}::{assoc}': declared by {}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
+                    traits
+                        .iter()
+                        .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
+                    traits.first().map(String::as_str).unwrap_or(assoc)
                 ),
                 *span,
             ),

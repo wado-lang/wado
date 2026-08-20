@@ -1654,9 +1654,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// `T::Output` for an operator applied to a type parameter — what the
-    /// frame's bound pins it to (`T: Mul<Output = T>`), else the projection.
-    /// The operand's own type where the trait declares no `Output`: `Shl` and
-    /// `Shr` do not project.
+    /// frame's bound pins it to (`T: Mul<Output = T>`), else the projection
+    /// under that same trait, since `T: Add + Mul` declares `Output` twice.
     fn operator_output_type(
         &mut self,
         operand_type_id: TypeId,
@@ -1682,7 +1681,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return operand_type_id;
         };
         self.frame_projection_of_trait(&name, trait_, "Output")
-            .unwrap_or_else(|| self.make_frame_projection(operand_type_id, &name, "Output"))
+            .unwrap_or_else(|| {
+                self.make_frame_projection_of_trait(operand_type_id, &name, Some(trait_), "Output")
+            })
     }
 
     /// The single TIR-level builder for every operator dispatching to a trait

@@ -1045,6 +1045,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.tysys.has_real_trait_impl_for_type(
                 &self.annotate_ctx,
                 &self.type_lookup(),
+                Some(target_type_id),
                 &receiver,
                 trait_,
             )
@@ -1879,6 +1880,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if impl_block.trait_type.is_some() {
             // Resolve the target type for registering associated type resolutions
             let target_type_id = scope.resolve_type(&impl_block.ty);
+            // `type Output = Self;` names this impl's target. Without the
+            // binding it resolved to `unknown` and registered as one.
+            scope.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
             let is_concrete = !scope
                 .tysys
                 .type_table

@@ -1535,9 +1535,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 names_to_check.iter().any(|target| {
-                    self.tysys.find_trait_impl_for_type(
+                    self.tysys.find_trait_impl_for_subject(
                         &self.annotate_ctx,
                         &type_lookup,
+                        receiver_type_id,
                         &target.receiver(self.tysys.resolutions.defs()),
                         bound_def,
                     )

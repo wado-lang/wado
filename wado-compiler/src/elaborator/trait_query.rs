@@ -1066,9 +1066,10 @@ impl TypeSystem {
             }
             // For other traits, check the type name
             let type_name = format!("{prim:?}").to_lowercase();
-            return self.find_trait_impl_for_type(
+            return self.find_trait_impl_for_subject(
                 ctx,
                 scope,
+                Some(type_id),
                 &Receiver::Type(FqTypeName::builtin(&type_name)),
                 trait_,
             );
@@ -1083,8 +1084,8 @@ impl TypeSystem {
             && let Some((_, module_source)) = nominal
         {
             let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-            let serde_blocked =
-                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, &receiver, trait_);
+            let serde_blocked = tr.is_serde()
+                && self.has_real_trait_impl_for_type(ctx, scope, Some(type_id), &receiver, trait_);
             if !serde_blocked
                 && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
                     self.type_implements_trait(ctx, scope, member, trait_)
@@ -1207,6 +1208,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
+                    Some(type_id),
                     &Receiver::Ref(RefKind::Shared),
                     trait_,
                     Some(&[inner_id]),
@@ -1227,6 +1229,7 @@ impl TypeSystem {
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
+                    Some(type_id),
                     &Receiver::Ref(RefKind::Mut),
                     trait_,
                     Some(&[inner_id]),
@@ -1247,7 +1250,7 @@ impl TypeSystem {
             ResolvedType::Newtype { base_type, .. } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_type(ctx, scope, &receiver, trait_) {
+                if self.find_trait_impl_for_subject(ctx, scope, Some(type_id), &receiver, trait_) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
@@ -1259,7 +1262,7 @@ impl TypeSystem {
             ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags { .. } => {
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_type(ctx, scope, &receiver, trait_) {
+                if self.find_trait_impl_for_subject(ctx, scope, Some(type_id), &receiver, trait_) {
                     return true;
                 }
                 return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_);
@@ -1270,33 +1273,46 @@ impl TypeSystem {
         self.find_trait_impl_for_type_with_args(
             ctx,
             scope,
+            Some(type_id),
             &Receiver::Type(type_name),
             trait_,
             type_args.as_deref(),
         )
     }
 
-    /// Helper to check if there's an impl block for a type implementing a trait
-    pub(super) fn find_trait_impl_for_type(
+    /// Whether an impl block makes `type_key` implement `trait_`. `subject` is
+    /// the receiver's own `TypeId` where the caller still holds one: a blanket
+    /// bound pinning an associated type to its receiver
+    /// (`impl<T: Mul<Output = T>> Product for T`) is decidable only against
+    /// that, so a key alone cannot answer it.
+    pub(super) fn find_trait_impl_for_subject(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
+        subject: Option<TypeId>,
         type_key: &Receiver,
         trait_: DefId,
     ) -> bool {
-        self.find_trait_impl_for_type_with_args(ctx, scope, type_key, trait_, None)
+        self.find_trait_impl_for_type_with_args(ctx, scope, subject, type_key, trait_, None)
     }
 
     pub(super) fn has_real_trait_impl_for_type(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
+        subject: Option<TypeId>,
         type_key: &Receiver,
         trait_: DefId,
     ) -> bool {
         self.trait_env
             .has_any_methodful_impl_by_receiver(type_key, trait_)
-            || self.blanket_trait_impl_applies(ctx, scope, type_key, self.trait_spelling(trait_))
+            || self.blanket_trait_impl_applies(
+                ctx,
+                scope,
+                subject,
+                type_key,
+                self.trait_spelling(trait_),
+            )
     }
 
     /// The name a trait declaration writes, for the layers still keyed on one.
@@ -1311,6 +1327,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
+        subject: Option<TypeId>,
         type_key: &Receiver,
         trait_: DefId,
         type_args: Option<&[TypeId]>,
@@ -1346,7 +1363,7 @@ impl TypeSystem {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        self.blanket_trait_impl_applies(ctx, scope, type_key, self.trait_spelling(trait_))
+        self.blanket_trait_impl_applies(ctx, scope, subject, type_key, self.trait_spelling(trait_))
     }
 
     /// [`Self::type_implements_trait_inner`]'s primitive arm, asked of a
@@ -1389,6 +1406,7 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
+        subject: Option<TypeId>,
         type_key: &Receiver,
         trait_name: &str,
     ) -> bool {
@@ -1416,10 +1434,10 @@ impl TypeSystem {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
                     || self.primitive_satisfies_builtin_trait(scope, type_key, bound)
                     || bound.decl_ref.is_some_and(|trait_| {
-                        self.find_trait_impl_for_type(ctx, scope, type_key, trait_)
+                        self.find_trait_impl_for_subject(ctx, scope, subject, type_key, trait_)
                     })
             });
-            if bounds_satisfied && self.blanket_assoc_constraints_hold(type_key, blanket) {
+            if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, blanket) {
                 return true;
             }
         }
@@ -1427,59 +1445,34 @@ impl TypeSystem {
         false
     }
 
-    /// Whether the receiver satisfies the associated-type constraints the
-    /// blanket's own bounds write (`impl<T: Mul<Output = T>> Product for T`).
-    /// The blanket's frame and the receiver's impl header each spell their side
-    /// from one module, so their heads compare directly.
+    /// Whether `subject` satisfies the associated-type constraints the
+    /// blanket's own bounds pin to its receiver param
+    /// (`impl<T: Mul<Output = T>> Product for T`).
+    ///
+    /// Both sides are `TypeId`s, so a generic argument counts (`W<i32>` with
+    /// `Output = W<String>` fails) and a `type Output = Self;` passes. An
+    /// unregistered answer means a compiler-supplied impl, whose `Output` is
+    /// the type itself. A caller with no subject cannot decide, and a blanket
+    /// that pins nothing needs no subject.
     fn blanket_assoc_constraints_hold(
         &self,
-        type_key: &Receiver,
+        subject: Option<TypeId>,
         blanket: &super::trait_env::BlanketImpl,
     ) -> bool {
-        let trait_env = self.trait_env.clone();
-        let Some(header) = trait_env
-            .impl_headers
-            .get(&(blanket.module.clone(), blanket.ast_id))
-        else {
-            return true;
-        };
-        let Some(param) = header.type_params.iter().find(|p| p.name == blanket.param) else {
-            return true;
-        };
-        param.bounds.iter().all(|bound| {
-            bound.assoc_types.iter().all(|constraint| {
-                // Only a constraint naming the receiver param itself is decidable
-                // here; anything else is the instantiation's to answer.
-                if super::trait_env::get_type_name_static(&constraint.ty) != blanket.param {
-                    return true;
-                }
-                self.receiver_assoc_type_is_self(type_key, &bound.name, &constraint.name)
+        blanket.bounds.iter().all(|bound| {
+            if bound.pinned_to_receiver.is_empty() {
+                return true;
+            }
+            let (Some(subject), Some(trait_)) = (subject, bound.decl_ref) else {
+                return false;
+            };
+            let table = self.type_table.borrow();
+            bound.pinned_to_receiver.iter().all(|assoc| {
+                table
+                    .resolve_assoc_type_of_trait(subject, &trait_, assoc)
+                    .is_none_or(|actual| actual == subject)
             })
         })
-    }
-
-    /// Whether `<receiver as trait_name>::assoc` is the receiver itself, read
-    /// off the impl header that binds it.
-    fn receiver_assoc_type_is_self(
-        &self,
-        type_key: &Receiver,
-        trait_name: &str,
-        assoc: &str,
-    ) -> bool {
-        let trait_env = self.trait_env.clone();
-        trait_env
-            .entries_by_receiver_vec(type_key)
-            .into_iter()
-            .filter_map(|entry| trait_env.impl_headers.get(&entry))
-            .filter(|header| header.trait_name.as_deref() == Some(trait_name))
-            .all(|header| {
-                let target = super::trait_env::get_type_name_static(&header.ty);
-                header
-                    .associated_types
-                    .iter()
-                    .filter(|b| b.name == assoc)
-                    .all(|b| super::trait_env::get_type_name_static(&b.ty) == target)
-            })
     }
 
     /// Whether `blanket`'s receiver bound is a reflection trait — the shape the
@@ -2261,6 +2254,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for info in impl_infos {
             let mut scope = self.enter_inherited_type_param_scope();
 
+            // `Self` in `type Output = Self;` is the type being registered for,
+            // not whatever the enclosing frame was implementing.
+            scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
+
             // Bind impl type params to concrete type args.
             // For `impl<T> IntoIterator for List<T>` with List<u8>:
             // impl_ty_param_names = ["T"], concrete_type_args = [u8_typeid]
@@ -2382,6 +2379,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Bind the blanket type param to the concrete type
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
+            scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
             scope
                 .annotate_ctx
                 .trait_ctx

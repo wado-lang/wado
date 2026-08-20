@@ -165,6 +165,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
+    /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
+    /// whether it did. [`Self::bound_declaring_assoc_type`] would answer with
+    /// the first, which is a coin toss the writer never made. Supertraits are
+    /// not counted: a direct bound redeclaring an inherited name wins there.
+    fn report_ambiguous_assoc_type(&self, param_name: &str, assoc_name: &str, span: Span) -> bool {
+        let Some(bounds) = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)
+        else {
+            return false;
+        };
+        let declaring: Vec<String> = bounds
+            .iter()
+            .filter(|bound| {
+                self.trait_assoc_type_decl(&bound.name, assoc_name)
+                    .is_some()
+            })
+            .map(|bound| bound.name.clone())
+            .collect();
+        if declaring.len() < 2 {
+            return false;
+        }
+        let _ = self.emit(TypeError::AmbiguousAssocType {
+            assoc: assoc_name.to_string(),
+            param: param_name.to_string(),
+            traits: declaring,
+            span,
+        });
+        true
+    }
+
     /// Which trait declares `assoc_name` for the `impl` block being elaborated:
     /// the trait it names, or the supertrait the name is inherited from.
     fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<crate::defs::DefId> {
@@ -324,6 +357,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             let base_name = namespaced.namespace.clone();
+            if self.report_ambiguous_assoc_type(&base_name, &namespaced.name, namespaced.span) {
+                return TypeTable::ERROR;
+            }
             return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
         }
 
@@ -752,13 +788,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_name: &str,
         assoc: &str,
     ) -> TypeId {
+        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc);
+        self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc)
+    }
+
+    /// [`Self::make_frame_projection`] for a caller that already knows which
+    /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
+    /// the site that dispatched can say which one `a * b` yields.
+    pub(super) fn make_frame_projection_of_trait(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        owning_trait: Option<crate::defs::DefId>,
+        assoc: &str,
+    ) -> TypeId {
         let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
         let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
             .iter()
             .map(|b| self.fq_trait_name_at(b.id, &b.name))
             .collect();
         let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
-        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc);
         self.tysys
             .type_table
             .borrow_mut()

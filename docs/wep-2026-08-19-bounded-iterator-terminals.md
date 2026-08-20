@@ -141,8 +141,16 @@ worked, none specific to iterators. Each is pinned by a fixture under
 
 3. **A blanket's bound keeps its associated-type constraints.** The index
    carried each bound's trait but not its `Output = T`, so `Product`'s blanket
-   accepted any `Mul`. The operator itself now yields `T::Output` rather than
-   assuming `Self`. Fixtures: `error_operator_output_widens.wado`,
+   accepted any `Mul`. The bound now records which associated types it pins to
+   the receiver, and the check compares `TypeId`s against the receiver the
+   caller still holds — so a generic argument counts (`W<i32>` projecting to
+   `W<String>` fails) and `type Output = Self;` passes. `Self` in an impl's
+   binding had no target bound and registered as `unknown`. The operator itself
+   now yields `T::Output`, under the trait it dispatched through, rather than
+   assuming `Self`; `T::Output` under two bounds that both declare it is
+   ambiguous and reported. Fixtures: `error_operator_output_widens.wado`,
+   `error_blanket_assoc_constraint_generic_arg.wado`,
+   `assoc_output_is_self.wado`, `error_ambiguous_assoc_type.wado`,
    `operator_output_projection.wado`.
 
 4. **A projection over a rigid type parameter is a type, not a pending

@@ -52,7 +52,7 @@ pub(super) fn check_assignable(
     }
 
     // Defer only what is genuinely undecided: an inference variable awaiting its
-    // solver, a pack awaiting expansion, a projection awaiting its impl, and
+    // solver, a pack awaiting expansion, a projection over one of those, and
     // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
     // of a polymorphic signature instantiates its slots into `InferVar`s first,
     // so nothing but itself is ever assignable to it.

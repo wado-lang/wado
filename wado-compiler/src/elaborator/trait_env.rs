@@ -420,6 +420,11 @@ pub(crate) struct BlanketBound {
     /// The trait the bound's reference site names, `None` where it reaches no
     /// declaration.
     pub(crate) decl_ref: Option<crate::defs::DefId>,
+    /// Associated types the bound pins to the receiver param itself
+    /// (`Output` in `T: Mul<Output = T>`). Only that shape is decidable
+    /// against a candidate receiver; any other right-hand side is the
+    /// instantiation's to answer.
+    pub(crate) pinned_to_receiver: Vec<String>,
 }
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
@@ -1157,6 +1162,12 @@ impl TraitEnv {
                                     .map(|b| BlanketBound {
                                         name: b.name.clone(),
                                         decl_ref: resolutions.declared(b.id),
+                                        pinned_to_receiver: b
+                                            .assoc_types
+                                            .iter()
+                                            .filter(|c| get_type_name_static(&c.ty) == param)
+                                            .map(|c| c.name.clone())
+                                            .collect(),
                                     })
                                     .collect()
                             })
