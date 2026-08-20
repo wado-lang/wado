@@ -81,3 +81,22 @@ Reverted. Generalizes: on a copying collector a hoist buys a cheaper use and
 sells a permanent root, so a constant that is small and rarely read loses.
 `const_object_globalization` is already near break-even on gale-gen without the
 extra hoists.
+
+## Demoting a `List<Variant>` value copy to a shallow spine copy (2026-08-20)
+
+`value_copy_demote` refuses any helper that transitively runs a variant deep
+copy, since a `match` payload binding aliases the payload storage in place. On
+gale-gen that exclusion covers `List<Element>`, whose deep copy is the single
+largest leaf in the profile (`$value_copy$RuleRefElement` 4.5%,
+`TokenRefElement` 1.9%, `Element` 1.1%).
+
+Lifting the exclusion outright (unsound, measured as an upper bound) changed
+nothing: **164.4 KB/s with the gate lifted vs 166.2 without**, best of three
+alternating.
+
+The pass never reaches these copies. `demote_candidate` matches only
+`let x = $value_copy$T(arg)`, and gale's `List<Element>` copies are struct
+_fields_ — `SllConfig { ..*c, pos }` in `sll_step`, `elements: alt.elements` in
+`sll_advance` — so no binding exists to retarget. Extending the element-
+immutability analysis to variants buys nothing until the pass can demote a copy
+in expression position.
