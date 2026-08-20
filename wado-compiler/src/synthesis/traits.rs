@@ -5646,13 +5646,12 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
         else {
             continue;
         };
-        // Only the return type has to be determined: it is half the key, and
-        // the parameters are irrelevant at codegen (see the type doc). A
-        // generic `fn(&T, &T) -> Ordering` therefore still supplies the
-        // `(2, Ordering)` stub its monomorphized closures will dispatch
-        // through, while `fn(?0::Item) -> ?1` — whose return type names
-        // nothing — supplies no key at all.
-        if !tt.is_concrete(*return_type) {
+        // The whole type has to be determined, parameters included: the
+        // receiver is the type's own spelling, so an undetermined part would
+        // put an inference variable in a function name. A generic
+        // `fn(?0::Item) -> bool` names a type no value ever has — substitution
+        // gives each instantiation its own, and its own stub with it.
+        if !tt.is_concrete(*return_type) || !params.iter().all(|p| tt.is_concrete(*p)) {
             continue;
         }
         let receiver = tt.fn_receiver_name(resolved);
