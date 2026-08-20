@@ -20,6 +20,9 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Decision: What was decided and why
 - Consequences: Impact and trade-offs
 
+Deciding is the human's role, to adopt and to refuse alike. Propose, and record
+what is still open as a gap; never write a decision of your own into a WEP.
+
 It may include TODOs on WIP.
 
 A WEP is a living standard: it states the design as it stands now, and a changed
