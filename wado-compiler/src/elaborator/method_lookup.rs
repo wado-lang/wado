@@ -1216,6 +1216,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+
+        // `&mut` of a scalar field borrows a boxed copy, so the mutation would
+        // be silently dropped. An explicit `&mut x.f` is refused for this
+        // reason (`operators.rs`); the implicit receiver borrow must refuse it
+        // too, or the same shape miscompiles instead of diagnosing.
+        if receiver_ast.is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_)))
+            && self.is_scalar_place_type(receiver.type_id)
+        {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: format!(
+                    "cannot call `&mut self` method `{method_name}` on a primitive struct \
+                     field; use the struct reference directly"
+                ),
+                span,
+            });
+        }
+    }
+
+    /// Whether a place of this type is a scalar: a primitive or an enum, or a
+    /// newtype over either. `&mut` of such a place is a boxed copy rather than
+    /// a projection, which is what makes it unwritable through the reference.
+    pub(super) fn is_scalar_place_type(&self, type_id: TypeId) -> bool {
+        let table = self.tysys.type_table.borrow();
+        let is_scalar = |ty: &ResolvedType| {
+            matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
+        };
+        if is_scalar(table.get(type_id)) {
+            return true;
+        }
+        let base = table.get_ultimate_base_type(type_id);
+        is_scalar(table.get(base))
     }
 
     /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and any

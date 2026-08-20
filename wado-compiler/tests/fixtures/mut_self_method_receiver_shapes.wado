@@ -1,0 +1,52 @@
+// The `&mut self` receiver shapes that must keep working, guarding the
+// primitive-field refusal (`mut_self_method_on_primitive_field_error.wado`)
+// against over-rejection.
+//
+// A primitive newtype is referenceable as a *local* — the box is the
+// variable's storage — and a struct-typed field is a GC reference, so both
+// mutate through. Only a primitive-typed field has no box to project into.
+
+type Budget = i32;
+
+impl Budget {
+    fn spend(&mut self) {
+        *self -= 1;
+    }
+}
+
+struct Guard {
+    remaining: i32,
+}
+
+impl Guard {
+    fn spend(&mut self) {
+        self.remaining -= 1;
+    }
+}
+
+struct Holder {
+    g: Guard,
+}
+
+impl Holder {
+    fn spend_through_self(&mut self) {
+        self.g.spend();
+    }
+}
+
+export fn run() {
+    let mut b: Budget = 5;
+    b.spend();
+    assert b as i32 == 4;
+
+    let mut h = Holder { g: Guard { remaining: 5 } };
+    h.g.spend();
+    assert h.g.remaining == 4;
+
+    // The same field, reached through an outer `&mut self` method.
+    h.spend_through_self();
+    assert h.g.remaining == 3;
+}
+
+__DATA__
+{"stdout": ""}

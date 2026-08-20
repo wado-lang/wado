@@ -1,0 +1,32 @@
+// A `&mut self` method called on a primitive-typed struct field.
+//
+// `&mut` of a primitive is a `Box<T>`: for a local the box is the variable's
+// storage, but a field has no box to project into, so the call site can only
+// box a *copy* and the mutation is discarded. The explicit form (`&mut h.b`)
+// has always been refused for this reason; the implicit receiver borrow used
+// to compile and silently do nothing, which is how the JSON depth guard was
+// nearly written as a newtype field that never counted.
+//
+// A newtype over a primitive is the same shape, so it is refused too — the
+// check looks through to the ultimate base type.
+
+type Budget = i32;
+
+impl Budget {
+    fn spend(&mut self) {
+        *self -= 1;
+    }
+}
+
+struct Holder {
+    b: Budget,
+}
+
+export fn run() {
+    let mut h = Holder { b: 5 };
+    h.b.spend();
+    assert h.b as i32 == 4;
+}
+
+__DATA__
+{"compile_error": "cannot call `&mut self` method `spend` on a primitive struct field"}

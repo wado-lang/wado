@@ -27,6 +27,8 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
+    DepthGuard,
+    DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
 use {
@@ -732,21 +734,12 @@ impl Serializer for PrettyJsonSerializer {
     }
 }
 
-/// Default nesting limit for `from_bytes` / `from_string`.
-///
-/// Both the typed path and `skip_value` recurse per container, so an unbounded
-/// input exhausts the Wasm stack and traps — unrecoverable, unlike an error.
-/// Measured trap depths are ~2,200 (typed) and ~6,600 (skip); 100 leaves ample
-/// headroom while covering realistic documents.
-pub global DEFAULT_MAX_DEPTH: i32 = 100;
-
 pub struct JsonDeserializer {
     pub input: ByteSlice,
     pub pos: i32,
-    /// Containers currently open. `enter_container` / `leave_container` keep it
-    /// in step with the recursion.
-    pub depth: i32 = 0,
-    pub max_depth: i32 = DEFAULT_MAX_DEPTH,
+    /// Both the typed path and `skip_value` recurse per container. Measured
+    /// trap depths without the guard: ~2,200 typed, ~6,600 skipped.
+    pub depth: DepthGuard = DepthGuard {},
 }
 
 /// A scanned JSON number token: sign, leading digits, the digit counts
@@ -922,23 +915,12 @@ struct StringRunScan {
 }
 
 impl JsonDeserializer {
-    /// Counts one container in. Errors past `max_depth` so a deeply nested
-    /// input returns a `DeserializeError` instead of exhausting the stack.
     internal fn enter_container(&mut self) -> Result<(), DeserializeError> {
-        self.depth += 1;
-        if self.depth > self.max_depth {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::depth_limit(
-                `exceeded maximum nesting depth of ${self.max_depth}`,
-                self.pos as i64,
-            ));
-        }
-        return Result::Ok(());
+        return self.depth.enter(self.pos as i64);
     }
 
     internal fn leave_container(&mut self) {
-        assert self.depth > 0;
-        self.depth -= 1;
+        self.depth.leave();
     }
 
     pub fn peek(&self) -> i32 {
@@ -2573,7 +2555,7 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     let mut de = JsonDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
-        max_depth,
+        depth: DepthGuard { max_depth },
     };
     let v = T::deserialize(&mut de)?;
     de.skip_whitespace();

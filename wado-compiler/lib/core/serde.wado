@@ -161,6 +161,43 @@ impl DeserializeError {
     }
 }
 
+/// Default nesting limit shared by every self-describing format.
+///
+/// A deserializer recurses once per open container, so unbounded nesting
+/// exhausts the stack and traps — unrecoverable, unlike an error. 100 covers
+/// realistic documents with ample headroom.
+pub global DEFAULT_MAX_DEPTH: i32 = 100;
+
+/// The nesting counter a format's deserializer embeds.
+///
+/// The mechanism is shared; the policy is not. A format sets its own
+/// `max_depth` and decides what counts as a container — only it knows where
+/// its recursion happens.
+pub struct DepthGuard {
+    depth: i32 = 0,
+    pub max_depth: i32 = DEFAULT_MAX_DEPTH,
+}
+
+impl DepthGuard {
+    /// Counts one container in. `offset` locates the overrun in the input.
+    pub fn enter(&mut self, offset: i64) -> Result<(), DeserializeError> {
+        self.depth += 1;
+        if self.depth > self.max_depth {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::depth_limit(
+                `exceeded maximum nesting depth of ${self.max_depth}`,
+                offset,
+            ));
+        }
+        return Result::Ok(());
+    }
+
+    pub fn leave(&mut self) {
+        assert self.depth > 0;
+        self.depth -= 1;
+    }
+}
+
 #[compiler_item("serialize_seq")]
 pub trait SerializeSeq {
 

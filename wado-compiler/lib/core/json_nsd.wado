@@ -25,9 +25,11 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
+    DepthGuard,
+    DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
-use { write_escaped_string, JsonDeserializer, DEFAULT_MAX_DEPTH } from "core:json";
+use { write_escaped_string, JsonDeserializer } from "core:json";
 
 #[synopsis]
 test {
@@ -621,7 +623,7 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     let mut de = JsonDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
-        max_depth,
+        depth: DepthGuard { max_depth },
     };
     let mut nsd = NsdDeserializer { de: &mut de };
     let v = T::deserialize(&mut nsd)?;

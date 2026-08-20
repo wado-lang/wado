@@ -38,6 +38,8 @@ use {
     SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
+    DepthGuard,
+    DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
 #[synopsis]
@@ -765,12 +767,6 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
     return Result::Ok(buf as ByteList);
 }
 
-/// Default nesting limit for arrays/maps/tags. A bounded recursion guard
-/// (RFC 8949 §10): a small header can claim deeply nested structure — one byte
-/// per level — so the decoder caps the depth rather than exhausting the native
-/// stack. Matches `core:json`'s default.
-pub global DEFAULT_MAX_DEPTH: i32 = 100;
-
 /// Reconstruct `2^e` exactly as an `f64` by writing its IEEE-754 exponent
 /// field directly. Used by the binary16 widening path; `e` stays within the
 /// normal `f64` exponent range there, so the result is exact.
@@ -829,8 +825,9 @@ fn is_passthrough_tag(tag: u64) -> bool {
 pub struct CborDeserializer {
     input: ByteSlice,
     pos: i32,
-    depth: i32 = 0,
-    max_depth: i32 = DEFAULT_MAX_DEPTH,
+    /// A one-byte header can claim deeply nested structure (RFC 8949 §10), so
+    /// a CBOR nesting bomb is far more compact than a JSON one.
+    depth: DepthGuard = DepthGuard {},
     strict: bool,
 }
 
@@ -854,15 +851,7 @@ impl CborDeserializer {
     }
 
     fn enter(&mut self) -> Result<(), DeserializeError> {
-        self.depth += 1;
-        if self.depth > self.max_depth {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::depth_limit(
-                `exceeded maximum nesting depth of ${self.max_depth}`,
-                self.pos as i64,
-            ));
-        }
-        return Result::Ok(());
+        return self.depth.enter(self.pos as i64);
     }
 
     /// Read `n` big-endian bytes into a `u64` (the argument of a head). A single
@@ -1194,13 +1183,13 @@ impl CborDeserializer {
         if indef {
             if self.peek_byte()? == BREAK {
                 self.pos += 1;
-                self.depth -= 1;
+                self.depth.leave();
                 return Result::Ok(true);
             }
             return Result::Ok(false);
         }
         if remaining <= 0 {
-            self.depth -= 1;
+            self.depth.leave();
             return Result::Ok(true);
         }
         return Result::Ok(false);
@@ -1250,7 +1239,7 @@ impl CborDeserializer {
                         i += 1;
                     }
                 }
-                self.depth -= 1;
+                self.depth.leave();
                 return Result::Ok(());
             },
             MAJOR_MAP => {
@@ -1272,7 +1261,7 @@ impl CborDeserializer {
                         i += 1;
                     }
                 }
-                self.depth -= 1;
+                self.depth.leave();
                 return Result::Ok(());
             },
             _ => {
@@ -1377,7 +1366,7 @@ impl DeserializeSeq for CborSeqAccess {
                 self.de.pos as i64,
             ));
         }
-        self.de.depth -= 1;
+        self.de.depth.leave();
         return Result::Ok(());
     }
 }
@@ -1487,7 +1476,7 @@ impl DeserializeVariant for CborVariantAccess {
                 self.de.pos += 1;
             }
             // Balance the `enter` taken for a payload-carrying variant map.
-            self.de.depth -= 1;
+            self.de.depth.leave();
         }
         return Result::Ok(());
     }
@@ -2091,7 +2080,7 @@ pub fn from_bytes<T: Deserialize, B: AsByteSlice>(
     let mut de = CborDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
-        max_depth,
+        depth: DepthGuard { max_depth },
         strict,
     };
     let v = T::deserialize(&mut de)?;
