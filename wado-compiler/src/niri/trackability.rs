@@ -417,12 +417,18 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &Type
 /// this reaches. A value element copies, so only a reference shape answers.
 fn shared_reference_root(body: &Body, op: Operand, type_table: &TypeTable) -> Option<u32> {
     let e = op.as_expr()?;
+    if !type_table.is_reference_shaped(body.exprs[e].type_id) {
+        return None;
+    }
+    let mut e = e;
+    // A cast names the same storage as its operand, so it hides no holder.
+    while let ExprKind::Cast { expr: inner, .. } = &body.exprs[e].kind {
+        e = inner.as_expr()?;
+    }
     let ExprKind::Local { index, .. } = &body.exprs[e].kind else {
         return None;
     };
-    type_table
-        .is_reference_shaped(body.exprs[e].type_id)
-        .then_some(*index)
+    Some(*index)
 }
 
 /// What a walk of a body may hold values for: which locals may bind an

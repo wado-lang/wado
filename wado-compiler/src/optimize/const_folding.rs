@@ -956,11 +956,8 @@ impl ConstFoldVisitor<'_> {
         changed
     }
 
-    /// Walk an `Assign { target, value }` expression. The outer
-    /// `target` shape is left opaque (lvalue); only its inner
-    /// sub-expression is folded. After the walk, a bare `local = …`
-    /// reassignment drops `local`'s lattice to unknown (field / heap
-    /// writes are the engine `ValueGraph`'s concern, not niri's).
+    /// Walk an `Assign { target, value }` expression. The outer `target` shape
+    /// is left opaque (lvalue); only its inner sub-expression is folded.
     fn visit_assign(&mut self, engine: &mut Engine, e: ExprId) -> bool {
         let (target, value) = match &engine.body.exprs[e].kind {
             ExprKind::Assign { target, value } => (*target, *value),

@@ -97,17 +97,16 @@ Work is sharded so every run covers the whole corpus, and findings fail the run.
 
 ## Roadmap
 
-Ordered by yield per cost. The corpus is 1600 fixtures and 23697 injection
-sites, of which the payloads now carry 1453 fixtures and 17906 sites — the
-write payload alone reached 568 fixtures and 5685 sites.
+Ordered by yield per cost. The harness reports the corpus it drew and the sites
+each payload reached; a run is the only place those counts are true.
 
 - [x] Opaque read payload. Its first full run found three bugs: two colliding
       mangled names (`&&T` spelled as `&T`, a generic newtype spelled without
       its arguments) and a closure capture handed the box where the field
       holds the value.
 - [ ] Retry a payload the compiler refuses without the bindings the error
-      names. 36 fixtures lose the read payload to one resource binding whose
-      read is a move.
+      names. A resource binding whose read is a move costs a fixture the whole
+      read payload.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
 - [ ] `while builtin::black_box(false) { … }` as a second guard shape.

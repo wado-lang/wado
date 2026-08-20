@@ -170,8 +170,8 @@ pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups 
     alias_groups_from_edges(edges)
 }
 
-/// A `let dst = src` / `dst = src` copy of a name that *is* the storage — a
-/// reference, or the `Box<T>` one collapses onto.
+/// A `let dst = src` / `dst = src` copy of a name that *is* the storage, by the
+/// same [`type_creates_alias`] the value graph seeds its own edges from.
 fn collect_shared_storage_edges(
     body: &Body,
     node: NodeRef,
@@ -199,7 +199,7 @@ fn collect_shared_storage_edges(
     let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind else {
         return;
     };
-    if type_table.is_reference_shaped(body.exprs[ve].type_id) {
+    if type_creates_alias(body.exprs[ve].type_id, type_table) {
         edges.push((dst, *src));
     }
 }
