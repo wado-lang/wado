@@ -920,10 +920,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // can create distinct TypeIds for the same logical type.
         if !matches!(op, BinaryOp::And | BinaryOp::Or)
             && left.type_id != right.type_id
-            && left.type_id != TypeTable::ERROR
-            && right.type_id != TypeTable::ERROR
             && left.type_id != TypeTable::NEVER
             && right.type_id != TypeTable::NEVER
+            && !self
+                .tysys
+                .type_table
+                .borrow()
+                .contains_undecided(left.type_id)
+            && !self
+                .tysys
+                .type_table
+                .borrow()
+                .contains_undecided(right.type_id)
         {
             let type_table = self.tysys.type_table.borrow();
             let (left_name, right_name) =
@@ -1020,6 +1028,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         } {
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
+            // A type parameter dispatches through its bounds, as the binary
+            // operators do; the name-keyed lookup below reaches no impl for one.
+            if let ResolvedType::TypeParam { name, .. } = &operand_resolved
+                && let Some(bounds) = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(name)
+                    .cloned()
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    method_name,
+                    expr_type,
+                    unary.span,
+                    None,
+                )
+            {
+                let return_type = self.operator_output_type(expr_type, &found_trait);
+                let resolved = ResolvedTraitMethod {
+                    trait_name: found_trait,
+                    method_name: method_name.to_string(),
+                    impl_name: name.clone(),
+                    impl_type_id: None,
+                    self_kind: info.self_kind,
+                    return_type,
+                    param_types: vec![],
+                    is_type_param_receiver: true,
+                };
+                return self
+                    .build_trait_op_method_call_on_resolved(
+                        placeholder(expr_type, unary.expr.span()),
+                        vec![],
+                        &resolved,
+                        unary.span,
+                        Some(unary.id),
+                    )
+                    .type_id;
+            }
             let struct_name = match &operand_resolved {
                 ResolvedType::Struct { .. }
                 | ResolvedType::GenericInstance { .. }

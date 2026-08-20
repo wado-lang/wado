@@ -1437,7 +1437,7 @@ impl TypeSystem {
                         self.find_trait_impl_for_subject(ctx, scope, subject, type_key, trait_)
                     })
             });
-            if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, blanket) {
+            if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, &blanket.bounds) {
                 return true;
             }
         }
@@ -1454,12 +1454,12 @@ impl TypeSystem {
     /// unregistered answer means a compiler-supplied impl, whose `Output` is
     /// the type itself. A caller with no subject cannot decide, and a blanket
     /// that pins nothing needs no subject.
-    fn blanket_assoc_constraints_hold(
+    pub(super) fn blanket_assoc_constraints_hold(
         &self,
         subject: Option<TypeId>,
-        blanket: &super::trait_env::BlanketImpl,
+        bounds: &[super::trait_env::BlanketBound],
     ) -> bool {
-        blanket.bounds.iter().all(|bound| {
+        bounds.iter().all(|bound| {
             if bound.pinned_to_receiver.is_empty() {
                 return true;
             }
@@ -1547,6 +1547,12 @@ impl TypeSystem {
     }
 }
 
+/// An associated type paired with the trait that declares it. A subtrait's
+/// default body may name a supertrait's, and the projection belongs to the
+/// declaring trait — keying it to the dispatched-through one made
+/// `<T as Base>::Elem` and `<T as Derived>::Elem` two types.
+type DeclaredAssocType = (crate::defs::DefId, ast::AssociatedTypeDecl);
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait declaration a reference site names, from
     /// [`crate::resolve::Resolutions`] and so resolved in the writing module: an
@@ -1596,23 +1602,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         key: &crate::defs::DefId,
         method_name: &str,
-    ) -> Option<(super::sig::MethodSig, Vec<ast::AssociatedTypeDecl>)> {
+    ) -> Option<(super::sig::MethodSig, Vec<DeclaredAssocType>)> {
         let header = self.trait_decl_header_of(key)?;
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
         }
-        let mut assoc_types = header.assoc_types.clone();
-        let inherited: Vec<ast::AssociatedTypeDecl> = self
+        let mut assoc_types: Vec<DeclaredAssocType> = header
+            .assoc_types
+            .iter()
+            .map(|decl| (*key, decl.clone()))
+            .collect();
+        let inherited: Vec<DeclaredAssocType> = self
             .tysys
             .trait_env
             .supertrait_closure(key)
             .iter()
-            .filter_map(|bound| self.trait_decl_header_of(&bound.decl))
-            .flat_map(|super_header| super_header.assoc_types.iter().cloned())
+            .filter_map(|bound| Some((bound.decl, self.trait_decl_header_of(&bound.decl)?)))
+            .flat_map(|(decl, super_header)| {
+                super_header
+                    .assoc_types
+                    .iter()
+                    .map(move |a| (decl, a.clone()))
+                    .collect::<Vec<_>>()
+            })
             .collect();
-        for decl in inherited {
-            if !assoc_types.iter().any(|own| own.name == decl.name) {
-                assoc_types.push(decl);
+        for entry in inherited {
+            if !assoc_types.iter().any(|(_, own)| own.name == entry.1.name) {
+                assoc_types.push(entry);
             }
         }
         let sig = self
@@ -1651,8 +1667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// one would not.
     fn trait_assoc_answers(
         &mut self,
-        trait_decl: &crate::defs::DefId,
-        assoc_types: &[ast::AssociatedTypeDecl],
+        assoc_types: &[DeclaredAssocType],
         self_type_id: TypeId,
     ) -> Vec<(String, TypeId)> {
         let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
@@ -1660,7 +1675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => String::new(),
         };
         let mut answers = Vec::with_capacity(assoc_types.len());
-        for decl in assoc_types {
+        for (declaring, decl) in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
                 let bound_names: Vec<crate::name::FqTraitName> = decl
@@ -1674,7 +1689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow_mut()
                     .make_assoc_type_projection_of_trait(
                         self_type_id,
-                        Some(*trait_decl),
+                        Some(*declaring),
                         decl.name.clone(),
                         bound_names,
                         bindings,
@@ -1809,7 +1824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), decl)
         });
 
-        let answers = self.trait_assoc_answers(&decl, &trait_assoc_types, self_type_id);
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         // Slot 0 is `Self`. The trait's own parameters follow, and a bound
         // names none of them positionally (`T: Add<Output = T>`), so they take
         // their declared defaults — `trait Add<Rhs = Self>` makes `add`'s
@@ -2575,6 +2590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
 /// arithmetic is lane-wise, and only the lane type's own impl knows the width.
 fn primitive_name_has_arithmetic(prim_name: &str, trait_name: &str) -> bool {
-    matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem")
+    matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem" | "Neg")
         && !matches!(prim_name, "bool" | "char" | "v128")
+        && !(trait_name == "Neg" && prim_name.starts_with('u'))
 }

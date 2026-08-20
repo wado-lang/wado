@@ -2414,8 +2414,10 @@ impl TypeTable {
         );
     }
 
-    /// Resolve `<concrete_id as trait_name>::assoc_name` — the exact form,
-    /// for callers that know which trait the projection came from.
+    /// Resolve `<concrete_id as trait_name>::assoc_name` at the trait's
+    /// declared defaults, for callers that know which trait the projection
+    /// came from. A projection carries no trait arguments — a bound cannot
+    /// write any — so the defaulted instantiation is the only one it names.
     pub fn resolve_assoc_type_of_trait(
         &self,
         concrete_id: TypeId,
@@ -2458,10 +2460,16 @@ impl TypeTable {
     /// Answers only when exactly one implemented trait declares the name;
     /// two make it a coin flip, so the caller must qualify with
     /// [`Self::resolve_assoc_type_of_trait`] instead.
+    ///
+    /// Naming no trait names no arguments either, so only the defaulted
+    /// instantiations answer — the same form a bound means.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
         let mut found = None;
         for (key, &resolved) in &self.assoc_type_resolutions {
-            if key.receiver != concrete_id || key.assoc_name != assoc_name {
+            if key.receiver != concrete_id
+                || key.assoc_name != assoc_name
+                || !key.trait_args.is_empty()
+            {
                 continue;
             }
             if found.is_some_and(|prior| prior != resolved) {

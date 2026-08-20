@@ -1544,7 +1544,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 })
             });
-            if bounds_satisfied {
+            // The bound holding is not the whole condition: a blanket pinning
+            // an associated type to its receiver (`T: Mul<Output = T>`) does
+            // not apply to one that widens. The bound path decides the same
+            // way, and a direct call must not disagree with it.
+            if bounds_satisfied
+                && self
+                    .tysys
+                    .blanket_assoc_constraints_hold(receiver_type_id, bounds)
+            {
                 impl_refs.push(ImplBlockRef(module.clone(), *ast_id));
             }
         }

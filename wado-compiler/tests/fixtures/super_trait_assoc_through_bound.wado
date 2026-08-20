@@ -1,0 +1,43 @@
+// `T::Elem` under `T: Derived` is `Base`'s associated type, and the subtrait's
+// default body names the same one. A projection belongs to the trait that
+// declares the name, not the one it was reached through — keying it to
+// `Derived` made the two `T::Elem` two types.
+use { println } from "core:cli";
+
+trait Base {
+    type Elem;
+
+    fn one(&self) -> Self::Elem;
+}
+
+trait Derived: Base {
+    fn pick(&self) -> Self::Elem {
+        return self.one();
+    }
+}
+
+struct Cell {
+    x: i32,
+}
+
+impl Base for Cell {
+    type Elem = i32;
+
+    fn one(&self) -> i32 {
+        return self.x;
+    }
+}
+
+impl Derived for Cell {
+}
+
+fn take<T: Derived>(d: &T) -> T::Elem {
+    return d.pick();
+}
+
+export fn run() with Stdout {
+    println(`${take(&Cell { x: 7 })}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

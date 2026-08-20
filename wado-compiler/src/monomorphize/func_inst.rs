@@ -2374,13 +2374,22 @@ impl Monomorphizer {
                 // Convert back to a binary op when monomorphization concretized to a primitive.
                 if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
                     let recv_inner = type_table.peel_refs(receiver.type_id);
+                    let base_name = trait_name_before
+                        .as_ref()
+                        .map(crate::name::FqTraitName::base_name);
                     if type_table.is_scalar_primitive_like(recv_inner)
-                        && let Some(binary_op) = trait_method_to_binary_op(
-                            trait_name_before
-                                .as_ref()
-                                .map(crate::name::FqTraitName::base_name),
-                            &method_name_before,
-                        )
+                        && let Some(unary_op) =
+                            trait_method_to_unary_op(base_name, &method_name_before)
+                    {
+                        let operand = unref_operand(receiver, type_table);
+                        expr.type_id = operand.type_id;
+                        expr.kind = TirExprKind::Unary {
+                            op: unary_op,
+                            expr: Box::new(operand),
+                        };
+                    } else if type_table.is_scalar_primitive_like(recv_inner)
+                        && let Some(binary_op) =
+                            trait_method_to_binary_op(base_name, &method_name_before)
                     {
                         let left = unref_operand(receiver, type_table);
                         let Some(arg) = args.first() else {
@@ -4630,6 +4639,17 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
 
 /// Convert a trait method name to a TIR binary operator, if applicable.
 /// Used when a type-param-receiver method call is monomorphized to a primitive type.
+/// The native instruction a unary operator trait's method is, for a receiver
+/// monomorphization turned into a scalar primitive. Primitives carry no impl
+/// for these, so the call has to become the operator again.
+fn trait_method_to_unary_op(trait_name: Option<&str>, method_name: &str) -> Option<TirUnaryOp> {
+    match (trait_name, method_name) {
+        (Some("Neg"), "neg") => Some(TirUnaryOp::Neg),
+        (Some("BitNot"), "bitnot") => Some(TirUnaryOp::BitNot),
+        _ => None,
+    }
+}
+
 fn trait_method_to_binary_op(trait_name: Option<&str>, method_name: &str) -> Option<TirBinaryOp> {
     match (trait_name, method_name) {
         (Some("Add"), "add") => Some(TirBinaryOp::Add),
