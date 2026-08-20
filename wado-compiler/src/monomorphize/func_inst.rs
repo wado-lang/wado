@@ -2353,7 +2353,7 @@ impl Monomorphizer {
                 // Convert back to a binary op when monomorphization concretized to a primitive.
                 if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
                     let recv_inner = type_table.peel_refs(receiver.type_id);
-                    if type_table.is_primitive_like(recv_inner)
+                    if type_table.is_scalar_primitive_like(recv_inner)
                         && let Some(binary_op) = trait_method_to_binary_op(
                             trait_name_before
                                 .as_ref()

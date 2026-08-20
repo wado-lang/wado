@@ -1663,18 +1663,64 @@ fn bind_for_sync(
     (vec![let_sid], read.into(), vec![(tmp_idx, type_id)])
 }
 
+/// Whether `stmt` never falls through to the statement after it. A `loop` does
+/// not when nothing breaks out of it: its only exits are labeled breaks to an
+/// enclosing block.
+fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
+    match &body.stmts[stmt].kind {
+        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => true,
+        StmtKind::Expr(e) => e
+            .as_expr()
+            .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
+        StmtKind::Loop { body: b } => !block_breaks_innermost_loop(body, *b),
+        _ => false,
+    }
+}
+
+/// Whether any unlabeled `break` appears anywhere in `block`. Conservative on
+/// purpose: one inside a nested loop binds to that loop and leaves this one
+/// unbroken, but reading it as a break only costs the caller its shortcut.
+fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
+    struct Search(bool);
+    impl NirRefVisitor for Search {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Stmt(s) = node
+                && matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. })
+            {
+                self.0 = true;
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut search = Search(false);
+    search.visit_node(body, NodeRef::Block(block));
+    search.0
+}
+
 /// Append `sync_stmts` to `block`, preserving the block's trailing value
 /// if it has one. If the block's last stmt is a non-unit value-producing
 /// `Expr(e)`, the trailing value is bound before the sync stmts run and a
 /// final stmt restores the block's value contract. Otherwise (empty block,
 /// non-Expr trailing stmt, or unit-typed trailing Expr) the sync stmts are
 /// simply appended.
+///
+/// A diverging trailing stmt takes neither path: nothing after it runs, and
+/// appending leaves the block ending on an assignment where its type demands a
+/// value — which the labeled block a `break … : value` feeds reaches as invalid
+/// Wasm.
 fn append_sync_preserving_block_value(
     body: &mut Body,
     block: BlockId,
     sync_stmts: Vec<StmtId>,
     ctx: &mut WalkCtx,
 ) {
+    if body.blocks[block]
+        .stmts
+        .last()
+        .is_some_and(|&s| stmt_diverges(body, s, ctx.type_table))
+    {
+        return;
+    }
     let trailing_is_value = match body.blocks[block].stmts.last() {
         Some(&s) => matches!(
             &body.stmts[s].kind,

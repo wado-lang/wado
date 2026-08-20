@@ -2160,6 +2160,14 @@ impl TypeTable {
         matches!(self.get(base), ResolvedType::Primitive(_))
     }
 
+    /// Whether `id` bottoms out in a primitive Wasm *scalar* — every primitive
+    /// but `v128`, whose arithmetic is lane-wise and known only to the lane
+    /// type's own impl.
+    pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
+        let base = self.get_ultimate_base_type(id);
+        matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
+    }
+
     /// Peel through Ref/MutRef wrappers to get the underlying type.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {

@@ -1,0 +1,26 @@
+// A user trait spelled like an operator trait is a different declaration, so a
+// primitive's compiler-supplied arithmetic must not satisfy a bound on it.
+trait Rem {
+    fn remainder(&self) -> i32;
+}
+
+trait Named {
+    fn describe(&self) -> i32;
+}
+
+impl<T: Rem> Named for T {
+    pub fn describe(&self) -> i32 {
+        return self.remainder();
+    }
+}
+
+fn describe<N: Named>(x: N) -> i32 {
+    return x.describe();
+}
+
+export fn run() {
+    assert describe(7) == 7;
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Named'" }

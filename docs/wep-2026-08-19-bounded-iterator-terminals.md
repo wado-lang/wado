@@ -85,14 +85,17 @@ declaration — the same diagnostic shape `collect` produces.
 
 ### Reference iterators
 
-The prelude implements `Eq` / `Ord` for `&T` and `&mut T` but not `Add`, so an
-`iter_ref()` chain gains `min` / `max` as `Option<&T>` and not `sum`. Nothing
-special-cases it — the carrier traits' bounds decide, and `iter_value()` names
-the step back.
+A `Ref` chain reaches none of the eight: `iter_ref().sum()` and `.min()` are
+compile errors naming the missing `Sum` / `Extremum`, and `iter_value()` names
+the step back to the values. Nothing special-cases it — two rules on how a
+reference satisfies a bound decide, and both are the compiler's:
 
-`Ord for &T` / `&mut T` had to be written out: the bound was already satisfied
-without them, so the instance had no impl to be homed by and two modules asking
-for one each minted their own, which the package-defines check rejects.
+- A receiverless method has no receiver to auto-deref, so `&T` does not inherit
+  a bound on a trait declaring one. Without this the bound held with no instance
+  to dispatch to, and the call reached WIR build as an ICE.
+- `==` on a reference is identity ([Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)),
+  so no ordering follows from it and `&T` is not `Ord` — which `Ord: Eq` would
+  otherwise contradict. A struct holding a reference derives no `Ord` either.
 
 ### `Option<T>`, not `T`
 
@@ -121,8 +124,8 @@ optional again.
 
 ## Compiler support
 
-The carrier traits lean on two blanket-impl behaviours neither of which worked,
-neither specific to iterators. Each is pinned by a fixture under
+The carrier traits lean on three bound-resolution behaviours none of which
+worked, none specific to iterators. Each is pinned by a fixture under
 `wado-compiler/tests/fixtures/`.
 
 1. **A blanket bounded by a compiler-supplied trait must apply to a primitive.**
@@ -131,7 +134,12 @@ neither specific to iterators. Each is pinned by a fixture under
    `impl<T: Add> Sum for T` held for `String` and not for `i32`. Fixture:
    `blanket_impl_builtin_bound.wado`.
 
-2. **A blanket's method must dispatch through a generic bound.**
+2. **A same-named user trait must not borrow a primitive's arithmetic.** The
+   operator traits carry no compiler item, so the bound was matched by its bare
+   spelling and a user `trait Rem` made every numeric primitive satisfy a
+   blanket bounded by it. Fixture: `error_same_named_operator_trait.wado`.
+
+3. **A blanket's method must dispatch through a generic bound.**
    `resolve_type_param_dispatch` keyed the template by the call site's
    type-parameter head, which matches the blanket's receiver param only when the
    two are spelled alike. `fn f<D: Doubler>(x: D) { x.twice() }` against

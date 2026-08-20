@@ -993,6 +993,20 @@ impl TypeSystem {
         }
     }
 
+    /// Whether `trait_` declares a method taking no receiver. A reference
+    /// otherwise satisfies every bound its pointee does, by auto-deref at the
+    /// call — which a receiverless method (`Sum::sum_iter`) has nothing to do,
+    /// so the bound would hold with no instance to dispatch to.
+    fn trait_has_receiverless_method(&self, trait_: DefId) -> bool {
+        trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
+            |sig| {
+                sig.methods
+                    .values()
+                    .any(|m| m.sig.self_kind == crate::ast::SelfKind::None)
+            },
+        )
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &Scope,
@@ -1197,6 +1211,14 @@ impl TypeSystem {
                 ) {
                     return true;
                 }
+                // `Eq` on a reference is identity, so no ordering follows from
+                // it and a struct holding one derives no `Ord`. A receiverless
+                // method (`Sum::sum_iter`) has no receiver to auto-deref, so
+                // the bound would hold with no instance to dispatch to.
+                if on_bound == Some(OnBoundTrait::Ord) || self.trait_has_receiverless_method(trait_)
+                {
+                    return false;
+                }
                 return self.type_implements_trait(ctx, scope, inner_id, trait_);
             }
             ResolvedType::MutRef(inner) => {
@@ -1213,6 +1235,14 @@ impl TypeSystem {
                     Some(&[inner_id]),
                 ) {
                     return true;
+                }
+                // `Eq` on a reference is identity, so no ordering follows from
+                // it and a struct holding one derives no `Ord`. A receiverless
+                // method (`Sum::sum_iter`) has no receiver to auto-deref, so
+                // the bound would hold with no instance to dispatch to.
+                if on_bound == Some(OnBoundTrait::Ord) || self.trait_has_receiverless_method(trait_)
+                {
+                    return false;
                 }
                 return self.type_implements_trait(ctx, scope, inner_id, trait_);
             }
@@ -1348,7 +1378,23 @@ impl TypeSystem {
         matches!(
             self.classify_on_bound_trait(scope, trait_name),
             Some(OnBoundTrait::Eq | OnBoundTrait::Ord)
-        ) || primitive_name_has_arithmetic(name, trait_name)
+        ) || (self.is_prelude_trait(scope, trait_name)
+            && primitive_name_has_arithmetic(name, trait_name))
+    }
+
+    /// Whether `trait_name` binds to the prelude's own declaration in `scope`.
+    /// The operator traits carry no compiler item, so a same-named user trait
+    /// is told apart by the module its declaration comes from.
+    fn is_prelude_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
+        let prelude = {
+            let tt = self.type_table.borrow();
+            let Some(module) = tt.compiler_items().trait_module(CompilerItem::Ord) else {
+                return false;
+            };
+            module.clone()
+        };
+        self.scoped_trait_decl_module(scope, trait_name)
+            .is_none_or(|module| *module == prelude)
     }
 
     fn blanket_trait_impl_applies(
@@ -2450,8 +2496,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 /// Whether the compiler supplies `trait_name`'s operator for the primitive
-/// spelled `prim_name`.
+/// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
+/// arithmetic is lane-wise, and only the lane type's own impl knows the width.
 fn primitive_name_has_arithmetic(prim_name: &str, trait_name: &str) -> bool {
     matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem")
-        && !matches!(prim_name, "bool" | "char")
+        && !matches!(prim_name, "bool" | "char" | "v128")
 }

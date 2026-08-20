@@ -1,0 +1,19 @@
+// `filter` fused into `reduce` leaves a labeled block whose tail is a `loop`
+// only labeled breaks leave. Field scalarization appended its field sync after
+// that loop, so the block ended on an assignment where its type demands a value
+// and codegen rejected the module. Only reproduces once inlining has fused the
+// two, so it needs the full pipeline at -O3.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: List<i32> = [1, 2, 3, 4];
+    assert arr.iter_value().filter(|x: i32| x > 2).reduce(|a: i32, b: i32| a * b)
+        matches { Some(v) && v == 12 };
+    assert arr.iter_value().filter(|x: i32| x > 10).reduce(|a: i32, b: i32| a * b)
+        matches { None };
+    assert arr.iter_value().filter(|x: i32| x > 2).sum() matches { Some(v) && v == 7 };
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

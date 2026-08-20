@@ -51,18 +51,6 @@ internal trait Ord: Eq {
     fn cmp(&self, other: &Self) -> Ordering;
 }
 
-impl<T: Ord> Ord for &T {
-    pub fn cmp(&self, other: &Self) -> Ordering {
-        return (*self).cmp(&**other);
-    }
-}
-
-impl<T: Ord> Ord for &mut T {
-    pub fn cmp(&self, other: &Self) -> Ordering {
-        return (*self).cmp(&**other);
-    }
-}
-
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]

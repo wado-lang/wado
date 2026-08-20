@@ -321,12 +321,6 @@ test "min_by_key keeps the first of equal keys, max_by_key the last" {
     assert words.iter_value().max_by_key(|w: String| w.len()) matches { Some(v) && v == "cx" };
 }
 
-test "min and max over a reference iterator order by pointee" {
-    let mut words: List<String> = ["bb", "a", "ccc"];
-    assert words.iter_ref().min() matches { Some(v) && *v == "a" };
-    assert words.iter_ref_mut().max() matches { Some(v) && *v == "ccc" };
-}
-
 test "map doubles elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
     let doubled = arr.iter_value().map(|x: i32| x * 2).collect();
