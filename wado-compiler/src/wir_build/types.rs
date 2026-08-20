@@ -1055,14 +1055,12 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirType;
 
-    // Collect all unique function signatures from the shared type table.
-    // Each entry carries `(param_wirs, result_wirs, is_inspectable,
-    // fn_struct_name)` so we can pick the right `CanonicalClosure_K`
-    // schema (slim `{ env, func }` vs fat `{ env, func, inspect,
-    // inspect_alt }`) up front based on whether `fn(..)^Inspect
-    // / InspectAlt` survived DCE for that signature, and so we can
-    // map `(arity, return_type)` back to the canonical struct type
-    // id for the WIR-level dispatch body.
+    // Every unique function signature in the shared type table, each carrying
+    // whether its `CanonicalClosure_K` takes the slim `{ env, func }` schema or
+    // the inspectable `{ env, inspect, inspect_alt, func }` one — decided by
+    // whether a `fn(..)^Inspect[Alt]` for that `(arity, return_type)` survived
+    // DCE. The `(arity, return_type)` also maps back to the canonical struct
+    // type id the dispatch body casts to.
     let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, crate::tir::TypeId)> =
         Vec::new();
     let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();

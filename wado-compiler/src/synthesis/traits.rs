@@ -3670,7 +3670,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // Enum, variant, and flags types derive Inspect via their kind's blanket
     // in `core:prelude/traits` (WEP 2026-06-13), so nothing is emitted for
     // them here — nor for structs. What remains has no reflection: newtypes,
-    // parameterized types, resources, and `Fn` dispatch stubs.
+    // parameterized types, resources, and `fn(..)` dispatch stubs.
 
     // Newtypes (e.g., `type Meters = f64`)
     for nt in &module.newtypes {
@@ -3804,7 +3804,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         ctx.record_impl(receiver, &inspect_fq.canonical().expect(KEYED));
     }
 
-    // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
+    // Dispatch stubs — one per `fn(..)` spelling, since a stub is named after
+    // the type it dispatches for.
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled = sig.receiver.to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
@@ -4482,7 +4483,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         // Per-module: do not `ctx.record_impl`.
     }
 
-    // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
+    // Dispatch stubs — one per `fn(..)` spelling, since a stub is named after
+    // the type it dispatches for.
     // Crucially, do NOT use the `display_fallback` Inspect-delegate:
     // WIR build supplies the real body — `call_ref (self.inspect_alt)`
     // for InspectAlt, `call_ref (self.inspect)` for Inspect — and a
@@ -5580,8 +5582,8 @@ fn resolve_impl_module_via_env(
 
 /// Collect the parameterized types needing Inspect/Display impls — the kinds
 /// whose codegen genuinely depends on the distinct `TypeId`, tuples and resource
-/// handles included. `ResolvedType::Function` is deliberately absent: a `Fn`
-/// dispatch stub depends only on `(arity, return_type)`, so use
+/// handles included. `ResolvedType::Function` is deliberately absent — its
+/// stubs are keyed by the type's own spelling, so use
 /// [`collect_canonical_fn_signatures`] instead.
 fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
     tt.all_types()

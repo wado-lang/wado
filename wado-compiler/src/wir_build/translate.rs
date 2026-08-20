@@ -625,8 +625,9 @@ fn register_inspect_wrapper(
 /// Build the WIR body for a `FunctionKind::FnCanonicalDispatch` stub: cast
 /// `self` to the shared `$canonical_inspectable_base`, then
 /// `call_ref (struct.get base $slot self) (self.env, f)`. The cast targets the
-/// shared base rather than one `CanonicalClosure_K`, so a single stub serves
-/// every parameter shape. `None` when no inspectable canonical struct exists.
+/// base shared by every `CanonicalClosure_K` of one `(arity, return_type)`, so
+/// each stub reaches any parameter shape. `None` when no inspectable canonical
+/// struct exists.
 #[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
