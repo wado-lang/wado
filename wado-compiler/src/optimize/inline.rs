@@ -1150,10 +1150,14 @@ pub fn inline_functions(
             let mut inlined_funcs: Vec<FuncId> = Vec::new();
             // Splice-point re-valuation records (Method A): one per inlined block.
             let mut reval: Vec<InlineRevalInfo> = Vec::new();
-            // Take ownership of local_count and locals to avoid borrow conflicts
-            // with the `&mut func.body` walk below.
-            let mut local_count = func.local_count();
-            let mut locals = std::mem::take(&mut func.locals);
+            // Take ownership of the frame to avoid borrow conflicts with the
+            // `&mut func.body` walk below.
+            let mut frame = CallerFrame {
+                local_count: func.local_count(),
+                locals: std::mem::take(&mut func.locals),
+                address_taken: std::mem::take(&mut func.address_taken_locals),
+                stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
+            };
             // Counter for generating unique inline labels
             let mut inline_counter: u32 = 0;
             // Calls in this body that mutate no caller-reachable state, taken
@@ -1176,8 +1180,7 @@ pub fn inline_functions(
                     root,
                     &inline_candidates,
                     &descriptors,
-                    &mut local_count,
-                    &mut locals,
+                    &mut frame,
                     &project.type_table.borrow(),
                     &mut inlined_funcs,
                     &mut inline_counter,
@@ -1185,7 +1188,9 @@ pub fn inline_functions(
                     false,
                 );
             }
-            func.locals = locals;
+            func.locals = frame.locals;
+            func.address_taken_locals = frame.address_taken;
+            func.stores_aliased_locals = frame.stores_aliased;
 
             if !inlined_funcs.is_empty() {
                 changed = true;
@@ -1255,6 +1260,15 @@ pub fn inline_functions(
     changed
 }
 
+/// The caller's local frame, which every splice extends: the locals it gains
+/// and the annotations the alias analysis reads about them.
+struct CallerFrame {
+    local_count: u32,
+    locals: Vec<NirLocal>,
+    address_taken: IndexSet<u32>,
+    stores_aliased: IndexSet<u32>,
+}
+
 /// Inline function calls in a block, each statement processed in place: a
 /// `Let` / `Expr` / `Return` value gets a top-level attempt that then re-scans
 /// the inlined body, while others recurse. `cold` marks a cold call-site
@@ -1266,8 +1280,7 @@ fn inline_calls_in_block(
     block: BlockId,
     candidates: &IndexMap<FuncId, NirFunction>,
     descriptors: &[FunctionRef],
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     inline_counter: &mut u32,
@@ -1314,8 +1327,7 @@ fn inline_calls_in_block(
                     value,
                     candidates,
                     descriptors,
-                    local_count,
-                    locals,
+                    frame,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -1334,8 +1346,7 @@ fn inline_calls_in_block(
                 value,
                 candidates,
                 descriptors,
-                local_count,
-                locals,
+                frame,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -1349,8 +1360,7 @@ fn inline_calls_in_block(
                         cond,
                         candidates,
                         descriptors,
-                        local_count,
-                        locals,
+                        frame,
                         type_table,
                         inlined_funcs,
                         inline_counter,
@@ -1363,8 +1373,7 @@ fn inline_calls_in_block(
                     tb,
                     candidates,
                     descriptors,
-                    local_count,
-                    locals,
+                    frame,
                     type_table,
                     inlined_funcs,
                     inline_counter,
@@ -1377,8 +1386,7 @@ fn inline_calls_in_block(
                         eb,
                         candidates,
                         descriptors,
-                        local_count,
-                        locals,
+                        frame,
                         type_table,
                         inlined_funcs,
                         inline_counter,
@@ -1392,8 +1400,7 @@ fn inline_calls_in_block(
                 b,
                 candidates,
                 descriptors,
-                local_count,
-                locals,
+                frame,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -1414,8 +1421,7 @@ fn inline_top_level(
     value: ExprId,
     candidates: &IndexMap<FuncId, NirFunction>,
     descriptors: &[FunctionRef],
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     inline_counter: &mut u32,
@@ -1426,8 +1432,7 @@ fn inline_top_level(
         body,
         value,
         candidates,
-        local_count,
-        locals,
+        frame,
         type_table,
         inline_counter,
         reval,
@@ -1442,8 +1447,7 @@ fn inline_top_level(
             new_id,
             candidates,
             descriptors,
-            local_count,
-            locals,
+            frame,
             type_table,
             inlined_funcs,
             inline_counter,
@@ -1457,8 +1461,7 @@ fn inline_top_level(
             value,
             candidates,
             descriptors,
-            local_count,
-            locals,
+            frame,
             type_table,
             inlined_funcs,
             inline_counter,
@@ -1559,8 +1562,7 @@ fn build_inlined_labeled_block(
     bindings: Vec<InlineBinding>,
     call_span: Span,
     call_expr: ExprId,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    frame: &mut CallerFrame,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
@@ -1577,7 +1579,7 @@ fn build_inlined_labeled_block(
     let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
     *inline_counter += 1;
 
-    let local_offset = *local_count;
+    let local_offset = frame.local_count;
     let callee_param_count = candidate.params.len() as u32;
     let callee_local_count = candidate.local_count();
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
@@ -1588,12 +1590,12 @@ fn build_inlined_labeled_block(
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(binding.callee_local_index, new_local_index);
-        locals.push(NirLocal {
+        frame.locals.push(NirLocal {
             name: binding.name.clone(),
             type_id: binding.local_type,
             is_mut: binding.is_mut,
         });
-        *local_count += 1;
+        frame.local_count += 1;
         let let_id = caller.stmts.push(StmtNode {
             kind: StmtKind::Let {
                 name: binding.name,
@@ -1612,10 +1614,23 @@ fn build_inlined_labeled_block(
     let param_offset = local_offset + callee_param_count;
     for i in callee_param_count..callee_local_count {
         if let Some(callee_local) = candidate.locals.get(i as usize) {
-            locals.push(callee_local.clone());
+            frame.locals.push(callee_local.clone());
         }
     }
-    *local_count += new_locals_needed;
+    frame.local_count += new_locals_needed;
+
+    // An annotation is about a local, and the splice renumbers locals: a callee
+    // local the alias analysis must keep treating as aliased carries over under
+    // its caller index. Dropping one lets a read of a boxed local forward past
+    // a write through the alias.
+    let carry =
+        |local: &u32| remap_local_index(*local, &param_to_local, param_offset, callee_param_count);
+    frame
+        .address_taken
+        .extend(candidate.address_taken_locals.iter().map(carry));
+    frame
+        .stores_aliased
+        .extend(candidate.stores_aliased_locals.iter().map(carry));
 
     let mut inner_labels: IndexSet<String> = IndexSet::default();
     collect_inner_labels(callee, NodeRef::Block(callee.root), &mut inner_labels);
@@ -1662,8 +1677,7 @@ fn try_inline_call_expr(
     caller: &mut Body,
     call_id: ExprId,
     candidates: &IndexMap<FuncId, NirFunction>,
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    frame: &mut CallerFrame,
     type_table: &TypeTable,
     inline_counter: &mut u32,
     reval: &mut Vec<InlineRevalInfo>,
@@ -1753,8 +1767,7 @@ fn try_inline_call_expr(
         bindings,
         call_span,
         call_id,
-        local_count,
-        locals,
+        frame,
         inline_counter,
         reval,
     );
@@ -2418,8 +2431,7 @@ fn inline_calls_in_expr(
     e: ExprId,
     candidates: &IndexMap<FuncId, NirFunction>,
     descriptors: &[FunctionRef],
-    local_count: &mut u32,
-    locals: &mut Vec<NirLocal>,
+    frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     inline_counter: &mut u32,
@@ -2438,8 +2450,7 @@ fn inline_calls_in_expr(
                 ex,
                 candidates,
                 descriptors,
-                local_count,
-                locals,
+                frame,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -2453,8 +2464,7 @@ fn inline_calls_in_expr(
                 b,
                 candidates,
                 descriptors,
-                local_count,
-                locals,
+                frame,
                 type_table,
                 inlined_funcs,
                 inline_counter,
@@ -2473,8 +2483,7 @@ fn inline_calls_in_expr(
             a,
             candidates,
             descriptors,
-            local_count,
-            locals,
+            frame,
             type_table,
             inlined_funcs,
             inline_counter,
@@ -2486,8 +2495,7 @@ fn inline_calls_in_expr(
         body,
         e,
         candidates,
-        local_count,
-        locals,
+        frame,
         type_table,
         inline_counter,
         reval,
