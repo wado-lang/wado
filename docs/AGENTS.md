@@ -22,21 +22,17 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 
 It may include TODOs on WIP.
 
-A WEP is a living standard: it states the design as it stands now. When a design
-changes, rewrite the affected sections. Do not append an update log, keep
-superseded alternatives, or leave a checklist of what already landed — the git
-history is the SSoT for how the design got here.
+A WEP is a living standard: it states the design as it stands now, and a changed
+design means rewriting the affected sections — no update log, no superseded
+alternatives, no checklist of what landed. Git history is the SSoT.
 
-An "out of scope" or "non-goals" section is forbidden, under any spelling. Such
-a list reads as a boundary of the design when it is almost always an unfinished
-mechanism, and it invites reasoning from what the implementation happens to do
-back to what the language means. Record the shortfall under "Known gaps"
-instead, as something to be closed: what is missing, what closing it takes, and
-— where it is a defect rather than an open question — a red test pinning it.
-
-A genuine decision not to have something is not a gap and does not go in a list
-of refusals either. State it in Decision, positively and with its reasoning, the
-way any other decision is stated.
+No "out of scope" or "non-goals" section, under any spelling. Such a list reads
+as a boundary of the design when it is almost always an unfinished mechanism,
+inviting reasoning from what the implementation does back to what the language
+means. A shortfall belongs under "Known gaps" as something to close: what is
+missing, what closing it takes, and a red test where it is a defect rather than
+an open question. A decision not to have something is neither, and goes in
+Decision with its reasoning.
 
 ### Index of WEPs
 
