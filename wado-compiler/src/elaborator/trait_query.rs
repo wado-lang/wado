@@ -993,11 +993,17 @@ impl TypeSystem {
         }
     }
 
-    /// Whether `trait_` declares a method taking no receiver. A reference
-    /// otherwise satisfies every bound its pointee does, by auto-deref at the
-    /// call — which a receiverless method (`Sum::sum_iter`) has nothing to do,
-    /// so the bound would hold with no instance to dispatch to.
-    fn trait_has_receiverless_method(&self, trait_: DefId) -> bool {
+    /// Whether a reference is denied `trait_`'s bound, which it otherwise
+    /// inherits from its pointee by auto-deref at the call.
+    ///
+    /// `Eq` on a reference is identity, so no ordering follows from it and a
+    /// struct holding one derives no `Ord`. A receiverless method
+    /// (`Sum::sum_iter`) has no receiver to auto-deref, so the bound would hold
+    /// with no instance to dispatch to.
+    fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
+        if on_bound == Some(OnBoundTrait::Ord) {
+            return true;
+        }
         trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
             |sig| {
                 sig.methods
@@ -1211,12 +1217,7 @@ impl TypeSystem {
                 ) {
                     return true;
                 }
-                // `Eq` on a reference is identity, so no ordering follows from
-                // it and a struct holding one derives no `Ord`. A receiverless
-                // method (`Sum::sum_iter`) has no receiver to auto-deref, so
-                // the bound would hold with no instance to dispatch to.
-                if on_bound == Some(OnBoundTrait::Ord) || self.trait_has_receiverless_method(trait_)
-                {
+                if self.ref_denies_bound(on_bound, trait_) {
                     return false;
                 }
                 return self.type_implements_trait(ctx, scope, inner_id, trait_);
@@ -1236,12 +1237,7 @@ impl TypeSystem {
                 ) {
                     return true;
                 }
-                // `Eq` on a reference is identity, so no ordering follows from
-                // it and a struct holding one derives no `Ord`. A receiverless
-                // method (`Sum::sum_iter`) has no receiver to auto-deref, so
-                // the bound would hold with no instance to dispatch to.
-                if on_bound == Some(OnBoundTrait::Ord) || self.trait_has_receiverless_method(trait_)
-                {
+                if self.ref_denies_bound(on_bound, trait_) {
                     return false;
                 }
                 return self.type_implements_trait(ctx, scope, inner_id, trait_);

@@ -1677,17 +1677,19 @@ fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// Whether any unlabeled `break` appears anywhere in `block`. Conservative on
-/// purpose: one inside a nested loop binds to that loop and leaves this one
-/// unbroken, but reading it as a break only costs the caller its shortcut.
+/// Whether an unlabeled `break` binds to the loop whose body is `block`. A
+/// nested loop captures its own, so its subtree is skipped.
 fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
     struct Search(bool);
     impl NirRefVisitor for Search {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Stmt(s) = node
-                && matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. })
-            {
-                self.0 = true;
+            if let NodeRef::Stmt(s) = node {
+                if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
+                    return;
+                }
+                if matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. }) {
+                    self.0 = true;
+                }
             }
             self.walk_node(body, node);
         }
