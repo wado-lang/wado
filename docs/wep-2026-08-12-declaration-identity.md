@@ -22,6 +22,22 @@ has been recorded under:
 
 `tests/fixtures/cross_module_same_name_*` holds a fixture per known occurrence.
 
+A closure's dispatch receiver was the same defect without a shared spelling to
+collide on. It was `Fn<arity,ret>` — a name no declaration backs, standing for
+the class of `fn(..)` types sharing a call shape — so reaching a stub meant
+reproducing that collapsing rule, and six places did. One spelled the type its
+own way and silently missed, which is how `${list_of_fns:?}` came to fail. The
+emitted IR stated the mismatch outright: one declaration
+`"Fn<1,i32>^Inspect::inspect"(self: &fn(i8) -> i32, …)` served `fn(i8)->i32` and
+`fn(String)->i32` alike.
+
+Retiring it for the type's own name found three more sites keyed on the
+spelling — the stub's own mangle, DCE's `== "Fn"` gate, an `InspectAlt` probe
+over emitted function names — and one defect the fabricated name had covered:
+because it spelled only arity and return type, nothing required a *parameter*
+to be determined, and an inference variable reached a function name once the
+parameters entered it.
+
 ## Decision
 
 There is one identity for a declaration, it is not constructible from a name, and
