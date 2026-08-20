@@ -12,6 +12,7 @@ use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtI
 
 use super::place::{borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of};
 use crate::nir_visitor::reachable_exprs;
+use crate::tir::TypeTable;
 
 use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
 
@@ -233,12 +234,27 @@ enum Reach {
 /// `value_reads` sources sweep the whole arena instead: an in-place rewrite
 /// shares ids between a live node and the displaced parent that held it, so a
 /// mention's only witness may sit where nothing live refers to.
-pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
+pub(super) fn aggregate_safe_locals(
+    body: &Body,
+    reached: &Reached,
+    type_table: &TypeTable,
+) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
         }
     }
+    // Storing a reference into an aggregate hands its object a second holder —
+    // a closure environment over a boxed local is the shape this reaches. A
+    // value element copies, so only a reference shape disqualifies.
+    let share_root = |body: &Body, op: Operand, set: &mut LocalSet| {
+        if let Some(e) = op.as_expr()
+            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
+            && type_table.is_reference_shaped(body.exprs[e].type_id)
+        {
+            set.insert(*index);
+        }
+    };
     fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
         if let Some(e) = op.as_expr() {
             reads.insert(e);
@@ -263,11 +279,13 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for element in elements {
                     read_value(*element, &mut value_reads);
+                    share_root(body, *element, &mut disqualified);
                 }
             }
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
                     read_value(field.value, &mut value_reads);
+                    share_root(body, field.value, &mut disqualified);
                 }
             }
             ExprKind::Assign { target, value } => {
@@ -395,20 +413,24 @@ pub(super) struct Trackability {
 
 impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
-    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
         let reached = Reached::in_frame(body, facts);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
             clobbered: clobbered_locals(body, &reached),
         }
     }
 
     /// For an ordinary walk, which performs nothing, so no write it reaches is
     /// one it carries out.
-    pub(super) fn outside_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn outside_frame(
+        body: &Body,
+        facts: ProgramFacts<'_>,
+        type_table: &TypeTable,
+    ) -> Self {
         let reached = Reached::outside_frame(body, facts);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
             clobbered: LocalSet::default(),
         }
     }

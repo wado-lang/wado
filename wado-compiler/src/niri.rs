@@ -270,6 +270,9 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
+    /// Per local, the locals that may name the same storage. A write through
+    /// one member lands in what every member names.
+    alias_classes: IndexMap<u32, Vec<u32>>,
     /// What this frame folded a node to, read back by
     /// [`Interpreter::expr_to_lattice`]. Load-bearing on both backends: the
     /// scratch body promotes nothing, and on a real body the committing rewrite
@@ -461,12 +464,18 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
+    /// Record which locals may name one another's storage, so a write through
+    /// any of them drops what the frame holds for all of them.
+    pub fn record_alias_classes(&mut self, classes: IndexMap<u32, Vec<u32>>) {
+        self.frame.alias_classes = classes;
+    }
+
     /// Record which of `body`'s locals may bind an aggregate constant. The
     /// driving visitor calls this once per function, next to
     /// [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
         self.frame.aggregate_locals =
-            Trackability::outside_frame(body, self.facts).aggregate_locals;
+            Trackability::outside_frame(body, self.facts, self.type_table).aggregate_locals;
     }
 
     /// Record which locals a `let` bound to `&GLOBAL`.
@@ -593,6 +602,31 @@ impl<'a> Interpreter<'a> {
     /// prior binding is dropped.
     pub fn invalidate_local(&mut self, index: u32) {
         self.frame.env.insert(index, Lattice::NonConst);
+    }
+
+    /// Drop what the frame knows about the storage `place` writes into, and
+    /// about every local that may name the same storage: `let r = b; r.f = v`
+    /// writes `b`'s object, and the frame tracks values per local, not per
+    /// object.
+    pub fn invalidate_place(&mut self, body: &Body, place: Operand) {
+        let Some((root, _)) = self.frame_place_of(body, place) else {
+            // A place no frame root names — through a call result, a global —
+            // may still be reachable from a tracked local.
+            for lattice in self.frame.env.values_mut() {
+                *lattice = Lattice::NonConst;
+            }
+            return;
+        };
+        self.invalidate_local(root);
+        for member in self
+            .frame
+            .alias_classes
+            .get(&root)
+            .cloned()
+            .unwrap_or_default()
+        {
+            self.invalidate_local(member);
+        }
     }
 }
 

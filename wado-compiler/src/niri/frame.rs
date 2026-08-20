@@ -700,7 +700,7 @@ impl Interpreter<'_> {
         self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
-        let track = Trackability::in_frame(&scratch, self.facts);
+        let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, bound));
         let run = self.exec_frame(&mut scratch, targets, returns_unit);
         self.swap_frame(caller);
@@ -792,7 +792,7 @@ impl Interpreter<'_> {
         self.charge(1)?;
         let mut scratch = body.nodes_only_clone();
         scratch.root = block;
-        let track = Trackability::in_frame(&scratch, self.facts);
+        let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);
         self.swap_frame(caller);

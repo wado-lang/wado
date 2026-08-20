@@ -44,6 +44,15 @@ impl AliasGroups {
         self.root_of.is_empty()
     }
 
+    /// Every member's class, keyed by member. What a consumer keyed on a
+    /// single local rather than on the canonical root reads.
+    pub fn per_member(&self) -> IndexMap<u32, Vec<u32>> {
+        self.root_of
+            .iter()
+            .filter_map(|(&member, root)| Some((member, self.members_of.get(root)?.clone())))
+            .collect()
+    }
+
     /// The alias class containing `local`, itself included, with the canonical
     /// root a caller sweeping many locals dedupes on.
     pub fn class_of(&self, local: u32) -> Option<(u32, &[u32])> {
