@@ -158,7 +158,7 @@ fn fold_function(
     visitor.interpreter.record_aggregate_locals(body);
     visitor
         .interpreter
-        .record_alias_classes(super::alias::alias_classes(body, locals, type_table).to_classes());
+        .record_alias_classes(super::alias::alias_classes(body, type_table).to_classes());
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)

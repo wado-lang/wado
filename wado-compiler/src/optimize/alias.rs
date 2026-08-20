@@ -152,18 +152,56 @@ pub(super) fn build_alias_info(
     }
 }
 
-/// The classes alone: which locals may name one another's storage. One walk,
-/// and none of the call-boundary analysis [`build_alias_info`] also answers for.
-pub(super) fn alias_classes(
-    body: &Body,
-    locals: &[crate::nir::NirLocal],
-    type_table: &TypeTable,
-) -> AliasGroups {
-    let mut edges = same_pointee_reference_edges(locals, type_table);
+/// Which locals name one another's storage, for a consumer holding a value per
+/// local — [`crate::niri`]'s frame.
+///
+/// Only the copies a body writes. The type-based
+/// [`same_pointee_reference_edges`] the value graph also seeds from say two
+/// same-shaped references *may* meet; a frame value denotes an object the frame
+/// itself built in this body, which another name reaches only by flowing from
+/// the binding that built it — a copy, an aggregate that stores it, or a call
+/// it is passed to, and the latter two disqualify the local outright
+/// ([`crate::niri::AliasClasses`], `aggregate_safe_locals`).
+pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups {
+    let mut edges = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        collect_alias_edges_node(body, node, type_table, &mut edges);
+        collect_shared_storage_edges(body, node, type_table, &mut edges);
     });
     alias_groups_from_edges(edges)
+}
+
+/// A `let dst = src` / `dst = src` copy of a name that *is* the storage — a
+/// reference, or the `Box<T>` one collapses onto.
+fn collect_shared_storage_edges(
+    body: &Body,
+    node: NodeRef,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
+    let copy = match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => Some((*local_index, *value)),
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { target, value } => match &body.exprs[*target].kind {
+                ExprKind::Local { index, .. } => Some((*index, *value)),
+                _ => None,
+            },
+            _ => None,
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    };
+    let Some((dst, value)) = copy else { return };
+    let Some(ve) = value.as_expr() else { return };
+    let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind else {
+        return;
+    };
+    if type_table.is_reference_shaped(body.exprs[ve].type_id) {
+        edges.push((dst, *src));
+    }
 }
 
 /// Per-[`FuncId`] first-parameter type. Lets the mutable-escape scan decide
