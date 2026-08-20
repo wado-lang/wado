@@ -8,6 +8,7 @@
 #[path = "../common.rs"]
 mod common;
 
+mod assert_capture_plan;
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;

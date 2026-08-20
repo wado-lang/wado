@@ -109,6 +109,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_assert_captures(
             assert_stmt.id,
             super::sem::types::AssertCaptureInfo {
+                condition_source: unparse_expr_source(&assert_stmt.condition),
+                line: assert_stmt.span.line,
                 slots: stage5_slots,
             },
         );
@@ -190,6 +192,32 @@ pub(super) fn render_local_name(cap_name: &str) -> String {
 
 /// The text a conditional slot renders when the run never reached it.
 pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
+
+/// Render every recorded capture plan as text, for `wado dump --assert-plan`.
+/// The plan is what decides which operands a failure quotes, so this view is
+/// how the covered-forms table is a test rather than a paragraph.
+pub(crate) fn render_plans(sem: &super::sem::ModuleSemantics) -> String {
+    let mut out = String::new();
+    for info in sem.types.assert_captures.values() {
+        out.push_str(&format!(
+            "{}: assert {}\n",
+            info.line, info.condition_source
+        ));
+        if info.slots.is_empty() {
+            out.push_str("  (no operand captured)\n");
+            continue;
+        }
+        for (i, slot) in info.slots.iter().enumerate() {
+            let reach = if slot.conditional {
+                "conditional"
+            } else {
+                "always"
+            };
+            out.push_str(&format!("  __v{i}  {reach:<11}  {}\n", slot.capture_label));
+        }
+    }
+    out
+}
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {

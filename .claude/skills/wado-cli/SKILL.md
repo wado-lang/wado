@@ -158,6 +158,7 @@ wado dump --types file.wado          # show type table
 wado dump --tir-resolved file.wado       # show TIR after type resolution
 wado dump --tir-monomorphized file.wado  # show TIR after monomorphization
 wado dump --nir-lowered file.wado        # show NIR right after lowering (before optimize)
+wado dump --assert-plan file.wado        # show which operands each `assert` captures
 ```
 
 ## Query

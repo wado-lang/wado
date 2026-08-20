@@ -717,6 +717,11 @@ pub(crate) struct AssertSlot {
 /// resolution stay unbound and are skipped by the template).
 #[derive(Clone)]
 pub(crate) struct AssertCaptureInfo {
+    /// The condition as source — what the failure message quotes on its
+    /// `condition:` line, and what `wado dump --assert-plan` names the plan by.
+    pub(crate) condition_source: String,
+    /// 1-based line of the `assert`, for the same two readers.
+    pub(crate) line: usize,
     pub(crate) slots: Vec<AssertSlot>,
 }
 

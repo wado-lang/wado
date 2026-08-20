@@ -55,26 +55,26 @@ Read from the scanner and checked by running one program per form. The
 **nothing** rows are what this WEP measured at `3de0afb35` and has not yet
 closed; every other row is the state after it:
 
-| Condition form                                                                    | Operand lines rendered                                           |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `Ident`, `Binary`, `Unary`                                                        | captured; operands recursed                                      |
-| `Call`, `StaticMethodCall`                                                        | captured whole; arguments recursed, except a bare-ident argument |
-| `MethodCall`                                                                      | captured whole; receiver and arguments recursed                  |
-| `FieldAccess`                                                                     | captured whole; receiver recursed                                |
-| `Index`                                                                           | captured whole; receiver and index operand recursed              |
-| `TemplateString`                                                                  | captured whole                                                   |
-| `ComparisonChain`                                                                 | captured; operands recursed                                      |
-| `Cast`                                                                            | captured; operand recursed                                       |
-| `TupleLiteral`, `StructLiteral`                                                   | not captured (shape comes from the expected type); elements recursed |
-| `Matches`                                                                         | captured; scrutinee recursed                                     |
-| `If`, `Match`                                                                     | captured; the condition / scrutinee recursed, bodies not         |
-| `Block`, `LabeledBlock`                                                           | captured; statements not walked                                  |
-| `Range`                                                                           | captured; bounds recursed                                        |
-| `TryOp`                                                                           | captured; operand recursed                                       |
-| `Literal`, `Closure`, `WithHandler`, `Resume`, `Spread`, `Assign`, `CompoundAssign` | not captured — see below                                       |
+| Condition form                                                                      | Operand lines rendered                                               |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `Ident`, `Binary`, `Unary`                                                          | captured; operands recursed                                          |
+| `Call`, `StaticMethodCall`                                                          | captured whole; arguments recursed, except a bare-ident argument     |
+| `MethodCall`                                                                        | captured whole; receiver and arguments recursed                      |
+| `FieldAccess`                                                                       | captured whole; receiver recursed                                    |
+| `Index`                                                                             | captured whole; receiver and index operand recursed                  |
+| `TemplateString`                                                                    | captured whole                                                       |
+| `ComparisonChain`                                                                   | captured; operands recursed                                          |
+| `Cast`                                                                              | captured; operand recursed                                           |
+| `TupleLiteral`, `StructLiteral`                                                     | not captured (shape comes from the expected type); elements recursed |
+| `Matches`                                                                           | captured; scrutinee recursed                                         |
+| `If`, `Match`                                                                       | captured; the condition / scrutinee recursed, bodies not             |
+| `Block`, `LabeledBlock`                                                             | captured; statements not walked                                      |
+| `Range`                                                                             | captured; bounds recursed                                            |
+| `TryOp`                                                                             | captured; operand recursed                                           |
+| `Literal`, `Closure`, `WithHandler`, `Resume`, `Spread`, `Assign`, `CompoundAssign` | not captured — see below                                             |
 
 Every operand position in a condition is now captured. What the last row
-leaves out, and why, is under *Deliberately out of scope*.
+leaves out, and why, is under _Deliberately out of scope_.
 
 ### The `condition:` line is not the condition
 
@@ -139,15 +139,33 @@ and every operand has a rendering. An operand the compiler declines to inspect
 is a bug in `Inspect` derivation, at the priority every compiler bug carries —
 never a power-assert degradation to document.
 
-The scanner's own comments claim otherwise, and that is what kept receivers
-uncaptured: they say `Fn<…>` and CM resource handles have no `Inspect`. The
-claim is stale — `${f:?}` on a closure prints `|i32| -> i32` today.
+The scanner's comments used to claim otherwise, and that is what had kept
+receivers uncaptured: they said `Fn<…>` and CM resource handles have no
+`Inspect`. The claim was stale — `${f:?}` on a closure prints `|i32| -> i32`.
 
 So one cause remains: the scanner does not descend into a shape. That is a bug
-against this WEP, closed by teaching the scanner, not by reporting. The
-enumeration in the table above is a compiler artefact, not folklore: the capture
-plan for a condition is dumpable, so the covered-forms list is a test rather
-than a paragraph that goes stale.
+against this WEP, closed by teaching the scanner, not by reporting. Two things
+keep it from recurring silently. The scanner's match is exhaustive over `Expr`,
+so a new variant is a compile error at the decision point rather than a fall
+into a leaf arm. And the plan itself is dumpable — `wado dump --assert-plan`
+prints, for every `assert`, which operands it captures and whether a
+short-circuit can skip each one:
+
+```
+6: assert i < list.len() && list[i] == 1
+  __v0  always       i
+  __v1  always       list
+  __v2  always       list.len()
+  __v3  always       i < list.len()
+  __v4  conditional  list
+  __v5  conditional  i
+  __v6  conditional  list[i]
+  __v7  conditional  list[i] == 1
+```
+
+`tests/integration/assert_capture_plan.rs` reads that back for one `assert` per
+condition shape, so the table above is a test rather than a paragraph that goes
+stale.
 
 ### The `condition:` line is source, not a paraphrase
 
@@ -164,7 +182,9 @@ same, which is why the formatter drops them.
 ## Roadmap
 
 Ordered by yield per cost, and rules 1–3 are why: a wrong-code bug outranks a
-missing line, and a missing line outranks a misrendered one.
+missing line, and a missing line outranks a misrendered one. All of it has
+landed; what the design leaves out on purpose is under _Deliberately out of
+scope_.
 
 - [x] **P0 — short-circuit preservation.** Conditional slots per rule 1, for
       `&&` and `||`. Closed the wrong-code bug; nothing below is safe to build
@@ -184,8 +204,8 @@ missing line, and a missing line outranks a misrendered one.
       it.
 - [x] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`,
       plus `Range` and `TryOp`.
-- [ ] **Dump the capture plan** so the covered-forms table is generated and
-      tested rather than written down.
+- [x] **Dump the capture plan** so the covered-forms table is tested rather
+      than written down.
 
 ### Deliberately out of scope
 
@@ -221,8 +241,9 @@ Rule 2 adds one `String` binding per conditional slot to the cold branch, behind
 the failure branch that `builtin::cold_path()` already marks.
 
 Rule 3 makes the covered-forms table a compiler artefact. The cost is a dump
-surface and its tests; the return is that the next unhandled AST shape is a test
-failure rather than an assert that quietly reports less.
+surface and its tests; the return is that the next unhandled AST shape is a
+compile error or a test failure rather than an assert that quietly reports
+less.
 
 Fixing rule 1 changes observable behaviour of existing programs: an assert whose
 right operand has a side effect stops running it when the left operand

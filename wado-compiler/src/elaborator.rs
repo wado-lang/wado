@@ -8,7 +8,7 @@
 //! All type resolution happens in this phase. The output TIR has fully
 //! resolved types on every expression, making code generation mechanical.
 
-mod assert;
+pub(crate) mod assert;
 mod call;
 mod callee;
 mod closure;
