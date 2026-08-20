@@ -1635,6 +1635,10 @@ impl Monomorphizer {
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
     /// call: a `newtype` inherits its base's trait impl, so peel it to the base
     /// unless the newtype defines its own impl of the bound trait.
+    ///
+    /// A blanket impl is not inherited — it applies to the newtype directly, and
+    /// its bounds are the newtype's to satisfy. `impl<T: Add> Sum for T` serves
+    /// `i32x4` through `impl Add for i32x4`, which the base `v128` does not have.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
@@ -1659,7 +1663,29 @@ impl Monomorphizer {
         {
             return tid;
         }
+        if self.value_blanket_serves(tid, trait_name.base_name(), type_table) {
+            return tid;
+        }
         base
+    }
+
+    /// Whether a value blanket impl of `trait_name` accepts `tid` as its
+    /// receiver.
+    fn value_blanket_serves(&self, tid: TypeId, trait_name: &str, type_table: &TypeTable) -> bool {
+        self.functions
+            .trait_env
+            .value_blanket_for_receiver(
+                trait_name,
+                module_source_for_trait_impl(type_table, tid).as_ref(),
+                &|bounds| {
+                    crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                        tid,
+                        bounds.to_vec(),
+                        type_table,
+                    )
+                },
+            )
+            .is_some()
     }
 
     /// Instantiate a generic function with concrete type arguments
