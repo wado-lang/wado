@@ -133,16 +133,16 @@ global global:opt_fusion_temp_used_after.wado::__const_obj_4: ref null "core:pre
 fn "opt_fusion_temp_used_after.wado/run"() with Stdout {
     let total: i32;
     let __iter_1: ref "core:prelude/range.wado//RangeExclusive<i32>";
-    let __local_8: ref "core:prelude/string.wado//String";
-    let __local_9: ref "core:prelude/format.wado//Formatter";
-    let __local_10: ref "core:prelude/string.wado//String";
-    let __local_11: ref "core:prelude/format.wado//Formatter";
+    let __local_7: ref "core:prelude/string.wado//String";
+    let __local_8: ref "core:prelude/format.wado//Formatter";
+    let __local_9: ref "core:prelude/string.wado//String";
+    let __local_10: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
-    let rx_28: i32;
-    let tx_29: i32;
+    let rx_27: i32;
+    let tx_28: i32;
+    let __sroa_slot_30: i32;
     let __sroa_slot_31: i32;
-    let __sroa_slot_32: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_fusion_temp_used_after.wado::__modules_initialized);
         cold_path;
@@ -153,32 +153,32 @@ fn "opt_fusion_temp_used_after.wado/run"() with Stdout {
     __iter_1 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 1, end: 3 };
     b0: block {
         l1: loop {
-            let __match_12_mv_0: i32;
-            let __match_12_mv_1: i32;
-            multivalue_bind [__match_12_mv_0, __match_12_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_1);
-            if __match_12_mv_0 == 0 {
+            let __match_11_mv_0: i32;
+            let __match_11_mv_1: i32;
+            multivalue_bind [__match_11_mv_0, __match_11_mv_1] = "core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next$spec0"(__iter_1);
+            if __match_11_mv_0 == 0 {
+                __sroa_slot_30 = 0;
                 __sroa_slot_31 = 0;
-                __sroa_slot_32 = 0;
                 __inline_f_3: block {
-                    if __match_12_mv_1 == 1 {
-                        __sroa_slot_31 = 0;
-                        __sroa_slot_32 = 10;
+                    if __match_11_mv_1 == 1 {
+                        __sroa_slot_30 = 0;
+                        __sroa_slot_31 = 10;
                         break __inline_f_3;
                     }
-                    __sroa_slot_31 = 1;
-                    __sroa_slot_32 = 0;
+                    __sroa_slot_30 = 1;
+                    __sroa_slot_31 = 0;
                     break __inline_f_3;
                 };
                 let __match_scrut_1: i32;
-                __match_scrut_1 = __sroa_slot_31;
+                __match_scrut_1 = __sroa_slot_30;
                 if __match_scrut_1 == 0 {
-                    total = total + __sroa_slot_32;
+                    total = total + __sroa_slot_31;
                 } else {
                 }
                 let __match_scrut_2: i32;
-                __match_scrut_2 = __sroa_slot_31;
+                __match_scrut_2 = __sroa_slot_30;
                 if __match_scrut_2 == 0 {
-                    total = total + __sroa_slot_32;
+                    total = total + __sroa_slot_31;
                 } else {
                 }
             } else {
@@ -187,17 +187,17 @@ fn "opt_fusion_temp_used_after.wado/run"() with Stdout {
             continue l1;
         };
     };
-    __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(total, __local_9);
-    rx_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_29 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_fusion_temp_used_after.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
-    "core:cli/write_to_stream"(tx_29, __local_8, 1);
+    __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(total, __local_8);
+    rx_27 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_28 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_fusion_temp_used_after.wado/__cm_binding__Stdout_write_via_stream"(rx_27);
+    "core:cli/write_to_stream"(tx_28, __local_7, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     if @unlikely(total != 20) {
         cold_path;
-        "core:rt/panic"(__local_10 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(121); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:opt_fusion_temp_used_after.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:opt_fusion_temp_used_after.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 58); __local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:opt_fusion_temp_used_after.wado::__const_obj_2, __local_11); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:opt_fusion_temp_used_after.wado::__const_obj_1); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 111); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 108); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 32); __local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: total }, __local_11); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 10); __local_10);
+        "core:rt/panic"(__local_9 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(121); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:opt_fusion_temp_used_after.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:opt_fusion_temp_used_after.wado::__const_obj_3); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 58); __local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:opt_fusion_temp_used_after.wado::__const_obj_2, __local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_9, global:opt_fusion_temp_used_after.wado::__const_obj_1); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 111); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 108); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 32); __local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: total }, __local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_9, 10); __local_9);
         unreachable;
     }
 }

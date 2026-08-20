@@ -1,13 +1,6 @@
-//! A closure dispatch stub is synthesized only for a `fn(..)` type that is
-//! fully determined.
-//!
-//! Regression: the collector filtered candidates with a predicate that looked
-//! at the top-level constructor alone, so `fn(I::Item) -> U` was rejected only
-//! because its return type happened to be a bare `TypeParam`. Once a use site
-//! instantiated that slot into an inference variable, nothing rejected it and
-//! the compiler emitted a stub named after a variable, which no monomorphized
-//! closure can ever dispatch through. The stub is named after the type itself,
-//! so every part of it has to be determined — parameters included.
+//! A closure dispatch stub is named after the type it dispatches for, so it is
+//! synthesized only for a `fn(..)` type every part of which is determined —
+//! parameters included. An inference variable in a stub name reaches no closure.
 
 use std::collections::BTreeSet;
 

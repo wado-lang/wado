@@ -702,17 +702,11 @@ pub(crate) struct AssertSlot {
     pub(crate) ast_id: AstId,
     /// The user-facing label the panic template uses for this slot.
     pub(crate) capture_label: String,
-    /// True when a short-circuit lies between this sub-expression and the
-    /// condition root, so the run may never reach it. Such a slot is captured
-    /// where it sits instead of being hoisted ahead of the condition, which is
-    /// what keeps `&&` / `||` short-circuiting, and it renders
-    /// `<not evaluated>` when the run stopped before it.
+    /// A short-circuit can skip this operand, so it is captured where it sits
+    /// and renders `<not evaluated>` when the run stopped before it.
     pub(crate) conditional: bool,
-    /// True when the sub-expression is a projection off a binding, so re-reading
-    /// it at the failure branch yields what the condition saw. Straight-line
-    /// code separates the two, so such a binding needs no value copy — and
-    /// copying one is what made a captured receiver materialize an aggregate at
-    /// every `List<T>::index_value` call in the program.
+    /// A binding the failure branch can re-read, so the slot needs none of its
+    /// own — straight-line code makes the read exact.
     pub(crate) is_place: bool,
 }
 
@@ -723,10 +717,9 @@ pub(crate) struct AssertSlot {
 /// resolution stay unbound and are skipped by the template).
 #[derive(Clone)]
 pub(crate) struct AssertCaptureInfo {
-    /// The condition as source — what the failure message quotes on its
-    /// `condition:` line, and what `wado dump --assert-plan` names the plan by.
+    /// The condition as source, quoted on the failure's `condition:` line.
     pub(crate) condition_source: String,
-    /// 1-based line of the `assert`, for the same two readers.
+    /// 1-based line of the `assert`.
     pub(crate) line: usize,
     pub(crate) slots: Vec<AssertSlot>,
 }

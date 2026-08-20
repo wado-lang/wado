@@ -987,9 +987,9 @@ impl LocalMethodName {
 
     /// True for the synthesized `__call` on a `__Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
-    /// closure's canonical type, whose Wasm signature is fixed — so a
-    /// caller that reshapes ABIs must filter them out or the signature will no
-    /// longer match the vtable slot they are installed into.
+    /// closure's canonical type, whose Wasm signature is fixed — so a caller
+    /// that reshapes ABIs must filter them out or the signature will no longer
+    /// match the vtable slot they are installed into.
     pub fn is_closure_call(&self) -> bool {
         self.method_name == CLOSURE_CALL_METHOD
             && self
@@ -1672,21 +1672,12 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 /// Spell a function type the way source does, minus the optional whitespace.
 ///
 /// A function type names no declaration, so the rendering *is* the identity
-/// and owes injectivity over everything `ResolvedType::Function` interns on —
+/// and owes injectivity over everything `ResolvedType::Function` interns on.
 ///
 /// Examples:
 /// - `mangle_fn_type(false, &["i32"], "i32", false, &[])` → `"fn(i32)->i32"`
 /// - `mangle_fn_type(true, &[], "()", false, &["wasi:cli/Stdout".into()])`
 ///   → `"fn mut()->()with(wasi:cli/Stdout)"`
-/// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
-/// it. A `fn(..)` type names no declaration, so its receiver is this spelling
-/// and a consumer asking "is this a closure receiver" asks here rather than
-/// comparing against a fabricated head.
-#[must_use]
-pub fn is_fn_type_name(name: &str) -> bool {
-    name.starts_with("fn(") || name.starts_with("fn mut(")
-}
-
 pub fn mangle_fn_type(
     is_mut: bool,
     params: &[String],
@@ -1710,6 +1701,13 @@ pub fn mangle_fn_type(
         out.push(')');
     }
     out
+}
+
+/// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
+/// it — the receiver a closure value dispatches through.
+#[must_use]
+pub fn is_fn_type_name(name: &str) -> bool {
+    name.starts_with("fn(") || name.starts_with("fn mut(")
 }
 
 /// A `stores[...]` member of a `with` clause, by parameter position.
@@ -2227,8 +2225,8 @@ mod tests {
 /// mangler spells it the same way wherever it appears. See
 /// [`FqTypeName::builtin`].
 ///
-/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>`
-/// are as module-less as the heads they instantiate.
+/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>` are as
+/// module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
     fn head_of(name: &str) -> &str {
@@ -2300,8 +2298,8 @@ pub enum TypeHead {
 
 impl TypeHead {
     /// A monomorphized instantiation, named by the fused spelling it mangles to
-    /// (`List<…/Token>`). No declaration names one, so its
-    /// rendering is its identity — the same rule [`Self::Shape`] carries.
+    /// (`List<…/Token>`). No declaration names one, so its rendering is its
+    /// identity — the same rule [`Self::Shape`] carries.
     #[must_use]
     pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
         Self::Shape {
@@ -2416,13 +2414,6 @@ impl FqTypeName {
             return Self::of_head_kind(TypeHead::Tuple);
         }
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
-    }
-
-    /// The arity that spells a [`CLOSURE_FN_TRAIT`] head's first argument
-    /// It names no type, so it mangles bare like a builtin shape.
-    #[must_use]
-    pub fn arity(arity: usize) -> Self {
-        Self::of_head_kind(TypeHead::Builtin(arity.to_string()))
     }
 
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,

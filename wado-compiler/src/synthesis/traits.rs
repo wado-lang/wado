@@ -3806,14 +3806,14 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver().to_mangled();
+        let mangled = sig.receiver.to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
         if ctx.instance_has_impl(&instance, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
-            &sig.receiver(),
+            &sig.receiver,
             sig.arity,
             sig.return_type,
             ref_type,
@@ -4219,9 +4219,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
         if ctx.has_impl(receiver, &inspect_fq.canonical().expect(KEYED)) {
             return true;
         }
-        // The receiver is spelled as written — a shape no declaration names
-        // has no head to carry it — so the probe is a rendering against the
-        // emitted function names, not an identity.
+        // A shape no declaration names has no head to carry it, so the probe
+        // is a rendering against emitted function names, not an identity.
         let mangled = MethodName::format_local(
             &FqTypeName::shape(&module_source, receiver.rendered()),
             Some(&inspect_fq),
@@ -4490,18 +4489,16 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // delegate would let the optimizer collapse InspectAlt to Inspect
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver().to_mangled();
+        let mangled = sig.receiver.to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
         // No `has_inspect` probe: the sibling pass emits an `Inspect` stub for
-        // every canonical signature, so the twin always has its counterpart.
-        // The probe reads emitted function *names*, which is what this receiver
-        // stopped being spelled as.
+        // every signature, so the twin always has its counterpart.
         if ctx.instance_has_impl(&instance, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
-            &sig.receiver(),
+            &sig.receiver,
             sig.arity,
             sig.return_type,
             ref_type,
@@ -5419,7 +5416,7 @@ fn generate_fallback_impls(
 
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = sig.receiver().to_mangled();
+        let mangled = sig.receiver.to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
         if ctx.instance_has_impl(&instance, &pair.target_trait.canonical().expect(KEYED)) {
             continue;
@@ -5440,10 +5437,9 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        let target_info =
-            trait_method_info(&sig.receiver(), &pair.target_trait, &pair.target_method);
+        let target_info = trait_method_info(&sig.receiver, &pair.target_trait, &pair.target_method);
         let delegate_info =
-            trait_method_info(&sig.receiver(), &pair.delegate_trait, &pair.delegate_method);
+            trait_method_info(&sig.receiver, &pair.delegate_trait, &pair.delegate_method);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5625,12 +5621,6 @@ struct FnSignature {
     receiver: FqTypeName,
 }
 
-impl FnSignature {
-    fn receiver(&self) -> FqTypeName {
-        self.receiver.clone()
-    }
-}
-
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
     // Dedup by mangled name, not `TypeId`: `&T` / `&mut T` mangle identically
     // and must share one stub, else the stubs collide post-mono.
@@ -5646,11 +5636,9 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
         else {
             continue;
         };
-        // The whole type has to be determined, parameters included: the
-        // receiver is the type's own spelling, so an undetermined part would
-        // put an inference variable in a function name. A generic
-        // `fn(?0::Item) -> bool` names a type no value ever has — substitution
-        // gives each instantiation its own, and its own stub with it.
+        // The whole type must be determined: the receiver is its own spelling,
+        // so an undetermined part would put an inference variable in a function
+        // name. Substitution gives each instantiation its own stub.
         if !tt.is_concrete(*return_type) || !params.iter().all(|p| tt.is_concrete(*p)) {
             continue;
         }

@@ -65,18 +65,18 @@ global mut global:select_basic.wado::__modules_initialized: bool = 0;
 fn "select_basic.wado/run"() with Stdout {
     let handle: i32;
     let packed: i64;
-    let rx_87: i32;
-    let tx_88: i32;
+    let rx_126: i32;
+    let tx_127: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:select_basic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:select_basic.wado::__modules_initialized = 1;
     };
-    rx_87 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_88 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "select_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_87);
-    "core:cli/write_to_stream"(tx_88, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 }, 1);
+    rx_126 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_127 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "select_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_126);
+    "core:cli/write_to_stream"(tx_127, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

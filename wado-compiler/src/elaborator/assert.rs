@@ -1,13 +1,6 @@
-//! Annotation pass for `assert`, where power-assert capture-slot discovery runs:
-//! a read-only AST scanner picks the sub-expressions worth quoting on failure
-//! and marks each one conditional or not, the capture hook on
-//! [`Elaborator::resolve_expr`] keeps the local numbering in step with reify's,
-//! and the recorded [`super::sem::types::AssertCaptureInfo`] carries the slot
-//! table to reify, which rebuilds the whole expansion from it and the AST.
-//!
-//! An unconditional slot is bound ahead of the condition; a conditional one —
-//! anything below a `&&` / `||` — is written where the operand sits, so the
-//! short-circuit still decides whether it runs.
+//! Annotate `assert`: pick the operands a failure quotes and mark each one
+//! conditional where a short-circuit can skip it. See
+//! `docs/wep-2026-08-19-power-assert-coverage.md`.
 
 use crate::ast::{self, AssertStmt, AstId, BinaryOp, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
@@ -22,7 +15,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
         self.record_desugar(assert_stmt.id, super::sem::types::DesugarKind::Assert);
 
-        // Phase 1: read-only AST scan to decide captures.
         let mut scanner = CaptureScanner::new();
         scanner.scan_root(&assert_stmt.condition);
         let CaptureScanner {
@@ -40,19 +32,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             in_progress: IndexSet::default(),
         });
 
-        // Walk the condition for fact recording. The hook on `resolve_expr`
-        // marks each `Capture::emitted` flag once it sees its slot's `AstId`.
         let cond_type = self.resolve_expr(&assert_stmt.condition, ctx, None);
 
-        // Reserve the outer-scope `__cond` slot so subsequent local-index
-        // accounting in the enclosing function (closure capture
-        // `outer_index`, recorded `MutCapture::outer_index`, etc.) stays in
-        // lockstep with reify's expansion — reify's `reify_assert` also
-        // allocates `__cond` at this point in its own walk.
+        // Reserved here because `reify_assert` allocates `__cond` at this
+        // point too, and the two walks must stay in local-index lockstep.
         let _cond_local_index = ctx.add_local("__cond".to_string(), cond_type, false, None);
 
-        // One rendered-text local per conditional slot, matching the cold-branch
-        // allocation in `reify_assert`.
+        // Matches the cold-branch allocation in `reify_assert`.
         let conditional_names: Vec<String> = ctx
             .assert_capture_ctx
             .as_ref()
@@ -118,17 +104,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         ctx.exit_scope();
 
-        // Bump the per-function assert serial so reify's `__assert_N`
-        // label numbering stays in sync with the source order.
+        // Keeps reify's `__assert_N` labels in source order.
         ctx.next_assert_id += 1;
     }
 
-    /// Hook the body walk calls when it encounters an `AstId` flagged for
-    /// power-assert capture. Marks the slot's `emitted` flag (so the recorded
-    /// `AssertCaptureInfo` lists it) and recursively walks the sub-tree for
-    /// its own fact recording. Returns a placeholder `TirExpr` whose type
-    /// matches the resolved sub-tree's so outer typecheck contexts see the
-    /// right type.
+    /// Hook the body walk calls on an `AstId` flagged for capture: resolves
+    /// the sub-tree for fact recording and allocates the slot's locals.
     pub(super) fn resolve_with_assert_capture(
         &mut self,
         ast_id: AstId,
@@ -160,10 +141,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (cap.name.clone(), cap.conditional, cap.is_place)
         };
 
-        // `defining_ast_id = None` so the synthetic locals do not enter
-        // `local_symbols` and pollute LSP hover / go-to-def lookups. The
-        // allocation here is index accounting only — reify allocates the same
-        // locals in the same order and is the side that emits their bindings.
+        // Index accounting only: reify allocates the same locals in the same
+        // order and is the side that emits their bindings. `defining_ast_id =
+        // None` keeps them out of LSP hover / go-to-def.
         if conditional {
             ctx.add_local(cap_name.clone(), type_id, true, None);
             ctx.add_local(
@@ -173,8 +153,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None,
             );
         } else if !is_place {
-            // A place slot is rendered by re-reading the operand, so it has no
-            // binding to account for. See `reify_with_assert_capture`.
             ctx.add_local(cap_name, type_id, false, None);
         }
 
@@ -187,8 +165,7 @@ pub(super) fn seen_local_name(cap_name: &str) -> String {
     format!("{cap_name}_seen")
 }
 
-/// Name of the cold-branch local holding a conditional slot's rendered text —
-/// the operand's `Inspect` output, or the not-evaluated marker.
+/// Name of the cold-branch local holding a conditional slot's rendered text.
 pub(super) fn render_local_name(cap_name: &str) -> String {
     format!("{cap_name}_text")
 }
@@ -196,9 +173,7 @@ pub(super) fn render_local_name(cap_name: &str) -> String {
 /// The text a conditional slot renders when the run never reached it.
 pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
 
-/// Render every recorded capture plan as text, for `wado dump --assert-plan`.
-/// The plan is what decides which operands a failure quotes, so this view is
-/// how the covered-forms table is a test rather than a paragraph.
+/// Render every recorded capture plan, for `wado dump --assert-plan`.
 pub(crate) fn render_plans(sem: &super::sem::ModuleSemantics) -> String {
     let mut out = String::new();
     for info in sem.types.assert_captures.values() {
@@ -234,11 +209,9 @@ struct Capture {
     is_place: bool,
 }
 
-/// Whether re-reading `expr` at the failure branch would yield what the
-/// condition saw, so the slot needs no binding of its own. Straight-line code
-/// separates the two, which makes a binding's read exact — but only a binding
-/// qualifies: a field read moved into the cold branch shifts what field
-/// scalarization sees, so a projection keeps its binding.
+/// Whether the failure branch can re-read `expr` instead of binding it. Only a
+/// binding qualifies: a field read moved into the cold branch shifts what field
+/// scalarization sees.
 fn is_place_expr(expr: &Expr) -> bool {
     matches!(expr, Expr::Ident(_))
 }
@@ -269,28 +242,19 @@ impl AssertCaptureContext {
     }
 }
 
-/// Read-only AST scanner deciding which sub-expressions of the assert condition
-/// deserve a `__vK` capture, recording each one's originating [`AstId`] for the
-/// `resolve_expr` hook to find. One slot per capturable `Expr`, with no
-/// source-text dedup: two identical sub-terms (`f() == f()`) each get their own
-/// slot and evaluate independently, matching the source as written.
+/// Decides which sub-expressions of an assert condition become capture slots.
+/// No source-text dedup: `f() == f()` gets a slot per occurrence, so each
+/// evaluates as the source wrote it. Receivers and `matches` scrutinees are
+/// never scanned — see the WEP's *Deliberately out of scope*.
 struct CaptureScanner {
     slots: Vec<Capture>,
-    /// `AstId` of each captureable sub-expression → its capture slot
-    /// index.
     ast_id_to_slot: IndexMap<AstId, usize>,
-    /// `true` only for the root call (the condition itself). The root
-    /// `Binary` / `Unary` is not captured because it would just
-    /// duplicate `__cond`.
+    /// The condition itself, which `__cond` already holds.
     is_root: bool,
-    /// `true` while descending into `Call` /
-    /// `StaticMethodCall` arguments. A bare `Ident` in that position
-    /// is a function-reference coercion site; extracting it into
-    /// `let __vK = name;` would lose the coercion context and the
-    /// inferencer would see `unknown` for the binding.
+    /// A bare `Ident` here may be a function-reference coercion site, and a
+    /// binding would lose that context.
     in_call_arg: bool,
-    /// `true` once the walk has crossed a short-circuit, so every capture
-    /// below it may go unevaluated.
+    /// A short-circuit lies above, so the capture may go unevaluated.
     conditional: bool,
 }
 
@@ -310,8 +274,6 @@ impl CaptureScanner {
         self.scan(expr);
     }
 
-    /// Add a capture; the sub-expression's `AstId` is recorded so the
-    /// elaborator hook can match it.
     fn add(&mut self, source: String, ast_id: AstId, is_place: bool) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
@@ -341,8 +303,6 @@ impl CaptureScanner {
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
-                // The right operand of `&&` / `||` runs only when the left one
-                // does not decide the result.
                 self.conditional = conditional || matches!(b.op, BinaryOp::And | BinaryOp::Or);
                 self.scan(&b.right);
                 self.conditional = conditional;
@@ -351,22 +311,18 @@ impl CaptureScanner {
                 }
             }
             Expr::Unary(u) => {
-                // Skip negated numeric literals: capturing them breaks
-                // bidirectional coercion (e.g. `i64 == -50` needs `-50`
-                // typed as `i64`, not `i32`).
+                // A binding would type `-50` as `i32`, losing the bidirectional
+                // coercion `i64 == -50` needs.
                 if u.op == UnaryOp::Neg
                     && matches!(&u.expr, Expr::Literal(lit) if matches!(&lit.value, Literal::Number(_)))
                 {
                     return;
                 }
-                // `&fn_name` is the function-reference coercion;
-                // capturing either it or its operand loses the context.
+                // `&fn_name` is the function-reference coercion, lost either way.
                 if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
                     return;
                 }
-                // `&mut <expr>` requires a mutable lvalue; an
-                // immutable `let __v = <expr>` would make the
-                // reconstructed `&mut __v` reject at typecheck.
+                // `&mut` needs a mutable lvalue; the binding is immutable.
                 if u.op == UnaryOp::MutRef {
                     return;
                 }
@@ -376,9 +332,7 @@ impl CaptureScanner {
                 }
             }
             Expr::Call(c) => {
-                // Callee stays untouched: it is almost always a bare
-                // function ident, and capturing it would either
-                // produce a useless intermediate or turn a direct
+                // The callee is left alone: capturing it would turn a direct
                 // call into an indirect one.
                 for arg in &c.args {
                     self.in_call_arg = true;
@@ -387,17 +341,6 @@ impl CaptureScanner {
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::MethodCall(m) => {
-                // No receiver is captured, on two grounds. A method's is rule
-                // 1: value semantics make the capture a copy, so a `&mut self`
-                // method would mutate the copy and leave the receiver
-                // untouched, and the scanner runs before the `self` kind is
-                // known. A projection's is safe under rule 1 but blocks
-                // optimization: `List<T>::index_value` asserts its bounds, and
-                // rendering `self` there is a use of the receiver that escape
-                // analysis counts even though `builtin::cold_path()` marks the
-                // branch — enough to stop const-object globalization, LICM and
-                // array-append collapse. It becomes free once that analysis
-                // discounts a cold-dominated use.
                 for arg in &m.args {
                     self.in_call_arg = true;
                     self.scan(arg);
@@ -414,9 +357,7 @@ impl CaptureScanner {
             Expr::ComparisonChain(chain) => {
                 self.scan(&chain.first);
                 for (idx, cmp) in chain.comparisons.iter().enumerate() {
-                    // `a < b < c` runs as `(a < b) && (b < c)`, so every
-                    // operand past the first comparison sits behind a
-                    // short-circuit.
+                    // `a < b < c` runs as `(a < b) && (b < c)`.
                     self.conditional = conditional || idx >= 1;
                     self.scan(&cmp.right);
                 }
@@ -432,54 +373,37 @@ impl CaptureScanner {
                 }
             }
             Expr::Matches(_) => {
-                // The scrutinee is not captured, though it is the value the
-                // pattern rejected. Rendering it is a *use* of an aggregate in
-                // the failure branch, and escape analysis counts that use even
-                // though `builtin::cold_path()` marks the branch — enough to
-                // stop variant-return scalarization, so `assert ok matches
-                // { Ok(6) }` would keep a scalarized `Result` whole. Re-reading
-                // instead of binding does not help: the read is the use. This
-                // is the one dependency a captured receiver waits on too.
                 if !is_root {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Index(i) => {
-                // The receiver is not scanned: see `MethodCall` above.
                 self.scan(&i.index);
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::TupleLiteral(t) => {
-                // The literal itself is not captured: it takes its shape from
-                // the expected type (`TupleToSequence`), which a `let` binding
-                // would drop. Its elements are ordinary operands.
+                // A literal takes its shape from the expected type, which a
+                // binding would drop; its elements are ordinary operands.
                 for elem in &t.elements {
                     self.scan(elem);
                 }
             }
             Expr::StructLiteral(sl) => {
-                // Not captured, for the reason `TupleLiteral` is not
-                // (`StructToMap`, and a named literal's own inference).
                 for field in &sl.fields {
                     self.scan(&field.value);
                 }
             }
             Expr::FieldAccess(_) => {
-                // The receiver is not scanned: see `MethodCall` above.
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::TemplateString(_) => {
-                // Capture the rendered string whole; don't recurse into the
-                // interpolations. Capturing them individually would
-                // double-evaluate any side-effecting interpolation — once for
-                // its per-slot `let __vK = <interp>` and again when the
-                // template is rendered.
+                // The rendered string only: a captured interpolation would
+                // evaluate twice, once for its slot and once for the template.
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::If(i) => {
-                // The branch bodies are not descended into: the value of the
-                // branch the run took is what this node's own capture renders.
-                // Its condition decided which one, so that is scanned.
+                // Bodies are not walked: this node's own capture is the value
+                // of the branch the run took. Its condition chose that branch.
                 match &i.condition {
                     ast::Condition::Expr(cond) => self.scan(cond),
                     ast::Condition::LetChain { elements, .. } => {
@@ -496,17 +420,15 @@ impl CaptureScanner {
                 }
             }
             Expr::Match(m) => {
-                // Arms are not descended into, for the reason `If` branches
-                // are not. The scrutinee chose the arm, so it is scanned.
+                // Arms are not walked, for the reason `If` bodies are not.
                 self.scan(&m.expr);
                 if !is_root {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Block(_) | Expr::LabeledBlock(_) => {
-                // Statements are not walked: a block's value is what this
-                // capture renders, and a binding inside it is not an operand
-                // of the condition.
+                // Statements are not walked: a binding inside one is not an
+                // operand of the condition.
                 if !is_root {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
@@ -524,12 +446,8 @@ impl CaptureScanner {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
-            // The rest are neither captured nor recursed into. A `Literal` has
-            // no value to add that the source text does not already show; the
-            // children of a `Closure`, `WithHandler` or `Resume` are not values
-            // in isolation; `Spread` only appears inside a literal this scanner
-            // already walks; and an `Assign` / `CompoundAssign` in a condition
-            // is a mutation, not an operand.
+            // Neither captured nor walked; the WEP's *Deliberately out of
+            // scope* has the reason for each.
             Expr::Literal(_)
             | Expr::Closure(_)
             | Expr::WithHandler(_)

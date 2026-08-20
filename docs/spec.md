@@ -4229,11 +4229,9 @@ assert x > 0;
 assert x > 0, "x must be checked elsewhere";
 ```
 
-`assert` evaluates its condition exactly as the surrounding code would: an
-operand below a short-circuit — the right side of `&&` or `||`, or a chained
-comparison past its first comparison — is captured where it sits, so a guarded
-operand never runs when its guard fails. An operand the run did not reach is reported as
-`<not evaluated>` rather than dropped from the message.
+`assert` evaluates its condition exactly as the surrounding code would, so a
+guarded operand never runs when its guard fails. An operand the run did not
+reach is reported as `<not evaluated>`.
 
 ```wado
 let i = 99;

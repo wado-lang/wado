@@ -3150,13 +3150,8 @@ fn escape_char(c: char) -> String {
 /// Unparse an AST expression to a string without comments.
 /// Used by the desugar phase for generating error messages.
 /// Unparse one expression as a single line of source, keeping the parentheses
-/// the parse needs. The `assert` diagnostic's `condition:` line quotes the
-/// condition the user wrote, so it uses this rather than
-/// [`unparse_expr_simple`], whose readability-over-fidelity trade prints a
-/// different expression. A block-carrying expression renders over several
-/// lines; the line breaks collapse to single spaces so the quote stays one
-/// line. Escapes inside a string literal are already 2-char sequences here, so
-/// no literal text is folded.
+/// the parse needs. Quotes the condition on an `assert` failure, where
+/// [`unparse_expr_simple`] would print a different expression.
 pub fn unparse_expr_source(expr: &Expr) -> String {
     let mut unparser = Unparser::new();
     unparser.unparse_expr(expr);

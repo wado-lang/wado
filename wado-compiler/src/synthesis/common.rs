@@ -308,9 +308,8 @@ pub fn option_none(option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
     )
 }
 
-/// Create a `ref.null` placeholder for a mutable local of *reference* type in
-/// synthesized code. It is not a zero of an arbitrary type: a primitive slot
-/// needs a literal of that type, and `lower` asserts on the difference.
+/// A `ref.null` placeholder for a synthesized mutable local of *reference*
+/// type. Not a zero of an arbitrary type — `lower` asserts on the difference.
 pub fn null_expr(type_id: TypeId) -> TirExpr {
     TirExpr::new(TirExprKind::Null, type_id, synth_span())
 }

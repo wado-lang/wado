@@ -1,13 +1,6 @@
-//! The covered-forms table in `docs/wep-2026-08-19-power-assert-coverage.md`
-//! states which operands each condition shape contributes to a power-assert
-//! failure. This test is what keeps that table honest: one `assert` per shape,
-//! checked against the plan `wado dump --assert-plan` prints.
-//!
-//! A shape the scanner stops descending into renders no operand, which is the
-//! silent degradation WEP rule 3 forbids. The plan is what makes that visible
-//! rather than silent, and `EXPECTED_EMPTY` is the whole of what the WEP
-//! sanctions — a shape joining it is a decision to record there, not a constant
-//! to widen here.
+//! What each condition shape contributes to a power-assert failure, read back
+//! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what
+//! `docs/wep-2026-08-19-power-assert-coverage.md` sanctions rendering nothing.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -87,9 +80,7 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("a > b || b > 0", &["a", "b", "a > b", "b", "b > 0"]),
 ];
 
-/// Operands whose evaluation a short-circuit can skip. The plan marks these
-/// `conditional`, which is what makes the failure message say
-/// `<not evaluated>` rather than quote a value the run never produced.
+/// Operands a short-circuit can skip, which the plan marks `conditional`.
 const EXPECTED_CONDITIONAL: &[(&str, &[&str])] = &[
     ("0 <= a < b", &["b"]),
     ("a < b && b < 3", &["b", "b < 3"]),
@@ -174,10 +165,7 @@ fn a_short_circuited_operand_is_marked_conditional() {
     }
 }
 
-/// The one shape in `SOURCE` that renders nothing, and why. A `matches`
-/// scrutinee is an aggregate, and rendering one is a use the escape analysis
-/// counts even in the `builtin::cold_path()` branch — enough to stop
-/// variant-return scalarization. See the WEP's *Deliberately out of scope*.
+/// The shapes the WEP's *Deliberately out of scope* sanctions rendering nothing.
 const EXPECTED_EMPTY: &[&str] = &["shape matches { Point }"];
 
 #[test]

@@ -147,15 +147,13 @@ pub(super) struct ReifyAssertSlot {
     pub(super) conditional: bool,
     /// See [`super::sem::types::AssertSlot::is_place`].
     pub(super) is_place: bool,
-    /// For a slot rendered by re-reading rather than by a binding: the operand
-    /// itself, spliced into the failure branch's template.
+    /// The operand itself, for a slot the failure branch re-reads.
     pub(super) place_expr: Option<TirExpr>,
-    /// Index of the `bool` recording whether the capture site ran. `Some`
-    /// exactly when `conditional`.
+    /// The `bool` recording whether the capture site ran.
     pub(super) seen_local_index: Option<u32>,
 }
 
-/// `target = value;` as a statement, for a synthesized write to a local.
+/// `target = value;` as a statement.
 fn assign_stmt(target: TirExpr, value: TirExpr, span: crate::token::Span) -> TirStmt {
     let type_id = value.type_id;
     TirStmt::new(
@@ -3042,10 +3040,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )]
     }
 
-    /// Reify hook for a power-assert-flagged sub-expression: reifies
-    /// the sub-tree under an `in_progress` guard, allocates `__vK`,
-    /// pushes the `let __vK = …;` onto the capture context, and
-    /// returns `Local(__vK)` for the surrounding reify to splice in.
+    /// Reify hook for a power-assert-flagged sub-expression: allocates the
+    /// slot's locals and returns what the surrounding reify splices in.
     /// Mirrors [`super::Elaborator::resolve_with_assert_capture`].
     fn reify_with_assert_capture(
         &mut self,
@@ -3082,12 +3078,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (slot.name.clone(), slot.conditional, slot.is_place)
         };
 
-        // An unconditional projection off a binding needs no binding of its own:
-        // straight-line code separates the condition from the failure branch, so
-        // the branch can read the operand again and see what the condition saw.
-        // Binding it instead keeps the aggregate live across the assert, which
-        // is what stopped `List<T>::index_value`'s bounds assert from letting
-        // its receiver be globalized.
+        // Re-read rather than bind: straight-line code makes the read exact,
+        // and a binding would keep an aggregate live across the assert.
         if is_place && !conditional {
             let cap_ctx = ctx
                 .reify_assert_capture_ctx
@@ -3120,12 +3112,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cap_span,
         );
 
-        // An unconditional slot is bound ahead of the condition. A conditional
-        // one takes its value where the operand sits, so the short-circuit
-        // above it still governs whether it runs; only the flag saying it did
-        // is bound ahead. The value local carries no binding of its own — the
-        // failure branch reads it under the flag, and until the capture site
-        // assigns it the local holds its Wasm default.
+        // A conditional slot takes its value where the operand sits, so the
+        // short-circuit still governs it; only the flag is bound ahead. Until
+        // the capture site assigns it, the value local holds its Wasm default.
         let (hoisted, in_place) = if let Some(seen_index) = seen_local_index {
             let decls = vec![TirStmt::new(
                 TirStmtKind::Let {
@@ -3180,12 +3169,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_reactive: false,
                         type_id,
                         value: resolved,
-                        // A projection off a binding is only read again in the
-                        // failure branch, which straight-line code separates
-                        // from here, so the binding may alias. Copying one is
-                        // what made a captured receiver materialize an
-                        // aggregate at every subscript in the program.
-                        skip_value_copy: is_place,
+                        skip_value_copy: false,
                     },
                     cap_span,
                 )],
@@ -3206,12 +3190,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         in_place
     }
 
-    /// Reify `assert cond[, msg];` into the power-assert expansion.
+    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
+    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
     /// Mirrors [`super::Elaborator::desugar_assert`].
-    /// Capture slots come from the recorded
-    /// [`super::sem::types::AssertCaptureInfo`] (annotate's
-    /// `CaptureScanner` already chose them); the hook in `reify_expr`
-    /// emits the `let __vK = …;` bindings during the condition walk.
     /// Build a `builtin::cold_path()` marker statement for a compiler-synthesized
     /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
     /// then hints the enclosing branch unlikely and the inliner skips the branch.
@@ -3222,8 +3203,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirStmt::new(TirStmtKind::Expr(call), span)
     }
 
-    /// `let __vK_text = if __vK_seen { `${__vK:?}` } else { "<not evaluated>" };`
-    /// — a conditional slot's failure-message text, built in the cold branch so
+    /// A conditional slot's failure-message text, chosen in the cold branch so
     /// an unreached slot says so instead of quoting its zero value.
     #[allow(clippy::too_many_arguments)]
     fn assert_slot_text_let(
@@ -3375,9 +3355,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
-        // One rendered-text local per conditional slot, allocated for every
-        // such slot (not only the emitted ones) so annotate's index accounting
-        // in `desugar_assert` stays in lockstep.
+        // Allocated for every conditional slot, not just the emitted ones, so
+        // annotate's index accounting stays in lockstep.
         let render_local_of: IndexMap<usize, u32> = actx
             .slots
             .iter()
@@ -3406,9 +3385,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
 
-        // Panic template, mirroring `build_assert_panic_template`:
-        // header + `condition: <source>` + one
-        // `<label>: {__vK:?}` line per emitted slot.
+        // Header + `condition: <source>` + one `<label>: <text>` line per
+        // emitted slot.
         let line = span.line as u64;
         let mut parts: Vec<TirTemplatePart> = vec![
             TirTemplatePart::Literal("Assertion failed in ".to_string()),
@@ -3459,8 +3437,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "\ncondition: {condition_source}\n"
         )));
 
-        // A conditional slot renders through its cold-branch text local, which
-        // carries the not-evaluated marker when the run never reached it.
         let mut text_lets: Vec<TirStmt> = Vec::new();
         for (slot_idx, slot) in actx.slots.iter().enumerate() {
             if !slot.emitted {
@@ -3558,9 +3534,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         ctx.exit_scope();
 
-        // Wrap in `__assert_N:` LabeledBlock so the synthetic
-        // counter on `FunctionContext` advances in lockstep with
-        // annotate's allocation (the walk-order invariant).
+        // The `__assert_N:` label advances `next_assert_id` in lockstep with
+        // annotate's own walk.
         let assert_serial = ctx.next_assert_id;
         ctx.next_assert_id += 1;
         vec![TirStmt::new(

@@ -90,14 +90,14 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
     let __local_3: ref "core:prelude/string.wado//String";
     let v_11: ref "core:prelude/string.wado//String";
     let self_15: ref "core:prelude/string.wado//String";
-    let new_used_27: i32;
-    let start_28: i32;
+    let new_used_26: i32;
+    let start_27: i32;
     let handle: i32;
-    let new_used_54: i32;
-    let start_55: i32;
+    let new_used_52: i32;
+    let start_53: i32;
     let packed: i64;
-    let rx_71: i32;
-    let tx_72: i32;
+    let rx_68: i32;
+    let tx_69: i32;
     let __sroa_x_repr: ref "Array<core:prelude/string.wado/String>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:value_copy_demote_element_mut.wado::__modules_initialized);
@@ -110,34 +110,34 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
     block {
     };
     self_15 = builtin::array_get_value<ref "core:prelude/string.wado//String">(__sroa_x_repr, 0);
-    new_used_27 = self_15.used + 1;
-    if @unlikely(new_used_27 > builtin::array_len(self_15.repr)) {
+    new_used_26 = self_15.used + 1;
+    if @unlikely(new_used_26 > builtin::array_len(self_15.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_15, new_used_26);
     }
-    start_28 = self_15.used;
-    self_15.used = new_used_27;
-    builtin::array_set_u8(self_15.repr, start_28, 33);
+    start_27 = self_15.used;
+    self_15.used = new_used_26;
+    builtin::array_set_u8(self_15.repr, start_27, 33);
     block {
     };
     v_11 = builtin::array_get_value<ref "core:prelude/string.wado//String">(__sroa_x_repr, 0);
     s = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_3: ref Array<u8>; __array_clone_src_3 = v_11.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_11.used; let __array_clone_dst_3: ref Array<u8>; __array_clone_dst_3 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_3, 0, __array_clone_src_3, 0, __array_clone_len_3); __array_clone_dst_3), used: v_11.used };
     __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, s);
-    new_used_54 = __local_3.used + 1;
-    if @unlikely(new_used_54 > builtin::array_len(__local_3.repr)) {
+    new_used_52 = __local_3.used + 1;
+    if @unlikely(new_used_52 > builtin::array_len(__local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_54);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_52);
     }
-    start_55 = __local_3.used;
-    __local_3.used = new_used_54;
-    builtin::array_set_u8(__local_3.repr, start_55, 32);
+    start_53 = __local_3.used;
+    __local_3.used = new_used_52;
+    builtin::array_set_u8(__local_3.repr, start_53, 32);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_3, 104);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_3, 105);
-    rx_71 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_72 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(rx_71);
-    "core:cli/write_to_stream"(tx_72, __local_3, 1);
+    rx_68 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_69 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "value_copy_demote_element_mut.wado/__cm_binding__Stdout_write_via_stream"(rx_68);
+    "core:cli/write_to_stream"(tx_69, __local_3, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

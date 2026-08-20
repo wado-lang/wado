@@ -1208,10 +1208,8 @@ impl FunctionTranslator<'_, '_> {
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
             // string → `seq_literal`, unit → no runtime value.
             TirExprKind::Null => {
-                // `Null` is a value only at a reference slot. At a primitive
-                // one it reaches codegen as a `ref.null` in an `i32` local and
-                // fails Wasm validation, naming an offset rather than the
-                // synthesis site that built it.
+                // At a primitive slot a `ref.null` reaches codegen and fails
+                // Wasm validation, naming an offset rather than this site.
                 assert!(
                     !matches!(
                         self.base.type_table.borrow().get(expr.type_id),

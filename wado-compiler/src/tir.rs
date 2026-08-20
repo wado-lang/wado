@@ -3600,8 +3600,8 @@ impl TypeTable {
 
     /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
     /// where [`Self::type_name`] would give the human-readable `[i32, String]`.
-    /// A generic renders as `Name<T1,T2,…>`, a function as
-    /// `Fn<paramCount,returnType>`, and references are stripped.
+    /// A generic renders as `Name<T1,T2,…>`, a function as [`crate::name::mangle_fn_type`]
+    /// spells it, and references are stripped.
     #[must_use]
     pub fn mangle_type_name(&self, id: TypeId) -> String {
         let info = self.get_type_name_info(id);
@@ -3742,10 +3742,8 @@ impl TypeTable {
         }
     }
 
-    /// A `fn(..)` type's spelling, as the mangler's own view of it. Shared by
-    /// [`Self::mangle_type_name`] and [`Self::fn_receiver_name`] so the name a
-    /// dispatch is registered under and the name a call site asks for are one
-    /// spelling.
+    /// A `fn(..)` type's spelling. Shared by [`Self::mangle_type_name`] and
+    /// [`Self::fn_receiver_name`], so a stub's name and a call site's are one.
     fn fn_type_name_info(
         &self,
         is_mut: bool,
@@ -3766,9 +3764,7 @@ impl TypeTable {
         }
     }
 
-    /// The receiver a value of a `fn(..)` type dispatches through: the type's
-    /// own name, carrying no arguments.
-    ///
+    /// The receiver a `fn(..)` value dispatches through: its own name.
     #[must_use]
     pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> crate::name::FqTypeName {
         let ResolvedType::Function {
@@ -5083,20 +5079,18 @@ pub enum ReturnAbi {
     },
 }
 
-/// Semantic category of a `TirFunction`. Carries the type operand so the
-/// optimizer can reason about the call without re-deriving it from the
-/// signature.
-/// Identifies which `fn(..)` dispatch-stub trait method an auto-derived
-/// dispatch stub implements. Recovered from
-/// [`FunctionKind::FnCanonicalDispatch`] so WIR build can choose
-/// the right vtable slot (`inspect` vs `inspect_alt`) without
-/// re-parsing mangled names.
+/// Which dispatch-stub trait method a `FunctionKind::FnCanonicalDispatch`
+/// implements, so WIR build can pick the vtable slot without re-parsing
+/// mangled names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FnDispatchTrait {
     Inspect,
     InspectAlt,
 }
 
+/// Semantic category of a `TirFunction`. Carries the type operand so the
+/// optimizer can reason about the call without re-deriving it from the
+/// signature.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum FunctionKind {
     /// Ordinary user-defined or synthesized function.
@@ -5106,8 +5100,8 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
-    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub (or
-    /// its `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
+    /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub (or its
+    /// `^InspectAlt` twin). The TIR body is `unreachable()` — enough for the
     /// function to be registered and the call resolvable — and WIR build
     /// supplies the real one, a `call_ref` through `CanonicalClosure_K`'s vtable
     /// slot. `(arity, return_type)` are structured so nobody parses the mangle.
@@ -5173,10 +5167,8 @@ impl TirFunction {
         }
     }
 
-    /// Returns the dispatch coordinates if this is an auto-derived
-    /// `fn(..)^Inspect` / `^InspectAlt` stub.
-    /// WIR build uses the result to supply the indirect-call body
-    /// without scanning mangled function names.
+    /// Dispatch coordinates of an auto-derived `fn(..)^Inspect` / `^InspectAlt`
+    /// stub, which WIR build turns into the indirect-call body.
     #[inline]
     pub fn fn_canonical_dispatch(&self) -> Option<(FnDispatchTrait, usize, TypeId)> {
         match self.kind {

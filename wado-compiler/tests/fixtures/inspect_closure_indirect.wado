@@ -1,13 +1,6 @@
-// Closure inspect/inspect_alt must work for indirect dispatch:
-// when the closure value is held behind a function parameter, struct
-// field, or global, `{f:?}` and `{f:#?}` still produce the correct
-// signature and per-literal source.
-//
-// The specialised path (closure kept as `&__Closure_N`) dispatches via
-// per-functor `__Closure_N^Inspect / InspectAlt`. Cases that go
-// through the canonical `Fn<N, Ret>` value (function parameters,
-// struct fields, globals) read the source via the `inspect_alt` slot
-// of `CanonicalClosure_K`.
+// `{f:?}` and `{f:#?}` on a closure held behind a function parameter, struct
+// field, or global. The specialised path dispatches per-functor; the canonical
+// path reads the source through `CanonicalClosure_K`'s vtable slot.
 
 fn fmt_def(f: fn(i32) -> i32) -> String {
     return `${f:?}`;

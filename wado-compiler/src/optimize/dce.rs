@@ -833,7 +833,7 @@ fn apply_inspect_edges(
     }
 }
 
-/// Every `(arity, return_type)` signature receiving a `Fn<…>^Inspect` or
+/// Every `(arity, return_type)` signature receiving a `fn(..)^Inspect` or
 /// `^InspectAlt` call. Gates the per-functor root marking from
 /// `ClosureToCanonical`: with no real caller those impls cannot be invoked
 /// indirectly. The two methods are tracked separately, so formatting closures

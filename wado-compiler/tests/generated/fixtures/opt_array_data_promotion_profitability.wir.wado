@@ -113,14 +113,14 @@ fn "opt_array_data_promotion_profitability.wado/run"() with Stdout {
     let __local_5_5: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let f_620: ref "core:prelude/format.wado//Formatter";
-    let self_628: i32;
+    let self_627: i32;
     let new_used: i32;
-    let start_636: i32;
-    let f_646: ref "core:prelude/format.wado//Formatter";
-    let self_654: i32;
+    let start_635: i32;
+    let f_645: ref "core:prelude/format.wado//Formatter";
+    let self_652: i32;
     let packed: i64;
-    let rx_657: i32;
-    let tx_658: i32;
+    let rx_655: i32;
+    let tx_656: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_array_data_promotion_profitability.wado::__modules_initialized);
         cold_path;
@@ -133,24 +133,24 @@ fn "opt_array_data_promotion_profitability.wado/run"() with Stdout {
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     f_620 = __local_5_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_628(block {
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_627(block {
     }; builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_18.repr, 3)), f_620);
     new_used = __local_4_4.used + 1;
     if @unlikely(new_used > builtin::array_len(__local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4_4, new_used);
     }
-    start_636 = __local_4_4.used;
+    start_635 = __local_4_4.used;
     __local_4_4.used = new_used;
-    builtin::array_set_u8(__local_4_4.repr, start_636, 32);
+    builtin::array_set_u8(__local_4_4.repr, start_635, 32);
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-    f_646 = __local_5_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_654(block {
-    }; builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_17.repr, 3)), f_646);
-    rx_657 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_658 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_array_data_promotion_profitability.wado/__cm_binding__Stdout_write_via_stream"(rx_657);
-    "core:cli/write_to_stream"(tx_658, __local_4_4, 1);
+    f_645 = __local_5_5;
+    "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_652(block {
+    }; builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::__const_obj_17.repr, 3)), f_645);
+    rx_655 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_656 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_array_data_promotion_profitability.wado/__cm_binding__Stdout_write_via_stream"(rx_655);
+    "core:cli/write_to_stream"(tx_656, __local_4_4, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

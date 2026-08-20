@@ -78,12 +78,9 @@ that goes stale.
 
 It is rendered by the formatter's `Unparser`, not by `unparse_expr_simple`,
 whose readability-over-fidelity trade stays right for its own callers. A
-block-carrying condition renders over several lines there, so the line breaks
-collapse to single spaces — the quote is one line, and a string literal's
-escapes are already 2-char sequences at that point, so no literal text folds.
-
-The formatter drops the parentheses around an `if` used as an operand. That is
-not a fidelity loss: both spellings parse to the same tree.
+block-carrying condition's line breaks collapse to single spaces, so the quote
+is one line. Where the formatter drops parentheses — around an `if` used as an
+operand — both spellings parse to the same tree, so no fidelity is lost.
 
 ## Deliberately out of scope
 
@@ -129,11 +126,9 @@ before types are known, so it cannot tell `&value` from `&fn_name`.
 A slot whose operand is a plain binding gets no binding of its own: the failure
 branch re-reads it, which straight-line code makes exact. A conditional slot
 costs one `bool` flag, cleared ahead of the condition and set at the capture
-site; its value gets no binding either, so the failure branch reads the local
-under the flag and nothing has to synthesize a zero value for an arbitrary `T`.
-Unconditional captures — the whole of the stdlib's asserts, and most asserts
-anywhere — keep the hoisted `let`. `-Os` still drops the whole expansion through
-`bare-asserts`.
+site; the failure branch reads its value local under that flag, so nothing has
+to synthesize a zero value for an arbitrary `T`. Unconditional captures keep the
+hoisted `let`. `-Os` still drops the whole expansion through `bare-asserts`.
 
 Rule 2 adds one `String` binding per conditional slot to the cold branch. Rule 3
 costs a dump surface and its tests, and returns a compile error or a test
