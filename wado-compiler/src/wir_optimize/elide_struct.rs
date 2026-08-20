@@ -358,6 +358,99 @@ fn substitute_box_use(instr: &mut WirInstr, name: &str, field: &str, inner: &Wir
     done
 }
 
+/// Retype a single-field (`Box<T>`) struct local to its field, dropping the
+/// `StructNew`. Nothing moves, so an intervening write is no obstacle.
+pub(super) fn unwrap_box_locals(module: &mut WirPackage) {
+    for func in &mut module.functions {
+        let params: IndexSet<String> = func.param_names.iter().cloned().collect();
+        let Some(body) = &mut func.body else {
+            continue;
+        };
+        let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
+        let mut candidates: IndexSet<String> = IndexSet::default();
+        for instr in body.iter() {
+            collect_stats(instr, &mut stats, &mut candidates);
+        }
+        let mut targets: IndexMap<String, (String, Option<WirType>)> = IndexMap::default();
+        for name in &candidates {
+            if params.contains(name) {
+                continue;
+            }
+            let Some(s) = stats.get(name) else { continue };
+            if s.defs != 1 || s.structget_uses == 0 || s.total_localgets != s.structget_uses {
+                continue;
+            }
+            if s.field_uses.len() != 1 {
+                continue;
+            }
+            let field = s.field_uses.keys().next().expect("one field").clone();
+            targets.insert(name.clone(), (field, None));
+        }
+        if targets.is_empty() {
+            continue;
+        }
+        let mut unwrapper = BoxUnwrapper { targets };
+        unwrapper.visit_body(body);
+        let mut retyper = BoxLocalRetyper {
+            targets: &unwrapper.targets,
+        };
+        retyper.visit_body(body);
+    }
+}
+
+/// Rewrites the def and the reads, recording each local's new type from the
+/// `StructGet` it replaces.
+struct BoxUnwrapper {
+    targets: IndexMap<String, (String, Option<WirType>)>,
+}
+
+impl WirMutVisitor for BoxUnwrapper {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        if let WirInstr::StructGet {
+            field_name,
+            expr,
+            result_ty,
+            ..
+        } = instr
+            && let WirInstr::LocalGet { name, .. } = expr.as_ref()
+            && let Some((field, ty)) = self.targets.get_mut(name)
+            && field == field_name
+        {
+            *ty = Some(result_ty.clone());
+            *instr = WirInstr::LocalGet {
+                name: name.clone(),
+                result_ty: result_ty.clone(),
+            };
+            return;
+        }
+        if let WirInstr::LocalSet { name, value } = instr
+            && self.targets.contains_key(name)
+            && let WirInstr::StructNew { fields, .. } = value.as_mut()
+            && fields.len() == 1
+        {
+            let inner = fields.remove(0);
+            **value = inner;
+        }
+        self.walk_instr(instr);
+    }
+}
+
+/// Point each rewritten local's declaration at the field type.
+struct BoxLocalRetyper<'a> {
+    targets: &'a IndexMap<String, (String, Option<WirType>)>,
+}
+
+impl WirMutVisitor for BoxLocalRetyper<'_> {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        if let WirInstr::DeclareLocal { name, ty } = instr
+            && let Some((_, Some(new_ty))) = self.targets.get(name)
+        {
+            *ty = new_ty.clone();
+        }
+        self.walk_instr(instr);
+    }
+}
+
 #[cfg(test)]
 mod adjacent_box_tests {
     use super::*;
@@ -507,98 +600,5 @@ mod adjacent_box_tests {
             panic!("expected call");
         };
         assert!(matches!(args[1], WirInstr::I32Const(42)));
-    }
-}
-
-/// Retype a single-field (`Box<T>`) struct local to its field, dropping the
-/// `StructNew`. Nothing moves, so an intervening write is no obstacle.
-pub(super) fn unwrap_box_locals(module: &mut WirPackage) {
-    for func in &mut module.functions {
-        let params: IndexSet<String> = func.param_names.iter().cloned().collect();
-        let Some(body) = &mut func.body else {
-            continue;
-        };
-        let mut stats: IndexMap<String, LocalStats> = IndexMap::default();
-        let mut candidates: IndexSet<String> = IndexSet::default();
-        for instr in body.iter() {
-            collect_stats(instr, &mut stats, &mut candidates);
-        }
-        let mut targets: IndexMap<String, (String, Option<WirType>)> = IndexMap::default();
-        for name in &candidates {
-            if params.contains(name) {
-                continue;
-            }
-            let Some(s) = stats.get(name) else { continue };
-            if s.defs != 1 || s.structget_uses == 0 || s.total_localgets != s.structget_uses {
-                continue;
-            }
-            if s.field_uses.len() != 1 {
-                continue;
-            }
-            let field = s.field_uses.keys().next().expect("one field").clone();
-            targets.insert(name.clone(), (field, None));
-        }
-        if targets.is_empty() {
-            continue;
-        }
-        let mut unwrapper = BoxUnwrapper { targets };
-        unwrapper.visit_body(body);
-        let mut retyper = BoxLocalRetyper {
-            targets: &unwrapper.targets,
-        };
-        retyper.visit_body(body);
-    }
-}
-
-/// Rewrites the def and the reads, recording each local's new type from the
-/// `StructGet` it replaces.
-struct BoxUnwrapper {
-    targets: IndexMap<String, (String, Option<WirType>)>,
-}
-
-impl WirMutVisitor for BoxUnwrapper {
-    fn visit_instr(&mut self, instr: &mut WirInstr) {
-        if let WirInstr::StructGet {
-            field_name,
-            expr,
-            result_ty,
-            ..
-        } = instr
-            && let WirInstr::LocalGet { name, .. } = expr.as_ref()
-            && let Some((field, ty)) = self.targets.get_mut(name)
-            && field == field_name
-        {
-            *ty = Some(result_ty.clone());
-            *instr = WirInstr::LocalGet {
-                name: name.clone(),
-                result_ty: result_ty.clone(),
-            };
-            return;
-        }
-        if let WirInstr::LocalSet { name, value } = instr
-            && self.targets.contains_key(name)
-            && let WirInstr::StructNew { fields, .. } = value.as_mut()
-            && fields.len() == 1
-        {
-            let inner = fields.remove(0);
-            *value = Box::new(inner);
-        }
-        self.walk_instr(instr);
-    }
-}
-
-/// Point each rewritten local's declaration at the field type.
-struct BoxLocalRetyper<'a> {
-    targets: &'a IndexMap<String, (String, Option<WirType>)>,
-}
-
-impl WirMutVisitor for BoxLocalRetyper<'_> {
-    fn visit_instr(&mut self, instr: &mut WirInstr) {
-        if let WirInstr::DeclareLocal { name, ty } = instr
-            && let Some((_, Some(new_ty))) = self.targets.get(name)
-        {
-            *ty = new_ty.clone();
-        }
-        self.walk_instr(instr);
     }
 }
