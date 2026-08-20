@@ -1315,6 +1315,26 @@ impl TypeSystem {
             )
     }
 
+    /// Whether the header implements its trait at the declared defaults. A
+    /// bound is a bare name — the parser reads `<...>` after one as
+    /// associated-type bindings — so that is the only instantiation a bound
+    /// asks for, and `impl Mul<Inch> for Cm` is not it.
+    fn header_is_defaulted_instantiation(&self, header: &super::trait_env::ImplHeader) -> bool {
+        let (Some(trait_type), Some(decl)) = (header.trait_type.as_ref(), header.trait_ref) else {
+            return true;
+        };
+        let Some(params) = self
+            .trait_env
+            .trait_decl_headers
+            .get(&decl)
+            .map(|h| h.type_params.clone())
+        else {
+            return true;
+        };
+        super::trait_env::non_default_arg_count(trait_type, &header.ty, &params, &self.resolutions)
+            == 0
+    }
+
     /// The name a trait declaration writes, for the layers still keyed on one.
     /// A rendering of the identity, so the two cannot disagree.
     pub(super) fn trait_spelling(&self, trait_: DefId) -> &str {
@@ -1345,6 +1365,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_ref == Some(trait_)
+                    && self.header_is_defaulted_instantiation(header)
                     && self.inherent_impl_type_args_match(&header.ty, type_args)
                     && self.check_impl_block_bounds(
                         ctx,
@@ -1450,10 +1471,12 @@ impl TypeSystem {
     /// (`impl<T: Mul<Output = T>> Product for T`).
     ///
     /// Both sides are `TypeId`s, so a generic argument counts (`W<i32>` with
-    /// `Output = W<String>` fails) and a `type Output = Self;` passes. An
-    /// unregistered answer means a compiler-supplied impl, whose `Output` is
-    /// the type itself. A caller with no subject cannot decide, and a blanket
-    /// that pins nothing needs no subject.
+    /// `Output = W<String>` fails) and a `type Output = Self;` passes. The
+    /// answer comes from whichever registry the serving impl wrote to — a
+    /// concrete one records the resolution, `impl<T> Mul for W<T>` records a
+    /// definition to substitute — so only a compiler-supplied impl answers
+    /// nothing, and its `Output` is the type itself. A caller with no subject
+    /// cannot decide, and a blanket that pins nothing needs no subject.
     pub(super) fn blanket_assoc_constraints_hold(
         &self,
         subject: Option<TypeId>,
@@ -1466,10 +1489,10 @@ impl TypeSystem {
             let (Some(subject), Some(trait_)) = (subject, bound.decl_ref) else {
                 return false;
             };
-            let table = self.type_table.borrow();
             bound.pinned_to_receiver.iter().all(|assoc| {
-                table
-                    .resolve_assoc_type_of_trait(subject, &trait_, assoc)
+                self.type_table
+                    .borrow_mut()
+                    .resolve_trait_assoc_type_of_instance(subject, &trait_, assoc)
                     .is_none_or(|actual| actual == subject)
             })
         })
@@ -2590,7 +2613,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
 /// arithmetic is lane-wise, and only the lane type's own impl knows the width.
 fn primitive_name_has_arithmetic(prim_name: &str, trait_name: &str) -> bool {
-    matches!(trait_name, "Add" | "Sub" | "Mul" | "Div" | "Rem" | "Neg")
-        && !matches!(prim_name, "bool" | "char" | "v128")
-        && !(trait_name == "Neg" && prim_name.starts_with('u'))
+    match trait_name {
+        "Add" | "Sub" | "Mul" | "Div" | "Rem" | "Neg" => {
+            !matches!(prim_name, "bool" | "char" | "v128")
+        }
+        // Bit patterns, so the floats are out and `bool` is in.
+        "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "Shl" | "Shr" => {
+            !matches!(prim_name, "f32" | "f64" | "char" | "v128")
+        }
+        _ => false,
+    }
 }

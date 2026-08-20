@@ -708,6 +708,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
 
         if is_shift {
+            let (shift_trait, shift_method) = match op {
+                BinaryOp::Shl => ("Shl", "shl"),
+                BinaryOp::Shr => ("Shr", "shr"),
+                _ => unreachable!(),
+            };
+            // A type parameter dispatches through its bounds, as the arithmetic
+            // operators do; the name-keyed lookup below reaches no impl for one.
+            if let ResolvedType::TypeParam { name, .. } = &left_type
+                && let Some(bounds) = self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(name)
+                    .cloned()
+                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
+                    &bounds,
+                    shift_method,
+                    left.type_id,
+                    span,
+                    None,
+                )
+            {
+                let return_type = self.operator_output_type(left.type_id, &found_trait);
+                let resolved = ResolvedTraitMethod {
+                    trait_name: found_trait,
+                    method_name: shift_method.to_string(),
+                    impl_name: name.clone(),
+                    impl_type_id: None,
+                    self_kind: info.self_kind,
+                    return_type,
+                    param_types: info.param_types,
+                    is_type_param_receiver: true,
+                };
+                return self
+                    .build_trait_op_method_call_on_resolved(
+                        left,
+                        vec![right],
+                        &resolved,
+                        span,
+                        origin,
+                    )
+                    .type_id;
+            }
             // Get struct name for trait lookup
             let struct_name = match &left_type {
                 ResolvedType::Struct { .. }
@@ -720,12 +763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                // Determine which trait and method to use based on operator
-                let (trait_name, method_name) = match op {
-                    BinaryOp::Shl => ("Shl", "shl"),
-                    BinaryOp::Shr => ("Shr", "shr"),
-                    _ => unreachable!(),
-                };
+                let (trait_name, method_name) = (shift_trait, shift_method);
 
                 // For newtypes, resolve base type for trait impl fallback
                 let (lookup_name, lookup_type_id) =

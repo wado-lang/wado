@@ -461,8 +461,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
         span: Span,
     ) -> Option<TypeId> {
-        let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
+        // A type parameter has no impl block to read the rhs off; its bounds
+        // say it, and `Shl::shl(&self, rhs: u32)` is why a literal needs to be
+        // told. A bound cannot vary the declared rhs, so no selection arises.
+        let param_name = match self.tysys.type_table.borrow().get(self_type_id) {
+            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
+            _ => None,
+        };
+        if let Some(param_name) = param_name {
+            let bounds = self
+                .annotate_ctx
+                .trait_ctx
+                .type_param_bounds
+                .get(&param_name)?
+                .clone();
+            let (_, info) =
+                self.find_method_in_trait_bounds(&bounds, method_name, self_type_id, span, None)?;
+            let first = *info.param_types.first()?;
+            let peeled = match self.tysys.type_table.borrow().get(first) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                _ => first,
+            };
+            return Some(peeled);
+        }
+        let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let admitted = self.find_arithmetic_trait_impls(
             &struct_name,
             self_type_id,

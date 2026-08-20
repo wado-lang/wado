@@ -552,8 +552,16 @@ those defaults, `Self` meaning the impl's target: `impl Add<Cm> for Cm` and
 predicate decides it for both the impl's minted name and the key its associated
 types register under, so §8's rendering and the registry cannot disagree.
 
+A bound therefore selects only an impl at that instantiation, and the
+associated type it pins is read from whichever registry the serving impl wrote
+to — a concrete impl records a resolution, a generic one a definition to
+substitute. Reading one of the two is what let a widening
+`impl<T> Mul for W<T>` satisfy `Mul<Output = T>`.
+
 Fixtures: `assoc_type_per_trait_args.wado`,
-`impl_writes_default_trait_arg.wado`.
+`impl_writes_default_trait_arg.wado`,
+`error_bound_needs_default_instantiation.wado`,
+`error_blanket_pinned_assoc_generic_impl.wado`.
 
 ## Impl target arguments
 
