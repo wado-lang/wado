@@ -1,0 +1,34 @@
+// `T::Out` is rigid, not undecided: it stands only for itself, so returning it
+// where `T` is declared is decidable in the frame that wrote both.
+trait Widen {
+    type Out;
+
+    fn widen(&self) -> Self::Out;
+}
+
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+impl Widen for Cm {
+    type Out = Area;
+
+    fn widen(&self) -> Area {
+        return Area { v: self.v * self.v };
+    }
+}
+
+fn go<T: Widen>(a: T) -> T {
+    return a.widen();
+}
+
+export fn run() {
+    assert go(Cm { v: 3 }).v == 9;
+}
+
+__DATA__
+{ "compile_error": "type mismatch" }

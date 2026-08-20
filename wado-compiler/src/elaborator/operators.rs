@@ -679,17 +679,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some((found_trait, info)) =
                     self.find_method_in_trait_bounds(&bounds, method_name, left.type_id, span, None)
                 {
-                    // For type-param arithmetic operators, Output == Self is the common
-                    // case and TypeParam types get properly substituted by monomorphization.
-                    // Using AssocTypeProjection would cause unresolved types for primitives
-                    // that don't register associated types.
+                    let return_type = self.operator_output_type(operand_type_id, &found_trait);
                     let resolved = ResolvedTraitMethod {
                         trait_name: found_trait,
                         method_name: method_name.to_string(),
                         impl_name: name.clone(),
                         impl_type_id: None,
                         self_kind: info.self_kind,
-                        return_type: operand_type_id,
+                        return_type,
                         param_types: info.param_types,
                         is_type_param_receiver: true,
                     };
@@ -1654,6 +1651,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let name = format!("__m{idx}");
         let _local_index = ctx.add_local(name, type_id, false, None);
         placeholder(type_id, span)
+    }
+
+    /// `T::Output` for an operator applied to a type parameter — what the
+    /// frame's bound pins it to (`T: Mul<Output = T>`), else the projection.
+    /// The operand's own type where the trait declares no `Output`: `Shl` and
+    /// `Shr` do not project.
+    fn operator_output_type(
+        &mut self,
+        operand_type_id: TypeId,
+        found_trait: &crate::name::FqTraitName,
+    ) -> TypeId {
+        let Some(trait_) = self.tysys.trait_env.trait_def_of_fq(found_trait) else {
+            return operand_type_id;
+        };
+        if self
+            .tysys
+            .trait_env
+            .trait_decl_headers
+            .get(&trait_)
+            .is_none_or(|header| !header.assoc_types.iter().any(|a| a.name == "Output"))
+        {
+            return operand_type_id;
+        }
+        let param_name = match self.tysys.type_table.borrow().get(operand_type_id) {
+            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
+            _ => None,
+        };
+        let Some(name) = param_name else {
+            return operand_type_id;
+        };
+        self.frame_projection_of_trait(&name, trait_, "Output")
+            .unwrap_or_else(|| self.make_frame_projection(operand_type_id, &name, "Output"))
     }
 
     /// The single TIR-level builder for every operator dispatching to a trait

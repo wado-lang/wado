@@ -2917,6 +2917,13 @@ impl TypeTable {
                     {
                         return resolved;
                     }
+                    // A primitive's arithmetic is compiler-supplied, so nothing
+                    // registered its `Output`. It is the primitive itself.
+                    if assoc_name == "Output"
+                        && matches!(self.get(concrete), ResolvedType::Primitive(_))
+                    {
+                        return concrete;
+                    }
                 }
                 // Bindings are resolved in the same frame as the rest of the
                 // signature, so they carry its slots too.
@@ -3120,19 +3127,22 @@ impl TypeTable {
 
     /// Whether `id` (recursively) mentions anything a type check cannot decide
     /// yet: an inference variable awaiting its solver, a type pack awaiting
-    /// expansion, an associated-type projection awaiting its impl, or an
-    /// unresolved / error type.
+    /// expansion, or an unresolved / error type.
     ///
     /// Deliberately *not* the same question as [`Self::contains_type_param`].
     /// A rigid type parameter is decided — it is opaque, and stands only for
-    /// itself — so it does not belong here.
+    /// itself — and so is a projection over one: no impl is in reach to look
+    /// through, so `T::Out` is its own answer. A projection over anything else
+    /// (`Array<T>::Elem`) still owes one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
-            | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                !self.projects_from_param(*param_id)
+            }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
@@ -3153,6 +3163,18 @@ impl TypeTable {
         }
     }
 
+    /// Whether a projection over `base` bottoms out at a rigid type parameter,
+    /// chaining through nested projections (`I::Iter::Item`).
+    fn projects_from_param(&self, base: TypeId) -> bool {
+        match self.get(base) {
+            ResolvedType::TypeParam { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.projects_from_param(*param_id)
+            }
+            _ => false,
+        }
+    }
+
     /// Whether `id` (recursively) mentions a *rigid* type parameter — a slot
     /// of some declaration's own frame, as opposed to an inference variable a
     /// solver still owns.
@@ -3163,6 +3185,9 @@ impl TypeTable {
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Reactive(inner) => self.contains_rigid_param(*inner),
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.contains_rigid_param(*param_id)
+            }
             ResolvedType::Function {
                 params,
                 return_type,

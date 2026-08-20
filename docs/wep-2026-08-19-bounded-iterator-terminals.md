@@ -59,7 +59,7 @@ internal trait Sum {
     fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
 
-impl<T: Add> Sum for T {
+impl<T: Add<Output = T>> Sum for T {
     type Elem = T;
 
     fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
@@ -73,8 +73,9 @@ fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S> {
 }
 ```
 
-`Product` is the same over `T: Mul`; `Extremum` carries `min_iter` / `max_iter`
-over `T: Ord`.
+`Product` is the same over `T: Mul<Output = T>`; `Extremum` carries `min_iter` /
+`max_iter` over `T: Ord`. `reduce` folds back into `T`, so the operator carriers
+pin `Output` as Rust's do.
 
 The call site never writes the parameter. An iterator whose `Item` implements
 neither trait fails at the call, naming the missing bound, not at the trait
@@ -121,14 +122,14 @@ optional again.
 
 ## Compiler support
 
-The carrier traits lean on three bound-resolution behaviours none of which
+The carrier traits lean on five bound-resolution behaviours none of which
 worked, none specific to iterators. Each is pinned by a fixture under
 `wado-compiler/tests/fixtures/`.
 
 1. **A blanket bounded by a compiler-supplied trait must apply to a primitive.**
    `blanket_trait_impl_applies` answered its bound with an impl-index lookup,
    which finds `impl Ord for i32` but not the compiler-supplied `Add`, so
-   `impl<T: Add> Sum for T` held for `String` and not for `i32`. Fixture:
+   `Sum`'s blanket held for `String` and not for `i32`. Fixture:
    `blanket_impl_builtin_bound.wado`.
 
 2. **The bound's identity is the blanket's, not the asking module's.** The
@@ -138,7 +139,25 @@ worked, none specific to iterators. Each is pinned by a fixture under
    `error_same_named_operator_trait.wado`,
    `blanket_builtin_bound_shadowed_spelling.wado`.
 
-3. **A blanket's method must dispatch through a generic bound.**
+3. **A blanket's bound keeps its associated-type constraints.** The index
+   carried each bound's trait but not its `Output = T`, so `Product`'s blanket
+   accepted any `Mul`. The operator itself now yields `T::Output` rather than
+   assuming `Self`. Fixtures: `error_operator_output_widens.wado`,
+   `operator_output_projection.wado`.
+
+4. **A projection over a rigid type parameter is a type, not a pending
+   question.** `T::Out` was deferred as "awaiting its impl", so
+   `fn go<T: Widen>(a: T) -> T { return a.widen(); }` type-checked. Only a
+   projection over an instance (`Array<T>::Elem`) still owes an impl its
+   answer. Deciding them exposed two builders that had been hidden behind the
+   deferral: one projection builder now serves every site, so a signature's
+   `T::Output` and one synthesized for `a * b` are the same type; and a bound's
+   answers (`D: Derived<Elem = i32>`) reach a default body naming a
+   _supertrait's_ associated type. Fixtures:
+   `error_assoc_projection_return_mismatch.wado`, `assoc_projection_rigid.wado`,
+   `super_trait_assoc_in_default_body.wado`.
+
+5. **A blanket's method must dispatch through a generic bound.**
    `resolve_type_param_dispatch` keyed the template by the call site's
    type-parameter head, which matches the blanket's receiver param only when the
    two are spelled alike. `fn f<D: Doubler>(x: D) { x.twice() }` against
@@ -165,10 +184,9 @@ worked, none specific to iterators. Each is pinned by a fixture under
   chain.
 - Three carrier traits enter the prelude namespace (`Sum`, `Product`,
   `Extremum`) as `internal`.
-- An operator trait's bound now requires `Output` to be the implementing type,
-  since a generic body's `a + b` is typed as `Self`. A widening `Mul` (`Cm * Cm
-  -> Area`) keeps working where it is written out, and no longer reaches a
-  `T: Mul` bound — which had accepted it and miscompiled.
+- `Sum` and `Product` are bounded `T: Add<Output = T>` / `T: Mul<Output = T>`,
+  as Rust's are: `reduce` folds back into `T`. A widening operator impl (`Cm *
+  Cm -> Area`) stays legal and simply does not reach them.
 - `fold` keeps its place. The `fold` call sites left in the tree are `fold`'s own
   tests and closure demonstrations, not sums written the long way.
 

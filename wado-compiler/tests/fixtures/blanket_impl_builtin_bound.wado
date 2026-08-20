@@ -7,7 +7,7 @@ trait Doubler {
     fn twice(&self) -> Self;
 }
 
-impl<T: Add> Doubler for T {
+impl<T: Add<Output = T>> Doubler for T {
     pub fn twice(&self) -> T {
         return *self + *self;
     }
@@ -17,7 +17,7 @@ trait Squarer {
     fn squared(&self) -> Self;
 }
 
-impl<T: Mul> Squarer for T {
+impl<T: Mul<Output = T>> Squarer for T {
     pub fn squared(&self) -> T {
         return *self * *self;
     }

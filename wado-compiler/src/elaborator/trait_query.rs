@@ -593,61 +593,7 @@ impl TypeSystem {
 
         ctx.trait_check_stack.borrow_mut().pop();
 
-        result && self.operator_output_is_self(type_id, &trait_name, trait_)
-    }
-
-    /// Whether an operator trait's `Output` is the implementing type. A generic
-    /// body's `a + b` is typed as `Self`, so a widening `Output` would reach
-    /// codegen as the wrong type and the bound does not hold for it.
-    fn operator_output_is_self(&self, type_id: TypeId, trait_name: &str, trait_: DefId) -> bool {
-        if !self.is_prelude_operator_trait(trait_name, trait_) {
-            return true;
-        }
-        // Unresolvable means a compiler-supplied impl or none at all; neither
-        // widens.
-        self.type_table
-            .borrow_mut()
-            .resolve_trait_assoc_type_of_instance(type_id, &trait_, "Output")
-            .is_none_or(|output| output == type_id)
-    }
-
-    /// [`Self::operator_output_is_self`] for a blanket's bound, which names its
-    /// receiver as an impl key rather than a `TypeId`. One header spells both
-    /// sides, so their heads compare directly.
-    fn receiver_operator_output_is_self(
-        &self,
-        type_key: &Receiver,
-        bound: &super::trait_env::BlanketBound,
-    ) -> bool {
-        let Some(trait_) = bound.decl_ref else {
-            return true;
-        };
-        if !self.is_prelude_operator_trait(&bound.name, trait_) {
-            return true;
-        }
-        let trait_env = self.trait_env.clone();
-        trait_env
-            .entries_by_receiver_vec(type_key)
-            .into_iter()
-            .filter_map(|entry| trait_env.impl_headers.get(&entry))
-            .filter(|header| header.trait_ref == Some(trait_))
-            .all(|header| {
-                let target = super::trait_env::get_type_name_static(&header.ty);
-                header
-                    .associated_types
-                    .iter()
-                    .filter(|b| b.name == "Output")
-                    .all(|b| super::trait_env::get_type_name_static(&b.ty) == target)
-            })
-    }
-
-    /// The prelude's arithmetic operator traits — the ones whose `Output` a
-    /// generic body's operator assumes is `Self`.
-    fn is_prelude_operator_trait(&self, trait_name: &str, trait_: DefId) -> bool {
-        matches!(
-            trait_name,
-            "Add" | "Sub" | "Mul" | "Div" | "Rem" | "BitAnd" | "BitOr" | "BitXor"
-        ) && self.is_prelude_trait_decl(Some(trait_))
+        result
     }
 
     /// Explain *why* `type_id` does not implement `trait_name` by walking the
@@ -1471,15 +1417,69 @@ impl TypeSystem {
                     || self.primitive_satisfies_builtin_trait(scope, type_key, bound)
                     || bound.decl_ref.is_some_and(|trait_| {
                         self.find_trait_impl_for_type(ctx, scope, type_key, trait_)
-                            && self.receiver_operator_output_is_self(type_key, bound)
                     })
             });
-            if bounds_satisfied {
+            if bounds_satisfied && self.blanket_assoc_constraints_hold(type_key, blanket) {
                 return true;
             }
         }
 
         false
+    }
+
+    /// Whether the receiver satisfies the associated-type constraints the
+    /// blanket's own bounds write (`impl<T: Mul<Output = T>> Product for T`).
+    /// The blanket's frame and the receiver's impl header each spell their side
+    /// from one module, so their heads compare directly.
+    fn blanket_assoc_constraints_hold(
+        &self,
+        type_key: &Receiver,
+        blanket: &super::trait_env::BlanketImpl,
+    ) -> bool {
+        let trait_env = self.trait_env.clone();
+        let Some(header) = trait_env
+            .impl_headers
+            .get(&(blanket.module.clone(), blanket.ast_id))
+        else {
+            return true;
+        };
+        let Some(param) = header.type_params.iter().find(|p| p.name == blanket.param) else {
+            return true;
+        };
+        param.bounds.iter().all(|bound| {
+            bound.assoc_types.iter().all(|constraint| {
+                // Only a constraint naming the receiver param itself is decidable
+                // here; anything else is the instantiation's to answer.
+                if super::trait_env::get_type_name_static(&constraint.ty) != blanket.param {
+                    return true;
+                }
+                self.receiver_assoc_type_is_self(type_key, &bound.name, &constraint.name)
+            })
+        })
+    }
+
+    /// Whether `<receiver as trait_name>::assoc` is the receiver itself, read
+    /// off the impl header that binds it.
+    fn receiver_assoc_type_is_self(
+        &self,
+        type_key: &Receiver,
+        trait_name: &str,
+        assoc: &str,
+    ) -> bool {
+        let trait_env = self.trait_env.clone();
+        trait_env
+            .entries_by_receiver_vec(type_key)
+            .into_iter()
+            .filter_map(|entry| trait_env.impl_headers.get(&entry))
+            .filter(|header| header.trait_name.as_deref() == Some(trait_name))
+            .all(|header| {
+                let target = super::trait_env::get_type_name_static(&header.ty);
+                header
+                    .associated_types
+                    .iter()
+                    .filter(|b| b.name == assoc)
+                    .all(|b| super::trait_env::get_type_name_static(&b.ty) == target)
+            })
     }
 
     /// Whether `blanket`'s receiver bound is a reflection trait — the shape the
@@ -1592,7 +1592,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The recorded signature of `method_name` on the trait `trait_name` names
-    /// in this frame, with that trait's associated-type declarations.
+    /// in this frame, with the associated-type declarations its body may name —
+    /// the trait's own and every supertrait's, since `Self::Elem` in a
+    /// `Derived` default body is `Base`'s.
     ///
     /// The header answers whether the method exists, the digest what it says.
     /// A method the header lists but the digest lacks is a decl-pass bug, so it
@@ -1606,7 +1608,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
         }
-        let assoc_types = header.assoc_types.clone();
+        let mut assoc_types = header.assoc_types.clone();
+        let inherited: Vec<ast::AssociatedTypeDecl> = self
+            .tysys
+            .trait_env
+            .supertrait_closure(key)
+            .iter()
+            .filter_map(|bound| self.trait_decl_header_of(&bound.decl))
+            .flat_map(|super_header| super_header.assoc_types.iter().cloned())
+            .collect();
+        for decl in inherited {
+            if !assoc_types.iter().any(|own| own.name == decl.name) {
+                assoc_types.push(decl);
+            }
+        }
         let sig = self
             .trait_sig_of(key)
             .and_then(|sig| sig.method(method_name))

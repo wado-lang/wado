@@ -1421,7 +1421,7 @@ internal trait Sum {
     fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
 
-impl<T: Add> Sum for T {
+impl<T: Add<Output = T>> Sum for T {
     type Elem = T;
 
     fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
@@ -1436,7 +1436,7 @@ internal trait Product {
     fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
 
-impl<T: Mul> Product for T {
+impl<T: Mul<Output = T>> Product for T {
     type Elem = T;
 
     fn product_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {

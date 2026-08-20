@@ -263,25 +263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::TypeParam { .. }
                 )
             {
-                let assoc_bounds = self.find_assoc_type_bounds(self_type, &namespaced.name);
-                let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
-                    .iter()
-                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
-                    .collect();
-                let assoc_type_bindings =
-                    self.frame_assoc_bindings(self_type, "Self", &assoc_bounds);
-                let owning_trait = self.bound_declaring_assoc_type("Self", &namespaced.name);
-                return self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_assoc_type_projection_of_trait(
-                        self_type,
-                        owning_trait,
-                        namespaced.name.clone(),
-                        bound_names,
-                        assoc_type_bindings,
-                    );
+                return self.make_frame_projection(self_type, "Self", &namespaced.name);
             }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
@@ -341,36 +323,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return direct_type;
             }
 
-            // Look up trait bounds on the associated type from the trait declaration.
-            let assoc_bounds = self.find_assoc_type_bounds(param_type_id, &namespaced.name);
-            let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
-                .iter()
-                .map(|b| self.fq_trait_name_at(b.id, &b.name))
-                .collect();
-
-            // Compute assoc_type_bindings by resolving Self::X in the assoc type's bounds.
-            // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
-            // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
-            // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
-            let assoc_type_bindings = self.frame_assoc_bindings(
-                param_type_id,
-                &namespaced.namespace.clone(),
-                &assoc_bounds,
-            );
-
-            let owning_trait =
-                self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name);
-            return self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_assoc_type_projection_of_trait(
-                    param_type_id,
-                    owning_trait,
-                    namespaced.name.clone(),
-                    bound_names,
-                    assoc_type_bindings,
-                );
+            let base_name = namespaced.namespace.clone();
+            return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
         }
 
         if self
@@ -786,6 +740,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .flat_map(|bound| &bound.assoc_types)
             .find(|binding| binding.name == assoc)
             .map(|binding| self.resolve_type(&binding.ty.clone()))
+    }
+
+    /// The projection `base::assoc` as this frame builds it, where `base_name`
+    /// is the name the frame files `base`'s bounds under. The single builder,
+    /// so a projection written in a signature and one synthesized for an
+    /// expression intern to the same type.
+    pub(super) fn make_frame_projection(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        assoc: &str,
+    ) -> TypeId {
+        let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
+        let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
+            .iter()
+            .map(|b| self.fq_trait_name_at(b.id, &b.name))
+            .collect();
+        let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
+        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc);
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .make_assoc_type_projection_of_trait(
+                base,
+                owning_trait,
+                assoc.to_string(),
+                bound_names,
+                assoc_type_bindings,
+            )
+    }
+
+    /// [`Self::frame_projection`] scoped to one trait: `T: Mul<Output = T>`
+    /// answers `T::Output` where a bare `T: Mul` leaves it abstract. A caller
+    /// that knows which trait it dispatched through asks this one, so a second
+    /// bound declaring the same name never answers for it.
+    pub(super) fn frame_projection_of_trait(
+        &mut self,
+        base_name: &str,
+        trait_: crate::defs::DefId,
+        assoc: &str,
+    ) -> Option<TypeId> {
+        let bounds = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(base_name)?
+            .clone();
+        let written = bounds.iter().find_map(|bound| {
+            let fq = self.fq_trait_name_at(bound.id, &bound.name);
+            (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
+                .then(|| bound.assoc_types.iter().find(|b| b.name == assoc))
+                .flatten()
+        })?;
+        Some(self.resolve_type(&written.ty.clone()))
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this
