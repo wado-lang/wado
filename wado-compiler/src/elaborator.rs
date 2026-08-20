@@ -1911,13 +1911,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     continue;
                 };
                 if is_concrete {
+                    let trait_args = impl_block.trait_type.as_ref().map_or_else(Vec::new, |t| {
+                        scope.non_default_trait_args(t, &impl_block.ty, trait_key)
+                    });
                     scope
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .register_assoc_type_resolution(
+                        .register_assoc_type_resolution_of_args(
                             target_type_id,
                             trait_key,
+                            trait_args,
                             binding.name.clone(),
                             type_id,
                         );

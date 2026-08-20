@@ -2523,13 +2523,32 @@ fn args_without_declared_defaults(
     params: &[ast::GenericParam],
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<name::FqTypeName> {
+    let mut kept = written;
+    kept.truncate(non_default_arg_count(
+        trait_type,
+        target,
+        params,
+        resolutions,
+    ));
+    kept
+}
+
+/// How many of `trait_type`'s written arguments say something its declared
+/// defaults do not. One rule behind both an impl's name and the identity its
+/// associated types register under, so the two cannot disagree.
+pub(super) fn non_default_arg_count(
+    trait_type: &ast::Type,
+    target: &ast::Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+) -> usize {
     let ast_args: &[ast::Type] = match trait_type {
         ast::Type::Generic(generic) => &generic.args,
         ast::Type::NamespacedGeneric(ns) => &ns.args,
-        _ => return written,
+        _ => return 0,
     };
-    let mut kept = written;
-    while let Some(last) = kept.len().checked_sub(1) {
+    let mut kept = ast_args.len();
+    while let Some(last) = kept.checked_sub(1) {
         let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {
             break;
         };
@@ -2546,7 +2565,7 @@ fn args_without_declared_defaults(
         if !restates_default {
             break;
         }
-        kept.truncate(last);
+        kept = last;
     }
     kept
 }

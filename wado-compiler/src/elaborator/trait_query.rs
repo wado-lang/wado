@@ -2206,6 +2206,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             /// The trait this block implements, as its own header names it —
             /// the key the registration must use.
             trait_key: crate::defs::DefId,
+            /// The written trait reference and the impl's target, so the
+            /// registration can name the instantiation the block implements.
+            trait_type: ast::Type,
+            target: ast::Type,
         }
         let trait_env = self.tysys.trait_env.clone();
         let impl_infos: Vec<ImplInfo> = {
@@ -2239,11 +2243,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else {
                             continue;
                         };
+                        let Some(trait_type) = header.trait_type.clone() else {
+                            continue;
+                        };
                         result.push(ImplInfo {
                             type_params: header.type_params.clone(),
                             impl_ty_param_names,
                             assoc_types: header.associated_types.clone(),
                             trait_key,
+                            trait_type,
+                            target: header.ty.clone(),
                         });
                     }
                 }
@@ -2286,6 +2295,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Resolve and register each associated type in this substituted context
             let trait_key = info.trait_key;
+            let trait_args =
+                scope.non_default_trait_args(&info.trait_type, &info.target, trait_key);
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2298,9 +2309,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .register_assoc_type_resolution(
+                        .register_assoc_type_resolution_of_args(
                             concrete_type_id,
                             trait_key,
+                            trait_args.clone(),
                             binding.name.clone(),
                             resolved_id,
                         );

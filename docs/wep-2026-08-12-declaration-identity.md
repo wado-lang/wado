@@ -537,6 +537,24 @@ spelling no query can mistake for an identity.
 A rendering is never read back into a declaration, and a name-keyed map is the
 same defect waiting for a reader.
 
+## Trait arguments
+
+An identity is a declaration plus the arguments it was instantiated at, and an
+associated type belongs to that: `<Cm as Combine>::Out` and
+`<Cm as Combine<Inch>>::Out` are two answers. Keying them by the declaration
+alone let one impl overwrite the other's.
+
+A bound is a bare name — the parser reads `<...>` after one as associated-type
+bindings — so a bound always means the trait at its declared defaults. The
+arguments an identity carries are therefore only the ones an impl writes beyond
+those defaults, `Self` meaning the impl's target: `impl Add<Cm> for Cm` and
+`impl Add for Cm` are one identity, `impl Add<Inch> for Cm` another. One
+predicate decides it for both the impl's minted name and the key its associated
+types register under, so §8's rendering and the registry cannot disagree.
+
+Fixtures: `assoc_type_per_trait_args.wado`,
+`impl_writes_default_trait_arg.wado`.
+
 ## Impl target arguments
 
 An `impl` header's type arguments are asked the same question twice — which

@@ -644,6 +644,21 @@ impl TypeSet {
     }
 }
 
+/// What an associated type belongs to: a receiver, a trait, and the arguments
+/// the trait was instantiated at. `<Cm as Combine>::Out` and
+/// `<Cm as Combine<Inch>>::Out` are two answers, so the declaration alone is
+/// not the identity (WEP 2026-08-12).
+///
+/// `trait_args` holds only what an impl wrote beyond the declared defaults: a
+/// bound is a bare name, so the defaulted form is the empty list.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AssocTypeKey {
+    receiver: TypeId,
+    trait_decl: crate::defs::DefId,
+    trait_args: Vec<TypeId>,
+    assoc_name: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -661,7 +676,11 @@ pub struct TypeTable {
     ///
     /// Keyed by trait because one type may implement several declaring the
     /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
-    assoc_type_resolutions: IndexMap<(TypeId, crate::defs::DefId, String), TypeId>,
+    /// `<type as trait[args]>::name` → the type it resolves to. The arguments
+    /// are the ones the impl wrote beyond the trait's declared defaults, so a
+    /// bare bound and `impl Add<Cm> for Cm` meet at the empty list while
+    /// `impl Add<Inch> for Cm` keys its own answer.
+    assoc_type_resolutions: IndexMap<AssocTypeKey, TypeId>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
@@ -2354,6 +2373,10 @@ impl TypeTable {
     /// Register an associated type resolution: for concrete type `concrete_id` (e.g., `JsonSerializer`),
     /// the associated type `assoc_name` (e.g., `"StructSerializer"`) resolves to `resolved_id`
     /// (e.g., `JsonStructSerializer`).
+    ///
+    /// At the trait's declared defaults, which is what a bound means — a bound
+    /// is a bare name. [`Self::register_assoc_type_resolution_of_args`] is the
+    /// form an impl writing more than the defaults registers under.
     pub fn register_assoc_type_resolution(
         &mut self,
         concrete_id: TypeId,
@@ -2361,8 +2384,34 @@ impl TypeTable {
         assoc_name: String,
         resolved_id: TypeId,
     ) {
-        self.assoc_type_resolutions
-            .insert((concrete_id, trait_key, assoc_name), resolved_id);
+        self.register_assoc_type_resolution_of_args(
+            concrete_id,
+            trait_key,
+            Vec::new(),
+            assoc_name,
+            resolved_id,
+        );
+    }
+
+    /// [`Self::register_assoc_type_resolution`] for an impl whose trait
+    /// arguments say more than the declared defaults do.
+    pub fn register_assoc_type_resolution_of_args(
+        &mut self,
+        concrete_id: TypeId,
+        trait_key: crate::defs::DefId,
+        trait_args: Vec<TypeId>,
+        assoc_name: String,
+        resolved_id: TypeId,
+    ) {
+        self.assoc_type_resolutions.insert(
+            AssocTypeKey {
+                receiver: concrete_id,
+                trait_decl: trait_key,
+                trait_args,
+                assoc_name,
+            },
+            resolved_id,
+        );
     }
 
     /// Resolve `<concrete_id as trait_name>::assoc_name` — the exact form,
@@ -2374,7 +2423,12 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
+            .get(&AssocTypeKey {
+                receiver: concrete_id,
+                trait_decl: *trait_key,
+                trait_args: Vec::new(),
+                assoc_name: assoc_name.to_string(),
+            })
             .copied()
     }
 
@@ -2406,8 +2460,8 @@ impl TypeTable {
     /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
         let mut found = None;
-        for ((type_id, _, name), &resolved) in &self.assoc_type_resolutions {
-            if *type_id != concrete_id || name != assoc_name {
+        for (key, &resolved) in &self.assoc_type_resolutions {
+            if key.receiver != concrete_id || key.assoc_name != assoc_name {
                 continue;
             }
             if found.is_some_and(|prior| prior != resolved) {
@@ -2630,9 +2684,7 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        self.assoc_type_resolutions
-            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
-            .copied()
+        self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
     }
 
     /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
@@ -2646,8 +2698,8 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let key = (concrete_id, *trait_key, assoc_name.to_string());
-        if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
+        if let Some(resolved) = self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
+        {
             return Some(resolved);
         }
         let type_args = self.nominal_type_args(concrete_id)?;

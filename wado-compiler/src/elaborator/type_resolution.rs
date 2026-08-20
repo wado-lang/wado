@@ -165,6 +165,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
+    /// The trait arguments an impl writes beyond the declared defaults, as the
+    /// identity its associated types register under. `Rhs = Self` makes
+    /// `impl Add<Cm> for Cm` the defaulted instantiation a bare bound reaches,
+    /// while `impl Add<Inch> for Cm` keys its own.
+    pub(super) fn non_default_trait_args(
+        &mut self,
+        trait_type: &crate::ast::Type,
+        target: &crate::ast::Type,
+        trait_decl: crate::defs::DefId,
+    ) -> Vec<TypeId> {
+        let Some(params) = self
+            .tysys
+            .trait_env
+            .trait_decl_headers
+            .get(&trait_decl)
+            .map(|header| header.type_params.clone())
+        else {
+            return Vec::new();
+        };
+        let kept = super::trait_env::non_default_arg_count(
+            trait_type,
+            target,
+            &params,
+            &self.tysys.resolutions,
+        );
+        let written: Vec<crate::ast::Type> = match trait_type {
+            Type::Generic(generic) => generic.args.clone(),
+            Type::NamespacedGeneric(ns) => ns.args.clone(),
+            _ => Vec::new(),
+        };
+        written
+            .iter()
+            .take(kept)
+            .map(|arg| self.resolve_type(arg))
+            .collect()
+    }
+
     /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
     /// whether it did. [`Self::bound_declaring_assoc_type`] would answer with
     /// the first, which is a coin toss the writer never made. Supertraits are
