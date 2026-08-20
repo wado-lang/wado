@@ -62,8 +62,8 @@ nothing for it.
 
 ### 3. No silent degradation
 
-Every operand position in a condition is captured, save what
-_Deliberately out of scope_ names. There is no second outcome to report for a
+Every operand position in a condition is captured, save what _Known gaps_
+lists as not yet reached. There is no second outcome to report for a
 type: `Inspect` is total (WEP-2026-06-25), so a `T: Inspect` obligation always
 holds and every operand has a rendering. An operand the compiler declines to
 inspect is a bug in `Inspect` derivation, at the priority every compiler bug
@@ -97,29 +97,13 @@ block-carrying condition's line breaks collapse to single spaces, so the quote
 is one line. Where the formatter drops parentheses — around an `if` used as an
 operand — both spellings parse to the same tree, so no fidelity is lost.
 
-## Deliberately out of scope
-
-The children of `Closure`, `WithHandler` and `Resume` are not captured: they are
-not values in isolation, and a slot for one would report a sub-expression that
-never had a value at the moment the condition failed. The same reasoning stops
-the walk at the body of an `If` / `Match` branch and at the statements of a
-block: the value of the branch the run took is what that node's own capture
-renders, so descending would report it twice under a second name.
-
-A `Literal` adds nothing the source text does not already show. An `Assign` or
-`CompoundAssign` in a condition is a mutation rather than an operand. A `Spread`
-only appears inside a literal the scanner already walks.
-
-Two narrower exclusions are unresolved rather than principled. A bare identifier
-in call-argument position stays uncaptured because it may be a
-function-reference coercion site, and `&<ident>` likewise: the scanner runs
-before types are known, so it cannot tell `&value` from `&fn_name`.
-`assert takes(&a)` therefore does not show `a`.
-
 ## Known gaps
 
-Not exclusions. Each is the mechanism failing rule 1 or paying too much for it,
-and each is a defect to fix rather than a boundary to document.
+Nothing here is settled by design. Each entry is the mechanism failing rule 1,
+or an operand position rule 3 does not yet reach, or a cost not yet paid down —
+a defect or an open question, never a boundary.
+
+### Rule 1: the mechanism changes evaluation
 
 - [ ] **Stop hoisting a capture past an operand left in place.** A method call's
       receiver is evaluated before its arguments and a subscript's receiver
@@ -137,6 +121,38 @@ and each is a defect to fix rather than a boundary to document.
       choice, not the operand's nature. Deciding which method mutates needs the
       `self` kind, which the scan does not have because it runs ahead of
       resolution: an ordering this design chose and can revisit.
+
+### Rule 3: operand positions that render nothing
+
+- [ ] **Render a closure, `WithHandler` or `Resume` operand.** `Inspect` is
+      total, so a closure value has a rendering — `assert apply(|x: i32| -> i32
+      { return x * 2; }, n)` could show `|i32| -> i32` and shows nothing today.
+      Their _children_ stay unwalked for a separate reason that does hold: a
+      sub-expression of a closure body has no value at the moment the condition
+      failed.
+
+- [ ] **Capture a bare identifier in call-argument position, and `&<ident>`.**
+      Either may be a function-reference coercion site, and the scanner runs
+      before types are known, so it cannot tell `&value` from `&fn_name`.
+      `assert takes(&a)` therefore does not show `a`. Resolving it means
+      deciding after types are known.
+
+- [ ] **Decide whether a `Literal` operand should render.** Its value is its
+      source text, so a slot would repeat what the `condition:` line already
+      shows. Left uncaptured on that reading, not on a principle.
+
+- [ ] **Decide whether an `Assign` / `CompoundAssign` in a condition should
+      render.** It is a mutation rather than an operand, so what a slot would
+      report is unclear rather than settled.
+
+- [ ] **Confirm the walk's stopping points are coverage, not omission.** The
+      scan does not descend into an `If` / `Match` branch body, the statements
+      of a block, or a `Spread` inside a literal it already walks. In each case
+      the enclosing node's own capture is believed to render the value the run
+      produced, so descending would report it twice under a second name — but
+      that is an argument, and no test pins it.
+
+### Cost
 
 - [ ] **Rematerialize a cold-path use** in the escape and scalarization
       analyses. This one is cost, not correctness, and it is not a trade against

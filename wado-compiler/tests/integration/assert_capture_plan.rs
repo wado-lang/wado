@@ -1,6 +1,7 @@
 //! What each condition shape contributes to a power-assert failure, read back
 //! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what
-//! `docs/wep-2026-08-19-power-assert-coverage.md` sanctions rendering nothing.
+//! renders nothing today; `docs/wep-2026-08-19-power-assert-coverage.md` lists
+//! each one as a gap.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -165,7 +166,7 @@ fn a_short_circuited_operand_is_marked_conditional() {
     }
 }
 
-/// The shapes the WEP's *Deliberately out of scope* sanctions rendering nothing.
+/// The shapes that render nothing today, each one a WEP *Known gaps* entry.
 const EXPECTED_EMPTY: &[&str] = &["shape matches { Point }"];
 
 #[test]

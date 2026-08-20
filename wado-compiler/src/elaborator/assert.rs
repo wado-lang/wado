@@ -245,7 +245,7 @@ impl AssertCaptureContext {
 /// Decides which sub-expressions of an assert condition become capture slots.
 /// No source-text dedup: `f() == f()` gets a slot per occurrence, so each
 /// evaluates as the source wrote it. Receivers and `matches` scrutinees are
-/// never scanned — see the WEP's *Deliberately out of scope*.
+/// never scanned — see the WEP's *Known gaps*.
 struct CaptureScanner {
     slots: Vec<Capture>,
     ast_id_to_slot: IndexMap<AstId, usize>,
