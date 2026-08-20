@@ -1,7 +1,6 @@
-// A user trait spelled like an operator trait shadows the name here, but the
-// prelude's `impl<T: Add> Sum for T` resolved its bound where the blanket is
-// written. Reading that bound's spelling back in the asking module made `i32`
-// stop satisfying it, and `sum()` stopped compiling.
+// A user trait shadows an operator trait's spelling here, where the prelude's
+// `impl<T: Add> Sum for T` is consumed but not written. Its bound resolved at
+// the blanket, so the shadowing does not reach it.
 use { println } from "core:cli";
 
 trait Add {

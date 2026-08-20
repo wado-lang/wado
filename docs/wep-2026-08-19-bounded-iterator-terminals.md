@@ -26,14 +26,11 @@ the terminals:
 | Map / set   | 8     | `TreeSet{Ref,Value}Iter`, `TreeMap{Keys,Values,Entries}{Ref,Value}Iter`                  | ✗                     |
 | String      | 7     | `StrCharIter`, `StrCharIndicesIter`, `StrLinesIter`, `StrSplit*Iter`, `StrUtf8ByteIter`  | ✗                     |
 
-The first adapter in a chain ended it: `map`, `filter`, `skip`, `zip`, and
-`chain` all dropped the terminal, and a `TreeMap`'s values, a range, or a
-string's bytes never had it. Five more were missing everywhere, `SliceValueIter`
-included: `product`, `min_by`, `max_by`, `min_by_key`, `max_by_key`.
-
-That left `fold` with a hand-written closure as the only spelling for a sum —
-and `fold` needs an explicit identity, which is exactly what `min` and `max`
-have none of.
+The first adapter in a chain ended it, and a `TreeMap`'s values, a range, or a
+string's bytes never had one. Five more were missing everywhere,
+`SliceValueIter` included: `product`, `min_by`, `max_by`, `min_by_key`,
+`max_by_key`. That left `fold` as the only spelling for a sum — and `fold` needs
+an explicit identity, which is exactly what `min` and `max` have none of.
 
 ## Decision
 
@@ -134,10 +131,12 @@ worked, none specific to iterators. Each is pinned by a fixture under
    `impl<T: Add> Sum for T` held for `String` and not for `i32`. Fixture:
    `blanket_impl_builtin_bound.wado`.
 
-2. **A same-named user trait must not borrow a primitive's arithmetic.** The
-   operator traits carry no compiler item, so the bound was matched by its bare
-   spelling and a user `trait Rem` made every numeric primitive satisfy a
-   blanket bounded by it. Fixture: `error_same_named_operator_trait.wado`.
+2. **The bound's identity is the blanket's, not the asking module's.** The
+   operator traits carry no compiler item, so a bare spelling let a user
+   `trait Rem` lend every primitive its arithmetic, and a user `trait Add`
+   downstream take it away. Read off `decl_ref` now. Fixtures:
+   `error_same_named_operator_trait.wado`,
+   `blanket_builtin_bound_shadowed_spelling.wado`.
 
 3. **A blanket's method must dispatch through a generic bound.**
    `resolve_type_param_dispatch` keyed the template by the call site's

@@ -3082,11 +3082,11 @@ pub trait FromIterator {
 
 #### SliceValueIter
 
-`SliceValueIter<T>` is the by-value iterator for the whole sequence family — `Array<T>`, `List<T>`, and `Slice<T>` all reach it through `iter_value()`. See [The Sequence Family](./wep-2026-06-02-sequence-family.md) for the `Value` / `Ref` / `RefMut` axis and the rest of the family's iterators.
+`SliceValueIter<T>` is the by-value iterator for the whole sequence family: `Array<T>`, `List<T>`, and `Slice<T>` all reach it through `iter_value()`. [The Sequence Family](./wep-2026-06-02-sequence-family.md) owns the `Value` / `Ref` / `RefMut` axis and the rest of the family's iterators.
 
 #### Terminals
 
-Every combinator and terminal `Iterator` declares is available on every implementor, adapters included — including the ones bounded by their element type (`sum` and `product` need `Item: Add` / `Mul`, `min` and `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
+Everything `Iterator` declares is available on every implementor, adapters included — the terminals bounded by their element type among them (`sum` / `product` need `Item: Add` / `Mul`, `min` / `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
 
 #### Usage
 

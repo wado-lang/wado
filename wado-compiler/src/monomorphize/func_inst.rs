@@ -1634,11 +1634,8 @@ impl Monomorphizer {
 
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
     /// call: a `newtype` inherits its base's trait impl, so peel it to the base
-    /// unless the newtype defines its own impl of the bound trait.
-    ///
-    /// A blanket impl is not inherited — it applies to the newtype directly, and
-    /// its bounds are the newtype's to satisfy. `impl<T: Add> Sum for T` serves
-    /// `i32x4` through `impl Add for i32x4`, which the base `v128` does not have.
+    /// unless the newtype has its own impl, or a blanket serving it — a blanket
+    /// is not inherited, and its bounds are the newtype's to satisfy.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
@@ -1669,8 +1666,6 @@ impl Monomorphizer {
         base
     }
 
-    /// Whether a value blanket impl of `trait_name` accepts `tid` as its
-    /// receiver.
     fn value_blanket_serves(&self, tid: TypeId, trait_name: &str, type_table: &TypeTable) -> bool {
         self.functions
             .trait_env
@@ -3284,11 +3279,9 @@ impl Monomorphizer {
         let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
             None
         } else {
-            // Blanket impl: choose the right generic_name for lookup. An
-            // associated-type projection (`S::SeqSerializer^…`) keeps
-            // `new_func_name`; every other blanket is keyed by its own receiver
-            // param, since `old_func_name` carries the call site's instead. The
-            // receiver-derived impl args below stay `ReflectStruct`-only.
+            // Blanket impl: an associated-type projection (`S::SeqSerializer^…`)
+            // keeps `new_func_name`; every other blanket is keyed by its own
+            // receiver param. The impl args below stay `ReflectStruct`-only.
             let recv_inner = type_table.peel_refs(receiver_type_id);
             // Resolve the type packs a blanket keys on. The general form of the
             // former `ReflectStruct`-struct-only `[T, Fields]` keying: a blanket
@@ -3327,8 +3320,6 @@ impl Monomorphizer {
                 .collect::<Option<Vec<_>>>()
                 .unwrap_or_default();
             let has_projected = !projected_assocs.is_empty();
-            // Keyed by the blanket's own receiver param: the call site's param
-            // head matches it only when the two are spelled alike.
             let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()
             } else if let Some(param) = blanket_param {

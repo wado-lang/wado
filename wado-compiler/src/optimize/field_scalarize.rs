@@ -1663,9 +1663,8 @@ fn bind_for_sync(
     (vec![let_sid], read.into(), vec![(tmp_idx, type_id)])
 }
 
-/// Whether `stmt` never falls through to the statement after it. A `loop` does
-/// not when nothing breaks out of it: its only exits are labeled breaks to an
-/// enclosing block.
+/// Whether `stmt` never falls through to the statement after it — a `loop`
+/// does not when its only exits are labeled breaks to an enclosing block.
 fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
     match &body.stmts[stmt].kind {
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => true,
@@ -1699,17 +1698,10 @@ fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
     search.0
 }
 
-/// Append `sync_stmts` to `block`, preserving the block's trailing value
-/// if it has one. If the block's last stmt is a non-unit value-producing
-/// `Expr(e)`, the trailing value is bound before the sync stmts run and a
-/// final stmt restores the block's value contract. Otherwise (empty block,
-/// non-Expr trailing stmt, or unit-typed trailing Expr) the sync stmts are
-/// simply appended.
-///
-/// A diverging trailing stmt takes neither path: nothing after it runs, and
-/// appending leaves the block ending on an assignment where its type demands a
-/// value — which the labeled block a `break … : value` feeds reaches as invalid
-/// Wasm.
+/// Append `sync_stmts` to `block`, preserving the trailing value where the last
+/// stmt produces one by binding it ahead of the sync and restoring it after. A
+/// diverging tail takes neither path: nothing after it runs, and appending
+/// leaves the block ending on an assignment where its type demands a value.
 fn append_sync_preserving_block_value(
     body: &mut Body,
     block: BlockId,

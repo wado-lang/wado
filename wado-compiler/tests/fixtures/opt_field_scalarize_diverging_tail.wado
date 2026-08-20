@@ -1,8 +1,6 @@
 // `filter` fused into `reduce` leaves a labeled block whose tail is a `loop`
-// only labeled breaks leave. Field scalarization appended its field sync after
-// that loop, so the block ended on an assignment where its type demands a value
-// and codegen rejected the module. Only reproduces once inlining has fused the
-// two, so it needs the full pipeline at -O3.
+// only labeled breaks leave, so field scalarization must not append its sync
+// after it. Needs the full pipeline at -O3, where inlining fuses the two.
 use { println } from "core:cli";
 
 export fn run() with Stdout {

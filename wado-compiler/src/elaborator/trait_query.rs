@@ -596,16 +596,15 @@ impl TypeSystem {
         result && self.operator_output_is_self(type_id, &trait_name, trait_)
     }
 
-    /// Whether an operator trait's `Output` is the implementing type. A bound
-    /// on one is what a generic body's `a + b` dispatches through, and that
-    /// expression is typed as `Self` — a widening `Output` would reach codegen
-    /// as the wrong type, so the bound does not hold for it.
+    /// Whether an operator trait's `Output` is the implementing type. A generic
+    /// body's `a + b` is typed as `Self`, so a widening `Output` would reach
+    /// codegen as the wrong type and the bound does not hold for it.
     fn operator_output_is_self(&self, type_id: TypeId, trait_name: &str, trait_: DefId) -> bool {
         if !self.is_prelude_operator_trait(trait_name, trait_) {
             return true;
         }
-        // An unresolvable projection is a compiler-supplied impl (`i32 + i32`)
-        // or a type with no impl at all, neither of which widens.
+        // Unresolvable means a compiler-supplied impl or none at all; neither
+        // widens.
         self.type_table
             .borrow_mut()
             .resolve_trait_assoc_type_of_instance(type_id, &trait_, "Output")
@@ -613,9 +612,8 @@ impl TypeSystem {
     }
 
     /// [`Self::operator_output_is_self`] for a blanket's bound, which names its
-    /// receiver as an impl key rather than a `TypeId`. The header's `Output`
-    /// binding and its target are spelled from one module, so their heads
-    /// compare directly.
+    /// receiver as an impl key rather than a `TypeId`. One header spells both
+    /// sides, so their heads compare directly.
     fn receiver_operator_output_is_self(
         &self,
         type_key: &Receiver,
@@ -643,8 +641,8 @@ impl TypeSystem {
             })
     }
 
-    /// Whether `trait_` is one of the prelude's arithmetic operator traits —
-    /// the ones whose `Output` a generic body's operator assumes is `Self`.
+    /// The prelude's arithmetic operator traits — the ones whose `Output` a
+    /// generic body's operator assumes is `Self`.
     fn is_prelude_operator_trait(&self, trait_name: &str, trait_: DefId) -> bool {
         matches!(
             trait_name,
@@ -1050,12 +1048,8 @@ impl TypeSystem {
     }
 
     /// Whether a reference is denied `trait_`'s bound, which it otherwise
-    /// inherits from its pointee by auto-deref at the call.
-    ///
-    /// `Eq` on a reference is identity, so no ordering follows from it and a
-    /// struct holding one derives no `Ord`. A receiverless method
-    /// (`Sum::sum_iter`) has no receiver to auto-deref, so the bound would hold
-    /// with no instance to dispatch to.
+    /// inherits from its pointee by auto-deref at the call. `Eq` on a reference
+    /// is identity, and a receiverless method has no receiver to deref.
     fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;
@@ -1436,9 +1430,7 @@ impl TypeSystem {
 
     /// Whether the bound's reference site reached the prelude's own trait
     /// declaration. The operator traits carry no compiler item, so a same-named
-    /// user trait is told apart by the module its declaration comes from — read
-    /// off the bound's own resolution, since the blanket's module, not the
-    /// asking one, is where the name was written.
+    /// user trait is told apart by the module its declaration comes from.
     fn is_prelude_trait_decl(&self, decl: Option<DefId>) -> bool {
         let tt = self.type_table.borrow();
         let Some(prelude) = tt.compiler_items().trait_module(CompilerItem::Ord) else {
