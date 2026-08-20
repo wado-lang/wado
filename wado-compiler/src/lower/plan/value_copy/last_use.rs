@@ -762,7 +762,7 @@ impl ShareCollector<'_> {
                 self.walk_block(block);
             }
             TirExprKind::GlobalVarSet { value, .. } => self.walk_value(value),
-            // Not walked into: the body indexes locals of its own.
+            // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
                 for c in captures {
                     self.mark_local_mutated(c.outer_index);
@@ -1633,7 +1633,7 @@ impl Analyzer<'_> {
                     self.walk_expr(e, live, record);
                 }
             }
-            // Not walked into: the body indexes locals of its own.
+            // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
                 for c in captures {
                     live.insert(c.outer_index);

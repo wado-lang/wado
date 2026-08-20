@@ -87,24 +87,23 @@ extra hoists.
 `value_copy_demote` refuses any helper reaching a variant deep copy, which on
 gale-gen covers `List<Element>` — 9.6% of the profile.
 
-Lifting that gate is a strict no-op: the candidate set grows from 26 helpers to
-44 and demotes the same 3, for byte-identical Wasm (`WADO_TRACE=demote`). It
-never blocked these copies — `demote_candidate` retargets only a
-`let x = $value_copy$T(arg)` binding, and gale's are struct fields
-(`SllConfig { ..*c, pos }`).
+Lifting that gate is a no-op: the candidate set grows from 26 helpers to 44 and
+demotes the same 3, for byte-identical Wasm (`WADO_TRACE=demote`).
+`demote_candidate` retargets only a `let x = $value_copy$T(arg)` binding, and
+gale's copies are struct fields (`SllConfig { ..*c, pos }`).
 
 Extending the pass to expression position is the obvious next step and the wrong
-one. Forcing every element clone shallow — the upper bound of any sharing scheme
-— runs gale-gen 3x slower:
+one. Forcing every element clone shallow is the upper bound of any sharing
+scheme:
 
 |                     | `copying` | `null` (no GC) |
 | ------------------- | --------- | -------------- |
 | deep copy (default) | 171 KB/s  | 208 KB/s       |
 | shared elements     | 60 KB/s   | 260 KB/s       |
 
-Sharing is the faster program and the slower one under a collector: a deep-copied
-element dies in the nursery and costs a copying collector nothing, a shared one
-is live from every config that borrowed it. GC goes from 18% of the run to 77%.
+A deep-copied element dies in the nursery and costs a copying collector nothing;
+a shared one is live from everything that borrowed it. GC goes from 18% of the
+run to 77%.
 
 Generalizes: price a "share instead of copy" idea against the live set it
 creates, not the allocations it removes.
@@ -115,13 +114,11 @@ creates, not the allocations it removes.
 so every `break` it holds resolves to "every local live". Pushing one is more
 precise and does unlock moves — `build_sll_node`'s loop binding among them.
 
-It costs more than it returns. The precise live set also admits place moves the
-coarse one refused, and a place move marks its root moved, which retires every
-immutable share of that root: `Rebuild::rebuild` trades three shares of a member
-tuple for one element move. gale-gen, best of four alternating pairs:
-**182.6 KB/s without the change vs 168.0 with it**, and the golden corpus grows
-from 34 changed fixtures to 132.
+A precise live set also admits place moves the coarse one refused, and a place
+move marks its root moved, retiring every immutable share of that root:
+`Rebuild::rebuild` trades three shares of a member tuple for one element move.
+gale-gen, best of four alternating pairs, **182.6 KB/s without it vs 168.0**.
 
-Not pursued. Making it pay needs the share analysis keyed on liveness (the
-standing item in [WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md)),
-so the two elisions can be priced against each other instead of racing.
+Pricing the two elisions against each other needs the share analysis keyed on
+liveness, a standing item in
+[WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md).

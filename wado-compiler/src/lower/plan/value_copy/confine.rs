@@ -220,7 +220,7 @@ impl TirRefVisitor for SinkWalker<'_> {
                 let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.raise_call_sides(func, &operands);
             }
-            // Not walked into: the body indexes locals of its own.
+            // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
                 for c in captures {
                     let t = self.taint.get(&c.outer_index).cloned().unwrap_or_default();
