@@ -84,13 +84,11 @@ extra hoists.
 
 ## Sharing list elements instead of deep-copying them (2026-08-20)
 
-`value_copy_demote` refuses any helper reaching a variant deep copy, which on
-gale-gen covers `List<Element>` — 9.6% of the profile.
-
-Lifting that gate is a no-op: the candidate set grows from 26 helpers to 44 and
-demotes the same 3, for byte-identical Wasm (`WADO_TRACE=demote`).
-`demote_candidate` retargets only a `let x = $value_copy$T(arg)` binding, and
-gale's copies are struct fields (`SllConfig { ..*c, pos }`).
+Lifting `value_copy_demote`'s variant-deep-copy gate is a no-op: the candidate
+set grows from 26 helpers to 44 and demotes the same 3, for byte-identical Wasm
+(`WADO_TRACE=demote`). It retargets only a `let x = $value_copy$T(arg)` binding,
+and gale's `List<Element>` copies — 9.6% of the profile — are struct fields
+(`SllConfig { ..*c, pos }`).
 
 Extending the pass to expression position is the obvious next step and the wrong
 one. Forcing every element clone shallow is the upper bound of any sharing

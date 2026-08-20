@@ -6,8 +6,7 @@
 //! `ret` (flows into a returned value) and `side` (written to lasting storage) —
 //! reach a least fixpoint; a parameter is confined iff neither is raised. The
 //! analysis over-approximates escape: unmodelled constructs, a closure's
-//! captures, and functions with a handler / `resume` body mark the parameters
-//! they reach escaping.
+//! captures, and a handler / `resume` body mark the parameters they reach.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
@@ -445,7 +444,7 @@ fn subtree_local_taint(taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
 }
 
 /// A handler or `resume` re-enters this frame, so nothing it holds can be
-/// tracked. A closure is: it reaches the frame only through its captures.
+/// tracked.
 fn body_defies_model(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,

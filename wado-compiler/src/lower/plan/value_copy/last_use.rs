@@ -1824,8 +1824,6 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
     }
 }
 
-/// A value of this type is its own bits, independent of any aggregate it is
-/// read out of.
 fn is_scalar_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
     type_table.is_primitive_like(type_id)
         || matches!(
