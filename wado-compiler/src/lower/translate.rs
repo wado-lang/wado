@@ -333,6 +333,8 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
+    /// The root each reference local is taken over, so an immutable-root rule
+    /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::compute_moved_roots`]).

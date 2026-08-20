@@ -126,7 +126,8 @@ pub struct ValueCopyPlan {
     /// borrowing, not consuming, receiver. Used by the read-only-share analysis.
     pub ref_receiver_methods: FuncKeySet,
     /// Functions whose result aliases their receiver's storage (a borrowed
-    /// projection / element read). Used only by the read-only-share analysis.
+    /// projection / element read). Because it admits borrowed projections it
+    /// must not feed the move / owned decision.
     pub returns_receiver_alias: FuncKeySet,
     /// Return types for which every closure `__call` — the complete set of
     /// indirect-call targets after closure lowering — returns owned, so an

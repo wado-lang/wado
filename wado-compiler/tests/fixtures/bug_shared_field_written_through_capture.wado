@@ -1,0 +1,31 @@
+// A closure writes a field through a capture, so a read taken before the call
+// must not alias the field's storage.
+struct Holder {
+    items: List<i32>,
+    tag: i32,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn poke(&mut self) {
+        let mut f = || {
+            self.items.push(99);
+        };
+        f();
+    }
+
+    #[inline("never")]
+    fn read_it(&mut self) -> i32 {
+        let raw = self.items;
+        self.poke();
+        return raw.len();
+    }
+}
+
+test "a write through a closure capture reaches the field" {
+    let mut h = Holder { items: [1, 2, builtin::black_box(3)], tag: 0 };
+    assert h.read_it() == 3;
+}
+
+__DATA__
+{"test": {}}

@@ -239,8 +239,9 @@ impl TirRefVisitor for Walker<'_> {
                     }
                 }
             }
-            // A closure reaches this storage only through what it is handed: a
-            // captured place is a borrow marked where the closure was built.
+            // What an indirect call is handed. A closure reaches a frame only
+            // through its captures, which the frame that builds one accounts
+            // for.
             TirExprKind::IndirectCall { args, .. } => {
                 for arg in args
                     .iter()
