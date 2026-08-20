@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787257033650,
+  "lastUpdate": 1787262160518,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49704,6 +49704,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16629,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d061828f6a265f3e6bfb398025d78ef9c605de3",
+          "message": "Merge pull request #1864 from wado-lang/fix/value-copy-through-shared-ref\n\nfix(lower): read what a call writes, not that it writes",
+          "timestamp": "2026-08-21T06:30:57+09:00",
+          "tree_id": "9131663b53b5ede21e7576301ce4467273fcf26e",
+          "url": "https://github.com/wado-lang/wado/commit/6d061828f6a265f3e6bfb398025d78ef9c605de3"
+        },
+        "date": 1787262159934,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
             "unit": "bytes"
           },
           {
