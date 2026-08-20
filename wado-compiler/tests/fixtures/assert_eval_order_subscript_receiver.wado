@@ -1,0 +1,23 @@
+// A subscript evaluates its receiver before its index, and `assert` may not
+// change that: WEP rule 1 makes the condition run as `if !cond` would.
+
+use { println, Stdout } from "core:cli";
+
+fn seq() -> List<i32> with Stdout {
+    println("seq");
+    return [7, 8, 9];
+}
+
+fn idx() -> i32 with Stdout {
+    println("idx");
+    return 1;
+}
+
+export fn run() with Stdout {
+    assert seq()[idx()] == 8;
+}
+
+__DATA__
+{
+    "stdout": "seq\nidx\n"
+}
