@@ -168,34 +168,28 @@ impl DeserializeError {
 /// realistic documents with ample headroom.
 pub global DEFAULT_MAX_DEPTH: i32 = 100;
 
-/// The nesting counter a format's deserializer embeds.
+/// One nesting level deeper, or `DepthLimitExceeded` at the limit. `offset`
+/// locates the overrun in the input.
 ///
-/// The mechanism is shared; the policy is not. A format sets its own
-/// `max_depth` and decides what counts as a container — only it knows where
-/// its recursion happens.
-pub struct DepthGuard {
-    depth: i32 = 0,
-    pub max_depth: i32 = DEFAULT_MAX_DEPTH,
-}
-
-impl DepthGuard {
-    /// Counts one container in. `offset` locates the overrun in the input.
-    pub fn enter(&mut self, offset: i64) -> Result<(), DeserializeError> {
-        self.depth += 1;
-        if self.depth > self.max_depth {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::depth_limit(
-                `exceeded maximum nesting depth of ${self.max_depth}`,
-                offset,
-            ));
-        }
-        return Result::Ok(());
+/// Depth is threaded as a value: a container passes `depth + 1` to whatever it
+/// contains, and the level simply goes out of scope when that container is
+/// done. Nothing to decrement, so a format cannot leave the count unbalanced —
+/// and a descent that forgets to pass its own level down over-counts, which
+/// errors rather than letting nesting through.
+///
+/// The mechanism is shared; the policy is not. A format picks its own
+/// `max_depth` and decides what counts as a container — only it knows where its
+/// recursion happens.
+pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError> {
+    let next = depth + 1;
+    if next > max_depth {
+        builtin::cold_path();
+        return Result::Err(DeserializeError::depth_limit(
+            `exceeded maximum nesting depth of ${max_depth}`,
+            offset,
+        ));
     }
-
-    pub fn leave(&mut self) {
-        assert self.depth > 0;
-        self.depth -= 1;
-    }
+    return Result::Ok(next);
 }
 
 #[compiler_item("serialize_seq")]
