@@ -209,13 +209,9 @@ impl TypeBuilder {
         }
     }
 
-    /// Get or create a Box<T> struct type for the given inner type.
     /// The `TypeId` a `Box` is keyed on: itself, or for a function type the
-    /// first one seen with its `(arity, return type)`.
-    ///
-    /// Every `Box<fn(...)>` holds one `ref struct` field whatever the
-    /// signature, and the `fn(..)^Inspect` stubs take the type's own receiver, so
-    /// a signature, so one wrapper serves them all.
+    /// first one seen with its `(arity, return type)`. Every `Box<fn(...)>`
+    /// holds one `ref struct` field whatever the signature, so one serves all.
     fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
         let ResolvedType::Function {
             params,

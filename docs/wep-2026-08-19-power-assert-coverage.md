@@ -4,10 +4,9 @@
 
 `assert` exists to show the values behind a failed condition, and it cannot be
 disabled, so a Wado program's assertion diagnostic is the one debugging aid that
-is always present. Its instrumentation (`elaborator/assert.rs`, replayed by
-`reify_assert`) is a read-only scanner that picks the sub-expressions of the
-condition worth quoting, plus a capture mechanism that must not disturb what the
-condition does.
+is always present. Its instrumentation is a read-only scanner picking the
+sub-expressions worth quoting, plus a capture mechanism that must not disturb
+what the condition does.
 
 Both halves are easy to get wrong in ways nothing reports. A capture hoisted
 ahead of the condition changes what the condition evaluates; a shape the scanner

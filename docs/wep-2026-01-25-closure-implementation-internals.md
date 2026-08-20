@@ -55,7 +55,7 @@ Two structs, on two different keys:
 - `__Closure_N` — one per closure literal, `(env, func)`, the specialised form.
 - `CanonicalClosure_K` — one per full Wasm signature, the type-erased form.
 
-The canonical struct takes one of two shapes, chosen per `(arity, return type)` by whether any closure of that shape is inspected:
+The canonical struct takes one of two shapes, chosen per `(arity, return type)` by whether any closure of that shape is inspected — the struct's own identity is keyed on the full Wasm signature:
 
 ```wat
 ;; Slim (default — call-only)
@@ -78,7 +78,7 @@ The canonical struct takes one of two shapes, chosen per `(arity, return type)` 
 
 The subtype keeps the base's prefix and adds `func` last. `$canonical_callback_fn` is uniform across signatures; `$canonical_fn_K` is typed per `K`.
 
-Because `$canonical_inspectable_base` is shared by every `K` of one `(arity, ret)`, every such closure casts to a single type to be inspected. The `^Inspect` / `^InspectAlt` dispatch stubs are not shared: a stub is named after the type it dispatches for, so `fn(i32) -> i32` and `fn(String) -> i32` get their own even though both cast to the same base.
+`$canonical_inspectable_base` is one type for the whole program — its three fields are signature-independent — so every inspectable closure casts to it whatever its shape. The `^Inspect` / `^InspectAlt` dispatch stubs are not shared: a stub is named after the type it dispatches for, so `fn(i32) -> i32` and `fn(String) -> i32` get their own even though both cast to that one base.
 
 A stub is synthesized as a bodyless `FunctionKind::FnCanonicalDispatch` and WIR build supplies its body, a `call_ref` through the vtable slot. Bodyless functions are skipped by the inliner and the other body walkers, so the placeholder costs nothing during optimization.
 

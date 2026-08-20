@@ -1121,10 +1121,9 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
         }
     }
 
-    // Register canonical closure types for each signature. Inspectable
-    // signatures share the supertype `$canonical_inspectable_base`,
-    // which is what the `fn(..)^Inspect` dispatch stub `ref.cast`s
-    // to — so no per-`(N, Ret)` struct map is needed.
+    // Inspectable signatures share the supertype `$canonical_inspectable_base`,
+    // which is what a `fn(..)^Inspect` stub `ref.cast`s to, so no per-shape
+    // struct map is needed.
     for (param_wirs, result_wirs, is_inspectable, _arity, _return_type) in fn_sigs {
         ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs, is_inspectable);
     }
