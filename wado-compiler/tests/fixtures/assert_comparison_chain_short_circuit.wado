@@ -1,0 +1,18 @@
+// Test: a chain short-circuits like the `&&` it expands to. The lower bound
+// fails here, so the upper bound's operand is never reached.
+
+export fn run() with Stdout {
+    let index = -1;
+    let used = 3;
+    assert 0 <= index < used, "index out of bounds";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: 0 <= index < used",
+        "index: -1",
+        "used: <not evaluated>"
+    ]
+}

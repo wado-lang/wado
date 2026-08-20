@@ -13,7 +13,7 @@ use crate::ast::{AssertStmt, AstId, BinaryOp, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::TypeId;
-use crate::unparse::unparse_expr_simple;
+use crate::unparse::unparse_expr_source;
 
 use super::Elaborator;
 use super::types::FunctionContext;
@@ -304,7 +304,7 @@ impl CaptureScanner {
                 self.scan(&b.right);
                 self.conditional = conditional;
                 if !is_root {
-                    self.add(unparse_expr_simple(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id);
                 }
             }
             Expr::Unary(u) => {
@@ -329,7 +329,7 @@ impl CaptureScanner {
                 }
                 self.scan(&u.expr);
                 if !is_root {
-                    self.add(unparse_expr_simple(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id);
                 }
             }
             Expr::Call(c) => {
@@ -341,7 +341,7 @@ impl CaptureScanner {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_simple(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id);
             }
             Expr::MethodCall(m) => {
                 // Receiver recursion is intentionally skipped:
@@ -355,19 +355,33 @@ impl CaptureScanner {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_simple(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id);
             }
             Expr::StaticMethodCall(s) => {
                 for arg in &s.args {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_simple(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id);
+            }
+            Expr::ComparisonChain(chain) => {
+                self.scan(&chain.first);
+                for (idx, cmp) in chain.comparisons.iter().enumerate() {
+                    // `a < b < c` runs as `(a < b) && (b < c)`, so every
+                    // operand past the first comparison sits behind a
+                    // short-circuit.
+                    self.conditional = conditional || idx >= 1;
+                    self.scan(&cmp.right);
+                }
+                self.conditional = conditional;
+                if !is_root {
+                    self.add(unparse_expr_source(expr), ast_id);
+                }
             }
             Expr::FieldAccess(_) | Expr::Index(_) => {
                 // Receiver / index recursion deferred (same reason as
                 // a method call): capture the access whole.
-                self.add(unparse_expr_simple(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id);
             }
             Expr::TemplateString(_) => {
                 // Capture the rendered string whole; don't recurse into the
@@ -375,7 +389,7 @@ impl CaptureScanner {
                 // double-evaluate any side-effecting interpolation — once for
                 // its per-slot `let __vK = <interp>` and again when the
                 // template is rendered.
-                self.add(unparse_expr_simple(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id);
             }
             // Every other `Expr` variant is treated as an opaque leaf:
             // it is neither captured nor recursed into. This keeps

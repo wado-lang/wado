@@ -62,7 +62,7 @@ form:
 | `FieldAccess`                                                                     | captured whole; **receiver not recursed**                        |
 | `Index`                                                                           | captured whole; **receiver and index operand not recursed**      |
 | `TemplateString`                                                                  | captured whole                                                   |
-| `ComparisonChain`                                                                 | **nothing** — `0 <= index < used` renders no operand             |
+| `ComparisonChain`                                                                 | captured; operands recursed                                      |
 | `Cast`                                                                            | **nothing** — `x as i64 == y` renders `y` and loses `x`          |
 | `TupleLiteral`                                                                    | **nothing** — `[a, b] == [3, 4]` renders no operand              |
 | `StructLiteral`                                                                   | **nothing** — `P { x: x } == P { x: 2 }` renders no operand      |
@@ -70,10 +70,10 @@ form:
 | `If`, `Match`, `Block`, `LabeledBlock`, `Range`                                   | **nothing**                                                      |
 | `TryOp`, `Spread`, `Closure`, `WithHandler`, `Resume`, `Assign`, `CompoundAssign` | **nothing**                                                      |
 
-Six forms render no operand line at all when one of them is the condition:
-`ComparisonChain`, `TupleLiteral`, `StructLiteral`, `Matches`, `If` and `Match`.
-`Cast` drops the operand on its side of a comparison and prints the
-other. The three receiver rows drop a value that is in scope and inspectable.
+Five forms render no operand line at all when one of them is the condition:
+`TupleLiteral`, `StructLiteral`, `Matches`, `If` and `Match`. `Cast` drops the
+operand on its side of a comparison and prints the other. The three receiver
+rows drop a value that is in scope and inspectable.
 
 ### The `condition:` line is not the condition
 
@@ -115,8 +115,8 @@ returns the value. Evaluation order and short-circuiting are then the source's,
 because the compiler no longer moves the operand.
 
 The boundaries are: the right operand of `&&` and `||`, every operand of a
-comparison chain after the first, and the arms of an `if` / `match` used as an
-expression.
+comparison chain past the first comparison (`a < b < c` runs as
+`(a < b) && (b < c)`), and the arms of an `if` / `match` used as an expression.
 
 ### 2. Rendering reports reach, not just value
 
@@ -170,10 +170,9 @@ missing line, and a missing line outranks a misrendered one.
       on an expansion that moves operands.
 - [x] **`<not evaluated>` rendering** (rule 2), landed with it: without it a
       short-circuited slot would have quoted the value it never took.
-- [ ] **Comparison chains** ([#1855](https://github.com/wado-lang/wado/issues/1855)).
-      Scan `first` and each comparison's `right`; operands after the first are
-      conditional slots. Unblocks the uniform `0 <= index` bound on the index
-      traits that WEP-2026-06-02 Phase D reverted.
+- [x] **Comparison chains** ([#1855](https://github.com/wado-lang/wado/issues/1855)).
+      Unblocks the uniform `0 <= index` bound on the index traits that
+      WEP-2026-06-02 Phase D reverted.
 - [ ] **Structural leaves that lose operands already in scope**: `Cast`,
       `TupleLiteral`, `StructLiteral`, `Matches` (the scrutinee), and the index
       operand of `Index`. Each is a recursion the scanner does not do; no new
