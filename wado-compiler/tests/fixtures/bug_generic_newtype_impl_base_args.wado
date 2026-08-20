@@ -1,0 +1,15 @@
+// A generic newtype whose base spells arguments of its own: `Pair<i32>` has one
+// argument, the `List<[i32, i32]>` behind it has another. A method is named
+// after the newtype, so the name follows the arguments the newtype carries.
+type Pair<T> = List<[T, i32]>;
+
+impl<T: Display> Pair<T> {
+    fn first_label(&self) -> String {
+        return `${self[0][0]}`;
+    }
+}
+
+test "a method on a generic newtype over a re-shaped base" {
+    let p: Pair<i32> = [[1, 2]];
+    assert p.first_label() == "1";
+}

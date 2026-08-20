@@ -745,16 +745,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_head(base_type_id)
                     .expect("a newtype names a declaration");
-                let (head, own_type_args) = if newtype_args.is_empty() {
-                    (name.clone(), None)
-                } else {
-                    let args = {
-                        let tt = self.tysys.type_table.borrow();
-                        let ultimate = tt.get_ultimate_base_type(base_type_id);
-                        tt.generic_type_args(ultimate).filter(|a| !a.is_empty())
-                    };
-                    (name.clone(), args)
-                };
+                // The newtype's own arguments: a base may re-shape them
+                // (`type Pair<T> = List<[T, i32]>`), and the method is named
+                // after the type the `impl` header writes.
+                let own_type_args = (!newtype_args.is_empty()).then(|| newtype_args.clone());
+                let head = name.clone();
                 (
                     head,
                     Some(module_source.clone()),
