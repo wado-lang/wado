@@ -845,3 +845,46 @@ test "sibling containers do not accumulate depth" {
     let r: Result<Value, DeserializeError> = from_string(text);
     assert r matches { Ok(_) };
 }
+
+struct Dup {
+    a: i32,
+    b: i32 = 9,
+}
+impl Deserialize for Dup;
+
+test "a repeated field is rejected by default" {
+    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2,"a":3\}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "a field repeated onto its declared default is still a duplicate" {
+    // `b` is seeded with 9, so an occupied slot cannot be the signal — only
+    // the wire-written bit distinguishes these.
+    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2,"b":3\}`);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+}
+
+test "distinct fields are not duplicates" {
+    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2\}`);
+    assert r matches { Ok(d) && d.a == 1 && d.b == 2 };
+}
+
+test "an omitted field keeps its declared default" {
+    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1\}`);
+    assert r matches { Ok(d) && d.b == 9 };
+}
+
+test "a repeated unknown member is not a duplicate" {
+    // Unknown fields own no bit, so repeating one must stay ignorable.
+    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"z":1,"z":2\}`);
+    assert r matches { Ok(d) && d.a == 1 };
+}
+
+test "the duplicate error names the wire field" {
+    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"a":2\}`);
+    if let Err(e) = r {
+        assert e.message == "duplicate field: a";
+    } else {
+        panic("expected a duplicate-field error");
+    }
+}

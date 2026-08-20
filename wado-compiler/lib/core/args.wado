@@ -58,6 +58,7 @@ use {
     FieldSchema,
     DeserializeError,
     DeserializeErrorKind,
+    DuplicateKeyPolicy,
     Visitor,
 } from "core:serde";
 
@@ -463,6 +464,15 @@ impl Deserializer for ArgvDeserializer {
     type MapAccess = ArgvMapAccess;
     type StructAccess = ArgvStructAccess;
     type VariantAccess = ArgvVariantAccess;
+
+    /// A command line is last-wins by convention: `prog --jobs 1 --jobs 2`
+    /// takes 2, which is what lets a wrapper script or alias append an
+    /// override after the defaults it supplies. (A *repeatable* option does
+    /// not reach this at all — `gather_option_values` collects every
+    /// occurrence and marks them consumed, so the field is reported once.)
+    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+        return DuplicateKeyPolicy::PassThru;
+    }
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
         let tok = self.take_value()?;

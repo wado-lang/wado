@@ -83,6 +83,11 @@
 //! ```
 
 
+// `core:log` cannot be used here — it imports `core:serde` (and `core:json`),
+// so the dependency only runs one way. `log_stderr` is what `core:log` itself
+// bottoms out on.
+use { log_stderr } from "core:rt";
+
 #[compiler_item("serialize_error_kind")]
 pub enum SerializeErrorKind {
     UnsupportedValue,
@@ -159,6 +164,26 @@ impl DeserializeError {
     pub fn depth_limit(msg: String, offset: i64) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg, offset };
     }
+
+    pub fn duplicate_field(name: String) -> DeserializeError {
+        return DeserializeError {
+            kind: DeserializeErrorKind::DuplicateField,
+            message: `duplicate field: ${name}`,
+            offset: -1,
+        };
+    }
+}
+
+/// What to do when the wire repeats a field or key.
+///
+/// A repeat is how two readers of the same bytes are made to disagree — a
+/// proxy authorizing on the first occurrence, the application acting on the
+/// last — so rejecting is the default. `Warn` and `PassThru` both keep the
+/// last occurrence; they differ only in whether anything is said about it.
+pub enum DuplicateKeyPolicy {
+    Error,
+    Warn,
+    PassThru,
 }
 
 /// Default nesting limit shared by every self-describing format.
@@ -483,6 +508,13 @@ pub trait Deserializer {
         }
     }
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
+
+    /// What this format does when the wire repeats a field or key. The
+    /// mechanism is shared — detection lives in the derived struct
+    /// deserialization — but the default is the format's to pick.
+    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+        return DuplicateKeyPolicy::Error;
+    }
 
 
     #[compiler_item("deserializer_begin_seq")]
@@ -1015,12 +1047,38 @@ fn missing_field_error(name: String) -> DeserializeError {
 impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deserialize for T {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
         let policy = ReflectStruct::<T>::wire_name_policy();
+        let on_duplicate = d.on_duplicate_key();
         let mut slots = ReflectStruct::<T>::defaults();
+        // One bit per field records what the *wire* wrote. The slots cannot
+        // answer that themselves: they are seeded with the declared defaults,
+        // so an occupied slot means nothing.
+        assert slots.len() <= 64;
+        let mut seen: i64 = 0;
         let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), slots.len())?;
         while let Some(index) = sd.next_field::<T>()? {
             let mut taken = false;
             for let [i, _] of slots.enumerate() {
                 if i == index {
+                    // `i` is a constant in each unrolled arm, so the bit and
+                    // the field name both fold. An unknown field is `-1` and
+                    // matches no arm, so it owns no bit.
+                    let bit: i64 = (1 as i64) << (i as i64);
+                    if (seen & bit) != 0 {
+                        match on_duplicate {
+                            DuplicateKeyPolicy::Error => {
+                                return Result::Err(DeserializeError::duplicate_field(
+                                    wire_name(&ReflectStruct::<T>::members()[i], policy),
+                                ));
+                            },
+                            DuplicateKeyPolicy::Warn => {
+                                let name = wire_name(&ReflectStruct::<T>::members()[i], policy);
+                                log_stderr(`warning: duplicate field: ${name}`);
+                            },
+                            DuplicateKeyPolicy::PassThru => {
+                            },
+                        }
+                    }
+                    seen |= bit;
                     let value: F = sd.value()?;
                     slots[i] = Option::Some(value);
                     taken = true;
