@@ -90,13 +90,22 @@ gale-gen that exclusion covers `List<Element>`, whose deep copy is the single
 largest leaf in the profile (`$value_copy$RuleRefElement` 4.5%,
 `TokenRefElement` 1.9%, `Element` 1.1%).
 
-Lifting the exclusion outright (unsound, measured as an upper bound) changed
-nothing: **164.4 KB/s with the gate lifted vs 166.2 without**, best of three
-alternating.
+Lifting the exclusion outright is a strict no-op, not a small win.
+`WADO_TRACE=demote` counts what the pass sees and what it converts:
 
-The pass never reaches these copies. `demote_candidate` matches only
-`let x = $value_copy$T(arg)`, and gale's `List<Element>` copies are struct
-_fields_ — `SllConfig { ..*c, pos }` in `sll_step`, `elements: alt.elements` in
-`sll_advance` — so no binding exists to retarget. Extending the element-
-immutability analysis to variants buys nothing until the pass can demote a copy
-in expression position.
+|                | candidate `List<E>` helpers | demoted |
+| -------------- | --------------------------- | ------- |
+| gate (default) | 25-26                       | 3       |
+| gate lifted    | 44                          | 3       |
+
+The 18 variant-element helpers it admits convert none, and the emitted Wasm is
+byte-identical.
+
+The gate is not what blocks these copies. `demote_candidate` retargets only a
+`let x = $value_copy$T(arg)` binding, and gale's `List<Element>` copies are
+struct _fields_ — `SllConfig { ..*c, pos }` in `sll_step`, `elements:
+alt.elements` in `sll_advance` — so there is no binding to retarget. Teaching
+the element-immutability analysis about variants buys nothing until the pass can
+demote a copy in expression position, and until then lifting the gate only ships
+an unsound relaxation (a `match` payload binding aliases the payload in place)
+with no reachable use.
