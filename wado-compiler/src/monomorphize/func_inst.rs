@@ -3071,8 +3071,7 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let candidate = info
-                .with_substituted_struct_name(&super::substituted_receiver_name(type_table, inner));
+            let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
             if self.functions.has_impl(&candidate)
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
@@ -3081,10 +3080,7 @@ impl Monomorphizer {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.resolve_newtype_base(inner);
-                info.with_substituted_struct_name(&super::substituted_receiver_name(
-                    type_table,
-                    resolved_inner,
-                ))
+                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
             }
         } else if needs_struct_type_args {
             // Resolve through newtypes so the receiver matches the TraitEnv key

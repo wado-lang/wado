@@ -1143,24 +1143,14 @@ fn method_name_for_type(
             info.is_type_param_receiver = true;
             info
         }
-        ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } => {
-            // A `Fn` receiver mangles as base struct `Fn` with the canonical
-            // `[arity, return-type]` args (shared with trait synthesis through
-            // `name::fn_type_args`). Without this arm the `_` fallback would
-            // call `LocalMethodName::new("Fn<N,Ret>", ...)` whose debug_assert
-            // rejects struct names containing `<`.
-            let type_args =
-                crate::name::fn_type_args(params.len(), &tt_ref.fq_type_name(return_type));
+        ResolvedType::Function { .. } => {
+            // A `fn(..)` receiver is named by the type itself, the same
+            // spelling its dispatch stubs are registered under.
             LocalMethodName::new(
-                FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
+                tt_ref.fn_receiver_name(&resolved),
                 Some(trait_name.clone()),
                 method_name.to_string(),
             )
-            .with_struct_type_args(&type_args)
         }
         _ => LocalMethodName::new(
             tt_ref.fq_base_type_name(type_id),

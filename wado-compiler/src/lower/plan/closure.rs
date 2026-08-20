@@ -1655,7 +1655,7 @@ impl ClosureCallSiteLowerer<'_> {
             Some(info) => info,
             None => return,
         };
-        if info.base_struct_name() != crate::name::CLOSURE_FN_TRAIT {
+        if !crate::name::is_fn_type_name(&info.base_struct_name()) {
             return;
         }
         let Some(base_trait) = info.base_trait_name() else {

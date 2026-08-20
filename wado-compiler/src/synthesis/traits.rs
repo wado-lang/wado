@@ -3813,7 +3813,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_fn(
-            &sig.type_arg_names,
+            &sig.receiver(),
             sig.arity,
             sig.return_type,
             ref_type,
@@ -4023,7 +4023,7 @@ fn generate_newtype_fmt_fn(
 /// recognises [`FunctionKind::FnCanonicalDispatch`] and supplies the real body,
 /// a `call_ref` through the matching `CanonicalClosure_K`'s vtable slot.
 fn generate_fn_inspect_fn(
-    type_arg_names: &[FqTypeName],
+    receiver: &FqTypeName,
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -4036,7 +4036,7 @@ fn generate_fn_inspect_fn(
         FnDispatchTrait::Inspect,
         inspect_trait,
         inspect_method,
-        type_arg_names,
+        receiver,
         arity,
         return_type,
         ref_fn_type,
@@ -4047,7 +4047,7 @@ fn generate_fn_inspect_fn(
 
 /// Twin of [`generate_fn_inspect_fn`] for `Fn<N, Ret>^InspectAlt`.
 fn generate_fn_inspect_alt_fn(
-    type_arg_names: &[FqTypeName],
+    receiver: &FqTypeName,
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
@@ -4060,7 +4060,7 @@ fn generate_fn_inspect_alt_fn(
         FnDispatchTrait::InspectAlt,
         inspect_alt_trait,
         inspect_alt_method,
-        type_arg_names,
+        receiver,
         arity,
         return_type,
         ref_fn_type,
@@ -4077,19 +4077,14 @@ fn generate_fn_canonical_dispatch_stub(
     trait_kind: FnDispatchTrait,
     trait_name: &crate::name::FqTraitName,
     method_name: &str,
-    type_arg_names: &[FqTypeName],
+    receiver: &FqTypeName,
     arity: usize,
     return_type: TypeId,
     ref_fn_type: TypeId,
     fmt_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(
-        &FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
-        trait_name,
-        method_name,
-    )
-    .with_struct_type_args(type_arg_names);
+    let method_info = trait_method_info(receiver, trait_name, method_name);
     let qualified_name = method_info.to_mangled_name();
 
     let mut func = make_synthetic_method(
@@ -4497,14 +4492,16 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled = sig.receiver().to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
-        if ctx.instance_has_impl(&instance, &inspect_alt_fq.canonical().expect(KEYED))
-            || !has_inspect(&instance, sig.repr_type_id, ctx, &mut tt)
-        {
+        // No `has_inspect` probe: the sibling pass emits an `Inspect` stub for
+        // every canonical signature, so the twin always has its counterpart.
+        // The probe reads emitted function *names*, which is what this receiver
+        // stopped being spelled as.
+        if ctx.instance_has_impl(&instance, &inspect_alt_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
         generated.push(Rc::new(RefCell::new(generate_fn_inspect_alt_fn(
-            &sig.type_arg_names,
+            &sig.receiver(),
             sig.arity,
             sig.return_type,
             ref_type,
@@ -5443,18 +5440,10 @@ fn generate_fallback_impls(
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
-        let target_info = trait_method_info(
-            &FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
-            &pair.target_trait,
-            &pair.target_method,
-        )
-        .with_struct_type_args(&sig.type_arg_names);
-        let delegate_info = trait_method_info(
-            &FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT),
-            &pair.delegate_trait,
-            &pair.delegate_method,
-        )
-        .with_struct_type_args(&sig.type_arg_names);
+        let target_info =
+            trait_method_info(&sig.receiver(), &pair.target_trait, &pair.target_method);
+        let delegate_info =
+            trait_method_info(&sig.receiver(), &pair.delegate_trait, &pair.delegate_method);
         generated.push(Rc::new(RefCell::new(generate_display_fallback(
             target_info,
             delegate_info,
@@ -5512,15 +5501,9 @@ fn decompose_type_for_method_name(
     tt: &TypeTable,
 ) -> (Receiver, bool, Vec<FqTypeName>) {
     match resolved {
-        ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } => (
-            Receiver::Type(FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT)),
-            false,
-            crate::name::fn_type_args(params.len(), &tt.fq_type_name(*return_type)),
-        ),
+        ResolvedType::Function { .. } => {
+            (Receiver::Type(tt.fn_receiver_name(resolved)), false, vec![])
+        }
         ResolvedType::Reactive(inner) => (
             Receiver::Type(FqTypeName::builtin("Reactive")),
             false,
@@ -5637,22 +5620,21 @@ struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
     return_type: TypeId,
-    /// `[arity, return_type]` (see [`crate::name::fn_type_args`]) — the form
-    /// consumed by the dispatch-stub emitters.
-    type_arg_names: Vec<FqTypeName>,
+    /// The type's own name — the receiver its dispatch stubs hang off, and what
+    /// a call on a value of this type asks for.
+    receiver: FqTypeName,
 }
 
 impl FnSignature {
-    /// The `Fn<arity,ret>` receiver this signature's dispatch stubs hang off.
     fn receiver(&self) -> FqTypeName {
-        FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT).with_args(self.type_arg_names.clone())
+        self.receiver.clone()
     }
 }
 
 fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
-    // Dedup by mangled name, not return-type `TypeId`: `&T` / `&mut T` mangle
-    // identically and must share one stub, else the stubs collide post-mono.
-    let mut seen: IndexSet<(usize, String)> = IndexSet::default();
+    // Dedup by mangled name, not `TypeId`: `&T` / `&mut T` mangle identically
+    // and must share one stub, else the stubs collide post-mono.
+    let mut seen: IndexSet<String> = IndexSet::default();
     let mut result = Vec::new();
 
     for (id, resolved) in tt.all_types() {
@@ -5673,16 +5655,15 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
         if !tt.is_concrete(*return_type) {
             continue;
         }
-        let arity = params.len();
-        let return_type_fq = tt.fq_type_name(*return_type);
-        if !seen.insert((arity, return_type_fq.to_mangled())) {
+        let receiver = tt.fn_receiver_name(resolved);
+        if !seen.insert(receiver.to_mangled()) {
             continue;
         }
         result.push(FnSignature {
             repr_type_id: id,
-            arity,
+            arity: params.len(),
             return_type: *return_type,
-            type_arg_names: crate::name::fn_type_args(arity, &return_type_fq),
+            receiver,
         });
     }
     result

@@ -207,13 +207,6 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 
-/// Canonical name of the synthesised closure-trait family (`Fn<N, Ret>`).
-/// Like [`CLOSURE_CALL_METHOD`] / [`CLOSURE_STRUCT_PREFIX`], the trait is
-/// compiler-internal — there is no Wado-side `trait Fn { ... }` declaration
-/// to attach a `#[compiler_item("...")]` to — so a `const` is the right
-/// anchor shape.
-pub const CLOSURE_FN_TRAIT: &str = "Fn";
-
 /// Prefix every compiler-synthesised block label carries.
 ///
 /// Reserved in source — the parser rejects a label that starts with it — so a
@@ -1686,6 +1679,15 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 /// - `mangle_fn_type(false, &["i32"], "i32", false, &[])` → `"fn(i32)->i32"`
 /// - `mangle_fn_type(true, &[], "()", false, &["wasi:cli/Stdout".into()])`
 ///   → `"fn mut()->()with(wasi:cli/Stdout)"`
+/// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
+/// it. A `fn(..)` type names no declaration, so its receiver is this spelling
+/// and a consumer asking "is this a closure receiver" asks here rather than
+/// comparing against a fabricated head.
+#[must_use]
+pub fn is_fn_type_name(name: &str) -> bool {
+    name.starts_with("fn(") || name.starts_with("fn mut(")
+}
+
 pub fn mangle_fn_type(
     is_mut: bool,
     params: &[String],
@@ -1718,25 +1720,6 @@ pub fn mangle_fn_type(
 #[must_use]
 pub fn mangle_stores_member(param_index: u32) -> String {
     format!("stores[{param_index}]")
-}
-
-/// Canonical struct-type-argument names for a closure / [`CLOSURE_FN_TRAIT`]
-/// receiver: `[arity, return-type]`.
-///
-/// A *representation* key, not a type name, and deliberately coarser than
-/// [`mangle_fn_type`]: every closure of one arity and return type shares a
-/// `CanonicalClosure_K` and one `Fn<N,Ret>^Inspect` vtable.
-///
-/// Examples:
-/// - `fn_type_arg_names(2, "i32")` → `["2", "i32"]`
-pub fn fn_type_arg_names(arity: usize, return_type_name: &str) -> Vec<String> {
-    vec![arity.to_string(), return_type_name.to_string()]
-}
-
-/// [`fn_type_arg_names`] in the structured namespace.
-#[must_use]
-pub fn fn_type_args(arity: usize, return_type: &FqTypeName) -> Vec<FqTypeName> {
-    vec![FqTypeName::arity(arity), return_type.clone()]
 }
 
 /// Build an Option type name from inner type name.
