@@ -1,0 +1,46 @@
+// A field no write anywhere reaches holds one value for the program's run, so
+// a binding out of it aliases that storage rather than copying it — reached
+// through a `&mut self` receiver like through any other handle.
+struct Reader {
+    buf: List<i32>,
+    pos: i32,
+    len: i32,
+}
+
+impl Reader {
+    #[inline(always)]
+    fn skip(&mut self) {
+        while self.pos < self.len && self.buf[self.pos] == 0 {
+            self.pos = self.pos + 1;
+        }
+    }
+
+    #[inline("never")]
+    fn scan(&mut self) -> i32 {
+        self.skip();
+        let raw = self.buf;
+        let len = self.len;
+        let mut pos = self.pos;
+        while pos < len {
+            let b = raw[pos];
+            if b > 0 {
+                self.pos = pos + 1;
+                self.skip();
+                return b;
+            }
+            pos = pos + 1;
+        }
+        return -1;
+    }
+}
+
+test "scan" {
+    let mut r = Reader { buf: [builtin::black_box(0), 7, 9], pos: 0, len: 3 };
+    assert r.scan() == 7;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": ["__array_clone_src"]
+}

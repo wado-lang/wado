@@ -418,6 +418,8 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.ref_receiver_methods,
                 &base.value_copy.returns_receiver_alias,
                 &ref_targets,
+                &base.value_copy.mod_ref,
+                &base.type_table.borrow(),
             )
         } else {
             IndexSet::default()
@@ -703,7 +705,14 @@ impl FunctionTranslator<'_, '_> {
     /// Whether an immutable binding may alias `value`'s storage instead of
     /// copying it: the source must be rooted at an immutable local whose
     /// storage is never moved to a new owner.
-    fn source_shares_immutable_storage(&self, value: &TirExpr) -> bool {
+    fn source_shares_immutable_storage(&self, local_index: u32, value: &TirExpr) -> bool {
+        // The alias the binding takes outlives the binding: a move hands its
+        // storage to a new — possibly mutable — owner, and a write through that
+        // owner is one the source observes. Either end being moved keeps the
+        // copy.
+        if self.moved_roots.contains(&local_index) {
+            return false;
+        }
         let type_table = self.base.type_table.borrow();
         if !value_copy::analyze::is_source_immutable(
             value,
@@ -1111,7 +1120,7 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let needs_value_copy_wrap = !*skip_value_copy
                     && !self.share_eligible_locals.contains(local_index)
-                    && (*is_mut || !self.source_shares_immutable_storage(value))
+                    && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);
                 let value_op = if needs_value_copy_wrap {

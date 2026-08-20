@@ -9,6 +9,7 @@ pub mod callgraph;
 pub mod confine;
 pub mod funcset;
 pub mod last_use;
+pub mod modref;
 pub mod ownership;
 pub mod stores;
 pub mod synthesize;
@@ -87,6 +88,9 @@ impl<T> ValueCopyHelpers<T> {
 /// telling the fold whether a call result is owned (a move) or borrowed.
 pub struct ValueCopyPlan {
     pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
+    /// What each call writes into its receiver, as fields of the receiver's
+    /// type: a read of one field is undisturbed by a call that writes another.
+    pub mod_ref: modref::ModRef,
     pub returns_owned: FuncKeySet,
     /// Functions whose every returned value is owned *or* a projection of the
     /// receiver / first parameter (`build(&self) -> List { return *self }`). A
@@ -156,6 +160,7 @@ pub fn plan(
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
         helpers,
+        mod_ref: modref::compute_mod_ref(flat, &returns_receiver_alias),
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         stored_params,

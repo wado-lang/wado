@@ -280,6 +280,12 @@ impl Pos {
     }
 }
 
+/// A `let` whose value is a projection out of a place: what it reads, and where.
+struct Source {
+    path: AccessPath,
+    read_pos: Pos,
+}
+
 struct Mutation {
     path: AccessPath,
     /// `p = x` repoints `p`; the value an earlier binding took out of `p` keeps
@@ -469,6 +475,7 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
 /// shared storage through an alias or a callee must first consume the root, so
 /// with the root unconsumed every such mutation is a direct write rooted at it,
 /// which the disjointness check covers.
+#[allow(clippy::too_many_arguments)]
 pub fn compute_share_eligible(
     func: &TirFunction,
     move_eligible: &IndexSet<u32>,
@@ -476,6 +483,8 @@ pub fn compute_share_eligible(
     ref_receiver_methods: &FuncKeySet,
     returns_receiver_alias: &FuncKeySet,
     ref_targets: &RefTargets,
+    mod_ref: &super::modref::ModRef,
+    type_table: &TypeTable,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -491,6 +500,8 @@ pub fn compute_share_eligible(
         mutated: Vec::new(),
         consumed: IndexSet::default(),
         ref_targets,
+        mod_ref,
+        type_table,
         pos: Pos { block: 0, index: 0 },
         next_block: 1,
     };
@@ -499,7 +510,7 @@ pub fn compute_share_eligible(
     collector
         .sources
         .iter()
-        .filter_map(|(&local, (path, read_pos))| {
+        .filter_map(|(&local, Source { path, read_pos })| {
             if path.root == local {
                 return None;
             }
@@ -530,7 +541,9 @@ struct ShareCollector<'a> {
     mut_receiver_methods: &'a FuncKeySet,
     ref_receiver_methods: &'a FuncKeySet,
     returns_receiver_alias: &'a FuncKeySet,
-    sources: IndexMap<u32, (AccessPath, Pos)>,
+    sources: IndexMap<u32, Source>,
+    mod_ref: &'a super::modref::ModRef,
+    type_table: &'a TypeTable,
     mutated: Vec<Mutation>,
     /// Locals read in a value position (consumed), so not safe to share.
     consumed: IndexSet<u32>,
@@ -540,6 +553,32 @@ struct ShareCollector<'a> {
 }
 
 impl ShareCollector<'_> {
+    /// Record what a `&mut self` call writes into its receiver: the fields the
+    /// callee names, re-rooted at the receiver's own path. A callee this
+    /// analysis cannot read writes the whole receiver, which is the answer
+    /// every such call used to get.
+    fn record_call_mutation(&mut self, func: &crate::tir::FunctionRef, receiver: &TirExpr) {
+        let writes = self.mod_ref.writes(&func.module_source, &func.name);
+        let owner = self.type_table.peel_refs(receiver.type_id);
+        let Some(path) = place_path(receiver).map(|p| self.resolve(p)) else {
+            self.record_mutation(receiver);
+            return;
+        };
+        if writes.is_opaque() || writes.writes_whole(owner) {
+            self.record_mutation(receiver);
+            return;
+        }
+        for field in writes.fields_of(owner) {
+            let mut written = path.clone();
+            written.selectors.push(Selector::Field(field));
+            self.mutated.push(Mutation {
+                path: written,
+                rebinds_place: false,
+                pos: self.pos,
+            });
+        }
+    }
+
     fn is_mutated_root(&self, local: u32) -> bool {
         self.mutated.iter().any(|m| m.path.root == local)
     }
@@ -636,7 +675,13 @@ impl ShareCollector<'_> {
                 local_index, value, ..
             } => {
                 if let Some(path) = self.source_path(value) {
-                    self.sources.insert(*local_index, (path, self.pos));
+                    self.sources.insert(
+                        *local_index,
+                        Source {
+                            path,
+                            read_pos: self.pos,
+                        },
+                    );
                 }
                 self.walk_value(value);
             }
@@ -724,7 +769,7 @@ impl ShareCollector<'_> {
                     .mut_receiver_methods
                     .contains(&func.module_source, &func.name)
                 {
-                    self.record_mutation(receiver);
+                    self.record_call_mutation(func, receiver);
                 }
                 if self
                     .ref_receiver_methods
