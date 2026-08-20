@@ -2,8 +2,8 @@
 //! every body and unioned with the source-level pass's `moved_local_spans`. One
 //! backward liveness pass yields both facts a move needs: every read is a final
 //! use, and nothing the value derives from is still live at the binding. A
-//! function containing a closure, handler or `resume` is skipped, either being
-//! able to re-observe.
+//! function containing a handler or `resume` is skipped, either being able to
+//! re-observe.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -762,6 +762,13 @@ impl ShareCollector<'_> {
                 self.walk_block(block);
             }
             TirExprKind::GlobalVarSet { value, .. } => self.walk_value(value),
+            // The body indexes locals of its own.
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    self.mark_local_mutated(c.outer_index);
+                    self.consumed.insert(c.outer_index);
+                }
+            }
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut children);
@@ -803,9 +810,9 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
-/// Closures / effect handlers / `resume` / an unexpanded variadic for-of defeat
-/// the single-observation model. Detected up front so the whole function falls
-/// back to copies.
+/// Effect handlers, `resume` and an unexpanded variadic for-of can re-enter this
+/// frame and read a local a second time, so the whole function falls back to
+/// copies. A closure cannot: it reaches the frame only through its `captures`.
 fn has_unsupported_form(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,
@@ -820,9 +827,7 @@ fn has_unsupported_form(body: &TirBlock) -> bool {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if matches!(
                 expr.kind,
-                TirExprKind::Closure { .. }
-                    | TirExprKind::WithHandler { .. }
-                    | TirExprKind::Resume { .. }
+                TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. }
             ) {
                 self.found = true;
             }
@@ -1291,6 +1296,11 @@ impl Analyzer<'_> {
                 }
                 None => self.scan_place_uses(place, conflict),
             },
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    conflict.insert(c.outer_index);
+                }
+            }
             _ => {
                 let mut kids: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut kids);
@@ -1623,6 +1633,24 @@ impl Analyzer<'_> {
                     self.walk_expr(e, live, record);
                 }
             }
+            // The body indexes locals of its own.
+            TirExprKind::Closure { captures, .. } => {
+                for c in captures {
+                    live.insert(c.outer_index);
+                    if record {
+                        self.mark_escaped(c.outer_index, None);
+                    }
+                }
+            }
+            // A scalar projection hands back bits, not the aggregate's storage,
+            // so a later whole-value read is still the root's final use.
+            TirExprKind::FieldAccess { .. }
+            | TirExprKind::VariantPayload { .. }
+            | TirExprKind::Index { .. }
+                if is_scalar_type(expr.type_id, self.type_table) =>
+            {
+                self.borrow_read(expr, live, record);
+            }
             _ => {
                 let mut children: Vec<&TirExpr> = Vec::new();
                 collect_child_exprs(expr, &mut children);
@@ -1794,6 +1822,14 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
         }
         _ => {}
     }
+}
+
+fn is_scalar_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_primitive_like(type_id)
+        || matches!(
+            type_table.get(type_id),
+            ResolvedType::Enum { .. } | ResolvedType::Unit
+        )
 }
 
 /// A `&T` / `&mut T` parameter borrows the caller's storage, so it is never a

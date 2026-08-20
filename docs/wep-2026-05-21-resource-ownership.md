@@ -407,9 +407,14 @@ Verified against the tree.
 - [x] A place repointed after a binding read it releases that binding.
 - [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
       counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
+- [x] A closure costs its captures their move, their share and their
+      confinement, not its whole frame's.
+- [x] A projection to a scalar keeps its root live without consuming it, so
+      `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
-      kind).
+      kind; `closure_capture_move`, `closure_confinement`,
+      `scalar_read_before_move`).
 - [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
       The share analysis is a forward walk with no liveness and no control flow,
       so a write anywhere refuses the binding.

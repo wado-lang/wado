@@ -10,6 +10,8 @@ mod common;
 
 mod assert_capture_plan;
 mod box_local_unwrap;
+mod closure_confinement;
+mod closure_frame_moves;
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;
@@ -39,6 +41,7 @@ mod match_place_scrutinee;
 mod niri;
 mod redundant_bce;
 mod remarks;
+mod scalar_read_move;
 mod semantics;
 mod serde_positional;
 mod stores_check_sem;

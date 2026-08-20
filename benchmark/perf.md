@@ -81,3 +81,42 @@ Reverted. Generalizes: on a copying collector a hoist buys a cheaper use and
 sells a permanent root, so a constant that is small and rarely read loses.
 `const_object_globalization` is already near break-even on gale-gen without the
 extra hoists.
+
+## Sharing list elements instead of deep-copying them (2026-08-20)
+
+Lifting `value_copy_demote`'s variant-deep-copy gate is a no-op: the candidate
+set grows from 26 helpers to 44 and demotes the same 3, for byte-identical Wasm
+(`WADO_TRACE=demote`). It retargets only a `let x = $value_copy$T(arg)` binding,
+and gale's `List<Element>` copies — 9.6% of the profile — are struct fields
+(`SllConfig { ..*c, pos }`).
+
+Extending the pass to expression position is the obvious next step and the wrong
+one. Forcing every element clone shallow is the upper bound of any sharing
+scheme:
+
+|                     | `copying` | `null` (no GC) |
+| ------------------- | --------- | -------------- |
+| deep copy (default) | 171 KB/s  | 208 KB/s       |
+| shared elements     | 60 KB/s   | 260 KB/s       |
+
+A deep-copied element dies in the nursery and costs a copying collector nothing;
+a shared one is live from everything that borrowed it. GC goes from 18% of the
+run to 77%.
+
+Generalizes: price a "share instead of copy" idea against the live set it
+creates, not the allocations it removes.
+
+## Making an expression-position labeled block a break target (2026-08-20)
+
+`Analyzer::walk_expr` pushes no exit entry for a value-producing labeled block,
+so every `break` it holds resolves to "every local live". Pushing one is more
+precise and does unlock moves — `build_sll_node`'s loop binding among them.
+
+A precise live set also admits place moves the coarse one refused, and a place
+move marks its root moved, retiring every immutable share of that root:
+`Rebuild::rebuild` trades three shares of a member tuple for one element move.
+gale-gen, best of four alternating pairs, **182.6 KB/s without it vs 168.0**.
+
+Pricing the two elisions against each other needs the share analysis keyed on
+liveness, a standing item in
+[WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md).

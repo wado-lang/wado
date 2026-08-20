@@ -1,0 +1,77 @@
+// Reading a scalar out of a binding hands back bits, not the binding's storage,
+// so a later whole-value read is still the binding's final use and moves.
+
+struct S {
+    items: List<i32>,
+    tag: i32,
+}
+
+fn source() -> List<S> {
+    return [S { items: [1], tag: 0 }];
+}
+
+test "a scalar read before a move leaves the source untouched" {
+    let src = source();
+    let mut tags: List<i32> = [];
+    let mut out: List<S> = [];
+    for let s of src {
+        if s.tag == -1 {
+            tags.push(s.tag);
+        } else {
+            out.push(s);
+        }
+    }
+    out[0].items.push(2);
+    assert src[0].items.len() == 1;
+    assert out[0].items.len() == 2;
+    assert tags.len() == 0;
+}
+
+test "a binding read whole twice gives each reader its own copy" {
+    let mut a: List<S> = [];
+    let mut b: List<S> = [];
+    for let s of source() {
+        if s.tag == 0 {
+            a.push(s);
+            b.push(s);
+        }
+    }
+    a[0].items.push(2);
+    assert b[0].items.len() == 1;
+}
+
+test "a scalar read after the whole read still reads the binding" {
+    let src = source();
+    let mut out: List<S> = [];
+    let mut total = 0;
+    for let s of src {
+        out.push(s);
+        total += s.tag;
+    }
+    out[0].items.push(2);
+    assert src[0].items.len() == 1;
+    assert total == 0;
+}
+
+test "a scalar read before a move of a local" {
+    let mut out: List<S> = [];
+    let s = S { items: [1], tag: 7 };
+    if s.tag == 7 {
+        out.push(s);
+    }
+    out[0].items.push(2);
+    assert out[0].items.len() == 2;
+}
+
+test "a scalar element read before a move" {
+    let src = source();
+    let mut out: List<S> = [];
+    for let s of src {
+        if s.items[0] == 1 {
+            out.push(s);
+        }
+    }
+    out[0].items.push(2);
+    assert src[0].items.len() == 1;
+    assert out[0].items.len() == 2;
+}
