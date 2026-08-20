@@ -624,9 +624,9 @@ fn register_inspect_wrapper(
 
 /// Build the WIR body for a `FunctionKind::FnCanonicalDispatch` stub: cast
 /// `self` to the shared `$canonical_inspectable_base`, then
-/// `call_ref (struct.get base $slot self) (self.env, f)`. The cast targets the
-/// shared base rather than one `CanonicalClosure_K`, so a single stub serves
-/// every parameter shape. `None` when no inspectable canonical struct exists.
+/// `call_ref (struct.get base $slot self) (self.env, f)`. Every inspectable
+/// `CanonicalClosure_K` subtypes that one base, so a stub reaches any shape
+/// cast to it. `None` when no inspectable canonical struct exists.
 #[allow(clippy::needless_pass_by_value)] // signature mirrors the param-name plumbing in translate_function_bodies
 fn build_fn_canonical_dispatch_body(
     ctx: &mut WirContext<'_>,
@@ -851,10 +851,9 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let tir_func = pending_body.tir_func.borrow();
         let type_table = pending_body.type_table.borrow();
 
-        // `Fn<arity, ret>^Inspect / InspectAlt` dispatch stubs carry
-        // an empty TIR placeholder body; substitute the real body
-        // (vtable indirect call through `CanonicalClosure_K`) here
-        // instead of translating the placeholder. Skipping the
+        // A `fn(..)^Inspect[Alt]` dispatch stub carries an empty TIR
+        // placeholder body; substitute the real one — a vtable indirect call
+        // through `CanonicalClosure_K` — rather than translating it. Skipping
         // string-matching post-pass keeps name-format knowledge
         // confined to `name.rs` and `synthesis::traits`.
         if let Some((trait_kind, _arity, _return_type)) = tir_func.fn_canonical_dispatch() {

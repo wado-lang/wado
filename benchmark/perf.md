@@ -49,3 +49,74 @@ another 0.50%); it is a real function there, not inlined away. Also:
 Where the time actually is: `whitespace_end` 12.5% (`citm_catalog.json` is 71%
 whitespace), and on ser `push_str` 6.6%, `write_plain_key` 5.1%,
 `String::grow` 5.1%.
+
+## Typing a string-literal pattern's `Eq::eq` argument as `&String` (2026-08-19)
+
+`x matches { "lit" }` lowers to `String^Eq::eq(&x, &"lit")`, and pattern
+lowering typed that argument node as `String` rather than `&String` ("type_id
+here is approximate"). The value-copy fold therefore defended the literal, so
+every call built the backing array twice — `array.new_data` for the literal,
+`array_new` + `array_copy` for the clone — and `const_object_globalization`
+never saw the `&literal` shape it hoists. On gale-gen that is **1507 of the
+module's 1522 array clones**; giving the node the callee's own `&String` deletes
+all of them.
+
+gale-gen, best of 3 back to back, `-O2`:
+
+|        | globalization on (default) | `WADO_SKIP_PASS=nir/const_object_globalization` |
+| ------ | -------------------------- | ----------------------------------------------- |
+| before | 154.09 KB/s                | 155.32 KB/s                                     |
+| after  | 143.72 KB/s                | 150.58 KB/s                                     |
+
+Slower either way, and the WIR is otherwise identical — same 1657 functions,
+same 122933 lines, only the literal expressions replaced. Fixing the copy moves
+1175 more constants into module globals (1250 -> 2425), and under the copying
+collector every one is permanently live and re-copied at each cycle; GC is ~20%
+of this benchmark (`--collector null` runs at 188 KB/s). Even with the pass
+skipped the clone removal does not pay: `String^Eq::eq` is 8.1% of the profile,
+but 3.6 points are `TreeMap<String, i32>::find_index` comparing two runtime
+strings and under 0.5 points are literal sites.
+
+Reverted. Generalizes: on a copying collector a hoist buys a cheaper use and
+sells a permanent root, so a constant that is small and rarely read loses.
+`const_object_globalization` is already near break-even on gale-gen without the
+extra hoists.
+
+## Sharing list elements instead of deep-copying them (2026-08-20)
+
+Lifting `value_copy_demote`'s variant-deep-copy gate is a no-op: the candidate
+set grows from 26 helpers to 44 and demotes the same 3, for byte-identical Wasm
+(`WADO_TRACE=demote`). It retargets only a `let x = $value_copy$T(arg)` binding,
+and gale's `List<Element>` copies — 9.6% of the profile — are struct fields
+(`SllConfig { ..*c, pos }`).
+
+Extending the pass to expression position is the obvious next step and the wrong
+one. Forcing every element clone shallow is the upper bound of any sharing
+scheme:
+
+|                     | `copying` | `null` (no GC) |
+| ------------------- | --------- | -------------- |
+| deep copy (default) | 171 KB/s  | 208 KB/s       |
+| shared elements     | 60 KB/s   | 260 KB/s       |
+
+A deep-copied element dies in the nursery and costs a copying collector nothing;
+a shared one is live from everything that borrowed it. GC goes from 18% of the
+run to 77%.
+
+Generalizes: price a "share instead of copy" idea against the live set it
+creates, not the allocations it removes.
+
+## Making an expression-position labeled block a break target (2026-08-20)
+
+`Analyzer::walk_expr` pushes no exit entry for a value-producing labeled block,
+so every `break` it holds resolves to "every local live". Pushing one is more
+precise and does unlock moves — `build_sll_node`'s loop binding among them.
+
+A precise live set also admits place moves the coarse one refused, and a place
+move marks its root moved, retiring every immutable share of that root:
+`Rebuild::rebuild` trades three shares of a member tuple for one element move.
+gale-gen, best of four alternating pairs, **182.6 KB/s without it vs 168.0**.
+
+Pricing the two elisions against each other needs the share analysis keyed on
+liveness, a standing item in
+[WEP: Ownership Analysis](../docs/wep-2026-05-21-resource-ownership.md).

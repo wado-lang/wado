@@ -101,9 +101,9 @@ fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
     let __local_5_5: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
-    let rx_35: i32;
-    let tx_36: i32;
-    let _licm_repr_41: ref Array<i32>;
+    let rx_34: i32;
+    let tx_35: i32;
+    let _licm_repr_40: ref Array<i32>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:array_bounds_elim_loop_guard_wir.wado::__modules_initialized);
         cold_path;
@@ -112,11 +112,11 @@ fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
     };
     sum = 0;
     i = 0;
-    _licm_repr_41 = global:array_bounds_elim_loop_guard_wir.wado::__const_obj_0.repr;
+    _licm_repr_40 = global:array_bounds_elim_loop_guard_wir.wado::__const_obj_0.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            sum = sum + builtin::array_get_value<i32>(_licm_repr_41, i);
+            sum = sum + builtin::array_get_value<i32>(_licm_repr_40, i);
             i = i + 1;
             continue l1;
         };
@@ -124,10 +124,10 @@ fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(sum, __local_5_5);
-    rx_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_36 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "array_bounds_elim_loop_guard_wir.wado/__cm_binding__Stdout_write_via_stream"(rx_35);
-    "core:cli/write_to_stream"(tx_36, __local_4_4, 1);
+    rx_34 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_35 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "array_bounds_elim_loop_guard_wir.wado/__cm_binding__Stdout_write_via_stream"(rx_34);
+    "core:cli/write_to_stream"(tx_35, __local_4_4, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

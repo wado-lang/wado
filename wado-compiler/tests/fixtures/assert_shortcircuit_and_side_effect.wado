@@ -1,0 +1,26 @@
+// The right operand of `&&` does not run when the left operand is false, and
+// its capture slots report that they were never reached.
+
+use { println, Stdout } from "core:cli";
+
+fn boom() -> i32 with Stdout {
+    println("SIDE EFFECT RAN");
+    return 1;
+}
+
+export fn run() with Stdout {
+    let ok = false;
+    assert ok && boom() == 2, "guarded";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stdout": "",
+    "stderr_contains": [
+        "condition: ok && boom() == 2",
+        "ok: false",
+        "boom(): <not evaluated>",
+        "boom() == 2: <not evaluated>"
+    ]
+}

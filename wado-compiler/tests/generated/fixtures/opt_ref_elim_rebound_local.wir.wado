@@ -156,10 +156,9 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     let __sroa_e2_value: ref "opt_ref_elim_rebound_local.wado//Element";
     let __sroa_e1_value: ref "opt_ref_elim_rebound_local.wado//Element";
     let g_93: ref "opt_ref_elim_rebound_local.wado//GroupElement";
+    let g_98: ref "opt_ref_elim_rebound_local.wado//GroupElement";
+    let rep_99: ref "opt_ref_elim_rebound_local.wado//RepeatElement";
     let g_100: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let rep_101: ref "opt_ref_elim_rebound_local.wado//RepeatElement";
-    let g_102: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let __sroa___match_4_value_104: ref "opt_ref_elim_rebound_local.wado//Element";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_ref_elim_rebound_local.wado::__modules_initialized);
         cold_path;
@@ -198,16 +197,17 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(local.tee self_60(__inline_process_27: block -> i32 {
         alts_58 = __inline_extract_2: block -> ref null "core:prelude//List<i32>" {
             if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value) {
-                g_100 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value).payload_0;
-                break __inline_extract_2: g_100.alternatives;
+                g_98 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value).payload_0;
+                break __inline_extract_2: g_98.alternatives;
             } else {
             }
             if ref.test "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value) {
-                rep_101 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value).payload_0;
-                __sroa___match_4_value_104 = rep_101.element;
-                if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_104) {
-                    g_102 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa___match_4_value_104).payload_0;
-                    break __inline_extract_2: g_102.alternatives;
+                rep_99 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value).payload_0;
+                let __match_scrut_4: ref "opt_ref_elim_rebound_local.wado//Element";
+                __match_scrut_4 = rep_99.element;
+                if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__match_scrut_4) {
+                    g_100 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__match_scrut_4).payload_0;
+                    break __inline_extract_2: g_100.alternatives;
                 } else {
                 }
             } else {

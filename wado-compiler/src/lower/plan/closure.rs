@@ -721,7 +721,7 @@ impl ClosureLowerer {
             // Synthesize per-functor Inspect / InspectAlt / Display / DisplayAlt
             // impls, so trait dispatch on a specialised `&__Closure_N` writes
             // the per-literal signature and unparsed source. Template expansion
-            // routes fn-typed receivers through `Fn<N, Ret>^<Trait>::<method>`,
+            // routes fn-typed receivers through `fn(..)^<Trait>::<method>`,
             // which `ClosureCallSiteLowerer` retargets here.
             let signature = format_closure_signature(&collected.params, return_type, type_table);
             // Recover the per-literal source body (`|x: i32| x + 1`)
@@ -1645,7 +1645,7 @@ impl ClosureCallSiteLowerer<'_> {
         };
     }
 
-    /// Redirect a `Fn<N, Ret>^{Inspect,InspectAlt,Display,DisplayAlt}` call on a
+    /// Redirect a `fn(..)^{Inspect,InspectAlt,Display,DisplayAlt}` call on a
     /// specialised closure local to the per-functor impl. All four shapes must be
     /// redirected: the `Display` fallbacks delegate through `Inspect::inspect`,
     /// which would trap the canonical stub's `ref.cast`. The rewritten
@@ -1655,7 +1655,7 @@ impl ClosureCallSiteLowerer<'_> {
             Some(info) => info,
             None => return,
         };
-        if info.base_struct_name() != crate::name::CLOSURE_FN_TRAIT {
+        if !crate::name::is_fn_type_name(&info.base_struct_name()) {
             return;
         }
         let Some(base_trait) = info.base_trait_name() else {

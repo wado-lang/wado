@@ -1,0 +1,16 @@
+// A `match` condition renders the scrutinee that chose the arm. Arms are not
+// descended into, for the reason `if` branches are not.
+
+export fn run() with Stdout {
+    let a = 1;
+    assert match a { 1 => false, _ => true }, "arm value";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: match a { 1 => false, _ => true, }",
+        "a: 1"
+    ]
+}

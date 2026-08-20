@@ -1,8 +1,6 @@
-// Multiple closure signatures sharing the same (arity, return_type)
-// but different parameter types. The shared `Fn<1, i32>^Inspect` and
-// `Fn<1, i32>^InspectAlt` dispatch stubs must work for both — they
-// `ref.cast` to the shared `$canonical_inspectable_base` supertype, so
-// the parameter shape is irrelevant.
+// Two closure signatures with the same (arity, return type) but different
+// parameter types. Each gets its own dispatch stub, and both `ref.cast` to the
+// shared `$canonical_inspectable_base` supertype.
 
 fn fmt_def_i(f: fn(i32) -> i32) -> String {
     return `${f:?}`;
@@ -20,22 +18,22 @@ fn fmt_alt_s(f: fn(String) -> i32) -> String {
     return `${f:#?}`;
 }
 
-test "i32 -> i32 :? via shared dispatch stub" {
+test "i32 -> i32 :? via its own dispatch stub" {
     let g = |x: i32| x + 1;
     assert fmt_def_i(g) == "|i32| -> i32";
 }
 
-test "String -> i32 :? via shared dispatch stub" {
+test "String -> i32 :? via its own dispatch stub" {
     let g = |s: String| s.len();
     assert fmt_def_s(g) == "|String| -> i32";
 }
 
-test "i32 -> i32 :#? via shared inspect_alt slot" {
+test "i32 -> i32 :#? via its own inspect_alt slot" {
     let g = |x: i32| x + 1;
     assert fmt_alt_i(g) == "|x: i32| (x + 1)";
 }
 
-test "String -> i32 :#? via shared inspect_alt slot" {
+test "String -> i32 :#? via its own inspect_alt slot" {
     let g = |s: String| s.len();
     assert fmt_alt_s(g) == "|s: String| s.String::len()";
 }

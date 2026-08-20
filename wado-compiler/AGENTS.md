@@ -30,5 +30,7 @@ section whose fields are the `serde` structs in `tests/e2e.rs`.
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and
   an incremental `cargo test` will not re-expand on its own.
 - `wado dump [-O0|-O2] file.wado` is how you find `wir_expect:Ox` patterns.
+- `wado dump --assert-plan file.wado` shows which operands an `assert` captures
+  and which of them a short-circuit can skip.
 - `builtin::black_box(value)` returns `value` opaquely, keeping a fixture's input
   off the constant-folding path.

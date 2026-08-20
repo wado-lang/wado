@@ -192,6 +192,9 @@ pub struct DumpResult {
     pub entry_module_source: ModuleSource,
     /// All TIR modules after resolution (in topological order)
     pub tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
+    /// Power-assert capture plans, one block per `assert` (unparsed text).
+    /// See `docs/wep-2026-08-19-power-assert-coverage.md`.
+    pub assert_plan_text: Option<String>,
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
@@ -1782,6 +1785,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // pipeline below runs on its own snapshot, so these stay frozen here.
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         sem.is_complete().then(|| sem.tir_modules.clone());
+    let assert_plan_text = sem.assert_plan_text();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -1950,6 +1954,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         implicit_modules: implicit_modules.into_iter().collect(),
         entry_module_source: entry_module_source_out,
         tir_modules: tir_modules_by_source,
+        assert_plan_text,
         monomorphized_tir_text,
         lowered_nir_text,
         optimized_package,

@@ -58,7 +58,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // string-literal expressions (string-literal pattern guards) the
     // data section must register.
     {
-        let pattern = pattern::Lowering::new(&flat);
+        let pattern = pattern::Lowering::new(&flat, &value_copy.returns_receiver_alias);
         let type_table = flat.type_table.borrow();
         for func_rc in &flat.functions {
             pattern.lower_function(&mut func_rc.borrow_mut(), &type_table);
@@ -1222,7 +1222,19 @@ impl FunctionTranslator<'_, '_> {
             // Pure constants whose WIR depends only on type/bytes (read back
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
             // string → `seq_literal`, unit → no runtime value.
-            TirExprKind::Null => Some(ValueKind::Null),
+            TirExprKind::Null => {
+                // At a primitive slot a `ref.null` reaches codegen and fails
+                // Wasm validation, naming an offset rather than this site.
+                assert!(
+                    !matches!(
+                        self.base.type_table.borrow().get(expr.type_id),
+                        crate::tir::ResolvedType::Primitive(_)
+                    ),
+                    "[lower] `null` typed as a primitive: a synthesized placeholder \
+                     at a primitive slot needs a zero of that type, not a reference null"
+                );
+                Some(ValueKind::Null)
+            }
             // String / bytes literals are no longer atomic pool values; they
             // lower to a `StructLiteral` over a packed `Array<u8>` repr in
             // `convert_expr` (`seq_literal`), so they fall through to the

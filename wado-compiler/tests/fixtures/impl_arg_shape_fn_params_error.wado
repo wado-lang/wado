@@ -1,8 +1,5 @@
-// `impl Slot<fn(i32) -> i32>` must not apply to a `Slot<fn(String) -> i32>`.
-//
-// A function type's mangled head is `Fn<arity, return>` — its parameter types
-// are not in it — so comparing renderings could not tell these apart. Comparing
-// structure can, without changing what the closure system spells.
+// `impl Slot<fn(i32) -> i32>` must not apply to a `Slot<fn(String) -> i32>`:
+// impl-argument shapes are compared structurally, not by rendering.
 
 use { Slot } from "./sub/impl_arg_shapes_holder.wado";
 
