@@ -60,12 +60,12 @@ Serializes a value to a pretty JSON string. Convenience over
 
 `trailing_char`, when `Some`, is appended after the value.
 
-### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
+### `pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from a JSON string. Convenience wrapper over
 `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
 
-### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError>`
+### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from UTF-8 JSON bytes — the primary entry point.
 
@@ -74,6 +74,10 @@ Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
 input bytes in place; every string token is validated as UTF-8 (RFC 8259
 §8.1) — skipped and key tokens included — reporting invalid bytes as
 `MalformedInput`.
+
+`max_depth` bounds container nesting; input past it is
+`DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
+a trusted source.
 
 ### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
@@ -190,6 +194,11 @@ _Fields are private._
 #### `input: ByteSlice`
 
 #### `pos: i32`
+
+#### `depth: DepthGuard`
+
+Both the typed path and `skip_value` recurse per container. Measured
+trap depths without the guard: ~2,200 typed, ~6,600 skipped.
 
 #### `pub fn peek(&self) -> i32`
 

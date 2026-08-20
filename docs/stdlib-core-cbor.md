@@ -58,7 +58,7 @@ Float caveat: Wado has no `f16`, so the canonical float ladder stops at
 binary32. Output is byte-identical to a reference deterministic encoder for
 integers, lengths, and map order, but may differ on float-bearing values.
 
-### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError>`
+### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserialize a value from CBOR — the primary entry point.
 
@@ -69,6 +69,10 @@ is variation-tolerant (RFC 8949 §4.1): any well-formed encoding is accepted.
 `strict` (default `true`) rejects items the target cannot represent; set
 `strict = false` only when deserializing into `core:value`'s `Value`, where
 unrepresentable items fall to `Value::Unknown` instead of erroring.
+
+`max_depth` bounds container nesting; input past it is
+`DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
+a trusted source.
 
 ## Structs
 

@@ -86,6 +86,16 @@ impl Deserialize for Config;
 //   -> Config { host: "localhost", port: 0, timeout: 30 }
 ```
 
+## Globals
+
+### `pub global DEFAULT_MAX_DEPTH: i32`
+
+Default nesting limit shared by every self-describing format.
+
+A deserializer recurses once per open container, so unbounded nesting
+exhausts the stack and traps — unrecoverable, unlike an error. 100 covers
+realistic documents with ample headroom.
+
 ## Functions
 
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
@@ -375,6 +385,24 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `pub fn overflow(msg: String, offset: i64) -> DeserializeError`
 
+#### `pub fn depth_limit(msg: String, offset: i64) -> DeserializeError`
+
+### `pub struct DepthGuard`
+
+The nesting counter a format's deserializer embeds.
+
+The mechanism is shared; the policy is not. A format sets its own
+`max_depth` and decides what counts as a container — only it knows where
+its recursion happens.
+
+#### `max_depth: i32`
+
+#### `pub fn enter(&mut self, offset: i64) -> Result<(), DeserializeError>`
+
+Counts one container in. `offset` locates the overrun in the input.
+
+#### `pub fn leave(&mut self)`
+
 ## Enums
 
 ### `pub enum SerializeErrorKind`
@@ -404,3 +432,8 @@ Used by variadic tuple deserialization via type pack expansion.
 #### `Eof`
 
 #### `Custom`
+
+#### `DepthLimitExceeded`
+
+Nesting ran past the deserializer's depth limit. A resource bound, not
+a spec violation: the input may be perfectly well-formed.
