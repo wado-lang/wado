@@ -203,13 +203,16 @@ scope_.
       Unblocks the uniform `0 <= index` bound on the index traits that
       WEP-2026-06-02 Phase D reverted.
 - [x] **Structural leaves that lose operands already in scope**: `Cast`,
-      `TupleLiteral`, `StructLiteral`, `Matches` (the scrutinee), and the index
-      operand of `Index`.
+      `TupleLiteral`, `StructLiteral`, and the index operand of `Index`.
 - [x] **Condition-line fidelity.** The line is rendered with the formatter's
       `Unparser`.
-- [x] **Receivers** of `FieldAccess` and `Index`. The `Inspect` claim that had
-      held them back was stale; what does hold back a _method_ receiver is rule
-      1 — see _Deliberately out of scope_.
+- [x] **Receivers**, and the `matches` scrutinee with them. Measured, and not
+      captured — see _Deliberately out of scope_. The `Inspect` claim that had
+      held receivers back was stale; what actually holds all three is one
+      optimizer capability.
+- [ ] **Discount a use dominated by `builtin::cold_path()`** in the escape and
+      scalarization analyses. The single item the three above wait on, and the
+      only thing between this WEP and rendering every operand.
 - [x] **Branch-shaped conditions**: `If`, `Match`, `Block`, `LabeledBlock`,
       plus `Range` and `TryOp`.
 - [x] **Dump the capture plan** so the covered-forms table is tested rather
@@ -228,13 +231,25 @@ A `Literal` adds nothing the source text does not already show. An `Assign` or
 `CompoundAssign` in a condition is a mutation rather than an operand. A `Spread`
 only appears inside a literal this scanner already walks.
 
-A method call's receiver is not captured, and this one is rule 1, not a gap.
-Wado is a value-semantics language, so binding the receiver copies it: a method
-taking `&mut self` would mutate the copy and leave the receiver untouched —
-`assert p.next_if(..) matches { .. }` would stop advancing `p`. The scanner runs
-before the method's `self` kind is known, so it cannot capture only the
-non-mutating ones. A field access and a subscript are projections and carry no
-such risk, so their receivers are captured.
+A method call's receiver is not captured, and this one is rule 1: value
+semantics make the capture a copy, so a `&mut self` method would mutate the copy
+and leave the receiver untouched — `assert p.next_if(..) matches { .. }` would
+stop advancing `p`. The scanner runs before the method's `self` kind is known,
+so it cannot capture only the non-mutating ones.
+
+A projection receiver, a subscript receiver and a `matches` scrutinee are all
+uncaptured for one further reason, and it is not a trade against diagnostic
+value. Rendering an operand whose value is an aggregate is a _use_ of that
+aggregate in the failure branch, and the escape and scalarization analyses count
+that use even though `builtin::cold_path()` marks the branch. Measured:
+capturing `List<T>::index_value`'s `self` stops const-object globalization, LICM
+and array-append collapse; capturing the scrutinee of
+`assert ok matches { Ok(6) }` stops variant-return scalarization.
+
+Binding is not what costs — the read is. An intermediate design bound nothing
+and re-read the operand in the failure branch instead; the aggregate cases
+regressed identically, because the read is the use. One optimizer capability
+lifts all three at once: discounting a use dominated by `cold_path()`.
 
 Two narrower exclusions are worth naming because they are not principled, only
 unresolved. A bare identifier in call-argument position stays uncaptured because
@@ -244,7 +259,9 @@ scanner runs before types are known, so it cannot tell `&value` from `&fn_name`.
 
 ## Consequences
 
-Rule 1 costs one `bool` flag per conditional capture, cleared ahead of the
+A slot whose operand is a plain binding gets no binding of its own: the failure
+branch re-reads it, which straight-line code makes exact. Rule 1 costs one
+`bool` flag per conditional capture, cleared ahead of the
 condition and set at the capture site. The captured value itself gets no
 binding: the failure branch reads its local under the flag, and until the
 capture site assigns it the local holds the Wasm default for its type — so

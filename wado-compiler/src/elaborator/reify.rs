@@ -145,6 +145,11 @@ pub(super) struct ReifyAssertSlot {
     pub(super) type_id: Option<crate::tir::TypeId>,
     /// See [`super::sem::types::AssertSlot::conditional`].
     pub(super) conditional: bool,
+    /// See [`super::sem::types::AssertSlot::is_place`].
+    pub(super) is_place: bool,
+    /// For a slot rendered by re-reading rather than by a binding: the operand
+    /// itself, spliced into the failure branch's template.
+    pub(super) place_expr: Option<TirExpr>,
     /// Index of the `bool` recording whether the capture site ran. `Some`
     /// exactly when `conditional`.
     pub(super) seen_local_index: Option<u32>,
@@ -3068,14 +3073,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let type_id = resolved.type_id;
         let cap_span = resolved.span;
-        let (cap_name, conditional) = {
+        let (cap_name, conditional, is_place) = {
             let slot = &ctx
                 .reify_assert_capture_ctx
                 .as_ref()
                 .expect("reify_assert_capture_ctx survives recursive reify")
                 .slots[slot_idx];
-            (slot.name.clone(), slot.conditional)
+            (slot.name.clone(), slot.conditional, slot.is_place)
         };
+
+        // An unconditional projection off a binding needs no binding of its own:
+        // straight-line code separates the condition from the failure branch, so
+        // the branch can read the operand again and see what the condition saw.
+        // Binding it instead keeps the aggregate live across the assert, which
+        // is what stopped `List<T>::index_value`'s bounds assert from letting
+        // its receiver be globalized.
+        if is_place && !conditional {
+            let cap_ctx = ctx
+                .reify_assert_capture_ctx
+                .as_mut()
+                .expect("reify_assert_capture_ctx survives recursive reify");
+            cap_ctx.slots[slot_idx].emitted = true;
+            cap_ctx.slots[slot_idx].type_id = Some(type_id);
+            cap_ctx.slots[slot_idx].place_expr = Some(resolved.clone());
+            return resolved;
+        }
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
@@ -3158,7 +3180,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_reactive: false,
                         type_id,
                         value: resolved,
-                        skip_value_copy: false,
+                        // A projection off a binding is only read again in the
+                        // failure branch, which straight-line code separates
+                        // from here, so the binding may alias. Copying one is
+                        // what made a captured receiver materialize an
+                        // aggregate at every subscript in the program.
+                        skip_value_copy: is_place,
                     },
                     cap_span,
                 )],
@@ -3278,12 +3305,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
         let info = self.ann_assert_captures(assert_stmt.id);
-        let (slot_facts, ast_id_to_slot): (Vec<(String, bool)>, IndexMap<AstId, usize>) =
+        let (slot_facts, ast_id_to_slot): (Vec<(String, bool, bool)>, IndexMap<AstId, usize>) =
             if let Some(info) = info.as_ref() {
-                let mut facts: Vec<(String, bool)> = Vec::with_capacity(info.slots.len());
+                let mut facts: Vec<(String, bool, bool)> = Vec::with_capacity(info.slots.len());
                 let mut map: IndexMap<AstId, usize> = IndexMap::default();
                 for (i, s) in info.slots.iter().enumerate() {
-                    facts.push((s.capture_label.clone(), s.conditional));
+                    facts.push((s.capture_label.clone(), s.conditional, s.is_place));
                     map.insert(s.ast_id, i);
                 }
                 (facts, map)
@@ -3297,13 +3324,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             slots: slot_facts
                 .iter()
                 .enumerate()
-                .map(|(i, (label, conditional))| ReifyAssertSlot {
+                .map(|(i, (label, conditional, is_place))| ReifyAssertSlot {
                     name: format!("__v{i}"),
                     label: label.clone(),
                     emitted: false,
                     local_index: None,
                     type_id: None,
                     conditional: *conditional,
+                    is_place: *is_place,
+                    place_expr: None,
                     seen_local_index: None,
                 })
                 .collect(),
@@ -3437,18 +3466,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if !slot.emitted {
                 continue;
             }
-            let (Some(local_index), Some(type_id)) = (slot.local_index, slot.type_id) else {
+            let Some(type_id) = slot.type_id else {
                 continue;
             };
             parts.push(TirTemplatePart::Literal(format!("{}: ", slot.label)));
-            let local_ref = TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: slot.name.clone(),
-                },
-                type_id,
-                span,
-            );
+            let local_ref = match (&slot.place_expr, slot.local_index) {
+                (Some(place), _) => place.clone(),
+                (None, Some(local_index)) => TirExpr::new(
+                    TirExprKind::Local {
+                        index: local_index,
+                        name: slot.name.clone(),
+                    },
+                    type_id,
+                    span,
+                ),
+                (None, None) => continue,
+            };
             let inspect_spec = Some(crate::format_spec::TemplateFormatSpec::of_kind(
                 crate::format_spec::FormatKind::Inspect,
             ));

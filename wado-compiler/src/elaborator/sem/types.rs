@@ -708,6 +708,12 @@ pub(crate) struct AssertSlot {
     /// what keeps `&&` / `||` short-circuiting, and it renders
     /// `<not evaluated>` when the run stopped before it.
     pub(crate) conditional: bool,
+    /// True when the sub-expression is a projection off a binding, so re-reading
+    /// it at the failure branch yields what the condition saw. Straight-line
+    /// code separates the two, so such a binding needs no value copy — and
+    /// copying one is what made a captured receiver materialize an aggregate at
+    /// every `List<T>::index_value` call in the program.
+    pub(crate) is_place: bool,
 }
 
 /// Power-assert capture map recorded by

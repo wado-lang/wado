@@ -4,8 +4,10 @@
 //! checked against the plan `wado dump --assert-plan` prints.
 //!
 //! A shape the scanner stops descending into renders no operand, which is the
-//! silent degradation WEP rule 3 forbids — so a row that goes empty here is a
-//! failure, not a fixture to update.
+//! silent degradation WEP rule 3 forbids. The plan is what makes that visible
+//! rather than silent, and `EXPECTED_EMPTY` is the whole of what the WEP
+//! sanctions — a shape joining it is a decision to record there, not a constant
+//! to widen here.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -65,12 +67,11 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("a < b", &["a", "b"]),
     ("!(a > b)", &["a", "b", "a > b"]),
     ("twice(a) == b", &["twice(a)", "b"]),
-    ("s.len() == 5", &["s", "s.len()"]),
-    ("o.inner.v == 1", &["o", "o.inner", "o.inner.v"]),
-    ("list[a] == 20", &["list", "a", "list[a]"]),
+    ("s.len() == 5", &["s.len()"]),
+    ("o.inner.v == 1", &["o.inner.v"]),
+    ("list[a] == 20", &["a", "list[a]"]),
     ("a as i64 == 1", &["a", "a as i64"]),
     ("0 <= a < b", &["a", "b"]),
-    ("shape matches { Point }", &["shape"]),
     ("[a, b] == [1, 2]", &["a", "b"]),
     ("Inner { v: a } == Inner { v: 1 }", &["a"]),
     (
@@ -81,10 +82,7 @@ const EXPECTED: &[(&str, &[&str])] = &[
         "match a { 1 => a, _ => b, } == 1",
         &["a", "match a { 1 => a, _ => b, }"],
     ),
-    (
-        "(a..<b).contains(&a)",
-        &["a", "b", "a..<b", "(a..<b).contains(&a)"],
-    ),
+    ("(a..<b).contains(&a)", &["(a..<b).contains(&a)"]),
     ("a < b && b < 3", &["a", "b", "a < b", "b", "b < 3"]),
     ("a > b || b > 0", &["a", "b", "a > b", "b", "b > 0"]),
 ];
@@ -176,12 +174,26 @@ fn a_short_circuited_operand_is_marked_conditional() {
     }
 }
 
+/// The one shape in `SOURCE` that renders nothing, and why. A `matches`
+/// scrutinee is an aggregate, and rendering one is a use the escape analysis
+/// counts even in the `builtin::cold_path()` branch — enough to stop
+/// variant-return scalarization. See the WEP's *Deliberately out of scope*.
+const EXPECTED_EMPTY: &[&str] = &["shape matches { Point }"];
+
 #[test]
-fn no_condition_shape_renders_an_empty_plan() {
+fn only_the_documented_shapes_render_an_empty_plan() {
     let plan = entry_plan();
 
-    assert!(
-        !plan.contains("(no operand captured)"),
-        "every shape in this program has an operand to show, got:\n{plan}"
+    let empty: Vec<&str> = plan
+        .lines()
+        .zip(plan.lines().skip(1))
+        .filter(|(_, next)| next.trim() == "(no operand captured)")
+        .filter_map(|(header, _)| header.split_once(": assert ").map(|(_, c)| c))
+        .collect();
+
+    assert_eq!(
+        empty, EXPECTED_EMPTY,
+        "a shape that stopped capturing is a regression against WEP rule 3, and \
+         one that started is a row to update; got:\n{plan}"
     );
 }

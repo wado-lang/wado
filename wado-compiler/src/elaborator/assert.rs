@@ -103,6 +103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ast_id,
                     capture_label: c.source.clone(),
                     conditional: c.conditional,
+                    is_place: c.is_place,
                 })
             })
             .collect();
@@ -150,13 +151,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .in_progress
             .shift_remove(&ast_id);
 
-        let (cap_name, conditional) = {
+        let (cap_name, conditional, is_place) = {
             let cap = &ctx
                 .assert_capture_ctx
                 .as_ref()
                 .expect("assert_capture_ctx survives recursive resolve")
                 .slots[slot_idx];
-            (cap.name.clone(), cap.conditional)
+            (cap.name.clone(), cap.conditional, cap.is_place)
         };
 
         // `defining_ast_id = None` so the synthetic locals do not enter
@@ -171,7 +172,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 true,
                 None,
             );
-        } else {
+        } else if !is_place {
+            // A place slot is rendered by re-reading the operand, so it has no
+            // binding to account for. See `reify_with_assert_capture`.
             ctx.add_local(cap_name, type_id, false, None);
         }
 
@@ -227,6 +230,17 @@ struct Capture {
     source: String,
     /// See [`super::sem::types::AssertSlot::conditional`].
     conditional: bool,
+    /// See [`super::sem::types::AssertSlot::is_place`].
+    is_place: bool,
+}
+
+/// Whether re-reading `expr` at the failure branch would yield what the
+/// condition saw, so the slot needs no binding of its own. Straight-line code
+/// separates the two, which makes a binding's read exact — but only a binding
+/// qualifies: a field read moved into the cold branch shifts what field
+/// scalarization sees, so a projection keeps its binding.
+fn is_place_expr(expr: &Expr) -> bool {
+    matches!(expr, Expr::Ident(_))
 }
 
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
@@ -298,7 +312,7 @@ impl CaptureScanner {
 
     /// Add a capture; the sub-expression's `AstId` is recorded so the
     /// elaborator hook can match it.
-    fn add(&mut self, source: String, ast_id: AstId) {
+    fn add(&mut self, source: String, ast_id: AstId, is_place: bool) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
         let conditional = self.conditional;
@@ -306,6 +320,7 @@ impl CaptureScanner {
             name,
             source,
             conditional,
+            is_place,
         });
         self.ast_id_to_slot.insert(ast_id, idx);
     }
@@ -322,7 +337,7 @@ impl CaptureScanner {
                     // Function-reference coercion site — leave as-is.
                     return;
                 }
-                self.add(ident.name.clone(), ast_id);
+                self.add(ident.name.clone(), ast_id, true);
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
@@ -332,7 +347,7 @@ impl CaptureScanner {
                 self.scan(&b.right);
                 self.conditional = conditional;
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Unary(u) => {
@@ -357,7 +372,7 @@ impl CaptureScanner {
                 }
                 self.scan(&u.expr);
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Call(c) => {
@@ -369,27 +384,32 @@ impl CaptureScanner {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_source(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::MethodCall(m) => {
-                // The receiver is not captured. A method taking `&mut self`
-                // would mutate the captured copy instead of the receiver —
-                // `assert p.next_if(..) matches { .. }` would stop advancing
-                // `p` — and the scanner runs before the method's `self` kind is
-                // known. A field access and a subscript are projections, so
-                // theirs are captured.
+                // No receiver is captured, on two grounds. A method's is rule
+                // 1: value semantics make the capture a copy, so a `&mut self`
+                // method would mutate the copy and leave the receiver
+                // untouched, and the scanner runs before the `self` kind is
+                // known. A projection's is safe under rule 1 but blocks
+                // optimization: `List<T>::index_value` asserts its bounds, and
+                // rendering `self` there is a use of the receiver that escape
+                // analysis counts even though `builtin::cold_path()` marks the
+                // branch — enough to stop const-object globalization, LICM and
+                // array-append collapse. It becomes free once that analysis
+                // discounts a cold-dominated use.
                 for arg in &m.args {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_source(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::StaticMethodCall(s) => {
                 for arg in &s.args {
                     self.in_call_arg = true;
                     self.scan(arg);
                 }
-                self.add(unparse_expr_source(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::ComparisonChain(chain) => {
                 self.scan(&chain.first);
@@ -402,27 +422,32 @@ impl CaptureScanner {
                 }
                 self.conditional = conditional;
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Cast(c) => {
                 self.scan(&c.expr);
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
-            Expr::Matches(m) => {
-                // The scrutinee is the value the pattern rejected, so it is
-                // the one the reader needs.
-                self.scan(&m.expr);
+            Expr::Matches(_) => {
+                // The scrutinee is not captured, though it is the value the
+                // pattern rejected. Rendering it is a *use* of an aggregate in
+                // the failure branch, and escape analysis counts that use even
+                // though `builtin::cold_path()` marks the branch — enough to
+                // stop variant-return scalarization, so `assert ok matches
+                // { Ok(6) }` would keep a scalarized `Result` whole. Re-reading
+                // instead of binding does not help: the read is the use. This
+                // is the one dependency a captured receiver waits on too.
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Index(i) => {
-                self.scan(&i.expr);
+                // The receiver is not scanned: see `MethodCall` above.
                 self.scan(&i.index);
-                self.add(unparse_expr_source(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::TupleLiteral(t) => {
                 // The literal itself is not captured: it takes its shape from
@@ -439,9 +464,9 @@ impl CaptureScanner {
                     self.scan(&field.value);
                 }
             }
-            Expr::FieldAccess(f) => {
-                self.scan(&f.expr);
-                self.add(unparse_expr_source(expr), ast_id);
+            Expr::FieldAccess(_) => {
+                // The receiver is not scanned: see `MethodCall` above.
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::TemplateString(_) => {
                 // Capture the rendered string whole; don't recurse into the
@@ -449,7 +474,7 @@ impl CaptureScanner {
                 // double-evaluate any side-effecting interpolation — once for
                 // its per-slot `let __vK = <interp>` and again when the
                 // template is rendered.
-                self.add(unparse_expr_source(expr), ast_id);
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
             }
             Expr::If(i) => {
                 // The branch bodies are not descended into: the value of the
@@ -467,7 +492,7 @@ impl CaptureScanner {
                     }
                 }
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Match(m) => {
@@ -475,7 +500,7 @@ impl CaptureScanner {
                 // are not. The scrutinee chose the arm, so it is scanned.
                 self.scan(&m.expr);
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Block(_) | Expr::LabeledBlock(_) => {
@@ -483,20 +508,20 @@ impl CaptureScanner {
                 // capture renders, and a binding inside it is not an operand
                 // of the condition.
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::Range(r) => {
                 self.scan(&r.start);
                 self.scan(&r.end);
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             Expr::TryOp(t) => {
                 self.scan(&t.expr);
                 if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id);
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr));
                 }
             }
             // The rest are neither captured nor recursed into. A `Literal` has
