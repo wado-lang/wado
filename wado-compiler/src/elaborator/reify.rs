@@ -3093,7 +3093,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
-        let local_index = ctx.add_local(cap_name.clone(), type_id, conditional, None);
+        let local_index = ctx.add_local(cap_name.clone(), type_id, true, None);
         let seen_local_index = conditional.then(|| {
             ctx.add_local(
                 super::assert::seen_local_name(&cap_name),
@@ -3112,10 +3112,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cap_span,
         );
 
-        // A conditional slot takes its value where the operand sits, so the
-        // short-circuit still governs it; only the flag is bound ahead. Until
-        // the capture site assigns it, the value local holds its Wasm default.
-        let (hoisted, in_place) = if let Some(seen_index) = seen_local_index {
+        // Every capture is taken where the operand sits, so instrumentation
+        // moves no evaluation at all: a short-circuit above still governs
+        // whether it runs, and nothing overtakes an operand evaluated before
+        // it. Collapsing the assignment back into a binding is the optimizer's
+        // job. Until the capture site runs, the local holds its Wasm default.
+        let (hoisted, spliced) = if let Some(seen_index) = seen_local_index {
             let decls = vec![TirStmt::new(
                 TirStmtKind::Let {
                     name: super::assert::seen_local_name(&cap_name),
@@ -3160,20 +3162,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
             )
         } else {
+            let capture_block = crate::tir::TirBlock::new(
+                vec![
+                    assign_stmt(local_ref.clone(), resolved, cap_span),
+                    TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
+                ],
+                cap_span,
+            );
             (
-                vec![TirStmt::new(
-                    TirStmtKind::Let {
-                        name: cap_name,
-                        local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id,
-                        value: resolved,
-                        skip_value_copy: false,
-                    },
-                    cap_span,
-                )],
-                local_ref,
+                Vec::new(),
+                TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
             )
         };
 
@@ -3187,7 +3185,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
         cap_ctx.emitted_lets.extend(hoisted);
 
-        in_place
+        spliced
     }
 
     /// Reify `assert cond[, msg];` into the power-assert expansion, from the

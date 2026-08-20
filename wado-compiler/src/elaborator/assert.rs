@@ -144,16 +144,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Index accounting only: reify allocates the same locals in the same
         // order and is the side that emits their bindings. `defining_ast_id =
         // None` keeps them out of LSP hover / go-to-def.
-        if conditional {
+        if is_place && !conditional {
+            // Re-read; no local of its own.
+        } else {
             ctx.add_local(cap_name.clone(), type_id, true, None);
-            ctx.add_local(
-                seen_local_name(&cap_name),
-                crate::tir::TypeTable::BOOL,
-                true,
-                None,
-            );
-        } else if !is_place {
-            ctx.add_local(cap_name, type_id, false, None);
+            if conditional {
+                ctx.add_local(
+                    seen_local_name(&cap_name),
+                    crate::tir::TypeTable::BOOL,
+                    true,
+                    None,
+                );
+            }
         }
 
         type_id
