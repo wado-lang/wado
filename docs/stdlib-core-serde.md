@@ -98,6 +98,21 @@ realistic documents with ample headroom.
 
 ## Functions
 
+### `pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError>`
+
+One nesting level deeper, or `DepthLimitExceeded` at the limit. `offset`
+locates the overrun in the input.
+
+Depth is threaded as a value: a container passes `depth + 1` to whatever it
+contains, and the level simply goes out of scope when that container is
+done. Nothing to decrement, so a format cannot leave the count unbalanced —
+and a descent that forgets to pass its own level down over-counts, which
+errors rather than letting nesting through.
+
+The mechanism is shared; the policy is not. A format picks its own
+`max_depth` and decides what counts as a container — only it knows where its
+recursion happens.
+
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
 
 Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
@@ -386,22 +401,6 @@ Used by variadic tuple deserialization via type pack expansion.
 #### `pub fn overflow(msg: String, offset: i64) -> DeserializeError`
 
 #### `pub fn depth_limit(msg: String, offset: i64) -> DeserializeError`
-
-### `pub struct DepthGuard`
-
-The nesting counter a format's deserializer embeds.
-
-The mechanism is shared; the policy is not. A format sets its own
-`max_depth` and decides what counts as a container — only it knows where
-its recursion happens.
-
-#### `max_depth: i32`
-
-#### `pub fn enter(&mut self, offset: i64) -> Result<(), DeserializeError>`
-
-Counts one container in. `offset` locates the overrun in the input.
-
-#### `pub fn leave(&mut self)`
 
 ## Enums
 

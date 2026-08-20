@@ -196,12 +196,12 @@ _Fields are private._
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
-##### `fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool], DeserializeError>`
+##### `fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool, i32], DeserializeError>`
 
 Open a definite/indefinite container of the expected major type,
-transparently unwrapping any self-described prefix and entering the
-depth guard. Returns `[remaining, indef]` for the access to carry
-(`remaining` is `-1` for an indefinite container).
+transparently unwrapping any self-described prefix. Returns
+`[remaining, indef, depth]` for the access to carry (`remaining` is
+`-1` for an indefinite container; `depth` is the level its items sit at).
 
 `expected` is the type-mismatch diagnostic, passed by reference (a
 module-global constant) so the common success path allocates nothing;

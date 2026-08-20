@@ -195,10 +195,15 @@ _Fields are private._
 
 #### `pos: i32`
 
-#### `depth: DepthGuard`
+#### `depth: i32`
+
+Nesting level of the value being read. Each access re-asserts its own
+level before descending, so the field never needs unwinding.
 
 Both the typed path and `skip_value` recurse per container. Measured
-trap depths without the guard: ~2,200 typed, ~6,600 skipped.
+trap depths without the bound: ~2,200 typed, ~6,600 skipped.
+
+#### `max_depth: i32`
 
 #### `pub fn peek(&self) -> i32`
 
@@ -248,9 +253,10 @@ Skips a string token without allocating. Shares `scan_string_run` with
 the reading path, so a skipped string is held to the same UTF-8 rule as
 a materialized one.
 
-#### `pub fn skip_value(&mut self) -> Result<(), DeserializeError>`
+#### `pub fn skip_value(&mut self, depth: i32) -> Result<(), DeserializeError>`
 
-Skips the next JSON value without allocating.
+Skips the next JSON value without allocating. `depth` is the level the
+value sits at; a container it opens goes one deeper.
 
 #### `impl Deserializer for JsonDeserializer`
 
