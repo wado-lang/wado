@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787192171929,
+  "lastUpdate": 1787203382526,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49577,6 +49577,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 254742,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ed1003b5b816e8caaf4a9e9937a9315da665887",
+          "message": "Merge pull request #1860 from wado-lang/claude/benchmark-gale-gen-optimization-dbmzcu\n\nperf(lower): match a place where it lies, and unwrap the per-element box",
+          "timestamp": "2026-08-20T14:09:56+09:00",
+          "tree_id": "a65a4bc19b626ca8a64ea066b25635f81e0db13e",
+          "url": "https://github.com/wado-lang/wado/commit/2ed1003b5b816e8caaf4a9e9937a9315da665887"
+        },
+        "date": 1787203381745,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16629,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254727,
             "unit": "bytes"
           }
         ]
