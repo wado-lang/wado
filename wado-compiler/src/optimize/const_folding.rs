@@ -99,14 +99,13 @@ pub fn fold_constants(
     let globals = build_global_view(project, &type_table, maps);
     let mut visitor = new_visitor(&type_table, maps, &globals);
     let mut buffers = EngineBuffers::default();
-    let aliasing = Aliasing::new(project, &type_table);
     let len = project.functions.len();
     gate.run_gated(GatedPass::ConstFold, len, |fid| {
         fold_function(
             &project.functions[fid.index()],
             &mut visitor,
             &mut buffers,
-            &aliasing,
+            &type_table,
         )
     })
 }
@@ -120,52 +119,11 @@ pub fn fold_constants_all(project: &mut NirPackage) -> bool {
     let globals = build_global_view(project, &type_table, &maps);
     let mut visitor = new_visitor(&type_table, &maps, &globals);
     let mut buffers = EngineBuffers::default();
-    let aliasing = Aliasing::new(project, &type_table);
     let mut changed = false;
     for func_rc in &project.functions {
-        changed |= fold_function(func_rc, &mut visitor, &mut buffers, &aliasing);
+        changed |= fold_function(func_rc, &mut visitor, &mut buffers, &type_table);
     }
     changed
-}
-
-/// The alias analysis' per-pass inputs. Its classes tell the frame which
-/// locals one write reaches.
-struct Aliasing<'a> {
-    type_table: &'a TypeTable,
-    first_param_types: super::alias::FirstParamTypes,
-    call_immutability: super::alias::CallImmutability<'a>,
-}
-
-impl<'a> Aliasing<'a> {
-    fn new(project: &NirPackage, type_table: &'a TypeTable) -> Self {
-        Self {
-            type_table,
-            first_param_types: super::alias::first_param_types(project),
-            call_immutability: super::alias::CallImmutability::new(project, type_table),
-        }
-    }
-
-    fn classes(
-        &self,
-        body: &Body,
-        locals: &[crate::nir::NirLocal],
-        address_taken_locals: &IndexSet<u32>,
-        stores_aliased_locals: &IndexSet<u32>,
-    ) -> crate::hashmap::IndexMap<u32, Vec<u32>> {
-        super::alias::build_alias_info(
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            self.type_table,
-            &self.first_param_types,
-            &self.call_immutability,
-            |_, _| None,
-        )
-        .info
-        .alias_groups
-        .per_member()
-    }
 }
 
 fn new_visitor<'a>(
@@ -187,16 +145,10 @@ fn fold_function(
     func_rc: &RefCell<NirFunction>,
     visitor: &mut ConstFoldVisitor<'_>,
     buffers: &mut EngineBuffers,
-    aliasing: &Aliasing<'_>,
+    type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
-    let NirFunction {
-        body,
-        locals,
-        address_taken_locals,
-        stores_aliased_locals,
-        ..
-    } = &mut *func;
+    let NirFunction { body, locals, .. } = &mut *func;
     let Some(body) = body.as_mut() else {
         return false;
     };
@@ -204,12 +156,9 @@ fn fold_function(
     visitor.interpreter.enter_function();
     visitor.interpreter.record_ref_global_aliases(body);
     visitor.interpreter.record_aggregate_locals(body);
-    visitor.interpreter.record_alias_classes(aliasing.classes(
-        body,
-        locals,
-        address_taken_locals,
-        stores_aliased_locals,
-    ));
+    visitor
+        .interpreter
+        .record_alias_classes(super::alias::alias_classes(body, locals, type_table).to_classes());
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)

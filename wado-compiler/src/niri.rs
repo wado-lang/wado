@@ -270,9 +270,9 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
-    /// Per local, the locals that may name the same storage. A write through
-    /// one member lands in what every member names.
-    alias_classes: IndexMap<u32, Vec<u32>>,
+    /// The locals that may name one another's storage. A write through one
+    /// member lands in what every member names.
+    alias_classes: AliasClasses,
     /// What this frame folded a node to, read back by
     /// [`Interpreter::expr_to_lattice`]. Load-bearing on both backends: the
     /// scratch body promotes nothing, and on a real body the committing rewrite
@@ -466,7 +466,7 @@ impl<'a> Interpreter<'a> {
 
     /// Record which locals may name one another's storage, so a write through
     /// any of them drops what the frame holds for all of them.
-    pub fn record_alias_classes(&mut self, classes: IndexMap<u32, Vec<u32>>) {
+    pub fn record_alias_classes(&mut self, classes: AliasClasses) {
         self.frame.alias_classes = classes;
     }
 
@@ -618,15 +618,37 @@ impl<'a> Interpreter<'a> {
             return;
         };
         self.invalidate_local(root);
-        for member in self
-            .frame
-            .alias_classes
-            .get(&root)
-            .cloned()
-            .unwrap_or_default()
-        {
+        for member in self.frame.alias_classes.members(root).to_vec() {
             self.invalidate_local(member);
         }
+    }
+}
+
+/// Locals that may name one another's storage, held once per class rather than
+/// once per member.
+#[derive(Default, Clone, Debug)]
+pub struct AliasClasses {
+    root_of: IndexMap<u32, u32>,
+    members_of: IndexMap<u32, Vec<u32>>,
+}
+
+impl AliasClasses {
+    #[must_use]
+    pub fn new(root_of: IndexMap<u32, u32>, members_of: IndexMap<u32, Vec<u32>>) -> Self {
+        Self {
+            root_of,
+            members_of,
+        }
+    }
+
+    /// The locals sharing `local`'s storage, itself included. Empty for a local
+    /// no copy aliases.
+    #[must_use]
+    pub fn members(&self, local: u32) -> &[u32] {
+        self.root_of
+            .get(&local)
+            .and_then(|root| self.members_of.get(root))
+            .map_or(&[], Vec::as_slice)
     }
 }
 

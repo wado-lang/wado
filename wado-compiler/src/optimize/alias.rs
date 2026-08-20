@@ -44,13 +44,9 @@ impl AliasGroups {
         self.root_of.is_empty()
     }
 
-    /// Every member's class, keyed by member. What a consumer keyed on a
-    /// single local rather than on the canonical root reads.
-    pub fn per_member(&self) -> IndexMap<u32, Vec<u32>> {
-        self.root_of
-            .iter()
-            .filter_map(|(&member, root)| Some((member, self.members_of.get(root)?.clone())))
-            .collect()
+    /// The same classes as the frame's lookup table.
+    pub fn to_classes(&self) -> crate::niri::AliasClasses {
+        crate::niri::AliasClasses::new(self.root_of.clone(), self.members_of.clone())
     }
 
     /// The alias class containing `local`, itself included, with the canonical
@@ -154,6 +150,20 @@ pub(super) fn build_alias_info(
         },
         syntactic_mut,
     }
+}
+
+/// The classes alone: which locals may name one another's storage. One walk,
+/// and none of the call-boundary analysis [`build_alias_info`] also answers for.
+pub(super) fn alias_classes(
+    body: &Body,
+    locals: &[crate::nir::NirLocal],
+    type_table: &TypeTable,
+) -> AliasGroups {
+    let mut edges = same_pointee_reference_edges(locals, type_table);
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        collect_alias_edges_node(body, node, type_table, &mut edges);
+    });
+    alias_groups_from_edges(edges)
 }
 
 /// Per-[`FuncId`] first-parameter type. Lets the mutable-escape scan decide

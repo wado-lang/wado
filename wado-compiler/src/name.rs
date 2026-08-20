@@ -2476,10 +2476,11 @@ impl FqTypeName {
         &self.args
     }
 
-    /// The outermost `&` / `&mut`, or `None` for a value name.
+    /// The `&` / `&mut` this name stands behind, outermost first. Empty for a
+    /// value name.
     #[must_use]
-    pub fn reference(&self) -> Option<RefKind> {
-        self.reference.first().copied()
+    pub fn references(&self) -> &[RefKind] {
+        &self.reference
     }
 
     /// The mangled spelling embedded in a mangled method name.

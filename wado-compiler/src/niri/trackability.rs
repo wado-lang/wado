@@ -244,15 +244,9 @@ pub(super) fn aggregate_safe_locals(
             set.insert(index);
         }
     }
-    // Storing a reference into an aggregate hands its object a second holder —
-    // a closure environment over a boxed local is the shape this reaches. A
-    // value element copies, so only a reference shape disqualifies.
     let share_root = |body: &Body, op: Operand, set: &mut LocalSet| {
-        if let Some(e) = op.as_expr()
-            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-            && type_table.is_reference_shaped(body.exprs[e].type_id)
-        {
-            set.insert(*index);
+        if let Some(index) = shared_reference_root(body, op, type_table) {
+            set.insert(index);
         }
     };
     fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
@@ -358,7 +352,7 @@ pub(super) fn aggregate_safe_locals(
 ///
 /// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
 /// node an in-place rewrite displaced, and one nothing refers to cannot run.
-pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
+pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &TypeTable) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -398,10 +392,37 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
                     }
                 }
             }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for element in elements {
+                    if let Some(index) = shared_reference_root(body, *element, type_table) {
+                        set.insert(index);
+                    }
+                }
+            }
+            ExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    if let Some(index) = shared_reference_root(body, field.value, type_table) {
+                        set.insert(index);
+                    }
+                }
+            }
             _ => {}
         }
     }
     set
+}
+
+/// The local a stored reference names. An aggregate holding one is a second
+/// holder of its object — a closure environment over a boxed local is the shape
+/// this reaches. A value element copies, so only a reference shape answers.
+fn shared_reference_root(body: &Body, op: Operand, type_table: &TypeTable) -> Option<u32> {
+    let e = op.as_expr()?;
+    let ExprKind::Local { index, .. } = &body.exprs[e].kind else {
+        return None;
+    };
+    type_table
+        .is_reference_shaped(body.exprs[e].type_id)
+        .then_some(*index)
 }
 
 /// What a walk of a body may hold values for: which locals may bind an
@@ -417,7 +438,7 @@ impl Trackability {
         let reached = Reached::in_frame(body, facts);
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
-            clobbered: clobbered_locals(body, &reached),
+            clobbered: clobbered_locals(body, &reached, type_table),
         }
     }
 
