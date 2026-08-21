@@ -43,10 +43,15 @@ the failure branch reaches, so the operand is read rather than recomputed there,
 and the optimizer sees an ordinary binding. The first fragment left behind
 clears it, and every slot after that is captured where it sits. A receiver and a
 callee clear it for the operands nested under them, since both run first and
-neither is captured; the node containing them may still be bound ahead, because
+stay where they are; the node containing them may still be bound ahead, because
 binding it moves the whole group and so moves nothing within it. A place is
 neither bound nor moved — the failure branch re-reads it, which is the same
 assumption seen from the other side — so it passes the fact through.
+
+That is also what lets a receiver render at all. Binding one would copy it, and
+value semantics would leave the call's own mutation on the copy; re-reading a
+place copies nothing, so a receiver that is a place is captured exactly as any
+other place is.
 
 A capture may not copy. Value semantics deep-copy on binding, so a captured
 receiver would take the copy's mutation and leave the original untouched. The
@@ -121,15 +126,15 @@ a defect or an open question, never a boundary.
 
 ### Rule 1: the mechanism changes evaluation
 
-- [ ] **Capture a receiver and a `matches` scrutinee.** Value semantics copy on
-      binding, so a bound receiver takes its own `&mut self` mutation and leaves
-      the original untouched. Capturing in place, or re-reading a binding from
-      the failure branch, changes no evaluation — the copy is the mechanism's
-      choice, not the operand's nature. Deciding which method mutates needs the
-      `self` kind, which the scan does not have because it runs ahead of
-      resolution: an ordering this design chose and can revisit. Red:
-      `assert_gap_method_receiver`, `assert_gap_subscript_receiver`,
-      `assert_gap_matches_scrutinee`.
+- [ ] **Capture a receiver that is not a place.** A place receiver renders
+      today: the failure branch re-reads it, which copies nothing, so the `&mut
+      self` mutation the copy would have hidden is never hidden and the scan
+      needs no `self` kind it cannot have. Every other receiver — `f().m()`,
+      `(a..<b).contains(&a)` — still renders nothing, and it needs the value
+      kept without a copy: binding it would take the copy's mutation and leave
+      the original untouched. Unpinned, since the fixtures that pinned it now
+      pin the place half: `assert_method_receiver`,
+      `assert_subscript_receiver`, `assert_matches_scrutinee`.
 
 ### Rule 3: operand positions that render nothing
 
