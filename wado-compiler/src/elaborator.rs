@@ -1889,6 +1889,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .type_table
                 .borrow()
                 .contains_type_param(target_type_id);
+            // The header names one instantiation whatever it binds, so the
+            // arguments are resolved once rather than per associated type.
+            let impl_trait_ref = trait_name
+                .as_ref()
+                .and_then(crate::name::FqTraitName::canonical)
+                .map(|trait_key| {
+                    impl_block.trait_type.as_ref().map_or_else(
+                        || crate::tir::TraitRef::bare(trait_key),
+                        |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
+                    )
+                });
 
             for binding in &impl_block.associated_types {
                 let type_id = scope.resolve_type(&binding.ty);
@@ -1900,16 +1911,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                 // Register in TypeTable for substitution resolution
                 // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
-                let Some(trait_key) = trait_name
-                    .as_ref()
-                    .and_then(crate::name::FqTraitName::canonical)
-                else {
+                let Some(trait_ref) = impl_trait_ref.clone() else {
                     continue;
                 };
-                let trait_ref = impl_block.trait_type.as_ref().map_or_else(
-                    || crate::tir::TraitRef::bare(trait_key),
-                    |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
-                );
                 if is_concrete {
                     scope
                         .tysys

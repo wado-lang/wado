@@ -679,16 +679,49 @@ impl TraitRef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GenericAssocTypeKey {
     target_decl: crate::ast::AstId,
-    trait_ref: TraitRef,
+    trait_decl: crate::defs::DefId,
     assoc_name: String,
 }
 
-/// What an associated type belongs to.
+/// What an associated type belongs to. The trait's arguments are not part of
+/// it: a bound writes none, so every lookup names them all and
+/// [`AssocAnswers`] picks between them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AssocTypeKey {
     receiver: TypeId,
-    trait_ref: TraitRef,
+    trait_decl: crate::defs::DefId,
     assoc_name: String,
+}
+
+/// The answers registered under one key, by the arguments the impl wrote
+/// beyond the trait's declared defaults. Several instantiations answer one
+/// name — `impl Add for Cm` and `impl Add<Inch> for Cm` both give `Output`.
+#[derive(Debug, Clone, Default)]
+struct AssocAnswers(Vec<(Vec<TypeId>, TypeId)>);
+
+impl AssocAnswers {
+    fn insert(&mut self, args: Vec<TypeId>, answer: TypeId) {
+        match self.0.iter_mut().find(|(written, _)| *written == args) {
+            Some(slot) => slot.1 = answer,
+            None => self.0.push((args, answer)),
+        }
+    }
+
+    /// The one answer a bound names: the bare instantiation where one is
+    /// registered, else whatever the arguments-writing impls agree on. A bound
+    /// writes no arguments, so it cannot pick between impls that disagree.
+    fn bare(&self) -> Option<TypeId> {
+        one_assoc_answer(&self.tagged())
+    }
+
+    /// Each answer paired with whether a bare bound names it, for a caller
+    /// weighing answers from several traits at once.
+    fn tagged(&self) -> Vec<(bool, TypeId)> {
+        self.0
+            .iter()
+            .map(|(args, answer)| (args.is_empty(), *answer))
+            .collect()
+    }
 }
 
 /// The one answer among `candidates`, preferring those a bare bound names when
@@ -725,7 +758,7 @@ pub struct TypeTable {
     /// are the ones the impl wrote beyond the trait's declared defaults, so a
     /// bare bound and `impl Add<Cm> for Cm` meet at the empty list while
     /// `impl Add<Inch> for Cm` keys its own answer.
-    assoc_type_resolutions: IndexMap<AssocTypeKey, TypeId>,
+    assoc_type_resolutions: IndexMap<AssocTypeKey, AssocAnswers>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
@@ -735,12 +768,7 @@ pub struct TypeTable {
     /// A generic impl's `type X = …` before substitution, keyed like
     /// [`Self::assoc_type_resolutions`] but by the target's declaration: two
     /// generic impls of one trait at different instantiations are two answers.
-    generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, TypeId>,
-    /// Whether either registry holds a key at non-default trait arguments.
-    /// A projection names the bare instantiation, which is a map hit; the
-    /// scan that answers from an arguments-writing impl runs only for a
-    /// program that has one.
-    assoc_keys_carry_args: bool,
+    generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -917,7 +945,6 @@ impl TypeTable {
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
-            assoc_keys_carry_args: false,
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
             shared_box_type_ids: TypeSet::default(),
@@ -2454,15 +2481,14 @@ impl TypeTable {
         assoc_name: String,
         resolved_id: TypeId,
     ) {
-        self.assoc_keys_carry_args |= !trait_ref.is_bare();
-        self.assoc_type_resolutions.insert(
-            AssocTypeKey {
+        self.assoc_type_resolutions
+            .entry(AssocTypeKey {
                 receiver: concrete_id,
-                trait_ref,
+                trait_decl: trait_ref.decl,
                 assoc_name,
-            },
-            resolved_id,
-        );
+            })
+            .or_default()
+            .insert(trait_ref.args, resolved_id);
     }
 
     /// Resolve `<concrete_id as trait_key>::assoc_name` for a caller that knows
@@ -2476,29 +2502,13 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        // A bare entry is unique by construction, so its hit is already the
-        // answer and the scan below runs only when nothing registered one.
-        if let Some(&resolved) = self.assoc_type_resolutions.get(&AssocTypeKey {
-            receiver: concrete_id,
-            trait_ref: TraitRef::bare(*trait_key),
-            assoc_name: assoc_name.to_string(),
-        }) {
-            return Some(resolved);
-        }
-        if !self.assoc_keys_carry_args {
-            return None;
-        }
-        let candidates: Vec<(bool, TypeId)> = self
-            .assoc_type_resolutions
-            .iter()
-            .filter(|(key, _)| {
-                key.receiver == concrete_id
-                    && key.trait_ref.decl == *trait_key
-                    && key.assoc_name == assoc_name
-            })
-            .map(|(key, &resolved)| (key.trait_ref.is_bare(), resolved))
-            .collect();
-        one_assoc_answer(&candidates)
+        self.assoc_type_resolutions
+            .get(&AssocTypeKey {
+                receiver: concrete_id,
+                trait_decl: *trait_key,
+                assoc_name: assoc_name.to_string(),
+            })?
+            .bare()
     }
 
     /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`
@@ -2532,7 +2542,7 @@ impl TypeTable {
             .assoc_type_resolutions
             .iter()
             .filter(|(key, _)| key.receiver == concrete_id && key.assoc_name == assoc_name)
-            .map(|(key, &resolved)| (key.trait_ref.is_bare(), resolved))
+            .flat_map(|(_, answers)| answers.tagged())
             .collect();
         one_assoc_answer(&candidates)
     }
@@ -2551,15 +2561,14 @@ impl TypeTable {
         assoc_name: String,
         type_param_id: TypeId,
     ) {
-        self.assoc_keys_carry_args |= !trait_ref.is_bare();
-        self.generic_assoc_type_defs.insert(
-            GenericAssocTypeKey {
+        self.generic_assoc_type_defs
+            .entry(GenericAssocTypeKey {
                 target_decl: base_decl,
-                trait_ref,
+                trait_decl: trait_ref.decl,
                 assoc_name,
-            },
-            type_param_id,
-        );
+            })
+            .or_default()
+            .insert(trait_ref.args, type_param_id);
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -2575,7 +2584,12 @@ impl TypeTable {
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
-            .map(|(key, &def_id)| (key.trait_ref.is_bare(), key.trait_ref.decl, def_id))
+            .flat_map(|(key, answers)| {
+                answers
+                    .tagged()
+                    .into_iter()
+                    .map(move |(bare, def_id)| (bare, key.trait_decl, def_id))
+            })
             .collect();
         if candidates.iter().any(|(bare, ..)| *bare) {
             candidates.retain(|(bare, ..)| *bare);
@@ -2598,27 +2612,13 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        if let Some(&def_id) = self.generic_assoc_type_defs.get(&GenericAssocTypeKey {
-            target_decl: base_decl,
-            trait_ref: TraitRef::bare(*trait_key),
-            assoc_name: assoc_name.to_string(),
-        }) {
-            return Some(def_id);
-        }
-        if !self.assoc_keys_carry_args {
-            return None;
-        }
-        let candidates: Vec<(bool, TypeId)> = self
-            .generic_assoc_type_defs
-            .iter()
-            .filter(|(key, _)| {
-                key.target_decl == base_decl
-                    && key.trait_ref.decl == *trait_key
-                    && key.assoc_name == assoc_name
-            })
-            .map(|(key, &def_id)| (key.trait_ref.is_bare(), def_id))
-            .collect();
-        one_assoc_answer(&candidates)
+        self.generic_assoc_type_defs
+            .get(&GenericAssocTypeKey {
+                target_decl: base_decl,
+                trait_decl: *trait_key,
+                assoc_name: assoc_name.to_string(),
+            })?
+            .bare()
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct.
@@ -2636,7 +2636,15 @@ impl TypeTable {
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl)
-            .map(|(key, &def_id)| (key.trait_ref.clone(), key.assoc_name.clone(), def_id))
+            .flat_map(|(key, answers)| {
+                answers.0.iter().map(move |(args, def_id)| {
+                    (
+                        TraitRef::new(key.trait_decl, args.clone()),
+                        key.assoc_name.clone(),
+                        *def_id,
+                    )
+                })
+            })
             .collect();
         for (trait_ref, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);

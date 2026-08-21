@@ -1042,8 +1042,9 @@ impl TypeSystem {
     }
 
     /// Whether a reference is denied `trait_`'s bound, which it otherwise
-    /// inherits from its pointee by auto-deref at the call. `Eq` on a reference
-    /// is identity, and a receiverless method has no receiver to deref.
+    /// inherits from its pointee by auto-deref at the call. `==` on a reference
+    /// is identity, so no ordering follows from it and `&T` is no `Ord`; and a
+    /// receiverless method has no receiver to deref.
     fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;

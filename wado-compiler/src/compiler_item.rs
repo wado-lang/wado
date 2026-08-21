@@ -1561,6 +1561,10 @@ impl Resolved {
 #[derive(Clone, Debug)]
 pub struct CompilerItems {
     items: Vec<Option<Resolved>>,
+    /// The inverse of [`CompilerItems::trait_decl`], maintained by `register`.
+    /// Recognising a compiler item is on the hot trait-query path, so it is a
+    /// lookup rather than a scan.
+    trait_by_decl: crate::hashmap::IndexMap<crate::ast::AstId, CompilerItem>,
 }
 
 impl Default for CompilerItems {
@@ -1596,6 +1600,7 @@ impl CompilerItems {
     pub fn new() -> Self {
         Self {
             items: vec![None; CompilerItem::COUNT],
+            trait_by_decl: crate::hashmap::IndexMap::default(),
         }
     }
 
@@ -1657,6 +1662,9 @@ impl CompilerItems {
                 new_module: resolved.module_source().clone(),
             }),
             None => {
+                if let Resolved::Trait { decl, .. } = &resolved {
+                    self.trait_by_decl.insert(*decl, item);
+                }
                 self.items[idx] = Some(resolved);
                 Ok(())
             }
