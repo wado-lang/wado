@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787262160518,
+  "lastUpdate": 1787272639495,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49733,6 +49733,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6d061828f6a265f3e6bfb398025d78ef9c605de3"
         },
         "date": 1787262159934,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e03f09aa0c753dd0a6770deb1cbbaea91c78698b",
+          "message": "Merge pull request #1865 from wado-lang/emi/nondeterministic-fixtures\n\nfeat(emi): an opaque read payload, and the compiler fixes it found",
+          "timestamp": "2026-08-21T09:23:23+09:00",
+          "tree_id": "f7a254058d8c4b568d8a2c99117e8fa088dbcb65",
+          "url": "https://github.com/wado-lang/wado/commit/e03f09aa0c753dd0a6770deb1cbbaea91c78698b"
+        },
+        "date": 1787272638791,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
