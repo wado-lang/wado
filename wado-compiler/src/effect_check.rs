@@ -347,9 +347,7 @@ struct OwnedEffectData {
     variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: IndexMap<String, EffectRef>,
-    interface_meta: IndexMap<String, (ModuleSource, Option<String>)>,
-    /// `#[cm]` FQ per interface declaration — the same question `interface_meta`
-    /// answers by spelling, asked by identity.
+    /// `#[cm]` FQ per interface declaration.
     interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
@@ -442,13 +440,9 @@ impl OwnedEffectData {
             }
         }
 
-        // `interface_meta` resolves a `Local(E)` callee to (declaring module,
-        // `#[cm]` FQ); `effect_by_cm_fq` maps a CM FQ back to the effect it
-        // declares, restricted to closure keys so a host-leaf import resolves to
-        // an effect while a type-only interface (`wasi:cli/types`) resolves to
-        // nothing.
-        let mut interface_meta: IndexMap<String, (ModuleSource, Option<String>)> =
-            IndexMap::default();
+        // `effect_by_cm_fq` maps a CM FQ back to the effect it declares,
+        // restricted to closure keys so a host-leaf import resolves to an effect
+        // while a type-only interface (`wasi:cli/types`) resolves to nothing.
         let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
             IndexMap::default();
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
@@ -462,9 +456,6 @@ impl OwnedEffectData {
                     .iter()
                     .find_map(|a| a.as_cm_import())
                     .map(crate::ast::CmImport::interface_path);
-                interface_meta
-                    .entry(decl.name.clone())
-                    .or_insert_with(|| (src.clone(), cm_fq.clone()));
                 interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
@@ -488,7 +479,6 @@ impl OwnedEffectData {
             variant_payloads,
             closure,
             effect_by_name,
-            interface_meta,
             interface_cm_fq,
             effect_by_cm_fq,
             provided_import_fqs,
@@ -506,7 +496,6 @@ impl OwnedEffectData {
             variant_payloads: &self.variant_payloads,
             closure: &self.closure,
             effect_by_name: &self.effect_by_name,
-            interface_meta: &self.interface_meta,
             interface_cm_fq: &self.interface_cm_fq,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
@@ -534,9 +523,8 @@ struct EffectIndex<'a> {
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
     effect_by_name: &'a IndexMap<String, EffectRef>,
-    /// Declared interface name → (declaring module, its `#[cm]` FQ), for
-    /// resolving a direct `E::op()` callee to its effect and FQ.
-    interface_meta: &'a IndexMap<String, (ModuleSource, Option<String>)>,
+    /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
+    /// callee to its effect and FQ.
     interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
@@ -984,22 +972,18 @@ impl SemEffectWalker<'_> {
         if !matches!(func_ref.module_source, ModuleSource::Local { .. }) {
             return Vec::new();
         }
-        let interface = func_ref.module_source.to_string();
         // The callee names its interface's declaration; the site says which one
         // that is, so a same-named local `interface` cannot stand in for it.
-        let declared = receiver_site
+        let Some((decl_module, name, cm_fq)) = receiver_site
             .and_then(|site| self.sem.resolutions()?.declared(site))
-            .map(|def| {
+            .and_then(|def| {
                 let defs = self.sem.resolutions().expect("resolutions").defs();
-                (defs.module(def).clone(), defs.name(def).to_string())
+                let key = (defs.module(def).clone(), defs.name(def).to_string());
+                let cm_fq = self.index.interface_cm_fq.get(&key)?;
+                Some((key.0, key.1, cm_fq))
             })
-            .filter(|key| self.index.interface_cm_fq.contains_key(key));
-        let (decl_module, name, cm_fq) = match &declared {
-            Some(key) => (&key.0, key.1.clone(), &self.index.interface_cm_fq[key]),
-            None => match self.index.interface_meta.get(&interface) {
-                Some((module, fq)) => (module, interface, fq),
-                None => return Vec::new(),
-            },
+        else {
+            return Vec::new();
         };
         // Only a host-backed effect (`#[cm]`) is a capability the caller must
         // hold. A user-defined effect is resolved by the handler machinery, so
@@ -1023,7 +1007,7 @@ impl SemEffectWalker<'_> {
         }
         vec![EffectRef::Concrete {
             name,
-            module_source: decl_module.clone(),
+            module_source: decl_module,
         }]
     }
 
