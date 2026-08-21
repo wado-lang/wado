@@ -555,6 +555,21 @@ node -e "
 """
 
 
+[tasks.cloudflare-build]
+description = "Compile a Wado service and transpile it for the Cloudflare Worker"
+depends = ["jco-deps"]
+run = "cloudflare-worker/build.sh"
+
+[tasks.cloudflare-dev]
+description = "Serve the Cloudflare Worker locally (run cloudflare-build first)"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+cd cloudflare-worker
+[ -d node_modules ] || npm install
+npx wrangler dev "$@"
+"""
+
 [tasks.jco-bench]
 description = "Benchmark a Wado program on Node via jco (compile -f no-wide-arithmetic, transpile, self-time 3x)"
 depends = ["jco-deps"]
