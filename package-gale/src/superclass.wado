@@ -204,9 +204,8 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
-/// role (predicate vs action). A later occurrence still contributes its
-/// `has_args`: one call site passing arguments makes the operation
-/// unrepresentable.
+/// role. A later occurrence still contributes `has_args` and `mixed_role`,
+/// either of which makes the operation unrepresentable.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
     let is_predicate = kind matches { Predicate };
     for let mut i = 0; i < ops.len(); i += 1 {
@@ -244,7 +243,7 @@ pub fn super_ops_mixed_role(ops: &List<SuperOp>) -> List<String> {
 
 /// Collect the superClass operations across a grammar's lexer rules: every
 /// distinct `this.<method>` call in an action / predicate body, in source
-/// order, deduped by name (first role wins).
+/// order, deduped by name.
 pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
     let mut ops: List<SuperOp> = [];
     for let rule of &grammar.lexer_rules {
