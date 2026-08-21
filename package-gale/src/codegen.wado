@@ -178,8 +178,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
                 `superClass '${sc}' is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them, so the base is not wired`,
             );
         } else if !mixed.is_empty() {
-            // An action call passes the lexer and a predicate call does not, so
-            // one of the two sites would not match the operation's signature.
             ctx.warn(
                 &DiagnosticOwner::host(&"superClass"),
                 DiagnosticKind::UnsupportedAction,

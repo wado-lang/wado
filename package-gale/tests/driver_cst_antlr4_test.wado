@@ -16,18 +16,16 @@ use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.
 use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, MODE_Argument } from "./grammars/ANTLRv4Lexer.g4";
 use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
 
-// A hand-written port of ANTLR's LexerAdaptor: these two ops drive the whole
-// `Argument` mode through the lexer command surface an action op reaches.
+// A hand-written port of ANTLR's LexerAdaptor: these two ops drive `Argument`.
 struct Antlr4Base {
     begins: i32,
     ends: i32,
 }
 
 impl LexerAdaptor for Antlr4Base {
-    // ANTLR branches here on `inLexerRule()`, which needs the rule-type state
-    // the `emit` / `nextToken` hooks carry (an open Stage C item, see TODO.md).
-    // Without it this always takes the parser-rule branch, so a lexer rule's
-    // `[...]` char set enters `Argument` rather than `LexerCharSet`.
+    // ANTLR branches here on `inLexerRule()`, which needs the `emit` /
+    // `nextToken` hooks (an open Stage C item, see TODO.md). Without them this
+    // always pushes `Argument`, never `LexerCharSet`.
     fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.begins += 1;
         lx.push_mode(MODE_Argument);
@@ -46,8 +44,6 @@ impl LexerAdaptor for Antlr4Base {
     }
 }
 
-// The commit applies a single latched push / pop / set per token, so a second
-// mode command from one action cannot be represented.
 struct DoublePushBase {
     hits: i32,
 }
@@ -213,8 +209,6 @@ test "the base's argument-bracket ops run on the winning tokens" {
 }
 
 test "the base drives the Argument mode from handleBeginArgument" {
-    // The base pushes `Argument` on `[`, so the rule-argument body lexes as
-    // ARGUMENT_CONTENT rather than DEFAULT-mode grammar tokens.
     let tokens = a4_tokenize(&"r[int x] : 'a' ;");
     let mut content = 0;
     let mut ends = 0;
@@ -231,8 +225,6 @@ test "the base drives the Argument mode from handleBeginArgument" {
 }
 
 test "a nested bracket retypes its closing bracket as content" {
-    // The inner `]` pops back into the outer Argument mode, where the base's
-    // depth check retypes it to content; only the outer one stays END_ARGUMENT.
     let tokens = a4_tokenize(&"r[int[] a] : 'a' ;");
     let mut ends = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {

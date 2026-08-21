@@ -272,8 +272,7 @@ WS : ' ' -> skip ;
 }
 
 test "a superClass action op reaches the lexer mode state" {
-    // ANTLRv4's LexerAdaptor shape: pop a mode, then branch on the remaining
-    // depth. The depth is a tokenize-loop local, so it rides on the `Lexer`.
+    // The depth is a tokenize-loop local, so it rides on the `Lexer`.
     let src = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
@@ -300,8 +299,6 @@ WS : ' ' -> skip ;
 }
 
 test "an action may issue at most one mode command per token" {
-    // The commit applies one latched push / pop / set per token, so a second
-    // command would be silently dropped or reordered.
     let src = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
@@ -313,8 +310,6 @@ C : ']' ;
 }
 
 test "the lexer exposes no current-mode read" {
-    // `pop_mode` cannot restore the previous mode — the Lexer holds no copy of
-    // the mode stack — so no `mode()` is offered rather than a stale one.
     let src = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }
 A : '[' { this.hit() } ;
