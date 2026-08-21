@@ -1431,6 +1431,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
+- [`core:random`](./stdlib-core-random.md) — entropy buffering for `wasi:random`
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time (`Instant`, `ZonedDateTime`)
 - [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)

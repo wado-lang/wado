@@ -44,6 +44,7 @@ pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
 pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
 pub const CORE_ROUTER: &str = include_str!("../lib/core/router.wado");
 pub const CORE_DIGEST: &str = include_str!("../lib/core/digest.wado");
+pub const CORE_RANDOM: &str = include_str!("../lib/core/random.wado");
 pub const CORE_UUID: &str = include_str!("../lib/core/uuid.wado");
 pub const CORE_TEMPORAL: &str = include_str!("../lib/core/temporal.wado");
 pub const CORE_LOG: &str = include_str!("../lib/core/log.wado");
@@ -143,6 +144,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:url", CORE_URL),
     ("core:router", CORE_ROUTER),
     ("core:digest", CORE_DIGEST),
+    ("core:random", CORE_RANDOM),
     ("core:uuid", CORE_UUID),
     ("core:temporal", CORE_TEMPORAL),
     ("core:log", CORE_LOG),

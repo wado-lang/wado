@@ -1,0 +1,80 @@
+#![stdlib("core:random")]
+//! Entropy buffering for `wasi:random`.
+//!
+//! A host call costs about the same for 16 bytes as for 4096, so drawing many
+//! small values pays that fixed cost over and over. `BufferedRandom` draws in
+//! blocks and serves reads from one, reaching the outer handler to refill.
+
+use { Random } from "wasi:random";
+
+global POOL_BYTES: i32 = 4096;
+
+#[synopsis]
+test {
+    let mut rng = BufferedRandom {};
+    with Random => &mut rng do {
+        assert Random::get_random_bytes(16).len() == 16;
+    };
+}
+
+/// A `Random` handler that draws entropy in blocks. Install it around the work
+/// that consumes randomness; its block lives in guest memory until consumed.
+pub struct BufferedRandom {
+    buf: List<u8> = [],
+    pos: i32 = 0,
+}
+
+impl Random for BufferedRandom {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        let n = max_len as i32;
+        if n > POOL_BYTES {
+            resume Random::get_random_bytes(max_len);
+        }
+        if self.available() < n {
+            self.refill();
+        }
+        // A WASI caller already tolerates a short read: the block's remainder
+        // is an answer, not a reason to reach the host again.
+        let take = if n < self.available() { n } else { self.available() };
+        resume self.take(take);
+    }
+
+    fn get_random_u64(&mut self) -> u64 {
+        let mut value: u64 = 0;
+        let mut shift = 0;
+        while shift < 64 {
+            if self.available() == 0 {
+                self.refill();
+            }
+            let byte = self.buf[self.pos];
+            self.pos += 1;
+            value = value | byte as u64 << shift as u64;
+            shift += 8;
+        }
+        resume value;
+    }
+}
+
+impl BufferedRandom {
+    fn available(&self) -> i32 {
+        return self.buf.len() - self.pos;
+    }
+
+    fn refill(&mut self) with Random {
+        self.buf = self.take(self.available());
+        for let byte of Random::get_random_bytes(POOL_BYTES as u64) {
+            self.buf.push(byte);
+        }
+        self.pos = 0;
+        assert self.buf.len() > 0, "wasi:random returned no data";
+    }
+
+    fn take(&mut self, n: i32) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < n; i += 1 {
+            out.push(self.buf[self.pos + i]);
+        }
+        self.pos += n;
+        return out;
+    }
+}
