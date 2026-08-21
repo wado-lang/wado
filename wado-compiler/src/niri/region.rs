@@ -88,7 +88,7 @@ pub(super) fn region_free_reads(
     block: BlockId,
     facts: ProgramFacts<'_>,
     type_table: &TypeTable,
-) -> Option<Vec<u32>> {
+) -> Option<Vec<FreeRead>> {
     fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
         written.insert(write_root_local(body, op)?);
         Some(())
@@ -150,10 +150,22 @@ pub(super) fn region_free_reads(
         if declared.contains(index) {
             continue;
         }
-        if written.contains(index) || type_table.is_reference_shaped(ty) {
+        if written.contains(index) {
             return None;
         }
-        out.push(index);
+        out.push(FreeRead {
+            index,
+            is_reference: type_table.is_reference_shaped(ty),
+        });
     }
     Some(out)
+}
+
+/// A local a region reads without declaring, and whether it names a reference.
+/// A reference has no value of its own, so seeding one is sound only where the
+/// frame already reads it as a constant — which the caller, holding the
+/// environment, is the one to know.
+pub(super) struct FreeRead {
+    pub(super) index: u32,
+    pub(super) is_reference: bool,
 }

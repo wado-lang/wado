@@ -796,7 +796,8 @@ impl Interpreter<'_> {
         }
         let free = region_free_reads(body, block, self.facts, self.type_table)?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
-        for index in free {
+        for read in free {
+            let index = read.index;
             if self.frame.alias_involves(index) {
                 crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
                 return None;
@@ -808,6 +809,16 @@ impl Interpreter<'_> {
                 );
                 return None;
             };
+            // A reference reads as its referent only where the frame already
+            // decided what that is — a scalar constant standing for a reference
+            // would be a value where the program holds an alias.
+            if read.is_reference && value.is_scalar() {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: reference local {index} holds a scalar"
+                );
+                return None;
+            }
             seeds.push((index, value.clone()));
         }
         self.charge(1)?;
