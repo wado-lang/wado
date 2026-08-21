@@ -85,7 +85,7 @@ let mut base = TsBase { brace_depth: 0 };
 with TypeScriptLexerBase => &mut base do { let toks = tokenize(&input); ... }
 ```
 
-Cost model (verified on a probe): a handler operation with no post-resume code hits the `resume`→`return` optimization and lowers to a single indirect call through the effect's dispatch — no Wasm stack switching / JSPI. The dominant per-character scan path emits no effect call and stays byte-identical to a non-superClass grammar; only the rare predicate / action sites pay the indirect call.
+Cost model (verified on a probe): a handler operation with no post-resume code hits the `resume`→`return` optimization and lowers to a single indirect call through the effect's dispatch — no Wasm stack switching / JSPI. The dominant per-character scan path emits no effect call and stays byte-identical to a non-superClass grammar; the predicate / action sites pay the indirect call where they fire, and the `emit` hook pays one per emitted token. A grammar with no `superClass` emits neither the interface nor the hook call.
 
 Gating: a non-superClass grammar emits no interface, no effect clause, and no operation call — byte-identical output.
 
@@ -93,7 +93,7 @@ ATN purity holds: a superClass predicate is pre-evaluated at the decision (in th
 
 Split grammars: a lexer and its sibling parser each declare their own `superClass` (lexer base vs parser base). Gale wires the lexer's base; the merge keeps the lexer / combined split's `superClass` so the parser's does not clobber it.
 
-Lifecycle overrides: a base may not only add helpers but _override_ recognizer methods (`nextToken` / `emit` / `reset`, e.g. to track the last token). These map to fixed hook operations the recognizer calls at the right point; the exact hook set is enumerated on real-grammar demand, not designed up front.
+Lifecycle overrides: a base may not only add helpers but _override_ recognizer methods. These are fixed operations on every generated interface, each with a default body, so a base opts in by implementing one exactly as an `@Override` does and every other base is untouched. Real-grammar demand has enumerated one so far: `emit(view, ty, channel) -> i32`, called for each token the lexer commits — not a skipped or `more`d match, and not the EOF sentinel — returning the type to emit. ANTLRv4's `LexerAdaptor` retypes `ID` to `TOKEN_REF` / `RULE_REF` there and tracks the current rule type it branches on; TypeScript's records the last default-channel token for `IsRegexPossible`.
 
 `tokenVocab` falls out separately and independently of the effect machinery: another grammar's generated token constants are imported by name.
 
@@ -150,13 +150,12 @@ Design phases, tracked at the capability level (see `TODO.md` for the working ta
 - Predicates in prediction (static dispatch, scan tournament, ATN exclusion; parser and single-pass lexer) — largely done; the ATN-class lexer path and the remaining lexer `$`-attribute surface remain.
 - java2wado for the corpus parser subset plus members translation — done, lexer bodies included: codegen stages every Java lexer action / predicate into Wado before emit, so the lexer emitters stay language-agnostic (the same staging the superClass call rewrite uses).
 - Lexer actions (winner-replay: set-type / channel / skip / more / mode ops, single- and multi-alt), the lexer print sink, and action placement (mid-element and nested-group, via a match replay that drops each action at its cursor) — done; actions under a `Repeat` and the ATN-class lexer path remain.
-- SuperClass effect interface — done for lexer bases, predicate and action ops alike (RustLexer, TypeScriptLexer and ANTLRv4Lexer all run through hand-written handlers), including the lexer command surface: an action op also receives the `Lexer`, so a base sets the type / channel, skips, `more`s, and pushes or pops a mode (ANTLRv4's `LexerAdaptor` drives the whole `Argument` mode this way). Parser-rule superClass predicates and lifecycle-override hooks remain.
+- SuperClass effect interface — done for lexer bases: predicate and action ops, the lexer command surface (an action op also receives the `Lexer`), and the `emit` lifecycle hook. `RustLexer`, `TypeScriptLexer` and `ANTLRv4Lexer` run through faithful hand-written handlers; ANTLRv4 grammars parse, since `TOKEN_REF` / `RULE_REF` come from the hook. Parser-rule superClass predicates remain.
 
 ## Open questions
 
 - Where Wado actions live: in-grammar (`language = Wado`) and the SuperClass effect handler are primary. A sidecar id→snippet mapping is fragile — keep as an escape hatch only?
 - SuperClass operations with arguments: the signature source (sidecar vs a user-pre-declared interface).
-- SuperClass lifecycle-override hook set: which recognizer methods a base may override become fixed effect operations — enumerated on real-grammar demand.
 - Whether a Kiln generator option may override the action language.
 - Value semantics after recovery beyond default-init: is the default always right for user types?
 - Predicate eval-count divergence policy: how much trace mismatch is acceptable before a descriptor is skipped rather than marked todo.

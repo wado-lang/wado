@@ -1,9 +1,7 @@
 /// Driver test for the ANTLR4 grammar parser.
 ///
-/// The ANTLR4 grammar uses semantic predicates to distinguish TOKEN_REF
-/// from RULE_REF, so full parsing of real ANTLR4 input is not supported.
-/// These tests verify tokenization, basic parsing, and that the generated
-/// parser compiles.
+/// `TOKEN_REF` and `RULE_REF` are virtual tokens: the base's `emit` hook
+/// retypes each `ID` by the case of its first character.
 use antlr4 from "./grammars/ANTLRv4Lexer.g4"
     with {
         generator: {
@@ -13,22 +11,54 @@ use antlr4 from "./grammars/ANTLRv4Lexer.g4"
         },
     };
 use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.g4";
-use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, MODE_Argument } from "./grammars/ANTLRv4Lexer.g4";
+use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, TK_ID, TK_SEMI } from "./grammars/ANTLRv4Lexer.g4";
+use { TK_TOKEN_REF, TK_RULE_REF, MODE_Argument, MODE_LexerCharSet } from "./grammars/ANTLRv4Lexer.g4";
 use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
 
-// A hand-written port of ANTLR's LexerAdaptor: these two ops drive `Argument`.
+// A hand-written port of ANTLR's LexerAdaptor.
 struct Antlr4Base {
     begins: i32,
     ends: i32,
+    /// The kind the enclosing rule's name was retyped to, or `-1` between
+    /// rules — ANTLR's `currentRuleType`, reset by each `;`.
+    current_rule_type: i32 = -1,
+}
+
+/// Upstream asks `Character.isUpperCase`, which is Unicode-wide;
+/// `NameStartChar` admits `\u00C0` upwards, so a rule named `ÀBC` diverges.
+/// Wado's prelude has no `char::is_uppercase` (see TODO.md).
+fn is_token_ref_name(view: &LexerView) -> bool {
+    return match char::from_u32(view.char_at(view.start()) as u32) {
+        Some(c) => c.is_ascii_uppercase(),
+        None => false,
+    };
 }
 
 impl LexerAdaptor for Antlr4Base {
-    // ANTLR branches here on `inLexerRule()`, which needs the `emit` /
-    // `nextToken` hooks (an open Stage C item, see TODO.md). Without them this
-    // always pushes `Argument`, never `LexerCharSet`.
+    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
+        if ty == TK_SEMI {
+            self.current_rule_type = -1;
+            resume ty;
+        }
+        if ty != TK_ID {
+            resume ty;
+        }
+        let retyped = if is_token_ref_name(&view) { TK_TOKEN_REF } else { TK_RULE_REF };
+        if self.current_rule_type < 0 {
+            self.current_rule_type = retyped;
+        }
+        resume retyped;
+    }
+
     fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.begins += 1;
-        lx.push_mode(MODE_Argument);
+        // Inside a lexer rule a `[` opens a char set, not an argument list.
+        if self.current_rule_type == TK_TOKEN_REF {
+            lx.push_mode(MODE_LexerCharSet);
+            lx.more();
+        } else {
+            lx.push_mode(MODE_Argument);
+        }
         resume ();
     }
 
@@ -140,11 +170,47 @@ test "tokenize lexer commands" {
 
 
 test "parse minimal grammar" {
-    // ANTLR4 lexer produces ID tokens, but the parser expects RULE_REF/TOKEN_REF
-    // (distinguished by semantic predicates based on case). Without predicates,
-    // any input with identifiers fails to parse. Verify the error is sensible.
     let r = a4_parse(&"grammar Foo;");
-    assert !r.ok(), "expected a diagnostic";
+    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
+}
+
+test "parse a grammar with a parser rule and a lexer rule" {
+    // The retype is what lets the parser tell a rule definition from a token
+    // definition.
+    let r = a4_parse(&"grammar Foo;\nexpr : expr '+' expr | INT ;\nINT : [0-9]+ ;\n");
+    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
+}
+
+test "the emit hook retypes ID by the case of its first character" {
+    let tokens = a4_tokenize(&"expr : INT ;");
+    let mut names: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        names.push(antlr4::token_kind_name(tokens.kinds[i]));
+    }
+    assert names.contains(&"RULE_REF"), `expected a RULE_REF, got ${names:?}`;
+    assert names.contains(&"TOKEN_REF"), `expected a TOKEN_REF, got ${names:?}`;
+    assert !names.contains(&"ID"), `no ID may survive the hook, got ${names:?}`;
+}
+
+#[TODO]
+test "a non-ASCII uppercase rule name is a TOKEN_REF" {
+    let tokens = a4_tokenize(&"ÀBC : [0-9]+ ;");
+    let name = antlr4::token_kind_name(tokens.kinds[0]);
+    assert name == "TOKEN_REF", `expected TOKEN_REF, got ${name}`;
+}
+
+test "a lexer rule's bracket opens a char set, not an argument list" {
+    // `inLexerRule()` is true inside `INT`, so `[` enters LexerCharSet and
+    // `more()`s — the set is part of the token, not ARGUMENT_CONTENT.
+    let mut base = new_antlr4_base();
+    with LexerAdaptor => &mut base do {
+        let tokens = antlr4::tokenize(&"INT : [0-9]+ ;");
+        for let mut i = 0; i < tokens.len(); i += 1 {
+            assert tokens.kinds[i] != TK_ARGUMENT_CONTENT, "a char set must not lex as argument content";
+        }
+    };
+    assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
+    assert base.ends == 0, "a char set is closed by the mode, not by handleEndArgument";
 }
 
 //

@@ -230,6 +230,21 @@ pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
     return out;
 }
 
+/// The recognizer methods a base may override, as fixed operations on every
+/// generated interface.
+global SUPER_HOOKS: List<String> = ["emit"];
+
+/// A base is wired only when this is empty.
+pub fn super_ops_reserved(ops: &List<SuperOp>) -> List<String> {
+    let mut out: List<String> = [];
+    for let op of ops {
+        if SUPER_HOOKS.contains(&to_snake_case(&op.name)) {
+            out.push(op.name);
+        }
+    }
+    return out;
+}
+
 /// A base is wired only when this is empty.
 pub fn super_ops_mixed_role(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
@@ -334,7 +349,9 @@ pub fn superclass_is_refused(grammar: &Grammar) -> bool {
     return match superclass_base_name(grammar) {
         Some(_) => {
             let ops = collect_lexer_super_ops(grammar);
-            !super_ops_with_args(&ops).is_empty() || !super_ops_mixed_role(&ops).is_empty();
+            !super_ops_with_args(&ops).is_empty()
+                || !super_ops_mixed_role(&ops).is_empty()
+                || !super_ops_reserved(&ops).is_empty();
         },
         None => false,
     };
@@ -454,9 +471,9 @@ fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
     }
 }
 
-/// Emit `interface Foo { ... }`, one operation per op. A predicate takes the
-/// read-only `LexerView` and returns `bool`; an action also takes the `Lexer`,
-/// for the command surface. Names are snake_cased to match the call rewrite.
+/// Emit `interface Foo { ... }`, one operation per op, then the lifecycle hooks.
+/// A predicate takes the read-only `LexerView` and returns `bool`; an action
+/// also takes the `Lexer`, for the command surface.
 pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
@@ -466,8 +483,27 @@ pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp
             w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer);`);
         }
     }
+    gen_super_hooks(w);
     w.line(&"}");
     w.blank();
+}
+
+/// A default body means a base opts in by implementing one, the way an
+/// `@Override` does, and every other base is unaffected.
+fn gen_super_hooks(w: &mut CodeWriter) {
+    w.line(&"    /// Called with the span, type and channel of each token the lexer");
+    w.line(&"    /// commits — not a skipped or `more`d match, and not the EOF");
+    w.line(&"    /// sentinel. Returns the type to emit.");
+    w.line(&"    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {");
+    w.line(&"        return ty;");
+    w.line(&"    }");
+}
+
+/// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
+/// `channel` names the token's channel, or the default for a grammar whose
+/// channel machinery is off.
+pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
+    return `${*base_name}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${*channel})`;
 }
 
 /// The ambient operation call, reading the match-fn locals in scope at every

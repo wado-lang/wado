@@ -2300,6 +2300,12 @@ pub interface TypeScriptLexerBase {
     fn increase_template_depth(view: LexerView, lx: &mut Lexer);
     fn decrease_template_depth(view: LexerView, lx: &mut Lexer);
     fn start_template_string(view: LexerView, lx: &mut Lexer);
+    /// Called with the span, type and channel of each token the lexer
+    /// commits — not a skipped or `more`d match, and not the EOF
+    /// sentinel. Returns the type to emit.
+    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
+        return ty;
+    }
 }
 
 pub struct Lexer {
@@ -6075,6 +6081,9 @@ pub fn tokenize(input: &String) -> TokenStream with TypeScriptLexerBase {
             }
             let tok_start = if more_start >= 0 { more_start } else { start };
             let is_skip = false || best_act_skip;
+            if !is_skip && !best_more {
+                best_kind = TypeScriptLexerBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
+            }
             if best_more {
                 if more_start < 0 { more_start = start; }
             } else if is_skip {

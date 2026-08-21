@@ -321,6 +321,54 @@ C : ']' ;
     assert src.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
 }
 
+test "the emit hook fires once per emitted token, never for a skipped one" {
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("if !is_skip"), "a skipped token never reaches the base";
+    assert src.contains(
+        "best_kind = B::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);",
+    ), "the hook takes the token span and may retype it";
+}
+
+test "a predicate-only base gets the emit hook without the channel machinery" {
+    // No action and no `-> channel` rule means no `best_channel` local.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; }
+A : { this.ok() }? 'a' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("best_channel"), "the channel machinery stays off";
+    assert src.contains(
+        "best_kind = B::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, 0);",
+    ), "the hook takes the default channel";
+}
+
+test "a base whose only override is the emit hook is still wired" {
+    // No `this.<m>()` call anywhere, so the grammar contributes zero ops.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("pub interface B {"), "a hook-only base still gets an interface";
+    assert src.contains("fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {"), "the hook is declared";
+    assert src.contains("::emit(LexerView"), "the tokenize loop calls it";
+    assert src.contains("pub fn tokenize(input: &String) -> TokenStream with B"), "tokenize carries the effect";
+}
+
+test "a grammar with no base has no emit hook" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("::emit(LexerView"), "no base, no lifecycle call";
+}
+
 test "a modeless grammar keeps the mode-state surface off" {
     let src = gen_source(&"lexer grammar L;
 options { superClass = B; language = Wado; }

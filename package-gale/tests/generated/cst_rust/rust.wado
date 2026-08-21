@@ -2385,6 +2385,12 @@ pub interface RustLexerBase {
     fn sof(view: LexerView) -> bool;
     fn float_literal_possible(view: LexerView) -> bool;
     fn float_dot_possible(view: LexerView) -> bool;
+    /// Called with the span, type and channel of each token the lexer
+    /// commits, as ANTLR calls `emit()` — so not for a skipped or `more`d
+    /// match, nor for EOF. Returns the type to emit.
+    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
+        return ty;
+    }
 }
 
 struct Lexer {
@@ -6386,6 +6392,7 @@ pub fn tokenize(input: &String) -> TokenStream with RustLexerBase {
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
+            best_kind = RustLexerBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
             if best_channel != 0 {
                 ts.push_trivia(best_kind, tok_start, best_end, best_channel);
             } else {

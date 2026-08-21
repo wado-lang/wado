@@ -40,6 +40,7 @@ use {
     superclass_base_name,
     superclass_is_refused,
     lexer_action_bodies_are_base_calls,
+    super_emit_hook_expr,
 } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
@@ -4325,6 +4326,8 @@ fn gen_tokenize_fn(
         w.write(&` }${act_skip};\n`);
     }
 
+    gen_lexer_emit_hook(w, sc_name, has_skip, has_more_rules, has_channel_rules);
+
     if has_more_rules {
         // A `more` match suppresses emission and remembers the starting
         // position so the next non-`more` match covers the full span.
@@ -4407,6 +4410,40 @@ fn gen_tokenize_fn(
     w.line(&"return ts;");
     w.end();  // fn
     w.blank();
+}
+
+/// Call the base's `emit` hook for a token that will be pushed. Placed after
+/// the skip / more decision, so a suppressed match never reaches the base and a
+/// non-default channel still does. The hook may retype the token.
+fn gen_lexer_emit_hook(
+    w: &mut CodeWriter,
+    sc_name: &String,
+    has_skip: bool,
+    has_more_rules: bool,
+    has_channel_rules: bool,
+) {
+    if sc_name.is_empty() {
+        return;
+    }
+    let mut guard = String::new();
+    if has_skip {
+        guard.push_str(&"!is_skip");
+    }
+    if has_more_rules {
+        if !guard.is_empty() {
+            guard.push_str(&" && ");
+        }
+        guard.push_str(&"!best_more");
+    }
+    let channel = if has_channel_rules { "best_channel" } else { "0" };
+    let call = `best_kind = ${super_emit_hook_expr(sc_name, &channel)};`;
+    if guard.is_empty() {
+        w.line(&call);
+        return;
+    }
+    w.begin(&`if ${guard}`);
+    w.line(&call);
+    w.end();
 }
 
 /// Emit a default-channel token commit: push it with the pending leading-trivia

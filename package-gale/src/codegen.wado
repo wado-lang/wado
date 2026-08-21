@@ -43,6 +43,7 @@ use {
     collect_lexer_super_ops,
     super_ops_with_args,
     super_ops_mixed_role,
+    super_ops_reserved,
     rewrite_superclass_calls,
     gen_super_interface,
     SuperOp,
@@ -169,6 +170,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         let ops = collect_lexer_super_ops(grammar);
         let with_args = super_ops_with_args(&ops);
         let mixed = super_ops_mixed_role(&ops);
+        let reserved = super_ops_reserved(&ops);
         if !with_args.is_empty() {
             // Wiring the base would run the operation with its argument lost,
             // so refuse it and name what forced that.
@@ -183,7 +185,14 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
                 DiagnosticKind::UnsupportedAction,
                 `superClass '${sc}' calls (${mixed.join(", ")}) from both a predicate and an action; an operation is one or the other, so the base is not wired`,
             );
-        } else if !ops.is_empty() {
+        } else if !reserved.is_empty() {
+            ctx.warn(
+                &DiagnosticOwner::host(&"superClass"),
+                DiagnosticKind::UnsupportedAction,
+                `superClass '${sc}' calls (${reserved.join(", ")}), which name a lifecycle hook the interface already declares, so the base is not wired`,
+            );
+        } else {
+            // Wired even with no ops: a base may override only a hook.
             ctx.set_superclass(&sc, ops);
             // Must follow op collection, which scans the original `this.` sites.
             rewrite_superclass_calls(grammar, &sc);
