@@ -7,13 +7,12 @@ description: Transpile Wado Wasm components to JS with jco and run/benchmark the
 
 jco (bytecodealliance) transpiles a Wasm **component** into JS + core Wasm so it
 runs on a plain Wasm engine (V8/Node, browsers) instead of a Component Model
-runtime. Wado targets WASI P3, and jco's P3 support is still incomplete, so this
-doc covers what works today, the workarounds, and what is still blocked.
+runtime. Wado targets WASI P3; this doc covers what the released jco does for
+Wado today and what is still blocked.
 
 ## TL;DR
 
 - Use the **released npm jco as a library** (`scripts/jco`, `mise run jco-*`).
-  No Rust fork build, no post-process.
 - Compile Wado with **`-f no-wide-arithmetic`** — V8 has no wide-arithmetic
   proposal, and float formatting / `i128` emit it.
 - Run on **Node 26+** — stable JSPI, no flag.
@@ -77,13 +76,7 @@ V8 ships the proposal). The WIR still shows the wide ops; only the final Wasm
 changes. **Compile every Node-bound Wado program with this flag** — a bare
 `println` of a float needs it.
 
-## WASI shims (`example/jco-shim`)
-
-Hand-written Node `cli` / `clocks` / `random` shims, mapped in with
-`--no-wasi-shim`. Only the fork path (`mise run jco-transpile`) wires them; the
-released path uses jco's own shim.
-
-### `@bytecodealliance/preview3-shim`
+## WASI shims
 
 BA ships a `preview3-shim` implementing P3 `cli` / `clocks` / `filesystem` /
 `http`, with a browser build beside the Node one. A plain `jco transpile` wires
@@ -133,71 +126,6 @@ against `preview3-shim`. What it reads is unconfirmed: the shim needs its
 preopens set (`_setPreopens` in `filesystem/descriptor.js`), and the
 benchmarks that load data from a preopen are still unported.
 
-## The fork path (`vendor/jco`)
-
-Only needed for cases the released pipeline can't cover (and to develop the jco
-patches). `vendor/jco` is pinned at a clean upstream commit; the Wado patches
-live in `vendor/jco.patch` and are applied to the working tree before building.
-
-### Setup
-
-```sh
-git submodule update --init vendor/jco
-cd vendor/jco
-git apply ../../vendor/jco.patch
-NPM_TOKEN="" PUPPETEER_SKIP_DOWNLOAD=1 pnpm --filter "@bytecodealliance/jco" install
-```
-
-### Build cycle
-
-```sh
-cd vendor/jco
-cargo build -p xtask --target x86_64-unknown-linux-gnu
-rm -f packages/jco/obj/js-component-bindgen-component.*
-./target/x86_64-unknown-linux-gnu/debug/xtask build debug   # re-transpile jco itself
-```
-
-Or `mise run build-jco`, then `mise run jco-transpile <file.wasm>`.
-
-### Current patches (`vendor/jco.patch`)
-
-1. **Stream write hook** (`async_stream.rs`): `globalThis._jcoStreamWriteHook`
-   delivers stream data directly from linear memory, bypassing the rendezvous.
-2. **Missing intrinsic dependencies** (`mod.rs`): `StreamNewFromLift` →
-   `SymbolResourceRep`; `FutureDropReadable/Writable` → `GlobalFutureMap`,
-   `FutureEndClass`, `FutureReadableEndClass`, `FutureWritableEndClass`,
-   `GetOrCreateAsyncState` (otherwise the stdout write path references undefined
-   future-end classes, e.g. `FutureReadableEnd is not defined`).
-3. **Async export void return** (`function_bindgen.rs`): when a JSPI-wrapped
-   async export returns `undefined` (result delivered via `task.return`), fall
-   back to `task.completionPromise()` instead of lifting `undefined`.
-
-Released jco needs none of #1 and #2; #3 is fork-only.
-
-### Saving patches
-
-The submodule stays at the pinned upstream commit; patches are never committed
-into it, only to `vendor/jco.patch`:
-
-```sh
-cd vendor/jco
-git diff HEAD -- crates/js-component-bindgen/src/ > /home/user/wado/vendor/jco.patch
-cd /home/user/wado && git add vendor/jco.patch   # + `git add vendor/jco` only when bumping the pin
-```
-
-### Key source locations in jco
-
-| File                                                            | Purpose                                                     |
-| --------------------------------------------------------------- | ----------------------------------------------------------- |
-| `crates/js-component-bindgen/src/lib.rs`                        | Top-level `WasmFeatures` validator config                   |
-| `crates/js-component-bindgen/src/core.rs`                       | Core module validation features (multi-memory augmentation) |
-| `crates/js-component-bindgen/src/transpile_bindgen.rs`          | Trampoline generation (JSPI wrapping)                       |
-| `crates/js-component-bindgen/src/function_bindgen.rs`           | Function call/result codegen                                |
-| `crates/js-component-bindgen/src/intrinsics/mod.rs`             | Intrinsic dependency resolution                             |
-| `crates/js-component-bindgen/src/intrinsics/p3/async_stream.rs` | Stream classes and operations                               |
-| `crates/js-component-bindgen/src/intrinsics/p3/async_future.rs` | Future classes and drop operations                          |
-| `crates/js-component-bindgen/src/intrinsics/p3/async_task.rs`   | AsyncTask class (read rendezvous lives near here)           |
-
 ## Debugging jco runtime errors
 
 Transpiled output is one large JS file. Useful canonical-builtin → JS mappings:
@@ -226,13 +154,11 @@ Transpiled output is one large JS file. Useful canonical-builtin → JS mappings
 
 ### Common error patterns
 
-| Error                                                | Likely cause                                                                                                                        |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `invalid numeric opcode: 0xfc16`                     | Wide-arithmetic — recompile with `-f no-wide-arithmetic`                                                                            |
-| `WebAssembly.Suspending is not a constructor`        | Node < 24, or Node 22 picked up outside the repo (use Node 26)                                                                      |
-| `FutureReadableEnd is not defined`                   | Future-end classes not injected (run via `transpile-released.mjs`)                                                                  |
-| stdout empty                                         | Missing the stream-write hook or `cli.js` map                                                                                       |
-| `rec group usage requires 'gc' proposal`             | Fork `WasmFeatures` missing `GC` / `WASM3`                                                                                          |
-| `wide arithmetic support is not enabled` (transpile) | Fork `core.rs` validates with `WasmFeatures::default()` — but prefer `-f no-wide-arithmetic` over forcing it, since V8 can't run it |
-| `invalid variant discriminant for expected`          | Async export returns `undefined` (fork patch #3)                                                                                    |
-| Hang / timeout                                       | JSPI Suspending missing on a trampoline, or a stream rendezvous deadlock (the filesystem read gap)                                  |
+| Error                                                | Likely cause                                                                                       |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `invalid numeric opcode: 0xfc16`                     | Wide-arithmetic — recompile with `-f no-wide-arithmetic`                                           |
+| `WebAssembly.Suspending is not a constructor`        | Node < 24, or Node 22 picked up outside the repo (use Node 26)                                     |
+| `FutureReadableEnd is not defined`                   | Future-end classes not injected (run via `transpile-released.mjs`)                                 |
+| stdout empty                                         | Missing the stream-write hook or `cli.js` map                                                      |
+| `wide arithmetic support is not enabled` (transpile) | Compile with `-f no-wide-arithmetic`; V8 cannot run the opcodes either                             |
+| Hang / timeout                                       | JSPI Suspending missing on a trampoline, or a stream rendezvous deadlock (the filesystem read gap) |

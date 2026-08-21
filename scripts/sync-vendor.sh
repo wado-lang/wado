@@ -53,7 +53,7 @@ fi
 
 # --- Other vendors: update to latest ---
 
-for submodule in vendor/wasm vendor/wasi vendor/wasm-tools vendor/component-model vendor/jco vendor/antlr4; do
+for submodule in vendor/wasm vendor/wasi vendor/wasm-tools vendor/component-model vendor/antlr4; do
     echo ""
     echo "==> Updating ${submodule} to latest"
     git submodule update --init --remote "${submodule}"
