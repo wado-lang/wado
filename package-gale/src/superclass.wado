@@ -36,6 +36,9 @@ pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
     pub has_args: bool,
+    /// The same name reached from both a predicate and an action body: the two
+    /// call forms differ, so one site would mismatch the operation's signature.
+    pub mixed_role: bool = false,
 }
 
 /// One `this.<method>(...)` call site found in a body.
@@ -205,17 +208,15 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 /// `has_args`: one call site passing arguments makes the operation
 /// unrepresentable.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
+    let is_predicate = kind matches { Predicate };
     for let mut i = 0; i < ops.len(); i += 1 {
         if ops[i].name == call.name {
             ops[i].has_args = ops[i].has_args || call.has_args;
+            ops[i].mixed_role = ops[i].mixed_role || ops[i].is_predicate != is_predicate;
             return;
         }
     }
-    ops.push(SuperOp {
-        name: call.name,
-        is_predicate: kind matches { Predicate },
-        has_args: call.has_args,
-    });
+    ops.push(SuperOp { name: call.name, is_predicate, has_args: call.has_args });
 }
 
 /// Operations called with arguments anywhere in the grammar. A base is wired
@@ -224,6 +225,18 @@ pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
     for let op of ops {
         if op.has_args {
+            out.push(op.name);
+        }
+    }
+    return out;
+}
+
+/// Operations reached from both a predicate and an action body. A base is wired
+/// only when this is empty.
+pub fn super_ops_mixed_role(ops: &List<SuperOp>) -> List<String> {
+    let mut out: List<String> = [];
+    for let op of ops {
+        if op.mixed_role {
             out.push(op.name);
         }
     }
@@ -321,7 +334,10 @@ fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool 
 /// unexecuted, each reported.
 pub fn superclass_is_refused(grammar: &Grammar) -> bool {
     return match superclass_base_name(grammar) {
-        Some(_) => !super_ops_with_args(&collect_lexer_super_ops(grammar)).is_empty(),
+        Some(_) => {
+            let ops = collect_lexer_super_ops(grammar);
+            !super_ops_with_args(&ops).is_empty() || !super_ops_mixed_role(&ops).is_empty();
+        },
         None => false,
     };
 }

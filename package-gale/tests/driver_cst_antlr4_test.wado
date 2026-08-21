@@ -46,6 +46,33 @@ impl LexerAdaptor for Antlr4Base {
     }
 }
 
+// The commit applies a single latched push / pop / set per token, so a second
+// mode command from one action cannot be represented.
+struct DoublePushBase {
+    hits: i32,
+}
+
+impl LexerAdaptor for DoublePushBase {
+    fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
+        self.hits += 1;
+        lx.push_mode(MODE_Argument);
+        lx.push_mode(MODE_Argument);
+        resume ();
+    }
+
+    fn handle_end_argument(&mut self, view: LexerView, lx: &mut Lexer) {
+        resume ();
+    }
+}
+
+#[expect_trap]
+test "a second mode command in one action is a hard error" {
+    let mut base = DoublePushBase { hits: 0 };
+    with LexerAdaptor => &mut base do {
+        antlr4::tokenize(&"r[int x] : 'a' ;");
+    };
+}
+
 fn new_antlr4_base() -> Antlr4Base {
     return Antlr4Base { begins: 0, ends: 0 };
 }

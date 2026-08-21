@@ -2313,7 +2313,6 @@ pub struct Lexer {
     act_push_mode: i32 = -1,
     act_pop_mode: bool = false,
     act_set_mode: i32 = -1,
-    act_mode: i32 = 0,
     act_mode_depth: i32 = 0,
 }
 
@@ -2334,7 +2333,7 @@ impl Lexer {
         self.act_output.push_str(&s);
     }
 
-    fn reset_actions(&mut self, mode: i32, depth: i32) {
+    fn reset_actions(&mut self, depth: i32) {
         self.act_type = -1;
         self.act_channel = -1;
         self.act_skip = false;
@@ -2342,7 +2341,6 @@ impl Lexer {
         self.act_push_mode = -1;
         self.act_pop_mode = false;
         self.act_set_mode = -1;
-        self.act_mode = mode;
         self.act_mode_depth = depth;
     }
 
@@ -2363,23 +2361,20 @@ impl Lexer {
     }
 
     pub fn push_mode(&mut self, m: i32) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_push_mode = m;
-        self.act_mode = m;
         self.act_mode_depth += 1;
     }
 
     pub fn pop_mode(&mut self) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_pop_mode = true;
         self.act_mode_depth -= 1;
     }
 
     pub fn set_mode(&mut self, m: i32) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_set_mode = m;
-        self.act_mode = m;
-    }
-
-    pub fn mode(&self) -> i32 {
-        return self.act_mode;
     }
 
     pub fn mode_depth(&self) -> i32 {
@@ -6056,7 +6051,7 @@ pub fn tokenize(input: &String) -> TokenStream with TypeScriptLexerBase {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                lexer.reset_actions(current_mode, mode_stack.len());
+                lexer.reset_actions(mode_stack.len());
                 if best_act == 0 {
                     apply_OpenBrace_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {

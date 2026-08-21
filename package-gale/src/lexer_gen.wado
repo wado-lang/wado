@@ -379,8 +379,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
             s.add_field_default(&"act_push_mode", &"i32", &"-1");
             s.add_field_default(&"act_pop_mode", &"bool", &"false");
             s.add_field_default(&"act_set_mode", &"i32", &"-1");
-            // ANTLR's `_mode` / `_modeStack.size()`, which a base branches on.
-            s.add_field_default(&"act_mode", &"i32", &"0");
+            // ANTLR's `_modeStack.size()`, which a base branches on.
             s.add_field_default(&"act_mode_depth", &"i32", &"0");
         }
     }
@@ -444,7 +443,6 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     let mut fr = FnSpec::new(&"reset_actions");
     fr.set_receiver(&"&mut self");
     if uses_modes {
-        fr.add_param(&"mode", &"i32");
         fr.add_param(&"depth", &"i32");
     }
     fr.emit_begin(w);
@@ -456,7 +454,6 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
         w.line(&"self.act_push_mode = -1;");
         w.line(&"self.act_pop_mode = false;");
         w.line(&"self.act_set_mode = -1;");
-        w.line(&"self.act_mode = mode;");
         w.line(&"self.act_mode_depth = depth;");
     }
     w.end();
@@ -476,15 +473,16 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: boo
     }
 }
 
-/// The mode commands. ANTLR applies one immediately and Gale latches it until
-/// the token commits, so each also updates the state a base reads back.
+/// The mode commands. Each is a single latch the commit applies once per token,
+/// in a fixed push-pop-set order — hence the guard. No current-mode read is
+/// offered: `pop_mode` cannot restore a stack the `Lexer` has no copy of.
 fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     let mut fp = FnSpec::new(&"push_mode", vis);
     fp.set_receiver(&"&mut self");
     fp.add_param(&"m", &"i32");
     fp.emit_begin(w);
+    gen_one_mode_command_assert(w);
     w.line(&"self.act_push_mode = m;");
-    w.line(&"self.act_mode = m;");
     w.line(&"self.act_mode_depth += 1;");
     w.end();
     w.blank();
@@ -492,6 +490,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     let mut fo = FnSpec::new(&"pop_mode", vis);
     fo.set_receiver(&"&mut self");
     fo.emit_begin(w);
+    gen_one_mode_command_assert(w);
     w.line(&"self.act_pop_mode = true;");
     w.line(&"self.act_mode_depth -= 1;");
     w.end();
@@ -501,14 +500,18 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
     fs.set_receiver(&"&mut self");
     fs.add_param(&"m", &"i32");
     fs.emit_begin(w);
+    gen_one_mode_command_assert(w);
     w.line(&"self.act_set_mode = m;");
-    w.line(&"self.act_mode = m;");
     w.end();
     w.blank();
 
-    lexer_reader(w, &"mode", &"act_mode", vis);
-    w.blank();
     lexer_reader(w, &"mode_depth", &"act_mode_depth", vis);
+}
+
+fn gen_one_mode_command_assert(w: &mut CodeWriter) {
+    w.line(
+        &"assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, \"a lexer action may issue at most one mode command per token\";",
+    );
 }
 
 fn lexer_reader(w: &mut CodeWriter, name: &String, field: &String, vis: Vis) {
@@ -1314,7 +1317,7 @@ fn apply_fn_name(rule_name: &String) -> String {
 fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, use_modes: bool, has_set_mode_rules: bool) {
     w.begin(&"if best_act >= 0");
     if use_modes {
-        w.line(&"lexer.reset_actions(current_mode, mode_stack.len());");
+        w.line(&"lexer.reset_actions(mode_stack.len());");
     } else {
         w.line(&"lexer.reset_actions();");
     }

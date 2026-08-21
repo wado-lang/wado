@@ -281,11 +281,49 @@ WS : ' ' -> skip ;
 mode Arg;
 C : ']' ;
 ");
-    assert src.contains("fn mode(&self) -> i32 {"), "the base can read the current mode";
     assert src.contains("fn mode_depth(&self) -> i32 {"), "the base can read the mode-stack depth";
-    assert src.contains("lexer.reset_actions(current_mode, mode_stack.len());"), "the mode state is seeded per token";
+    assert src.contains("lexer.reset_actions(mode_stack.len());"), "the depth is seeded per token";
     assert src.contains("self.act_mode_depth += 1;"), "push_mode keeps the depth the base reads consistent";
     assert src.contains("self.act_mode_depth -= 1;"), "pop_mode keeps the depth the base reads consistent";
+}
+
+test "a base method used as both a predicate and an action is refused" {
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : { this.m() }? 'a' { this.m() } ;
+WS : ' ' -> skip ;
+";
+    // Two reports: the refused base, and the action that can no longer run.
+    assert unsupported_count(src) == 2, "a mixed-role base method must be reported";
+    let out = gen_source(src);
+    assert !out.contains("pub interface B {"), "a refused base is not wired";
+}
+
+test "an action may issue at most one mode command per token" {
+    // The commit applies one latched push / pop / set per token, so a second
+    // command would be silently dropped or reordered.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : '[' { this.hit() } ;
+WS : ' ' -> skip ;
+mode Arg;
+C : ']' ;
+");
+    assert src.contains("assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0,"), "each mode command guards against a second one";
+}
+
+test "the lexer exposes no current-mode read" {
+    // `pop_mode` cannot restore the previous mode — the Lexer holds no copy of
+    // the mode stack — so no `mode()` is offered rather than a stale one.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : '[' { this.hit() } ;
+WS : ' ' -> skip ;
+mode Arg;
+C : ']' ;
+");
+    assert !src.contains("fn mode(&self)"), "no stale current-mode read";
+    assert src.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
 }
 
 test "a modeless grammar keeps the mode-state surface off" {

@@ -6,6 +6,7 @@ use {
     gen_super_interface,
     super_call_expr,
     super_ops_with_args,
+    super_ops_mixed_role,
     rewrite_this_calls,
     SuperCall,
     SuperOp,
@@ -103,6 +104,14 @@ test "an argument at any call site marks the op, whichever came first" {
     add_super_op(&mut ops, &SuperCall { name: "m", has_args: true }, &ActionKind::Action);
     assert ops.len() == 1;
     assert super_ops_with_args(&ops) == ["m"];
+}
+
+test "add_super_op flags a name reached from both a predicate and an action" {
+    let mut ops: List<SuperOp> = [];
+    add_super_op(&mut ops, &SuperCall { name: "m", has_args: false }, &ActionKind::Predicate);
+    add_super_op(&mut ops, &SuperCall { name: "m", has_args: false }, &ActionKind::Action);
+    add_super_op(&mut ops, &SuperCall { name: "n", has_args: false }, &ActionKind::Action);
+    assert super_ops_mixed_role(&ops) == ["m"];
 }
 
 test "super_ops_with_args is empty for the zero-argument ops a base can take" {
