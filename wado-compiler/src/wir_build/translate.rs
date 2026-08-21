@@ -912,10 +912,14 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
+            // Parameters are already locals in the emitted function; declaring
+            // one again would shadow the incoming argument.
+            let param_count = tir_func.params.len();
             let assignable_local_types: IndexMap<String, WirType> = tir_func
                 .locals
                 .iter()
                 .enumerate()
+                .skip(param_count)
                 .filter_map(|(i, local)| {
                     let idx = u32::try_from(i).ok()?;
                     let name = resolved_local_names.get(&idx)?.clone();
