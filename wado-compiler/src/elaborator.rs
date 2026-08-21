@@ -128,6 +128,11 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
     /// [`infer_hole`].
     pub(super) infer_holes: infer_hole::InferHoleTable,
+    /// The `(base, assoc)` pairs whose binding is being resolved right now.
+    /// `type A: Iterator<Item = Self::B>` beside `type B: Iterator<Item =
+    /// Self::A>` has no fixpoint, so a pair already on the walk contributes no
+    /// binding and stays abstract.
+    pub(super) assoc_binding_stack: crate::hashmap::IndexSet<(crate::tir::TypeId, String)>,
     /// Bound failures already reported, keyed by what the message states. A
     /// defaulted method type parameter reaches enforcement twice — at its call
     /// site and as a hole at finalize — and one failure is one diagnostic. The

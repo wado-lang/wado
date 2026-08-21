@@ -958,15 +958,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         projections
             .into_iter()
-            .map(|(name, assoc)| {
+            .filter_map(|(name, assoc)| {
                 // A frame that binds `Self::X` answers with the binding; one
                 // that does not answers with the projection, which is what the
                 // name means there. Dropping it left `C::Iter::Item` unable to
                 // reach the `C::Item` a bare `C: IntoIterator` still names.
-                let answer = self
-                    .frame_projection(base, base_name, &assoc)
-                    .unwrap_or_else(|| self.make_frame_projection(base, base_name, &assoc));
-                (name, answer)
+                //
+                // Building that projection reads `assoc`'s own bounds, which
+                // may name this pair again: two associated types bounded
+                // through each other have no fixpoint, and the one already on
+                // the walk stays abstract.
+                let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
+                    let key = (base, assoc.clone());
+                    if !self.assoc_binding_stack.insert(key.clone()) {
+                        return None;
+                    }
+                    let built = self.make_frame_projection(base, base_name, &assoc);
+                    self.assoc_binding_stack.shift_remove(&key);
+                    Some(built)
+                })?;
+                Some((name, answer))
             })
             .collect()
     }
