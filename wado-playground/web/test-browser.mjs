@@ -44,7 +44,7 @@ const CASES = [
   },
   {
     name: "compute+float",
-    src: `use { println, Stdout } from "core:cli";\n\nexport fn run() with Stdout {\n    let mut s = 0;\n    let mut i = 1;\n    while i <= 100 { s = s + i; i = i + 1; }\n    println(\`sum={s} pi={355.0 / 113.0}\`);\n}\n`,
+    src: `use { println, Stdout } from "core:cli";\n\nexport fn run() with Stdout {\n    let mut s = 0;\n    let mut i = 1;\n    while i <= 100 { s = s + i; i = i + 1; }\n    println(\`sum=\${s} pi=\${355.0 / 113.0}\`);\n}\n`,
     expect: "sum=5050 pi=3.14",
   },
   {
@@ -52,7 +52,7 @@ const CASES = [
     // stdout and stderr must not cross channels, and a multi-byte glyph must
     // decode intact.
     name: "stdout+stderr+utf8",
-    src: `use { println, eprintln, Stdout, Stderr } from "core:cli";\n\nexport fn run() with Stdout, Stderr {\n    println("out: café ☕");\n    eprintln("err: naïve");\n}\n`,
+    src: `use { println, eprintln, Stdout, Stderr } from "core:cli";\n\nexport fn run() with (Stdout, Stderr) {\n    println("out: café ☕");\n    eprintln("err: naïve");\n}\n`,
     expect: "out: café ☕",
     expectStderr: "err: naïve",
   },

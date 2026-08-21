@@ -1,45 +1,36 @@
-// Browser WASI P3 CLI shim: bytes from `_jcoStreamWriteHook` are decoded and
-// delivered to `globalThis._wadoWrite(kind, text)`.
-//
-// jco identifies a write only by a writable-end index and recycles those, so a
-// permanent index→target map mis-routes (stderr leaked into stdout). We target
-// the most recently opened stream instead — `println`/`eprintln` open, write,
-// and drop, so the last `writeViaStream` is the right target. Each open gets its
-// own `TextDecoder`, so multi-byte glyphs don't corrupt or cross streams.
+// Browser WASI P3 CLI shim: each `write-via-stream` drains to
+// `globalThis._wadoWrite(kind, text)`. The stream and its decoder are the
+// call's own, so stdout and stderr cross neither channels nor glyphs.
 
-function _sink(kind) {
+async function drain(kind, streamReader) {
   const decoder = new TextDecoder();
-  return {
-    write(data) {
-      const text = decoder.decode(data, { stream: true });
-      if (text && typeof globalThis._wadoWrite === "function") globalThis._wadoWrite(kind, text);
-    },
+  const emit = (text) => {
+    if (text && typeof globalThis._wadoWrite === "function") globalThis._wadoWrite(kind, text);
   };
+  try {
+    for await (const chunk of streamReader) emit(decoder.decode(chunk, { stream: true }));
+    emit(decoder.decode());
+    return { tag: "ok" };
+  } catch (err) {
+    // `error-code` is an enum; an arbitrary string cannot be lowered.
+    return { tag: "err", val: err?.code === "EPIPE" ? "pipe" : "io" };
+  }
 }
-
-let _current = _sink("stdout");
-
-globalThis._jcoStreamWriteHook = (_writableEndIdx, data) => {
-  _current.write(data);
-  return true;
-};
 
 export const types = {
   OutputStream: class OutputStream {},
 };
 
 export const stdout = {
-  writeViaStream(_stream) {
-    _current = _sink("stdout");
-    return Promise.resolve({ tag: "ok" });
+  writeViaStream(streamReader) {
+    return drain("stdout", streamReader);
   },
 };
 stdout.writeViaStream._isHostProvided = true;
 
 export const stderr = {
-  writeViaStream(_stream) {
-    _current = _sink("stderr");
-    return Promise.resolve({ tag: "ok" });
+  writeViaStream(streamReader) {
+    return drain("stderr", streamReader);
   },
 };
 stderr.writeViaStream._isHostProvided = true;
