@@ -3361,8 +3361,12 @@ fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
 ```
 
 A bound cannot write a trait argument — the parser reads `<...>` after one as
-associated-type bindings — so `T: Add` names the defaulted `Add<Self>`, and
-`T::Output` under two bounds that both declare `Output` is ambiguous.
+associated-type bindings — so `T: Add` names the defaulted `Add<Self>`.
+`T::Output` under two bounds that both declare `Output` is ambiguous unless
+they bind it to the same type.
+
+An operator names these traits by construction, not by spelling: a trait
+declared as `Add` elsewhere shadows the name but does not answer `+`.
 
 A parameter with no default is therefore unconstrained by a bound: `T: Pick`
 holds for every `impl Pick<K>`, and the body cannot pass an argument for `K`.

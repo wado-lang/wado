@@ -670,25 +670,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // TypeParam with trait bounds: resolve arithmetic operators via trait bound methods
-            if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some(bounds) = self
+            // A type parameter resolves an arithmetic operator through its
+            // bounds, and reaches it no other way.
+            if let ResolvedType::TypeParam { name, .. } = &left_type {
+                let bounds = self
                     .annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .get(name)
                     .cloned()
-            {
+                    .unwrap_or_default();
                 let operand_type_id = left.type_id;
-                let (item, method_name) = match op {
-                    BinaryOp::Add => (CompilerItem::Add, "add"),
-                    BinaryOp::Sub => (CompilerItem::Sub, "sub"),
-                    BinaryOp::Mul => (CompilerItem::Mul, "mul"),
-                    BinaryOp::Div => (CompilerItem::Div, "div"),
-                    BinaryOp::Mod => (CompilerItem::Rem, "rem"),
-                    BinaryOp::BitAnd => (CompilerItem::BitAnd, "bitand"),
-                    BinaryOp::BitOr => (CompilerItem::BitOr, "bitor"),
-                    BinaryOp::BitXor => (CompilerItem::BitXor, "bitxor"),
+                let (item, method_name, trait_name) = match op {
+                    BinaryOp::Add => (CompilerItem::Add, "add", "Add"),
+                    BinaryOp::Sub => (CompilerItem::Sub, "sub", "Sub"),
+                    BinaryOp::Mul => (CompilerItem::Mul, "mul", "Mul"),
+                    BinaryOp::Div => (CompilerItem::Div, "div", "Div"),
+                    BinaryOp::Mod => (CompilerItem::Rem, "rem", "Rem"),
+                    BinaryOp::BitAnd => (CompilerItem::BitAnd, "bitand", "BitAnd"),
+                    BinaryOp::BitOr => (CompilerItem::BitOr, "bitor", "BitOr"),
+                    BinaryOp::BitXor => (CompilerItem::BitXor, "bitxor", "BitXor"),
                     _ => unreachable!(),
                 };
                 let required = self.required_operator_trait(item);
@@ -720,6 +721,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                         .type_id;
                 }
+                // A type parameter reaches its operator only through a bound.
+                // None gave one, so there is nothing to dispatch to and nothing
+                // below answers for it — say so here rather than at WIR build.
+                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+                    type_name: name.clone(),
+                    trait_name: trait_name.to_string(),
+                    param_name: name.clone(),
+                    reason: Vec::new(),
+                    span,
+                });
+                return TypeTable::ERROR;
             }
         }
 
@@ -776,6 +788,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         origin,
                     )
                     .type_id;
+            }
+            if let ResolvedType::TypeParam { name, .. } = &left_type {
+                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+                    type_name: name.clone(),
+                    trait_name: shift_trait.to_string(),
+                    param_name: name.clone(),
+                    reason: Vec::new(),
+                    span,
+                });
+                return TypeTable::ERROR;
             }
             // Get struct name for trait lookup
             let struct_name = match &left_type {

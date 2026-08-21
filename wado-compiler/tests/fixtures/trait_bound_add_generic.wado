@@ -1,3 +1,5 @@
+// `+` on a type parameter dispatches through its bound, and the bound pins
+// `Output` so the sum stays a `T`.
 use { println, Stdout } from "core:cli";
 
 struct Vec2 {
@@ -5,17 +7,15 @@ struct Vec2 {
     y: i32,
 }
 
-trait Add {
-    fn add(&self, other: &Self) -> Self;
-}
-
 impl Add for Vec2 {
-    fn add(&self, other: &Self) -> Self {
+    type Output = Vec2;
+
+    fn add(&self, other: &Vec2) -> Vec2 {
         return Vec2 { x: self.x + other.x, y: self.y + other.y };
     }
 }
 
-fn generic_add<T: Add>(a: T, b: T) -> T {
+fn generic_add<T: Add<Output = T>>(a: T, b: T) -> T {
     return a + b;
 }
 

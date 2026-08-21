@@ -1,0 +1,28 @@
+// A trait is its declaration, not its spelling: a locally declared `Add`
+// shadows the prelude's name but is not the trait `+` dispatches to. The
+// operator used to find it by spelling and lower a struct as a scalar.
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+trait Add {
+    fn add(&self, other: &Self) -> Self;
+}
+
+impl Add for Vec2 {
+    fn add(&self, other: &Vec2) -> Vec2 {
+        return Vec2 { x: self.x + other.x, y: self.y + other.y };
+    }
+}
+
+fn generic_add<T: Add>(a: T, b: T) -> T {
+    return a + b;
+}
+
+export fn run() {
+    assert generic_add::<Vec2>(Vec2 { x: 1, y: 2 }, Vec2 { x: 3, y: 4 }).x == 4;
+}
+
+__DATA__
+{ "compile_error": "type 'T' does not implement trait 'Add'" }

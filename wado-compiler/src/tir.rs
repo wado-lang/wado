@@ -2561,13 +2561,24 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         assoc_name: &str,
     ) -> Option<(crate::defs::DefId, TypeId)> {
-        let candidates: Vec<(bool, (crate::defs::DefId, TypeId))> = self
+        let mut candidates: Vec<(bool, crate::defs::DefId, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
-            .map(|(key, &def_id)| (key.trait_ref.is_bare(), (key.trait_ref.decl, def_id)))
+            .map(|(key, &def_id)| (key.trait_ref.is_bare(), key.trait_ref.decl, def_id))
             .collect();
-        one_assoc_answer(&candidates)
+        if candidates.iter().any(|(bare, ..)| *bare) {
+            candidates.retain(|(bare, ..)| *bare);
+        }
+        // Several traits may declare one name over a single definition —
+        // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
+        // so the definitions decide agreement and the last impl registered
+        // names the trait.
+        let (_, trait_decl, def_id) = *candidates.last()?;
+        candidates
+            .iter()
+            .all(|(_, _, def)| *def == def_id)
+            .then_some((trait_decl, def_id))
     }
 
     /// [`Self::generic_assoc_type_def`] for a caller that knows the trait.
