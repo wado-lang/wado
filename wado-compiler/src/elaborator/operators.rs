@@ -672,7 +672,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // A type parameter resolves an arithmetic operator through its
             // bounds, and reaches it no other way.
-            if let ResolvedType::TypeParam { name, .. } = &left_type {
+            let arithmetic = match op {
+                BinaryOp::Add => Some((CompilerItem::Add, "add", "Add")),
+                BinaryOp::Sub => Some((CompilerItem::Sub, "sub", "Sub")),
+                BinaryOp::Mul => Some((CompilerItem::Mul, "mul", "Mul")),
+                BinaryOp::Div => Some((CompilerItem::Div, "div", "Div")),
+                BinaryOp::Mod => Some((CompilerItem::Rem, "rem", "Rem")),
+                BinaryOp::BitAnd => Some((CompilerItem::BitAnd, "bitand", "BitAnd")),
+                BinaryOp::BitOr => Some((CompilerItem::BitOr, "bitor", "BitOr")),
+                BinaryOp::BitXor => Some((CompilerItem::BitXor, "bitxor", "BitXor")),
+                _ => None,
+            };
+            if let ResolvedType::TypeParam { name, .. } = &left_type
+                && let Some((item, method_name, trait_name)) = arithmetic
+            {
                 let bounds = self
                     .annotate_ctx
                     .trait_ctx
@@ -681,17 +694,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
                     .unwrap_or_default();
                 let operand_type_id = left.type_id;
-                let (item, method_name, trait_name) = match op {
-                    BinaryOp::Add => (CompilerItem::Add, "add", "Add"),
-                    BinaryOp::Sub => (CompilerItem::Sub, "sub", "Sub"),
-                    BinaryOp::Mul => (CompilerItem::Mul, "mul", "Mul"),
-                    BinaryOp::Div => (CompilerItem::Div, "div", "Div"),
-                    BinaryOp::Mod => (CompilerItem::Rem, "rem", "Rem"),
-                    BinaryOp::BitAnd => (CompilerItem::BitAnd, "bitand", "BitAnd"),
-                    BinaryOp::BitOr => (CompilerItem::BitOr, "bitor", "BitOr"),
-                    BinaryOp::BitXor => (CompilerItem::BitXor, "bitxor", "BitXor"),
-                    _ => unreachable!(),
-                };
                 let required = self.required_operator_trait(item);
                 if let Some((found_trait, info)) = self.find_method_in_trait_bounds(
                     &bounds,
