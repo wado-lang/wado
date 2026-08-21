@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787324753349,
+  "lastUpdate": 1787346292500,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49953,6 +49953,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/66a0bee5ad1a9e5cfbdccdad1793917f63eecc03"
         },
         "date": 1787324752652,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "973789d3fd5c8faf36545ef22b03d5ea06b60edb",
+          "message": "Merge pull request #1869 from wado-lang/claude/wado-core-json-issues-5dpk19\n\nfeat(serde)!: reject duplicate keys and bound deserialization depth",
+          "timestamp": "2026-08-22T05:51:20+09:00",
+          "tree_id": "4923ae876e9ef14fbae850c9dd8e8299eeb4e7b5",
+          "url": "https://github.com/wado-lang/wado/commit/973789d3fd5c8faf36545ef22b03d5ea06b60edb"
+        },
+        "date": 1787346291724,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
