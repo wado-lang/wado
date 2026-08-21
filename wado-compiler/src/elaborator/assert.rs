@@ -147,7 +147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_place && !conditional {
             // Re-read; no local of its own.
         } else {
-            ctx.add_local(cap_name.clone(), type_id, conditional, None);
+            ctx.add_local(cap_name.clone(), type_id, true, None);
             if conditional {
                 ctx.add_local(
                     seen_local_name(&cap_name),

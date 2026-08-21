@@ -912,6 +912,17 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
+            let assignable_local_types: IndexMap<String, WirType> = tir_func
+                .locals
+                .iter()
+                .enumerate()
+                .filter_map(|(i, local)| {
+                    let idx = u32::try_from(i).ok()?;
+                    let name = resolved_local_names.get(&idx)?.clone();
+                    Some((name, ctx.type_id_to_wir_type(&type_table, local.type_id)))
+                })
+                .collect();
+
             let mut wir_body = {
                 let mut translator = FunctionTranslator {
                     ctx: &mut *ctx,
@@ -929,11 +940,44 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 translator.translate_block(body.root)
             };
             apply_cold_path_hints(&mut wir_body);
+            declare_assigned_locals(&mut wir_body, &assignable_local_types);
             let _ = type_table;
             drop(tir_func);
             ctx.functions[pending_body.wir_func_index].body = Some(wir_body);
         }
     }
+}
+
+/// Declare every local the body assigns but never declares. A producer that
+/// preallocates a slot without a `Let` — a power-assert capture, an optimizer
+/// pass minting a temporary — otherwise leaves it undeclared, and a body lifted
+/// into its own function has nothing for codegen to resolve.
+fn declare_assigned_locals(body: &mut Vec<WirInstr>, types: &IndexMap<String, WirType>) {
+    let declared = crate::wir::WirLocals::scan(body);
+    let mut missing: Vec<String> = Vec::new();
+    for instr in body.iter() {
+        collect_assigned_locals(instr, &declared, types, &mut missing);
+    }
+    for name in missing.into_iter().rev() {
+        let ty = types[&name].clone();
+        body.insert(0, WirInstr::DeclareLocal { name, ty });
+    }
+}
+
+fn collect_assigned_locals(
+    instr: &WirInstr,
+    declared: &crate::wir::WirLocals,
+    types: &IndexMap<String, WirType>,
+    missing: &mut Vec<String>,
+) {
+    if let WirInstr::LocalSet { name, .. } = instr
+        && !declared.iter().any(|(n, _)| n == name)
+        && types.contains_key(name)
+        && !missing.contains(name)
+    {
+        missing.push(name.clone());
+    }
+    instr.for_each_child(&mut |child| collect_assigned_locals(child, declared, types, missing));
 }
 
 /// Tracks a Wasm block scope in the label stack for computing br depths.
