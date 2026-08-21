@@ -1,0 +1,30 @@
+// Regression: a conditional capture whose value is an aggregate, inside a
+// closure. The closure body is lifted into its own function, so the capture
+// local it assigns has to be declared there with the type it actually holds.
+
+use { println, Stdout } from "core:cli";
+
+fn ids() -> List<i32> {
+    return [1, 2, 3];
+}
+
+fn total(v: List<i32>) -> i32 {
+    return v.len();
+}
+
+fn wrapper(f: fn() with Stdout) with Stdout {
+    f();
+}
+
+export fn run() with Stdout {
+    let ok = false;
+    wrapper(|| {
+        assert ok || total(ids()) == 3;
+        println("ok");
+    });
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

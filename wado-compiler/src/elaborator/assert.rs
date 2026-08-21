@@ -363,12 +363,13 @@ impl CaptureScanner {
 
     /// A receiver runs before everything nested under it and is never bound —
     /// binding would copy, and value semantics would then hide the call's own
-    /// mutation. Only a place earns a slot here: the failure branch re-reads it,
-    /// which moves nothing and copies nothing. Either way nothing after the
-    /// receiver may be bound ahead of the condition, since the receiver itself
-    /// stays where it is.
+    /// mutation. Only a place the failure branch can re-read earns a slot here,
+    /// which is why a short-circuit above rules one out: a conditional slot is
+    /// bound, so it would copy. Either way nothing after the receiver may be
+    /// bound ahead of the condition, since the receiver itself stays where it
+    /// is.
     fn scan_receiver(&mut self, expr: &Expr) {
-        if is_place_expr(expr) {
+        if is_place_expr(expr) && !self.conditional {
             self.scan(expr);
         }
         self.frontier_ok = false;
