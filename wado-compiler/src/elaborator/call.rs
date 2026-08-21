@@ -317,13 +317,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.is_effect_or_resource_decl(def).then_some(def)
     }
 
-    /// The same declaration for a callee with no site: a rewritten or
-    /// synthesized call names it as this module spells it.
-    fn effect_or_resource_decl_named(&self, name: &str) -> Option<crate::defs::DefId> {
-        self.decl_key_or_local(name)
-            .filter(|def| self.is_effect_or_resource_decl(*def))
-    }
-
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -1321,9 +1314,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // caller falls through to the standard "unknown function" error
             // instead of deferring an unvalidated call to codegen, where it
             // would panic instead of failing cleanly.
-            else if let Some(decl) = self
-                .effect_or_resource_decl_at(ident.segments.first().map(|seg| seg.id))
-                .or_else(|| self.effect_or_resource_decl_named(prefix))
+            else if let Some(decl) =
+                self.effect_or_resource_decl_at(ident.segments.first().map(|seg| seg.id))
             {
                 // Name the interface by its declaration: signature resolution,
                 // the effect check, dispatch and WIR all key on that name, and
@@ -1680,10 +1672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Effect operations are routed here as `CalleeRef::local_namespace`, so
         // `ModuleSource::Local { path }` matches `is_effect_like()`.
         if callee_module.is_effect_like()
-            && let Some(interface_name) = callee_module.interface_name()
-            && let Some(decl) = self
-                .effect_or_resource_decl_at(receiver_site)
-                .or_else(|| self.effect_or_resource_decl_named(&interface_name))
+            && let Some(decl) = self.effect_or_resource_decl_at(receiver_site)
             && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
         {
             return return_type;
@@ -1787,9 +1776,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return (sig.decl.param_types.clone(), Vec::new());
             }
 
-            if let Some(decl) = self
-                .effect_or_resource_decl_at(receiver_site)
-                .or_else(|| self.effect_or_resource_decl_named(prefix))
+            if let Some(decl) = self.effect_or_resource_decl_at(receiver_site)
                 && let Some((params, _)) = self.resolve_effect_op_signature(decl, suffix)
             {
                 return (params, Vec::new());
