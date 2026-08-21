@@ -98,8 +98,10 @@ export default {
     const status = response.getStatusCode();
     // `consume-body` answers `null` for a response built without contents, and
     // a status in NULL_BODY refuses a body at all — including an empty one.
-    const [body] = WasiResponse.consumeBody(response, Promise.resolve(undefined));
+    const [body, trailers] = WasiResponse.consumeBody(response, Promise.resolve(undefined));
     const bytes = body ? await collect(body) : null;
+    // A Worker cannot send trailers, but the guest writes them, so read them.
+    await trailers?.read?.().catch(() => {});
     return new Response(NULL_BODY.has(status) || !bytes?.length ? null : bytes, {
       status,
       headers: out,
