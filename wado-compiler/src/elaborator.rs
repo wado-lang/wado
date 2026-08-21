@@ -990,8 +990,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|_| base.to_string())
     }
 
-    /// Widest struct the derived `Deserialize` body can carry: its
-    /// duplicate-field bitmask is one `i64`.
+    /// One `i64` of duplicate-field bits, one per field.
     const SERDE_MAX_FIELDS: usize = 64;
 
     /// Refuse a too-wide `Deserialize` derive, so it fails to build rather than

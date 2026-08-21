@@ -851,7 +851,6 @@ impl CborDeserializer {
         return Result::Ok(self.input.get_unchecked(self.pos));
     }
 
-    /// The level a container opened here sits at.
     fn inner_depth(&self) -> Result<i32, DeserializeError> {
         return deeper(self.depth, self.max_depth, self.pos as i64);
     }
@@ -1177,10 +1176,8 @@ impl CborDeserializer {
 
     /// One step of a container walk, shared by the seq / map / struct accesses.
     /// Returns `true` when the container is exhausted, consuming an indefinite
-    /// container's break. On `false` the caller consumes one element; a
-    /// definite container's caller then decrements its own `remaining`. (A bare
-    /// `bool` rather than a `[bool, i64]` pair keeps the hottest decode loop
-    /// allocation-free.)
+    /// container's break. On `false` the caller consumes one element and, when
+    /// definite, decrements its own `remaining`.
     fn container_step(&mut self, remaining: i64, indef: bool) -> Result<bool, DeserializeError> {
         if indef {
             if self.peek_byte()? == BREAK {
@@ -1289,9 +1286,6 @@ impl CborDeserializer {
         }
     }
 }
-
-// Each access carries its container's level and re-asserts it before
-// descending, as in `core:json`.
 
 struct CborSeqAccess {
     de: &mut CborDeserializer,

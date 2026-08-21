@@ -734,9 +734,7 @@ fn nested_more(levels: i32) -> ByteList {
 }
 
 test "reject: deeply nested recursive variant exceeds the depth bound" {
-    // Payload-carrying variants nest through begin_variant, so they must be
-    // depth-bounded like arrays/maps. A depth bound is a resource limit, not a
-    // spec violation: these bytes are well-formed CBOR.
+    // A depth bound is a resource limit: these bytes are well-formed CBOR.
     assert decode_err_kind::<Nest>(nested_more(400)) matches {
         Some(DeserializeErrorKind::DepthLimitExceeded)
     };

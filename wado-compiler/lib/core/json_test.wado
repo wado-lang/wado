@@ -814,8 +814,6 @@ test "an object nests as deeply as an array" {
 }
 
 test "a skipped unknown member is depth-limited too" {
-    // The struct has no `unknown` field, so the payload is only ever skipped —
-    // `skip_value` must count depth just as the typed path does.
     let mut text = String::new();
     text.push_str(&`\{"unknown":`);
     text.push_str(&nested(DEFAULT_MAX_DEPTH + 1, '[', ']'));
@@ -832,7 +830,6 @@ test "max_depth is caller-tunable" {
 }
 
 test "sibling containers do not accumulate depth" {
-    // Depth is nesting, not a running total: 200 siblings at depth 2 are fine.
     let mut text = String::new();
     text.push('[');
     for let mut i = 0; i < 200; i += 1 {
@@ -858,8 +855,6 @@ test "a repeated field is rejected by default" {
 }
 
 test "a field repeated onto its declared default is still a duplicate" {
-    // `b` is seeded with 9, so an occupied slot cannot be the signal — only
-    // the wire-written bit distinguishes these.
     let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2,"b":3\}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
@@ -875,7 +870,6 @@ test "an omitted field keeps its declared default" {
 }
 
 test "a repeated unknown member is not a duplicate" {
-    // Unknown fields own no bit, so repeating one must stay ignorable.
     let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"z":1,"z":2\}`);
     assert r matches { Ok(d) && d.a == 1 };
 }
@@ -895,8 +889,6 @@ test "a repeated map key is rejected by default" {
 }
 
 test "a repeated Value key is rejected by default" {
-    // The proxy/application split in the article: both read the same bytes,
-    // and a repeat is what makes them disagree.
     let r: Result<Value, DeserializeError> = from_string(`\{"role":"user","role":"admin"\}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }

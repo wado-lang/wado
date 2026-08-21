@@ -384,8 +384,6 @@ fn nested_tree(depth: i32) -> String {
 }
 
 test "a recursive type is depth-limited, not stack-exhausting" {
-    // The input drives the recursion here, so NSD needs the same bound as the
-    // self-describing form.
     let r: Result<Tree, DeserializeError> = from_string(nested_tree(400));
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded };
 }

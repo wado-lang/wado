@@ -15,7 +15,6 @@ export fn run() {
     let dup = from_string::<Point>(`\{"x":1.0,"y":2.0,"x":99.0\}`);
     assert dup matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 
-    // Distinct fields still parse.
     let ok = from_string::<Point>(`\{"x":1.0,"y":2.0\}`);
     assert ok matches { Ok(p) && p.x == 1.0 && p.y == 2.0 };
 }

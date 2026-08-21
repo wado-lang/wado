@@ -516,8 +516,6 @@ test "try_insert reports whether the key was new" {
 }
 
 test "try_insert leaves the existing value alone" {
-    // The point of the variant: unlike `map[key] = value`, a losing insert
-    // must not overwrite. This is what makes it a duplicate-key detector.
     let mut map: TreeMap<String, i32> = TreeMap::new();
     map.try_insert("a", 1);
     map.try_insert("a", 99);
@@ -562,7 +560,6 @@ test "get_or_insert inserts and returns when absent" {
 }
 
 test "index assignment still overwrites" {
-    // `map[key] = value` keeps last-wins; only the named variants refuse.
     let mut map: TreeMap<String, i32> = TreeMap::new();
     map["a"] = 1;
     map["a"] = 2;

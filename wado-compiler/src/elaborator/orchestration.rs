@@ -1720,8 +1720,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     ast::UseItem::Namespace { name: ns } => {
                         let same_package = source.same_package(module_source);
-                        // Declared here, plus re-exported: both reach the
-                        // namespace.
                         let declared = state
                             .tysys
                             .signatures
