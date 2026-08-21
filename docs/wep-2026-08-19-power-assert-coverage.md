@@ -51,7 +51,11 @@ assumption seen from the other side — so it passes the fact through.
 That is also what lets a receiver render at all. Binding one would copy it, and
 value semantics would leave the call's own mutation on the copy; re-reading a
 place copies nothing, so a receiver that is a place is captured exactly as any
-other place is.
+other place is. The same holds for an argument: a bare identifier in
+call-argument position is a function-reference coercion site the scan cannot
+recognise, and a binding would lose it — but a place leaves the argument exactly
+as written, so nothing is there to lose. Only `&<ident>` keeps the `&` itself
+unbound for that reason, the place under it rendering instead.
 
 A capture may not copy. Value semantics deep-copy on binding, so a captured
 receiver would take the copy's mutation and leave the original untouched. The
@@ -145,13 +149,6 @@ a defect or an open question, never a boundary.
       sub-expression of a closure body has no value at the moment the condition
       failed. Red: `assert_gap_closure_operand`, which pins the closure half
       only — `WithHandler` and `Resume` are unpinned.
-
-- [ ] **Capture a bare identifier in call-argument position, and `&<ident>`.**
-      Either may be a function-reference coercion site, and the scanner runs
-      before types are known, so it cannot tell `&value` from `&fn_name`.
-      `assert takes(&a)` therefore does not show `a`. Resolving it means
-      deciding after types are known. Red: `assert_gap_call_arg_ident`,
-      `assert_gap_ref_ident`.
 
 - [ ] **Capture the operands inside the branch a run took.** The scan stops at
       an `If` / `Match` branch body and at a block's statements, on the argument

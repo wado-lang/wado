@@ -1,0 +1,18 @@
+// A bare identifier in call-argument position is a place, so it renders without
+// a binding — leaving the argument exactly as written, and with it the
+// `fn_name` coercion a binding would have lost.
+
+fn twice(n: i32) -> i32 {
+    return n * 2;
+}
+
+export fn run() {
+    let a = 7;
+    assert twice(a) == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["twice(a): 14", "a: 7"]
+}
