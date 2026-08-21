@@ -90,7 +90,13 @@ fn apply_name_policy(s: &str, strategy: &str) -> String {
     }
 }
 
-pub fn synthesize_serde(project: &mut Package) {
+/// Widest struct the derived `Deserialize` body can carry: its duplicate-field
+/// bitmask is one `i64`, one bit per field. Beyond that `1 << index` wraps and
+/// two fields would share a bit, so a wide struct must be refused rather than
+/// silently reporting the wrong field as a duplicate.
+const SERDE_MAX_FIELDS: usize = 64;
+
+pub fn synthesize_serde(project: &mut Package) -> Result<(), String> {
     distribute_bound_driven_requests(project);
 
     for module in project.tir_modules.values_mut() {
@@ -125,6 +131,22 @@ pub fn synthesize_serde(project: &mut Package) {
                     if existing.contains(&key) {
                         continue;
                     }
+                    if let Some(count) = find_struct(module, &req.target_type_name)
+                        .map(|def| def.fields.len())
+                        .filter(|count| *count > SERDE_MAX_FIELDS)
+                    {
+                        // The elaborator refuses an explicit `impl Deserialize
+                        // for T;` with a span. A bound-driven derivation has no
+                        // marker to point at, so it is caught here instead.
+                        return Err(format!(
+                            "cannot derive `Deserialize` for `{}`: {count} fields exceeds the \
+                             {SERDE_MAX_FIELDS}-field limit. Deserialization tracks which fields \
+                             the wire wrote in a {SERDE_MAX_FIELDS}-bit mask, so duplicates can \
+                             be rejected; split the struct into nested ones, each within the \
+                             limit.",
+                            req.target_type_name,
+                        ));
+                    }
                     if let Some((lookup_func, positional_at_func)) =
                         generate_field_schema(module, req, &names)
                     {
@@ -142,6 +164,7 @@ pub fn synthesize_serde(project: &mut Package) {
 
         module.functions.extend(generated);
     }
+    Ok(())
 }
 
 /// Distribute bound-driven `Serialize` / `Deserialize` requests (WEP

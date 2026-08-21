@@ -989,7 +989,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
+        if unary.op == UnaryOp::MutRef
+            && matches!(
+                &unary.expr,
+                ast::Expr::FieldAccess(_) | ast::Expr::Index(_)
+            )
+        {
             let field_type = self.tysys.type_table.borrow().get(expr_type).clone();
             let base_type = self
                 .tysys
@@ -1007,7 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if is_scalar_field(&field_type) || is_scalar_field(&base_type) {
                 let _ = self.emit(TypeError::CannotAssign {
-                    message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
+                    message: "cannot take mutable reference to a primitive field or element; use the containing value's reference directly".to_string(),
                     span: unary.span,
                 });
             }

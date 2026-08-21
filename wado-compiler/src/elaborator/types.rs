@@ -625,10 +625,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `impl Trait for Type;` requested synthesis of a trait the compiler
-    /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
-    /// `Ord` are synthesizable through the bodyless-impl form.
-    /// A serde derive on a struct wider than the duplicate-field bitmask.
+    /// A `Deserialize` derive on a struct wider than the duplicate-field
+    /// bitmask.
     SerdeStructTooWide {
         trait_name: String,
         type_name: String,
@@ -637,6 +635,9 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `impl Trait for Type;` requested synthesis of a trait the compiler
+    /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
+    /// `Ord` are synthesizable through the bodyless-impl form.
     UnsupportedSynthesisTrait {
         trait_name: String,
         type_name: String,

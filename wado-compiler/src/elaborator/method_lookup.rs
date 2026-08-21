@@ -1217,17 +1217,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `&mut` of a scalar field borrows a boxed copy, so the mutation would
-        // be silently dropped. An explicit `&mut x.f` is refused for this
-        // reason (`operators.rs`); the implicit receiver borrow must refuse it
-        // too, or the same shape miscompiles instead of diagnosing.
-        if receiver_ast.is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_)))
+        // `&mut` of a scalar place inside a container borrows a boxed copy, so
+        // the mutation would be silently dropped. An explicit `&mut x.f` is
+        // refused for this reason (`operators.rs`); the implicit receiver
+        // borrow must refuse it too, or the same shape miscompiles instead of
+        // diagnosing. An element (`xs[i]`) is the same shape as a field.
+        if receiver_ast
+            .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
             && self.is_scalar_place_type(receiver.type_id)
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
-                    "cannot call `&mut self` method `{method_name}` on a primitive struct \
-                     field; use the struct reference directly"
+                    "cannot call `&mut self` method `{method_name}` on a primitive field or \
+                     element; use the containing value's reference directly"
                 ),
                 span,
             });

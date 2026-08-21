@@ -1223,7 +1223,10 @@ impl CborDeserializer {
                 return self.skip_item(depth);
             },
             MAJOR_ARRAY => {
-                let inner = self.inner_depth()?;
+                // From the threaded `depth`, not `self.depth`: skipping does
+                // not move the deserializer's own level, so `inner_depth`
+                // would return the same value at every nesting step.
+                let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 if indef {
                     loop {
                         if self.peek_byte()? == BREAK {
@@ -1242,7 +1245,7 @@ impl CborDeserializer {
                 return Result::Ok(());
             },
             MAJOR_MAP => {
-                let inner = self.inner_depth()?;
+                let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 if indef {
                     loop {
                         if self.peek_byte()? == BREAK {

@@ -8,7 +8,8 @@
 // nearly written as a newtype field that never counted.
 //
 // A newtype over a primitive is the same shape, so it is refused too — the
-// check looks through to the ultimate base type.
+// check looks through to the ultimate base type. A list element (`xs[i]`) is
+// the same shape as a field and is refused for the same reason.
 
 type Budget = i32;
 
@@ -26,7 +27,10 @@ export fn run() {
     let mut h = Holder { b: 5 };
     h.b.spend();
     assert h.b as i32 == 4;
+
+    let mut xs: List<Budget> = [5];
+    xs[0].spend();
 }
 
 __DATA__
-{"compile_error": "cannot call `&mut self` method `spend` on a primitive struct field"}
+{"compile_error": "cannot call `&mut self` method `spend` on a primitive field or element"}
