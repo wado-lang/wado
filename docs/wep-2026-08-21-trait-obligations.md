@@ -78,9 +78,11 @@ cannot answer differently, because the recomputation is the same function.
 
 A bound is syntax, and syntax means what the frame that wrote it says. A
 supertrait bound reached through `T: Derived` was written in `Derived`'s frame,
-so `Item = A` there is `Derived`'s `A`, not the caller's. `Obligation.frame`
-travels with the bound; nothing resolves a bound's right-hand side in a frame
-that did not write it.
+so `Item = A` there is `Derived`'s `A`, not the caller's. An inherited bound
+carries its writer, and a right-hand side naming the writer's own parameters
+stays abstract rather than binding to a name the asking frame shares.
+`Obligation.frame` generalises this: nothing resolves a bound's right-hand side
+in a frame that did not write it.
 
 ### Termination
 
@@ -110,5 +112,5 @@ this.
 - [x] `TraitRef` at every bound, replacing the `(DefId, Vec<TypeId>)` pairs
       threaded by hand.
 - [ ] `solve` returning `Solution`; associated types and methods read off it.
-- [ ] Frames on obligations.
+- [ ] `Obligation.frame`, replacing the per-bound writer.
 - [ ] Delete the registries' independent keys, leaving them caches.
