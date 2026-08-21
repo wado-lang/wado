@@ -35,12 +35,6 @@ use super::util::placeholder;
 /// [`impl_header`]. Dispatch cannot reach the impl AST at all.
 struct ImplBlockRef(ModuleSource, AstId);
 
-/// A trait spelling's head: `Add<Feet>` is an `Add` impl. Trait arguments are
-/// selected on separately, so a lookup by operator name compares heads.
-fn trait_head(spelling: &str) -> &str {
-    spelling.split('<').next().unwrap_or(spelling)
-}
-
 /// The digested header of the impl block `r` points at. Borrowed from the
 /// caller's `TraitEnv` handle rather than from `&self`, so the header stays
 /// readable across the `&mut self` calls a lookup makes.
@@ -390,7 +384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str) -> bool,
+        trait_matches: impl Fn(&str, Option<crate::defs::DefId>) -> bool,
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
@@ -404,7 +398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
             let trait_name = self.get_type_name(header.trait_type.as_ref().unwrap());
-            if !trait_matches(&trait_name) {
+            if !trait_matches(&trait_name, header.trait_ref) {
                 continue;
             }
             let impl_sig = signatures
@@ -428,7 +422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str) -> bool,
+        trait_matches: impl Fn(&str, Option<crate::defs::DefId>) -> bool,
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
@@ -462,7 +456,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
         span: Span,
     ) -> Option<TypeId> {
-        let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
+        let (_, method_name) = self.tysys.operator_trait_method(op)?;
+        let trait_ = self.operator_trait_decl(op)?;
         // A type parameter has no impl block to read the rhs off; its bounds
         // say it, and `Shl::shl(&self, rhs: u32)` is why a literal needs to be
         // told. A bound cannot vary the declared rhs, so no selection arises.
@@ -471,17 +466,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         };
         if let Some(param_name) = param_name {
-            let trait_ = self.operator_trait_decl(op)?;
             return self.bound_declared_rhs_type(&param_name, trait_, method_name, self_type_id);
         }
         let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
-        let admitted = self.find_arithmetic_trait_impls(
-            &struct_name,
-            self_type_id,
-            &trait_name,
-            method_name,
-            rhs,
-        );
+        let admitted =
+            self.find_arithmetic_trait_impls(&struct_name, self_type_id, trait_, method_name, rhs);
         self.report_ambiguous_operator_rhs(&admitted, self_type_id, *op, span);
         let [trait_info] = admitted.as_slice() else {
             return None;
@@ -499,15 +488,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declaration an operator dispatches through, as a compiler item names
     /// it. The spelling answers nothing: a bound on a user trait that declares
     /// a method of the same name is not the operator's.
-    fn operator_trait_decl(&self, op: &BinaryOp) -> Option<crate::defs::DefId> {
-        let item = super::tysys::operator_compiler_item(op)?;
-        let ast = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_decl(item)?;
-        self.tysys.resolutions.defs().of_ast_id(ast)
+    pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<crate::defs::DefId> {
+        self.tysys
+            .compiler_trait_def(super::tysys::operator_compiler_item(op)?)
     }
 
     /// The right-hand type `trait_`'s declaration gives `method_name`, read off
@@ -596,7 +579,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
-        let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
+        let (_, method_name) = self.tysys.operator_trait_method(op)?;
+        let trait_ = self.operator_trait_decl(op)?;
         // `1 + m` reads the impl on the right operand's type and gives the
         // literal that same type, so the impl must be the one whose right-hand
         // type is it — an `Add<Feet>` on `Meters` does not answer for `1 + m`.
@@ -604,7 +588,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_arithmetic_trait_impl(
             &struct_name,
             rhs_type_id,
-            &trait_name,
+            trait_,
             method_name,
             Some(&rhs),
         )?;
@@ -2779,7 +2763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |trait_name| trait_name.starts_with(trait_base_name),
+            |trait_name, _| trait_name.starts_with(trait_base_name),
             |s, impl_ref, impl_sig, declared| {
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
@@ -2960,12 +2944,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
         match self
-            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_name, method_name, rhs)
+            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs)
             .as_slice()
         {
             [only] => Some(only.clone()),
@@ -2984,7 +2968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
@@ -3001,10 +2985,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.collect_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            // The operator traits carry a right-hand type argument now, so a
-            // candidate renders as `Add<Feet>`; the head is what names the
-            // operator.
-            |found_trait_name| trait_head(found_trait_name) == trait_name,
+            // The operator names a declaration: an impl of a user trait
+            // spelled `Add` is not an impl of the one `+` dispatches to.
+            |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
@@ -3141,7 +3124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |trait_base| trait_base.starts_with(trait_base_name),
+            |trait_base, _| trait_base.starts_with(trait_base_name),
             |s, impl_ref, impl_sig, declared| {
                 // The trait's index-type argument (`List<i32>` in `impl
                 // Index<List<i32>>`), returned for subscript coercion and used

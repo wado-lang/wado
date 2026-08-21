@@ -21,7 +21,10 @@ fn generic_add<T: Add>(a: T, b: T) -> T {
 }
 
 export fn run() {
+    // Both paths reach the same answer: the bound's, and the concrete
+    // receiver's own impl scan.
     assert generic_add::<Vec2>(Vec2 { x: 1, y: 2 }, Vec2 { x: 3, y: 4 }).x == 4;
+    assert (Vec2 { x: 1, y: 2 } + Vec2 { x: 3, y: 4 }).x == 4;
 }
 
 __DATA__

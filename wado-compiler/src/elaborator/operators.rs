@@ -382,9 +382,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_name(CompilerItem::Eq)
                         .to_string();
+                    let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
+                        return TypeTable::ERROR;
+                    };
                     let Some(resolved) = self.resolve_trait_method_for_op(
                         &struct_name,
                         lookup_type_id,
+                        eq_trait,
                         &eq_trait_name,
                         "eq",
                         false,
@@ -424,9 +428,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_name(CompilerItem::Ord)
                         .to_string();
+                    let Some(ord_trait) = self.tysys.compiler_trait_def(CompilerItem::Ord) else {
+                        return TypeTable::ERROR;
+                    };
                     let Some(resolved) = self.resolve_trait_method_for_op(
                         &struct_name,
                         lookup_type_id,
+                        ord_trait,
                         &ord_trait_name,
                         "cmp",
                         false,
@@ -588,16 +596,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                // Determine which trait and method to use based on operator
-                let (trait_name, method_name) = match op {
-                    BinaryOp::Add => ("Add", "add"),
-                    BinaryOp::Sub => ("Sub", "sub"),
-                    BinaryOp::Mul => ("Mul", "mul"),
-                    BinaryOp::Div => ("Div", "div"),
-                    BinaryOp::Mod => ("Rem", "rem"),
-                    BinaryOp::BitAnd => ("BitAnd", "bitand"),
-                    BinaryOp::BitOr => ("BitOr", "bitor"),
-                    BinaryOp::BitXor => ("BitXor", "bitxor"),
+                let Some(trait_) = self.operator_trait_decl(&op) else {
+                    return TypeTable::ERROR;
+                };
+                let method_name = match op {
+                    BinaryOp::Add => "add",
+                    BinaryOp::Sub => "sub",
+                    BinaryOp::Mul => "mul",
+                    BinaryOp::Div => "div",
+                    BinaryOp::Mod => "rem",
+                    BinaryOp::BitAnd => "bitand",
+                    BinaryOp::BitOr => "bitor",
+                    BinaryOp::BitXor => "bitxor",
                     _ => unreachable!(),
                 };
 
@@ -611,7 +621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut admitted = self.find_arithmetic_trait_impls(
                     &struct_name,
                     left.type_id,
-                    trait_name,
+                    trait_,
                     method_name,
                     Some(&rhs_class),
                 );
@@ -632,7 +642,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     admitted = self.find_arithmetic_trait_impls(
                         &lookup_name,
                         lookup_type_id,
-                        trait_name,
+                        trait_,
                         method_name,
                         Some(&rhs_class),
                     );
@@ -811,7 +821,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                let (trait_name, method_name) = (shift_trait, shift_method);
+                let Some(trait_) = self.operator_trait_decl(&op) else {
+                    return TypeTable::ERROR;
+                };
+                let method_name = shift_method;
 
                 // For newtypes, resolve base type for trait impl fallback
                 let (lookup_name, lookup_type_id) =
@@ -824,7 +837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find_arithmetic_trait_impl(
                         &struct_name,
                         left.type_id,
-                        trait_name,
+                        trait_,
                         method_name,
                         None,
                     )
@@ -833,7 +846,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let info = self.find_arithmetic_trait_impl(
                             &lookup_name,
                             lookup_type_id,
-                            trait_name,
+                            trait_,
                             method_name,
                             None,
                         );
@@ -1178,10 +1191,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(struct_name) = struct_name {
                 let (lookup_name, lookup_type_id) =
                     self.tysys.newtype_base_lookup(&struct_name, expr_type);
+                let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+                    return TypeTable::ERROR;
+                };
                 let resolved = self
                     .resolve_trait_method_for_op(
                         &struct_name,
                         expr_type,
+                        trait_,
                         trait_name,
                         method_name,
                         false,
@@ -1190,6 +1207,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.resolve_trait_method_for_op(
                             &lookup_name,
                             lookup_type_id,
+                            trait_,
                             trait_name,
                             method_name,
                             false,

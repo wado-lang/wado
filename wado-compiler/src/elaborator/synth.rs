@@ -6,6 +6,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::name::FqTypeName;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -522,8 +523,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     open
                 }
             }
-            ast::UnaryOp::Neg => self.synth_unary_op_output(operand, "Neg", "neg"),
-            ast::UnaryOp::BitNot => self.synth_unary_op_output(operand, "BitNot", "bitnot"),
+            ast::UnaryOp::Neg => self.synth_unary_op_output(operand, CompilerItem::Neg, "neg"),
+            ast::UnaryOp::BitNot => {
+                self.synth_unary_op_output(operand, CompilerItem::BitNot, "bitnot")
+            }
         }
     }
 
@@ -532,7 +535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn synth_unary_op_output(
         &mut self,
         operand: ArgClass,
-        trait_name: &str,
+        item: CompilerItem,
         method_name: &str,
     ) -> ArgClass {
         let open = ArgClass::Opaque(OpaqueReason::Inference);
@@ -545,7 +548,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(name) = self.tysys.struct_name_for_type(t) else {
                     return open;
                 };
-                match self.find_arithmetic_trait_impl(&name, t, trait_name, method_name, None) {
+                let Some(trait_) = self.tysys.compiler_trait_def(item) else {
+                    return open;
+                };
+                match self.find_arithmetic_trait_impl(&name, t, trait_, method_name, None) {
                     Some(info) => self.class_of_type(info.output_type),
                     None => open,
                 }
