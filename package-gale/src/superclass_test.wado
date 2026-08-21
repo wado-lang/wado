@@ -7,6 +7,7 @@ use {
     super_call_expr,
     super_ops_with_args,
     super_ops_mixed_role,
+    super_ops_reserved,
     rewrite_this_calls,
     SuperCall,
     SuperOp,
@@ -159,6 +160,25 @@ test "gen_super_interface emits predicate and action ops" {
     assert out.contains("pub interface LexerBase {");
     assert out.contains("fn is_regex_possible(view: LexerView) -> bool;");
     assert out.contains("fn process_open_brace(view: LexerView, lx: &mut Lexer);");
+}
+
+test "the interface carries the emit lifecycle hook with a pass-through default" {
+    let ops: List<SuperOp> = [
+        SuperOp { name: "hit", is_predicate: false, has_args: false },
+    ];
+    let mut w = CodeWriter::new();
+    gen_super_interface(&mut w, &"B", &ops);
+    let out = w.to_string();
+    assert out.contains("fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {");
+    assert out.contains("return ty;");
+}
+
+test "a base method colliding with a lifecycle hook is reported" {
+    let ops: List<SuperOp> = [
+        SuperOp { name: "emit", is_predicate: false, has_args: false },
+        SuperOp { name: "hit", is_predicate: false, has_args: false },
+    ];
+    assert super_ops_reserved(&ops) == ["emit"];
 }
 
 test "an action op receives the lexer, a predicate op does not" {
