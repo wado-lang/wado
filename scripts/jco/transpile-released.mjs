@@ -31,6 +31,6 @@ await writeFile(join(outDir, "package.json"), '{"type":"module"}\n');
 // The output imports the shim by bare specifier, and `outDir` is usually a temp
 // directory with no `node_modules` above it.
 const deps = join(here, "node_modules");
-await rm(join(outDir, "node_modules"), { force: true, recursive: false }).catch(() => {});
+await rm(join(outDir, "node_modules"), { force: true, recursive: true });
 await symlink(deps, join(outDir, "node_modules"), "dir");
 console.error(`transpiled (released jco) → ${outDir}`);

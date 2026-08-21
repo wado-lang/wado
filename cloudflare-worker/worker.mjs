@@ -3,21 +3,28 @@
 // `build.sh` compiles the program and transpiles it into `gen/`; this module
 // bridges the Worker's `fetch` to the component's `handle`.
 
-import core0 from "./gen/service.core.wasm";
-import core1 from "./gen/service.core2.wasm";
 import { instantiate } from "./gen/service.js";
+// Written by build.sh: a Worker takes only static imports, so the core modules
+// a program transpiles to are named at build time rather than discovered here.
+import { CORES } from "./gen/cores.js";
 import { types } from "./shims/http.js";
 import * as cli from "./shims/cli.js";
 import * as clocks from "./shims/clocks.js";
 
 const { Fields, Request, Response: WasiResponse } = types;
-const CORES = { "service.core.wasm": core0, "service.core2.wasm": core1 };
+
+// Statuses that refuse a body, empty included.
+const NULL_BODY = new Set([101, 204, 205, 304]);
 
 // One instance per request: workerd gives each request its own I/O context, and
 // jco holds its async task state on the module, so a shared instance stops
 // settling after the first.
 function guest() {
-  return instantiate((name) => CORES[name], {
+  return instantiate((name) => {
+    const core = CORES[name];
+    if (!core) throw new Error(`transpiled output asks for an unknown core module: ${name}`);
+    return core;
+  }, {
     "./shims/cli.js": cli,
     "./shims/clocks.js": clocks,
     "./shims/http.js": { types },
@@ -88,7 +95,14 @@ export default {
     for (const [name, value] of response.getHeaders().copyAll()) {
       out.append(name, new TextDecoder().decode(value));
     }
+    const status = response.getStatusCode();
+    // `consume-body` answers `null` for a response built without contents, and
+    // a status in NULL_BODY refuses a body at all — including an empty one.
     const [body] = WasiResponse.consumeBody(response, Promise.resolve(undefined));
-    return new Response(await collect(body), { status: response.getStatusCode(), headers: out });
+    const bytes = body ? await collect(body) : null;
+    return new Response(NULL_BODY.has(status) || !bytes?.length ? null : bytes, {
+      status,
+      headers: out,
+    });
   },
 };

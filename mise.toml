@@ -525,7 +525,7 @@ description = "Install the released jco for the vendor-free pipeline (scripts/jc
 run = "cd scripts/jco && npm install"
 
 [tasks.jco-transpile-released]
-description = "Transpile a Wado .wasm component to JS via the released jco + runtime post-process"
+description = "Transpile a Wado .wasm component to JS via the released jco"
 depends = ["jco-deps"]
 run = """
 #!/usr/bin/env bash
@@ -545,10 +545,10 @@ OUT="$(mktemp -d)/hello-released"
 cargo run -q -p wado-cli -- compile -O2 -o "$WASM" example/hello.wado
 node scripts/jco/transpile-released.mjs "$WASM" "$OUT"
 # Node 26 ships stable JSPI (WebAssembly.Suspending), so no flag is needed.
-node -e "
+# The shim flushes stdout after run() resolves, so the loop drains rather than
+# exiting on it; the timeout is what bounds a run that never settles.
+timeout 120 node -e "
   process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
-  // The shim flushes stdout after run() resolves, so let the loop drain rather
-  // than exiting on it.
   import('$OUT/hello.js').then(m => m.run.run())
     .catch(e => { console.error(e); process.exit(1); });
 "

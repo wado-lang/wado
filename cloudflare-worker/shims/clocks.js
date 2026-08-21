@@ -4,6 +4,8 @@
 export const monotonicClock = {
   now: () => BigInt(Math.round(Date.now() * 1e6)),
   getResolution: () => 1_000_000n,
+  // A Worker has no sleep it can bill to a request, so a guest that waits or
+  // backs off returns at once.
   waitUntil: async () => {},
   waitFor: async () => {},
 };

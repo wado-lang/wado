@@ -13,7 +13,8 @@ async function drain(kind, streamReader) {
     if (text) console.log(`[${kind}] ${text.trimEnd()}`);
     return { tag: "ok" };
   } catch (err) {
-    return { tag: "err", val: String(err?.message ?? err) };
+    // `error-code` is an enum; an arbitrary string cannot be lowered.
+    return { tag: "err", val: err?.code === "EPIPE" ? "pipe" : "io" };
   }
 }
 

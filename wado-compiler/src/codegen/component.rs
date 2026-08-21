@@ -4321,7 +4321,12 @@ fn append_interface_instance_exports(
                 cm_name,
                 is_resource,
             } => {
-                if out.iter().any(|(_, name, _)| name == cm_name) {
+                // By owner as well as name: two interfaces may each define a
+                // `request`, and the one this export defines must survive.
+                if out
+                    .iter()
+                    .any(|(owner, name, _)| owner == interface_fq && name == cm_name)
+                {
                     return;
                 }
                 let pkg = crate::world_registry::fq_name_package(interface_fq);
