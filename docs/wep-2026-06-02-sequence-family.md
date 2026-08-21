@@ -107,8 +107,8 @@ carries no bound. `contains`, `binary_search`, `starts_with`, and `ends_with`
 need `Elem: Eq` or `Elem: Ord`, so they stay bounded inherent impls with thin
 forwarders. `Iterator` cleared the same wall with a carrier trait plus a
 defaulted method type parameter
-([Bounded Iterator Terminals](./wep-2026-08-19-bounded-iterator-terminals.md)),
-which these four could take as well. Bounds on associated types would fold them
+([Iterator Traits](./wep-2026-01-24-iterator-traits.md)), which these four
+could take as well. Bounds on associated types would fold them
 all back in directly; that stays a separate proposal.
 
 Mutation is absent from both traits: `set`, `sort`, `reverse`, and `[i] = v`

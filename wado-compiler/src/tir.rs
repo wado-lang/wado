@@ -644,7 +644,7 @@ impl TypeSet {
     }
 }
 
-/// A trait at the arguments it was instantiated at (WEP 2026-08-21):
+/// A trait at the arguments it was instantiated at (WEP 2026-08-12):
 /// `Combine` and `Combine<Inch>` are two, so the declaration alone is not the
 /// identity. `args` holds only what an impl wrote beyond the trait's declared
 /// defaults; a bound writes none, so it is always [`TraitRef::bare`].

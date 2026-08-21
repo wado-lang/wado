@@ -514,6 +514,17 @@ and the derivation filters it by a frame of the walk's own. That is why it canno
 be mistaken for a scope, and why it is sanctioned rather than scheduled for
 removal.
 
+### A bound means what its writer wrote
+
+Syntax means what the frame that wrote it says. A supertrait bound reached
+through `T: Derived` was written in `Derived`'s frame, so `Item = A` there is
+`Derived`'s `A` — and a bound writes no trait arguments, so an asking frame has
+nothing to bind it to. An inherited bound carries its writer, and a right-hand
+side naming the writer's own parameters stays abstract rather than binding to a
+name the asking frame happens to share.
+
+Fixture: `supertrait_binding_keeps_writer_frame.wado`.
+
 ### What a derivation may not be
 
 A derivation reaches a module's own scope and no further. Three shapes look like
@@ -562,6 +573,25 @@ Fixtures: `assoc_type_per_trait_args.wado`,
 `impl_writes_default_trait_arg.wado`,
 `error_bound_needs_default_instantiation.wado`,
 `error_blanket_pinned_assoc_generic_impl.wado`.
+
+## Compiler items
+
+A trait the compiler supplies behaviour for — an operator, `Eq` / `Ord`, a
+reflection kind — is recognised by a `DefId → CompilerItem` map, never by a
+spelling in the asking scope. Matching the spelling answers for a user trait
+that shares the name and declines for the prelude's where a module shadows it,
+so `trait Add { fn add(&self, other: &Self) -> Self; }` used to capture `+`,
+and a monomorphized `T::neg()` used to relower to `i32.sub` over the body the
+program wrote.
+
+Every site that decides an operator asks it: which impls a bound admits, which
+primitives supply arithmetic, which instruction a call lowers back to, and
+which right-hand type a literal is typed from.
+
+Fixtures: `error_user_trait_does_not_capture_add.wado`,
+`error_user_trait_does_not_capture_operator.wado`,
+`user_trait_method_survives_relowering.wado`,
+`operator_rhs_hint_names_its_trait.wado`.
 
 ## Impl target arguments
 

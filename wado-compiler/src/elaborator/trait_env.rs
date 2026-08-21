@@ -513,7 +513,7 @@ pub(super) type TraitDeclIndex = IndexSet<DefId>;
 /// `writer` is the trait whose declaration listed it. A bound means what its
 /// writer's frame says, so `trait Foo<A>: Bar<Item = A>` binds `Item` to
 /// `Foo`'s `A` and to nothing an asking frame happens to spell the same
-/// (WEP 2026-08-21).
+/// (WEP 2026-08-12).
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
