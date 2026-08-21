@@ -1,0 +1,15 @@
+// `#[benign(E)]` names its effect as this module spells it, alias included.
+
+use { println, Stdout as Out, Stdout } from "core:cli";
+
+#[benign(Out)]
+fn quiet() {
+    println("quiet");
+}
+
+export fn run() with Stdout {
+    quiet();
+}
+
+__DATA__
+{"stdout_contains": ["quiet"]}
