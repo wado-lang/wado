@@ -31,8 +31,8 @@ assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && 
 
 ### `pub struct Uuid`
 
-A 128-bit universally unique identifier, held big-endian: byte 0 is the most
-significant, the order RFC 9562 lays the fields out in.
+A 128-bit universally unique identifier, held big-endian as RFC 9562 lays
+the fields out.
 
 _Fields are private._
 

@@ -1,8 +1,7 @@
 //! Deterministic UUID v7 via effect handlers.
 //!
-//! `Uuid::v7()` draws from two effects: `Random` and `SystemClock`. Installing
-//! our own handlers pins both, so the output is reproducible — for tests,
-//! golden files, demos.
+//! `Uuid::v7()` draws from `Random` and `SystemClock`; installing our own
+//! handlers pins both, so the output is reproducible.
 //!
 //!     wado run example/uuid_v7.wado
 
@@ -77,14 +76,12 @@ export fn run() with Stdout {
     println(`v7 @ 1000ms: ${a}`);
     println(`v7 @ 2000ms: ${b}`);
 
-    // The clock leads the bytes, down to a 244 ns fraction, so later sorts after.
     assert a < b, "v7 values must sort by timestamp";
     assert a.version() == 7;
 
     let fine = gen_v7(1, 250_000, repeat(0xAB, 16));
     assert a < fine, "v7 values must sort within a millisecond too";
 
-    // Determinism: the same handlers reproduce the same UUID byte for byte.
     assert gen_v7(1, 0, repeat(0xAB, 16)) == a;
     println("deterministic: re-running yields the same UUID");
 }

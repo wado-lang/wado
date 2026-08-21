@@ -2,7 +2,6 @@
 
 export const monotonicClock = {
   now() {
-    // Return nanoseconds as BigInt
     const [sec, nsec] = process.hrtime();
     return BigInt(sec) * 1000000000n + BigInt(nsec);
   },
@@ -17,8 +16,8 @@ export const monotonicClock = {
   },
 };
 
-// The high-resolution clock has sub-millisecond precision but runs from process
-// start, so anchor it to `Date.now()` and re-anchor once the two diverge.
+// The high-resolution clock is sub-millisecond but process-relative, so anchor
+// it to `Date.now()`.
 let anchor = null;
 
 export const wallClock = {

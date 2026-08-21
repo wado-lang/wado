@@ -31,7 +31,6 @@ use {
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
 
-/// `rand_a` resolution: one tick per 1 ms / 4096 = 244 ns.
 global SUB_MS_TICKS: i64 = 4096;
 
 /// IANA CBOR tag for a UUID's 16 raw bytes.
@@ -52,8 +51,8 @@ pub variant ParseError {
     InvalidCharacter,
 }
 
-/// A 128-bit universally unique identifier, held big-endian: byte 0 is the most
-/// significant, the order RFC 9562 lays the fields out in.
+/// A 128-bit universally unique identifier, held big-endian as RFC 9562 lays
+/// the fields out.
 pub struct Uuid {
     bytes: u8x16,
 }

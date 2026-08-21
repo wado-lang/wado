@@ -4,8 +4,7 @@ use { to_bytes, from_bytes } from "core:cbor";
 use { Random } from "wasi:random";
 use { SystemClock, Instant } from "wasi:clocks";
 
-// A fixed byte stream: `Uuid::v4` / `Uuid::v7` draw all their non-determinism
-// from `Random`, so pinning it pins the output.
+// Pinning `Random` pins `Uuid::v4` / `v7`: it is their only non-determinism.
 struct MockRandom {
     data: List<u8>,
     pos: i32,
@@ -26,7 +25,6 @@ impl Random for MockRandom {
     ..trap
 }
 
-// A deterministic `SystemClock` handler returning a fixed instant.
 struct MockClock {
     instant: Instant,
 }
