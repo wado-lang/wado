@@ -99,8 +99,9 @@ pub(super) struct MethodInferenceInput<'a> {
     pub expected_return_type: Option<TypeId>,
     /// The dispatch-resolved trait, when this is a trait method. Disambiguates
     /// the method lookup for same-named methods on different traits (e.g.
-    /// `payload` on Serialize vs Deserialize).
-    pub trait_name: Option<&'a str>,
+    /// `payload` on Serialize vs Deserialize). A declaration, not a spelling:
+    /// two modules' same-named traits are two traits.
+    pub trait_decl: Option<crate::defs::DefId>,
     /// Module declaring the method. See
     /// [`Elaborator::fill_defaulted_method_type_args`].
     pub declaring_module: Option<ModuleSource>,
@@ -1085,7 +1086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
-        trait_name: Option<&str>,
+        trait_decl: Option<crate::defs::DefId>,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         inferred: &mut [TypeId],
@@ -1101,8 +1102,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !has_fillable {
             return;
         }
-        if let Some(trait_name) = trait_name {
-            self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
+        if let Some(trait_) = trait_decl {
+            self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
         }
         // Re-registering the parameters gives a default like `= T` a scope to
         // resolve against. Number them from the index the declaration gave the
@@ -1154,7 +1155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             decl_return_type,
             expected_return_type,
-            trait_name,
+            trait_decl,
             declaring_module,
             span,
         } = input;
@@ -1201,7 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.fill_defaulted_method_type_args(
             &method_type_params,
             receiver_type,
-            trait_name,
+            trait_decl,
             slots,
             declaring_module,
             &mut inferred,

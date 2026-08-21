@@ -63,6 +63,29 @@ impl OnBoundTrait {
         }
     }
 
+    /// The inverse of [`Self::compiler_item`]. `None` for an item that drives
+    /// no bound-time synthesis.
+    pub(super) fn of_compiler_item(item: CompilerItem) -> Option<Self> {
+        let found = match item {
+            CompilerItem::Eq => Self::Eq,
+            CompilerItem::Ord => Self::Ord,
+            CompilerItem::Serialize => Self::Serialize,
+            CompilerItem::Deserialize => Self::Deserialize,
+            CompilerItem::Default => Self::Default,
+            CompilerItem::ReflectStruct => Self::ReflectStruct,
+            CompilerItem::ReflectVariant => Self::ReflectVariant,
+            CompilerItem::ReflectEnum => Self::ReflectEnum,
+            CompilerItem::ReflectFlags => Self::ReflectFlags,
+            CompilerItem::Ref => Self::Ref,
+            CompilerItem::RefMut => Self::RefMut,
+            CompilerItem::Inspect => Self::Inspect,
+            CompilerItem::InspectAlt => Self::InspectAlt,
+            CompilerItem::DisplayAlt => Self::DisplayAlt,
+            _ => return None,
+        };
+        Some(found)
+    }
+
     pub(super) fn is_serde(self) -> bool {
         matches!(self, Self::Serialize | Self::Deserialize)
     }
@@ -585,11 +608,7 @@ impl TypeSystem {
         }
         ctx.trait_check_stack.borrow_mut().push((type_id, trait_));
 
-        // The spelling the inner layers still key on is *derived from* the
-        // identity rather than passed beside it, so the two cannot disagree.
-        let trait_name = self.resolutions.defs().name(trait_).to_string();
-        let result =
-            self.type_implements_trait_inner(ctx, scope, type_id, &resolved, &trait_name, trait_);
+        let result = self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_);
 
         ctx.trait_check_stack.borrow_mut().pop();
 
@@ -695,6 +714,35 @@ impl TypeSystem {
             .and_then(|t| t.canonical())
     }
 
+    /// Which compiler item `trait_` is, by identity. A trait is a declaration,
+    /// so this is a lookup and not a comparison: a user trait sharing a prelude
+    /// name is not that trait, and a scope shadowing one does not stop the
+    /// prelude's from being itself.
+    pub(super) fn on_bound_of(&self, trait_: DefId) -> Option<OnBoundTrait> {
+        let decl = self.resolutions.defs().ast_id(trait_);
+        let item = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_item_of_decl(decl)?;
+        OnBoundTrait::of_compiler_item(item)
+    }
+
+    /// Whether `trait_` is the prelude's `Display`. Not an [`OnBoundTrait`] —
+    /// it is never auto-derived except for a plain enum.
+    pub(super) fn is_display_trait_of(&self, trait_: DefId) -> bool {
+        let decl = self.resolutions.defs().ast_id(trait_);
+        self.type_table
+            .borrow()
+            .compiler_items()
+            .trait_item_of_decl(decl)
+            == Some(CompilerItem::Display)
+    }
+
+    /// [`Self::on_bound_of`] for a caller holding a spelling with no reference
+    /// site — a `#[derive(...)]` prefix, which names no trait reference to
+    /// resolve. Distinct from the identity form so the two questions cannot be
+    /// mistaken for one.
     pub(super) fn classify_on_bound_trait(
         &self,
         scope: &TypeLookup,
@@ -776,24 +824,24 @@ impl TypeSystem {
         self.trait_env.decl_index.contains(&key).then_some(key)
     }
 
-    /// Whether holding `bound_name` also gives `trait_name` — the same trait,
-    /// or one of its supertraits. The single place a declared bound is read as
-    /// its elaborated form, so no registration site can bypass it.
-    pub(super) fn bound_implies(
+    /// Whether holding the bound spelled `bound_name` in `scope` also gives
+    /// `trait_` — the same declaration, or one of its supertraits.
+    ///
+    /// [`Self::bound_implies`] compares two spellings; this compares the
+    /// bound's declaration against an identity the caller already holds, which
+    /// is what a satisfaction check has.
+    pub(super) fn bound_decl_implies(
         &self,
         scope: &TypeLookup,
         bound_name: &str,
-        trait_name: &str,
+        trait_: DefId,
     ) -> bool {
-        if bound_name == trait_name {
+        if self.scoped_trait_decl_key(scope, bound_name) == Some(trait_) {
             return true;
         }
-        let wanted = self.scoped_trait_decl_key(scope, trait_name);
-        self.supertraits_of(scope, bound_name).iter().any(|s| {
-            wanted
-                .as_ref()
-                .map_or(s.bound.name == trait_name, |want| &s.decl == want)
-        })
+        self.supertraits_of(scope, bound_name)
+            .iter()
+            .any(|s| s.decl == trait_)
     }
 
     /// The transitive supertraits of `trait_name` as seen from `scope`.
@@ -1040,10 +1088,9 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_id: TypeId,
         resolved: &ResolvedType,
-        trait_name: &str,
         trait_: DefId,
     ) -> bool {
-        let on_bound = self.classify_on_bound_trait(scope, trait_name);
+        let on_bound = self.on_bound_of(trait_);
 
         if on_bound.is_some_and(OnBoundTrait::is_format) {
             return true;
@@ -1051,8 +1098,7 @@ impl TypeSystem {
 
         // A plain `enum` auto-derives `Display` (the bare case name), so its
         // bound holds before `synthesize_traits` emits the body.
-        if matches!(resolved, ResolvedType::Enum { .. }) && self.is_display_trait(scope, trait_name)
-        {
+        if matches!(resolved, ResolvedType::Enum { .. }) && self.is_display_trait_of(trait_) {
             return true;
         }
 
@@ -1065,7 +1111,7 @@ impl TypeSystem {
                 .is_some_and(|bounds| {
                     bounds
                         .iter()
-                        .any(|b| self.bound_implies(scope, &b.name, trait_name))
+                        .any(|b| self.bound_decl_implies(scope, &b.name, trait_))
                 });
         }
 
@@ -1085,11 +1131,14 @@ impl TypeSystem {
             if is_eq_or_ord {
                 return true;
             }
-            // Numeric primitives implement arithmetic traits. Keyed on the
-            // declaration, not the spelling: a user `trait Rem` is a different
-            // trait and a primitive does not implement it (WEP 2026-08-12).
+            // Numeric primitives implement arithmetic traits. The operator is
+            // named by the declaration the compiler supplies it for, so a user
+            // `trait Rem` is a different trait and gets none of it.
             if self.is_prelude_trait_decl(Some(trait_))
-                && primitive_name_has_arithmetic(prim.as_str(), trait_name)
+                && primitive_name_has_arithmetic(
+                    prim.as_str(),
+                    self.resolutions.defs().name(trait_),
+                )
             {
                 return true;
             }
@@ -1274,7 +1323,7 @@ impl TypeSystem {
                 // An associated type projection T::Assoc implements a trait if
                 // the trait declaration for Assoc declares that bound.
                 // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
-                return bounds.iter().any(|b| b.base_name() == trait_name);
+                return bounds.iter().any(|b| b.canonical() == Some(trait_));
             }
             ResolvedType::Newtype { base_type, .. } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
@@ -1335,13 +1384,7 @@ impl TypeSystem {
     ) -> bool {
         self.trait_env
             .has_any_methodful_impl_by_receiver(type_key, trait_)
-            || self.blanket_trait_impl_applies(
-                ctx,
-                scope,
-                subject,
-                type_key,
-                self.trait_spelling(trait_),
-            )
+            || self.blanket_trait_impl_applies(ctx, scope, subject, type_key, trait_)
     }
 
     /// Whether a bare bound on the header's trait selects it — see
@@ -1364,12 +1407,6 @@ impl TypeSystem {
             &params,
             &self.resolutions,
         )
-    }
-
-    /// The name a trait declaration writes, for the layers still keyed on one.
-    /// A rendering of the identity, so the two cannot disagree.
-    pub(super) fn trait_spelling(&self, trait_: DefId) -> &str {
-        self.resolutions.defs().name(trait_)
     }
 
     /// Check if there's a trait impl for a type, with optional type args for bounds checking.
@@ -1415,7 +1452,7 @@ impl TypeSystem {
         // `impl_index` above (the index is built from every loaded module,
         // including this one), so no separate current-module scan is needed.
 
-        self.blanket_trait_impl_applies(ctx, scope, subject, type_key, self.trait_spelling(trait_))
+        self.blanket_trait_impl_applies(ctx, scope, subject, type_key, trait_)
     }
 
     /// [`Self::type_implements_trait_inner`]'s primitive arm, asked of a
@@ -1460,7 +1497,7 @@ impl TypeSystem {
         scope: &TypeLookup,
         subject: Option<TypeId>,
         type_key: &Receiver,
-        trait_name: &str,
+        trait_: DefId,
     ) -> bool {
         // A structural obligation is the member walk's to answer, so a
         // `Reflect*`-bounded blanket does not get to answer it: its bound holds
@@ -1471,12 +1508,12 @@ impl TypeSystem {
         // Only that shape is skipped — a user-written blanket over the same
         // trait still answers for itself.
         let structural = self
-            .classify_on_bound_trait(scope, trait_name)
+            .on_bound_of(trait_)
             .is_some_and(OnBoundTrait::is_field_recursive);
         let trait_env = self.trait_env.clone();
         for blanket in trait_env
             .blanket_impls
-            .get(trait_name)
+            .get(&trait_)
             .into_iter()
             .flatten()
             // A value blanket mints no instance for a reference, so it does not
@@ -2238,8 +2275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return false;
         }
-        let trait_name = self.tysys.trait_spelling(trait_).to_string();
-        self.register_assoc_types_for_concrete_type_and_trait(type_arg, &trait_name);
+        self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_);
         true
     }
 
@@ -2252,7 +2288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn register_assoc_types_for_concrete_type_and_trait(
         &mut self,
         concrete_type_id: TypeId,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
     ) {
         // Get the base type name and concrete type args for impl block lookup.
         // For newtypes, follow the chain to the underlying type to find the trait impl,
@@ -2301,9 +2337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let Some(header) = trait_env.impl_headers.get(&entry) else {
                         continue;
                     };
-                    if header.trait_name.as_deref() == Some(trait_name)
-                        && !header.associated_types.is_empty()
-                    {
+                    if header.trait_ref == Some(trait_) && !header.associated_types.is_empty() {
                         let impl_ty_param_names: Vec<String> = match &header.ty {
                             ast::Type::Generic(g) => g
                                 .args
@@ -2414,12 +2448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
-            for blanket in trait_env
-                .blanket_impls
-                .get(trait_name)
-                .into_iter()
-                .flatten()
-            {
+            for blanket in trait_env.blanket_impls.get(&trait_).into_iter().flatten() {
                 let Some(header) = trait_env
                     .impl_headers
                     .get(&(blanket.module.clone(), blanket.ast_id))

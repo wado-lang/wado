@@ -289,7 +289,7 @@ impl ImplHeader {
 /// blanket wrote cannot answer that.
 fn blanket_pack_assocs(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
-    blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
+    blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
 ) -> IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> {
     let mut out: IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> = IndexMap::default();
@@ -341,7 +341,7 @@ pub(crate) enum BlanketParamSource {
 /// written after another parameter sits at a slot the caller never fills.
 fn blanket_param_sources(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
-    blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
+    blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
 ) -> IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> {
     let mut out: IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> = IndexMap::default();
@@ -779,7 +779,10 @@ pub struct TraitEnv {
     /// Type` block — the blanket provides the body, homed in the blanket's
     /// module. Keyed by bare trait name; the `type_module` hint at the call site
     /// disambiguates when several modules host a blanket for the same trait.
-    pub(super) blanket_impls: IndexMap<String, Vec<BlanketImpl>>,
+    /// Blanket impls by the trait they implement. Keyed by declaration:
+    /// a name-keyed bucket merged two modules' same-named traits, so one
+    /// module's blanket answered the other's bound (WEP 2026-08-12).
+    pub(super) blanket_impls: IndexMap<DefId, Vec<BlanketImpl>>,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
@@ -882,7 +885,7 @@ impl TraitEnv {
         let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
             IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
-        let mut blanket_impls: IndexMap<String, Vec<BlanketImpl>> = IndexMap::default();
+        let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
@@ -1147,8 +1150,7 @@ impl TraitEnv {
                     .entry(type_key.clone())
                     .or_default()
                     .push((module_source.clone(), impl_block.id));
-                if let Some(trait_type) = &impl_block.trait_type {
-                    let trait_name = get_type_name_static(trait_type);
+                if impl_block.trait_type.is_some() {
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
                     {
@@ -1172,16 +1174,20 @@ impl TraitEnv {
                                     .collect()
                             })
                             .unwrap_or_default();
-                        blanket_impls
-                            .entry(trait_name.clone())
-                            .or_default()
-                            .push(BlanketImpl {
-                                module: module_source.clone(),
-                                ast_id: impl_block.id,
-                                receiver,
-                                param,
-                                bounds,
-                            });
+                        // A blanket whose trait reference reaches no
+                        // declaration answers no bound, so it is not indexed.
+                        if let Some(implemented) = trait_ref {
+                            blanket_impls
+                                .entry(implemented)
+                                .or_default()
+                                .push(BlanketImpl {
+                                    module: module_source.clone(),
+                                    ast_id: impl_block.id,
+                                    receiver,
+                                    param,
+                                    bounds,
+                                });
+                        }
                     }
                     impl_index
                         .entry(type_key.clone())
@@ -1546,10 +1552,10 @@ impl TraitEnv {
     /// several modules host a value blanket for the trait.
     pub(crate) fn blanket_impl_module_for_trait(
         &self,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        self.value_blanket_for_trait(trait_name, type_module)
+        self.value_blanket_for_trait(trait_, type_module)
             .map(|b| &b.module)
     }
 
@@ -1560,11 +1566,11 @@ impl TraitEnv {
     /// first-registered kind and then reject it on the bound check.
     pub(crate) fn value_blanket_for_receiver(
         &self,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
         satisfies: &dyn Fn(&[BlanketBound]) -> bool,
     ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(trait_name)?;
+        let impls = self.blanket_impls.get(&trait_)?;
         let mut values = impls
             .iter()
             .filter(|b| b.receiver == BlanketReceiver::Value)
@@ -1583,10 +1589,10 @@ impl TraitEnv {
     /// never dispatch a value receiver.
     fn value_blanket_for_trait(
         &self,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
     ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(trait_name)?;
+        let impls = self.blanket_impls.get(&trait_)?;
         let mut values = impls
             .iter()
             .filter(|b| b.receiver == BlanketReceiver::Value);
@@ -1604,8 +1610,8 @@ impl TraitEnv {
     /// shape ref impl (`impl<T> IntoIterator for &List<T>`), whose inner is a
     /// concrete/parametric type. Callers route a `&<pointee>` type-param dispatch
     /// through the universal blanket only when one exists.
-    pub(crate) fn has_universal_ref_blanket(&self, trait_name: &str, is_mut: bool) -> bool {
-        self.blanket_impls.get(trait_name).is_some_and(|impls| {
+    pub(crate) fn has_universal_ref_blanket(&self, trait_: DefId, is_mut: bool) -> bool {
+        self.blanket_impls.get(&trait_).is_some_and(|impls| {
             impls
                 .iter()
                 .any(|b| b.receiver == BlanketReceiver::Ref { is_mut })

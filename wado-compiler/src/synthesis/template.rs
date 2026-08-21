@@ -1036,7 +1036,7 @@ pub(crate) fn blanket_dispatch_for(
     // Param and pack projections must come from the same blanket, or the
     // template name would name one kind and the args another.
     let blanket = trait_env.value_blanket_for_receiver(
-        trait_name.base_name(),
+        trait_name.canonical()?,
         type_module.as_ref(),
         &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt),
     )?;

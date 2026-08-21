@@ -146,7 +146,7 @@ struct SubstitutedCall {
 pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
-    trait_name: &str,
+    trait_: crate::defs::DefId,
     blanket_module: &ModuleSource,
     type_table: &TypeTable,
 ) -> Option<Vec<TypeId>> {
@@ -155,7 +155,7 @@ pub(super) fn blanket_pack_dispatch_args(
     }
     let receiver = args[0];
     let blanket =
-        trait_env.value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+        trait_env.value_blanket_for_receiver(trait_, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
                 receiver,
                 bounds.to_vec(),
@@ -206,7 +206,7 @@ fn declared_method_type_args(generic: &TirFunction, type_args: &[TypeId]) -> Vec
 /// allowed as before.
 fn blanket_receiver_satisfies(
     trait_env: &TraitEnv,
-    trait_name: &str,
+    trait_: crate::defs::DefId,
     blanket_module: &ModuleSource,
     blanket_receiver: Option<(TypeId, &TypeTable)>,
 ) -> bool {
@@ -214,7 +214,7 @@ fn blanket_receiver_satisfies(
         return true;
     };
     trait_env
-        .value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+        .value_blanket_for_receiver(trait_, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
                 type_id,
                 bounds.to_vec(),
@@ -242,6 +242,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some(v);
     }
+    let trait_decl = info.and_then(|i| i.trait_decl());
     let trait_name = info.and_then(|i| i.base_trait_name());
     if let Some(trait_name) = trait_name {
         for candidate in struct_candidates {
@@ -256,9 +257,10 @@ fn lookup_template_with_trait_fallback<'a, V>(
         // name — the receiver-type candidates above can't find them. Consult
         // the blanket index by trait name so `bytes.into_iter()` resolves to
         // the `IntoIterator` blanket in `core:prelude/traits`.
-        if let Some(impl_module) =
-            trait_env.blanket_impl_module_for_trait(trait_name, type_module_hint)
-            && blanket_receiver_satisfies(trait_env, trait_name, impl_module, blanket_receiver)
+        if let Some(trait_) = trait_decl
+            && let Some(impl_module) =
+                trait_env.blanket_impl_module_for_trait(trait_, type_module_hint)
+            && blanket_receiver_satisfies(trait_env, trait_, impl_module, blanket_receiver)
             && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
         {
             return Some(v);
@@ -856,13 +858,13 @@ impl Monomorphizer {
             // re-keyed this way: a concrete impl whose single argument happens
             // to satisfy some blanket's bounds is not that blanket.
             let impl_type_args = info
-                .base_trait_name()
+                .trait_decl()
                 .filter(|_| monomorph.is_blanket)
-                .and_then(|tn| {
+                .and_then(|trait_| {
                     blanket_pack_dispatch_args(
                         &monomorph.impl_type_args,
                         &self.functions.trait_env,
-                        tn,
+                        trait_,
                         module_source,
                         type_table,
                     )
@@ -1421,7 +1423,7 @@ impl Monomorphizer {
                 {
                     let generic_func = generic_func_rc.borrow();
                     let info = method_func.method_info.as_ref();
-                    let trait_name = info.and_then(|i| i.base_trait_name());
+                    let trait_name = info.and_then(|i| i.trait_decl());
                     // Does this dispatch go through a blanket template that keys on
                     // projected type packs (`impl<T: Bound<Assoc = [..P]>, ..P>
                     // Trait for T`, keyed by `[T, T::Assoc, …]`)? Covers
@@ -1660,17 +1662,25 @@ impl Monomorphizer {
         {
             return tid;
         }
-        if self.value_blanket_serves(tid, trait_name.base_name(), type_table) {
+        if trait_name
+            .canonical()
+            .is_some_and(|trait_| self.value_blanket_serves(tid, trait_, type_table))
+        {
             return tid;
         }
         base
     }
 
-    fn value_blanket_serves(&self, tid: TypeId, trait_name: &str, type_table: &TypeTable) -> bool {
+    fn value_blanket_serves(
+        &self,
+        tid: TypeId,
+        trait_: crate::defs::DefId,
+        type_table: &TypeTable,
+    ) -> bool {
         self.functions
             .trait_env
             .value_blanket_for_receiver(
-                trait_name,
+                trait_,
                 module_source_for_trait_impl(type_table, tid).as_ref(),
                 &|bounds| {
                     crate::synthesis::template::receiver_satisfies_blanket_bounds(
@@ -2184,7 +2194,7 @@ impl Monomorphizer {
                             // `&List<i32>^Inspect` to List's impl instead of the
                             // ref blanket's, dropping the leading `&` at codegen.
                             // A generic impl lives in the receiver's own module.
-                            let trait_name_for_blanket = new_info.base_trait_name();
+                            let trait_name_for_blanket = new_info.trait_decl();
                             let generic_or_concrete =
                                 self.functions.generic_or_concrete_impl_module(
                                     &new_info,
@@ -2976,10 +2986,13 @@ impl Monomorphizer {
             return false;
         };
         let trait_name = trait_fq.base_name();
+        let Some(trait_) = trait_fq.canonical() else {
+            return false;
+        };
         if !self
             .functions
             .trait_env
-            .has_universal_ref_blanket(trait_name, is_mut)
+            .has_universal_ref_blanket(trait_, is_mut)
         {
             return false;
         }
@@ -3181,7 +3194,7 @@ impl Monomorphizer {
         receiver: TypeId,
         type_table: &TypeTable,
     ) -> bool {
-        let Some(trait_name) = info.base_trait_name() else {
+        let Some(trait_name) = info.trait_decl() else {
             return false;
         };
         if !crate::synthesis::template::has_reflect_kind(receiver, type_table) {
@@ -3230,7 +3243,7 @@ impl Monomorphizer {
         // ref blanket's, dropping the leading `&` at codegen. With no concrete
         // impl, a generic one lives in the receiver type's own module — how
         // newtype inheritance reuses it — and only a blanket in `blanket_impls`.
-        let trait_name_for_blanket = new_info.base_trait_name();
+        let trait_name_for_blanket = new_info.trait_decl();
         let generic_or_concrete = self
             .functions
             .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());

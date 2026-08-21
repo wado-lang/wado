@@ -157,3 +157,4 @@ history is the SSoT for how the design got here.
 - [Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md)
 - [Power-Assert Coverage](./wep-2026-08-19-power-assert-coverage.md)
 - [Bounded Iterator Terminals — `sum` / `product` / `min` / `max`](./wep-2026-08-19-bounded-iterator-terminals.md)
+- [Trait Obligations — One Solve, One Answer](./wep-2026-08-21-trait-obligations.md)

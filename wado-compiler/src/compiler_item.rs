@@ -1695,6 +1695,19 @@ impl CompilerItems {
         }
     }
 
+    /// Which compiler item `decl` is the trait of, or `None` for a trait the
+    /// compiler does not know. The inverse of [`Self::trait_decl`], and the
+    /// only way to recognise one: matching the spelling in the asking scope
+    /// answers for a user trait that shares the name, and declines for the
+    /// prelude's when a scope shadows it.
+    #[must_use]
+    pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
+        CompilerItem::ALL
+            .iter()
+            .copied()
+            .find(|item| self.trait_decl(*item) == Some(decl))
+    }
+
     /// The declaring node of a [`CompilerItemKind::Variant`] item.
     pub fn variant_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
         match self.get(item)? {

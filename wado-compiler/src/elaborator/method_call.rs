@@ -753,7 +753,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
-                trait_name: trait_name.as_ref().map(crate::name::FqTraitName::base_name),
+                trait_decl: trait_name
+                    .as_ref()
+                    .and_then(crate::name::FqTraitName::canonical),
                 declaring_module: Some(callee_module),
                 span,
             });

@@ -314,10 +314,10 @@ impl Monomorphizer {
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
             && key.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
-                    i.base_trait_name().is_some_and(|tn| {
+                    i.trait_decl().is_some_and(|trait_| {
                         self.functions
                             .trait_env
-                            .has_universal_ref_blanket(tn, ref_kind == RefKind::Mut)
+                            .has_universal_ref_blanket(trait_, ref_kind == RefKind::Mut)
                     })
                 })
             });
