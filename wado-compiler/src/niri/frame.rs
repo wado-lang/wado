@@ -5,6 +5,7 @@
 //! abandons the evaluation rather than stepping past an unperformed write.
 
 use crate::const_eval::Value;
+use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -623,6 +624,26 @@ impl Interpreter<'_> {
         }
     }
 
+    /// The value bound to a by-value or shared-reference parameter.
+    ///
+    /// `&expr` has no value of its own — the lattice refuses a reference, since
+    /// binding one would snapshot a referent a later write could change. What a
+    /// callee reads through a shared reference is the referent, and a shared
+    /// reference cannot write, so the referent's own constant stands. A callee
+    /// that retains one past its return is refused separately, by `stores`.
+    fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
+        if let Some(e) = arg.as_expr()
+            && let ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            } = &body.exprs[e].kind
+        {
+            let inner = *inner;
+            return self.operand_lattice_folded(body, inner).as_const();
+        }
+        self.operand_lattice_folded(body, arg).as_const()
+    }
+
     /// The callee a call names, and the operands bound to its parameters, in
     /// parameter order.
     fn call_target(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
@@ -673,7 +694,7 @@ impl Interpreter<'_> {
                 targets.push((param.local_index, root, path));
                 value
             } else {
-                self.operand_lattice_folded(body, *arg).as_const()?
+                self.shared_ref_arg_value(body, *arg)?
             };
             places.extend(place);
             bound.push((param.local_index, value));
