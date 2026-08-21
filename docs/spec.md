@@ -3364,6 +3364,9 @@ A bound cannot write a trait argument — the parser reads `<...>` after one as
 associated-type bindings — so `T: Add` names the defaulted `Add<Self>`, and
 `T::Output` under two bounds that both declare `Output` is ambiguous.
 
+A parameter with no default is therefore unconstrained by a bound: `T: Pick`
+holds for every `impl Pick<K>`, and the body cannot pass an argument for `K`.
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:
