@@ -15,7 +15,6 @@ use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, TK_ID, TK_SEMI } from "./grammars/AN
 use { TK_TOKEN_REF, TK_RULE_REF, MODE_Argument, MODE_LexerCharSet } from "./grammars/ANTLRv4Lexer.g4";
 use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
 
-// A hand-written port of ANTLR's LexerAdaptor.
 struct Antlr4Base {
     begins: i32,
     ends: i32,
@@ -175,8 +174,6 @@ test "parse minimal grammar" {
 }
 
 test "parse a grammar with a parser rule and a lexer rule" {
-    // The retype is what lets the parser tell a rule definition from a token
-    // definition.
     let r = a4_parse(&"grammar Foo;\nexpr : expr '+' expr | INT ;\nINT : [0-9]+ ;\n");
     assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
 }
@@ -200,8 +197,6 @@ test "a non-ASCII uppercase rule name is a TOKEN_REF" {
 }
 
 test "a lexer rule's bracket opens a char set, not an argument list" {
-    // `inLexerRule()` is true inside `INT`, so `[` enters LexerCharSet and
-    // `more()`s — the set is part of the token, not ARGUMENT_CONTENT.
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
         let tokens = antlr4::tokenize(&"INT : [0-9]+ ;");

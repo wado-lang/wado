@@ -38,7 +38,7 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 - OK to read: `.g4` files anywhere under `vendor/antlr4/`; `runtime-testsuite/**/*.txt` descriptors; `vendor/antlr4/doc/*.md` (spec-like prose — the canonical `.g4` semantics reference; a curated index is in `antlr4-compatibility.md`).
 - OK to run: the published `antlr-4.13.2-complete.jar` as a black-box oracle (clean-room measurement).
 
-The first rule is enforced, not just documented: `permissions.deny` covers the Read tool and `.claude/hooks/antlr4-license-guard.sh` covers Bash (`cat`, `grep`, `sed`, …).
+The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/hooks/antlr4-license-guard.sh` covers Bash.
 
 ## Standing codegen rules
 

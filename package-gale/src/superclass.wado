@@ -230,8 +230,7 @@ pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
     return out;
 }
 
-/// The recognizer methods a base may override, as fixed operations on every
-/// generated interface.
+/// The recognizer methods a base may override.
 global SUPER_HOOKS: List<String> = ["emit"];
 
 /// A base is wired only when this is empty.
@@ -500,8 +499,6 @@ fn gen_super_hooks(w: &mut CodeWriter) {
 }
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
-/// `channel` names the token's channel, or the default for a grammar whose
-/// channel machinery is off.
 pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
     return `${*base_name}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${*channel})`;
 }
