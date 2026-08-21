@@ -41,6 +41,7 @@ mod sroa_variant_return;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
+mod tuple_projection;
 mod value_copy;
 mod value_copy_demote;
 

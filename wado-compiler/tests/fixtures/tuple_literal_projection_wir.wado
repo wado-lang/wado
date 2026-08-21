@@ -1,0 +1,30 @@
+// Test: WIR-level verification that a field read of a tuple built in place is
+// that element.
+//
+// A tuple literal has no identity, so `[a, b, c].1` is `b` — provided the
+// unselected elements can be dropped, which needs them pure. An element that
+// prints is not, so that tuple stands and its side effect still happens.
+
+use { println, Stdout } from "core:cli";
+
+fn shout(s: String) -> String with Stdout {
+    println(`side: ${s}`);
+    return s;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(3);
+    println(`${[n, n * 2, n * 3].1}`);
+    println([`kept`, shout(`boom`)].0);
+}
+
+__DATA__
+{
+    "stdout": "6\nside: boom\nkept\n",
+    "wir_expect:O2": [
+        "i32::fmt_decimal$spec0\"(3 * 2,"
+    ],
+    "wir_not_expect:O2": [
+        "3 * 3"
+    ]
+}
