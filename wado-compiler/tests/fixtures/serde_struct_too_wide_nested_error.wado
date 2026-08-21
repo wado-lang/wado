@@ -1,9 +1,6 @@
-// The width limit must also catch a struct derived through a *bound*, not just
-// one with an explicit `impl Deserialize for T;` marker.
-//
-// `Outer` carries the marker; `Inner` is derived because `Outer`'s field
-// demands it. Without this check the 65th field's `1 << 64` wraps onto bit 0
-// and the wire reports `f0` and `f64` as duplicates of each other.
+// The width limit must also catch a struct derived through a *bound*: `Outer`
+// carries the marker, `Inner` is derived because `Outer`'s field demands it.
+// Unchecked, `1 << 64` wraps and `f0` / `f64` report as duplicates.
 
 use { Deserialize } from "core:serde";
 

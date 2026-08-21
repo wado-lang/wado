@@ -1,9 +1,6 @@
 // Skipping an unknown key's value must be depth-bounded like the typed path.
-//
-// `skip_item` threads its own `depth` because skipping does not move the
-// deserializer's level; reading `self.depth` instead would return the same
-// value at every nesting step and leave the skip path unbounded, so a struct
-// with no such field at all could still be made to exhaust the stack.
+// `skip_item` threads its own `depth`: skipping does not move the
+// deserializer's level, so reading `self.depth` leaves the path unbounded.
 
 use { Deserialize, DeserializeErrorKind } from "core:serde";
 use { from_bytes } from "core:cbor";

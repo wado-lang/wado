@@ -1,14 +1,10 @@
-// Reading a global through a re-exporting module.
+// Reading a global through a re-exporting module: a body read, a namespace
+// import, and a default argument naming it (which resolves in the declaring
+// module's scope, so this module deliberately does not import it).
 //
-// `signatures.globals` is keyed by the module that *declares* a global, so a
-// module that only `pub use`s one has no entry. The import collection gave up
-// there, the name fell through to the function branch of identifier
-// resolution, and the resulting `FuncRef` tripped `lower::translate`'s
-// unreachable — an ICE, not a diagnostic.
-//
-// Covered here: a body read, a namespace import, and a default argument naming
-// the re-exported global (which resolves in the declaring module's scope, so
-// this module deliberately does not import it).
+// `signatures.globals` is keyed by the declaring module, so a `pub use`-only
+// module has no entry; the import was dropped and the name fell through to the
+// function branch, whose `FuncRef` tripped `lower::translate`'s unreachable.
 
 use { body_use, defaulted } from "./sub/reexport_global_mid.wado";
 use facade from "./sub/reexport_global_facade.wado";

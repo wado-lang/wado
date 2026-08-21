@@ -1217,11 +1217,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `&mut` of a scalar place inside a container borrows a boxed copy, so
-        // the mutation would be silently dropped. An explicit `&mut x.f` is
-        // refused for this reason (`operators.rs`); the implicit receiver
-        // borrow must refuse it too, or the same shape miscompiles instead of
-        // diagnosing. An element (`xs[i]`) is the same shape as a field.
+        // `&mut` of a scalar place in a container borrows a boxed copy, so the
+        // mutation would be silently dropped. `operators.rs` refuses the
+        // explicit `&mut x.f`; the implicit receiver borrow must match it.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
             && self.is_scalar_place_type(receiver.type_id)
@@ -1236,9 +1234,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether a place of this type is a scalar: a primitive or an enum, or a
-    /// newtype over either. `&mut` of such a place is a boxed copy rather than
-    /// a projection, which is what makes it unwritable through the reference.
+    /// A primitive or enum, or a newtype over either. `&mut` of such a place
+    /// is a boxed copy rather than a projection, so writes do not land.
     pub(super) fn is_scalar_place_type(&self, type_id: TypeId) -> bool {
         let table = self.tysys.type_table.borrow();
         let is_scalar = |ty: &ResolvedType| {

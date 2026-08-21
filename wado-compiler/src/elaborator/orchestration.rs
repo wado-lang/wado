@@ -1720,9 +1720,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     ast::UseItem::Namespace { name: ns } => {
                         let same_package = source.same_package(module_source);
-                        // What `source` declares itself, plus what it re-exports:
-                        // a `pub use`d global reaches the namespace exactly as a
-                        // declared one does.
+                        // Declared here, plus re-exported: both reach the
+                        // namespace.
                         let declared = state
                             .tysys
                             .signatures
@@ -1755,13 +1754,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         imported
     }
 
-    /// Where the global `name` is *declared*, as seen from `source`, with its
-    /// type and mutability.
-    ///
-    /// `signatures.globals` is keyed by the declaring module, so a name
-    /// `source` only re-exports (`pub use`) is absent under `source` itself.
-    /// The symbol table resolves the re-export chain to the module that wrote
-    /// it. Returns `None` for a name that is not a global at all.
+    /// Where the global `name` is declared, as seen from `source`, with its
+    /// type and mutability. `signatures.globals` is keyed by the declaring
+    /// module, so a re-exported name needs the chain resolved first. `None`
+    /// when `name` is not a global.
     fn global_declared_for(
         state: &AnnotateState,
         symbols: &crate::symbol::SymbolTable,
@@ -1776,7 +1772,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .tysys
             .signatures
             .global(symbol.module_source(), &symbol.name)?;
-        Some((symbol.module_source().clone(), symbol.name.clone(), ty, mutable))
+        Some((
+            symbol.module_source().clone(),
+            symbol.name.clone(),
+            ty,
+            mutable,
+        ))
     }
 
     /// Topologically sort modules based on struct field type dependencies.

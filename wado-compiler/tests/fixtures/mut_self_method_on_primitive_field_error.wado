@@ -1,15 +1,9 @@
-// A `&mut self` method called on a primitive-typed struct field.
+// A `&mut self` method on a primitive-typed field or element.
 //
-// `&mut` of a primitive is a `Box<T>`: for a local the box is the variable's
-// storage, but a field has no box to project into, so the call site can only
-// box a *copy* and the mutation is discarded. The explicit form (`&mut h.b`)
-// has always been refused for this reason; the implicit receiver borrow used
-// to compile and silently do nothing, which is how the JSON depth guard was
-// nearly written as a newtype field that never counted.
-//
-// A newtype over a primitive is the same shape, so it is refused too — the
-// check looks through to the ultimate base type. A list element (`xs[i]`) is
-// the same shape as a field and is refused for the same reason.
+// `&mut` of a primitive is a `Box<T>`: a local's box is its storage, but a
+// field has none to project into, so the call site boxes a copy and the
+// mutation is discarded. The explicit `&mut h.b` was always refused; the
+// implicit receiver borrow used to compile and silently do nothing.
 
 type Budget = i32;
 

@@ -990,15 +990,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|_| base.to_string())
     }
 
-    /// Widest struct the derived serde bodies can carry: the duplicate-field
-    /// bitmask in `core:serde` is one `i64`, one bit per field.
+    /// Widest struct the derived `Deserialize` body can carry: its
+    /// duplicate-field bitmask is one `i64`.
     const SERDE_MAX_FIELDS: usize = 64;
 
-    /// Refuse a `Deserialize` derive on a struct too wide for the
-    /// duplicate-field bitmask, so it fails to build rather than wrapping
-    /// `1 << index` and reporting the wrong field as a duplicate. A
-    /// bound-driven derivation has no marker to point at and is caught in
-    /// `serde_synth` instead.
+    /// Refuse a too-wide `Deserialize` derive, so it fails to build rather than
+    /// wrapping `1 << index` onto another field's bit. A bound-driven
+    /// derivation has no marker to point at and is caught in `serde_synth`.
     fn check_serde_derive_width(
         &mut self,
         trait_name: &str,
@@ -1006,8 +1004,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         target_type_name: &str,
         span: crate::token::Span,
     ) {
-        // Serialization writes every field unconditionally and needs no mask,
-        // so only the `Deserialize` derive is bounded.
+        // Serialization needs no mask, so only `Deserialize` is bounded.
         let is_deserialize = matches!(
             self.tysys
                 .classify_on_bound_trait(&self.type_lookup(), trait_name),

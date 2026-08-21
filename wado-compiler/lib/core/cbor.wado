@@ -825,11 +825,8 @@ fn is_passthrough_tag(tag: u64) -> bool {
 pub struct CborDeserializer {
     input: ByteSlice,
     pos: i32,
-    /// Nesting level of the item being read. Each access re-asserts its own
-    /// level before descending, so the field never needs unwinding.
-    ///
-    /// A one-byte header can claim deeply nested structure (RFC 8949 §10), so
-    /// a CBOR nesting bomb is far more compact than a JSON one.
+    /// Nesting level of the item being read. A one-byte header can claim deep
+    /// structure (RFC 8949 §10), so a CBOR bomb is compact.
     depth: i32 = 0,
     max_depth: i32 = DEFAULT_MAX_DEPTH,
     strict: bool,
@@ -1223,9 +1220,8 @@ impl CborDeserializer {
                 return self.skip_item(depth);
             },
             MAJOR_ARRAY => {
-                // From the threaded `depth`, not `self.depth`: skipping does
-                // not move the deserializer's own level, so `inner_depth`
-                // would return the same value at every nesting step.
+                // The threaded `depth`, not `self.depth`: skipping does not
+                // move the deserializer's level.
                 let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 if indef {
                     loop {
@@ -1294,8 +1290,8 @@ impl CborDeserializer {
     }
 }
 
-// Each access carries the level of the container it reads and re-asserts it on
-// the deserializer before descending — the same discipline as `core:json`.
+// Each access carries its container's level and re-asserts it before
+// descending, as in `core:json`.
 
 struct CborSeqAccess {
     de: &mut CborDeserializer,
@@ -1854,10 +1850,8 @@ impl Deserializer for CborDeserializer {
         }
     }
 
-    /// Open a definite/indefinite container of the expected major type,
-    /// transparently unwrapping any self-described prefix. Returns
-    /// `[remaining, indef, depth]` for the access to carry (`remaining` is
-    /// `-1` for an indefinite container; `depth` is the level its items sit at).
+    /// Open a container of the expected major type, unwrapping any
+    /// self-described prefix. `remaining` is `-1` when indefinite.
     ///
     /// `expected` is the type-mismatch diagnostic, passed by reference (a
     /// module-global constant) so the common success path allocates nothing;
@@ -1927,8 +1921,7 @@ impl Deserializer for CborDeserializer {
                             self.pos as i64,
                         ));
                     }
-                    // The map may nest (recursive variants), so bound the depth
-                    // like other containers (RFC 8949 §10).
+                    // The map may nest (recursive variants).
                     let depth = self.inner_depth()?;
                     let key = self.deserialize_string()?;
                     return Result::Ok(CborVariantAccess { de: self, depth, variant: key, is_map: true, indef });
@@ -2079,9 +2072,7 @@ impl Deserializer for CborDeserializer {
 /// `strict = false` only when deserializing into `core:value`'s `Value`, where
 /// unrepresentable items fall to `Value::Unknown` instead of erroring.
 ///
-/// `max_depth` bounds container nesting; input past it is
-/// `DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
-/// a trusted source.
+/// `max_depth` bounds nesting; raise it only for a trusted source.
 pub fn from_bytes<T: Deserialize, B: AsByteSlice>(
     input: B,
     strict: bool = true,

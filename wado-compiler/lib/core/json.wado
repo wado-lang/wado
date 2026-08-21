@@ -738,10 +738,7 @@ pub struct JsonDeserializer {
     pub input: ByteSlice,
     pub pos: i32,
     /// Nesting level of the value being read. Each access re-asserts its own
-    /// level before descending, so the field never needs unwinding.
-    ///
-    /// Both the typed path and `skip_value` recurse per container. Measured
-    /// trap depths without the bound: ~2,200 typed, ~6,600 skipped.
+    /// level before descending, so it never needs unwinding.
     pub depth: i32 = 0,
     pub max_depth: i32 = DEFAULT_MAX_DEPTH,
 }
@@ -1606,8 +1603,7 @@ impl JsonDeserializer {
         return Result::Err(DeserializeError::malformed("expected 'null'", self.pos as i64));
     }
 
-    /// Skips array elements up to and including the closing `]`. The caller
-    /// has consumed the `[`; `depth` is the level its elements sit at.
+    /// Skips array elements through the closing `]`; `depth` is their level.
     fn skip_array_body(&mut self, depth: i32) -> Result<(), DeserializeError> {
         self.skip_whitespace();
         if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == ']' as i32 {
@@ -1641,8 +1637,7 @@ impl JsonDeserializer {
         unreachable();
     }
 
-    /// Skips object members up to and including the closing `}`. The caller
-    /// has consumed the `{`; `depth` is the level its members sit at.
+    /// Skips object members through the closing `}`; `depth` is their level.
     fn skip_object_body(&mut self, depth: i32) -> Result<(), DeserializeError> {
         self.skip_whitespace();
         if self.pos < self.input.len() && self.input.get_unchecked(self.pos) as i32 == '}' as i32 {
@@ -1686,8 +1681,7 @@ impl JsonDeserializer {
         unreachable();
     }
 
-    /// Skips the next JSON value without allocating. `depth` is the level the
-    /// value sits at; a container it opens goes one deeper.
+    /// Skips the next JSON value without allocating.
     pub fn skip_value(&mut self, depth: i32) -> Result<(), DeserializeError> {
         self.skip_whitespace();
         if self.pos >= self.input.len() {
@@ -1746,9 +1740,8 @@ impl JsonDeserializer {
 // caller's `pos` would never see the bytes the sub-access consumed —
 // `from_string`'s post-deserialize "trailing data after value" check
 // would fire on every map / struct / seq.
-// Each access carries the level of the container it reads and re-asserts it on
-// the deserializer before descending, so a sibling never inherits the depth a
-// previous one left behind.
+// Each access carries its container's level and re-asserts it before
+// descending, so a sibling never inherits what a previous one left behind.
 
 struct JsonSeqAccess {
     de: &mut JsonDeserializer,
@@ -2176,8 +2169,7 @@ impl Deserializer for JsonDeserializer {
         let b = self.input.get_unchecked(self.pos) as u8 as char;
         match b {
             '"' => {
-                // A bare tag opens no container, so the payload — there is
-                // none — would sit at this same level.
+                // A bare tag opens no container.
                 let depth = self.depth;
                 let name = self.read_json_string()?;
                 return Result::Ok(JsonVariantAccess {
@@ -2556,9 +2548,7 @@ pub fn from_string<T: Deserialize>(
 /// §8.1) — skipped and key tokens included — reporting invalid bytes as
 /// `MalformedInput`.
 ///
-/// `max_depth` bounds container nesting; input past it is
-/// `DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
-/// a trusted source.
+/// `max_depth` bounds nesting; raise it only for a trusted source.
 pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     input: S,
     max_depth: i32 = DEFAULT_MAX_DEPTH,

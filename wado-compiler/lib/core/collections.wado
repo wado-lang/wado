@@ -195,9 +195,8 @@ impl<K: Ord> TreeMap<K, V> {
         return Option::Some(new_idx);
     }
 
-    /// Appends `key` as a new entry. The caller has established the key is
-    /// absent, so this never overwrites; a previously removed key re-enters at
-    /// the end, which is what keeps iteration in insertion order.
+    /// Appends `key` as a new entry; the caller has established it is absent.
+    /// A previously removed key re-enters at the end.
     fn append_entry(&mut self, key: K, value: V) with stores[key, value] {
         let new_index = self.entries.len();
         self.entries.push(TreeMapEntry {
@@ -223,13 +222,8 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// Inserts only if `key` is absent, and reports whether it was inserted.
-    ///
-    /// The losing insert leaves the existing value untouched — the difference
-    /// from `map[key] = value`, which is last-wins. That makes this the
-    /// duplicate-key primitive: one lookup answers both "is it there" and
-    /// "put it there if not".
-    ///
-    /// Mirrors `TreeSet::insert`, which reports the same way.
+    /// The losing insert keeps the existing value, unlike `map[key] = value`.
+    /// Mirrors `TreeSet::insert`.
     pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value] {
         if self.find_index(key) >= 0 {
             return false;
@@ -239,11 +233,8 @@ impl<K: Ord> TreeMap<K, V> {
     }
 
     /// The value already stored under `key`, or `value` inserted and returned.
-    ///
-    /// The upsert shape of TC39's `Map.prototype.getOrInsert`. It answers with
-    /// the value rather than with whether it inserted; when the caller needs
-    /// that instead — duplicate detection — `try_insert` reports it and copies
-    /// nothing back out.
+    /// The shape of TC39's `Map.prototype.getOrInsert`; for whether it
+    /// inserted, use `try_insert`.
     pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value] {
         let existing_index = self.find_index(key);
         if existing_index >= 0 {
@@ -728,9 +719,8 @@ impl<V: Deserialize> Deserialize for TreeMap<String, V> {
             let key_opt = map.next_key_string()?;
             if let Some(key) = key_opt {
                 let val = map.next_value::<V>()?;
-                // `try_insert` answers "was it already there" with the lookup
-                // the insert needs anyway; the losing insert keeps the first
-                // value, so a lenient policy re-assigns to take the last.
+                // The losing insert keeps the first value, so a lenient
+                // policy re-assigns to take the last.
                 if !result.try_insert(key, val) {
                     report_duplicate_key(on_duplicate, &key)?;
                     result[key] = val;

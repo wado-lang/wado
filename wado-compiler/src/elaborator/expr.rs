@@ -682,11 +682,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Where `name` is *declared*, as seen from `fallback`. The signature
-    /// tables are keyed by declaring module, so a name `fallback` only
-    /// imported (`use { X } from ...`) is not found under `fallback` itself —
-    /// the import is followed to the module that wrote it, which is what the
-    /// declaration-scope rule for defaults asks for (WEP: Default Arguments,
-    /// "Name Resolution: Declaration Scope").
+    /// tables are keyed by declaring module, so a name `fallback` merely
+    /// imported or re-exported is not found under `fallback` itself (WEP:
+    /// Default Arguments, "Name Resolution: Declaration Scope").
     fn declaring_module_of_ident(
         &self,
         name: &str,
@@ -697,8 +695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return (fallback.clone(), name.to_string());
         }
-        // What `fallback` imported, then what it re-exports (`pub use`) — two
-        // different maps, and a default may name either.
+        // Imports and re-exports are different maps; a default may name either.
         let resolved = self
             .symbols
             .imported(fallback, name)

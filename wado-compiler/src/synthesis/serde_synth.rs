@@ -91,9 +91,7 @@ fn apply_name_policy(s: &str, strategy: &str) -> String {
 }
 
 /// Widest struct the derived `Deserialize` body can carry: its duplicate-field
-/// bitmask is one `i64`, one bit per field. Beyond that `1 << index` wraps and
-/// two fields would share a bit, so a wide struct must be refused rather than
-/// silently reporting the wrong field as a duplicate.
+/// bitmask is one `i64`. Beyond that `1 << index` wraps onto another field.
 const SERDE_MAX_FIELDS: usize = 64;
 
 pub fn synthesize_serde(project: &mut Package) -> Result<(), String> {
@@ -135,9 +133,8 @@ pub fn synthesize_serde(project: &mut Package) -> Result<(), String> {
                         .map(|def| def.fields.len())
                         .filter(|count| *count > SERDE_MAX_FIELDS)
                     {
-                        // The elaborator refuses an explicit `impl Deserialize
-                        // for T;` with a span. A bound-driven derivation has no
-                        // marker to point at, so it is caught here instead.
+                        // The elaborator refuses an explicit marker with a
+                        // span; a bound-driven derivation has none.
                         return Err(format!(
                             "cannot derive `Deserialize` for `{}`: {count} fields exceeds the \
                              {SERDE_MAX_FIELDS}-field limit. Deserialization tracks which fields \

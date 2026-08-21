@@ -1,10 +1,6 @@
-// The `&mut self` receiver shapes that must keep working, guarding the
-// primitive-field refusal (`mut_self_method_on_primitive_field_error.wado`)
-// against over-rejection.
-//
-// A primitive newtype is referenceable as a *local* — the box is the
-// variable's storage — and a struct-typed field is a GC reference, so both
-// mutate through. Only a primitive-typed field has no box to project into.
+// The `&mut self` receiver shapes that must keep working, guarding
+// `mut_self_method_on_primitive_field_error.wado` against over-rejection: a
+// primitive newtype as a *local*, and a struct-typed field (a GC reference).
 
 type Budget = i32;
 

@@ -1,11 +1,6 @@
-// Duplicate fields during JSON deserialization.
-//
-// RFC 8259 says names SHOULD be unique but leaves the behaviour for duplicates
-// to the implementation. Wado rejects them: a repeat is how two readers of the
-// same bytes are made to disagree — an authorizing proxy acting on the first
-// occurrence, the application on the last — so silently taking either one is
-// the dangerous default. A format that wants leniency overrides
-// `on_duplicate_key`.
+// RFC 8259 leaves duplicate names implementation-defined. Wado rejects them: a
+// repeat is how two readers of the same bytes are made to disagree. A format
+// that wants leniency overrides `on_duplicate_key`.
 use { Serialize, Deserialize, DeserializeErrorKind } from "core:serde";
 use { from_string } from "core:json";
 

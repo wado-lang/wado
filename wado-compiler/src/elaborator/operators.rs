@@ -990,10 +990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if unary.op == UnaryOp::MutRef
-            && matches!(
-                &unary.expr,
-                ast::Expr::FieldAccess(_) | ast::Expr::Index(_)
-            )
+            && matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
         {
             let field_type = self.tysys.type_table.borrow().get(expr_type).clone();
             let base_type = self

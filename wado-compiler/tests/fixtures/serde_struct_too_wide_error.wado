@@ -1,9 +1,6 @@
-// A serde derive on a struct too wide for the duplicate-field bitmask.
-//
-// Deserialization records which fields the wire wrote in one `i64`, one bit
-// each, so duplicates can be rejected without confusing "the wire set this"
-// with "this is the declared default". 65 fields do not fit, and the derive
-// refuses rather than leaving the check to fail at run time.
+// A `Deserialize` derive on a struct too wide for the duplicate-field bitmask.
+// The wire-written bits are one `i64`, so 65 fields do not fit and the derive
+// refuses rather than wrapping onto another field's bit.
 
 use { Deserialize } from "core:serde";
 
