@@ -1,0 +1,18 @@
+// A type parameter reaches an operator only through a bound. With none, the
+// arithmetic and shift paths fell through to a lookup meant for concrete
+// types and the operand arrived at WIR build with nothing to lower.
+fn add2<T>(a: T, b: T) -> T {
+    return a + b;
+}
+
+fn shl2<T>(a: T) -> T {
+    return a << 1;
+}
+
+export fn run() {
+    assert add2(1, 2) == 3;
+    assert shl2(1) == 2;
+}
+
+__DATA__
+{ "compile_error": "type 'T' does not implement trait 'Add'" }
