@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787282836486,
+  "lastUpdate": 1787307242254,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49821,6 +49821,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f46102aadeb0c0138499052242c4e98afc6bebee"
         },
         "date": 1787282836197,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85d0138b25a822e7ce0ce5da9dc9e2bf43716334",
+          "message": "Merge pull request #1867 from wado-lang/claude/go-1-27-uuid-evaluation-887rvz\n\nfeat(stdlib)!: order core:uuid v7 sub-millisecond, and give it serde, byte access and a faster codec",
+          "timestamp": "2026-08-21T18:59:02+09:00",
+          "tree_id": "48089b951e909faa1cac74d8a33664a4871c2d28",
+          "url": "https://github.com/wado-lang/wado/commit/85d0138b25a822e7ce0ce5da9dc9e2bf43716334"
+        },
+        "date": 1787307241599,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
