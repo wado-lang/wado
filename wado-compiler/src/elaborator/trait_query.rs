@@ -2701,12 +2701,13 @@ fn primitive_has_operator(prim_name: &str, op: CompilerItem) -> bool {
         | CompilerItem::Neg => is_int || matches!(prim_name, "f32" | "f64"),
         // `%` has no float lowering.
         CompilerItem::Rem => is_int,
-        // Bit patterns. `bool` takes the binary three, as `b & c` does, but
-        // neither `~b` nor `b << 1` is a Wado expression.
-        CompilerItem::BitAnd | CompilerItem::BitOr | CompilerItem::BitXor => {
-            is_int || prim_name == "bool"
-        }
-        CompilerItem::BitNot | CompilerItem::Shl | CompilerItem::Shr => is_int,
+        // Bit patterns. `bool` holds one bit, so `b & c` and `~b` are both
+        // Wado expressions; a shift by a bit width it does not have is not.
+        CompilerItem::BitAnd
+        | CompilerItem::BitOr
+        | CompilerItem::BitXor
+        | CompilerItem::BitNot => is_int || prim_name == "bool",
+        CompilerItem::Shl | CompilerItem::Shr => is_int,
         _ => false,
     }
 }

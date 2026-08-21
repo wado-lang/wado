@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::ReceiverCandidate;
 use crate::elaborator::trait_env::{BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -2386,17 +2387,22 @@ impl Monomorphizer {
                 // Convert back to a binary op when monomorphization concretized to a primitive.
                 if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
                     let recv_inner = type_table.peel_refs(receiver.type_id);
-                    let base_name = trait_name_before
-                        .as_ref()
-                        .map(crate::name::FqTraitName::base_name);
                     let trait_decl = trait_name_before
                         .as_ref()
                         .and_then(crate::name::FqTraitName::canonical);
+                    // Which operator this is, by declaration: a user trait
+                    // spelled `Neg` supplies no instruction, and relowering its
+                    // call would run the primitive's arithmetic instead of the
+                    // body the program wrote.
+                    let item = trait_decl.and_then(|decl| {
+                        type_table
+                            .compiler_items()
+                            .trait_item_of_decl(type_table.defs().ast_id(decl))
+                    });
                     let lowers_to_scalar =
                         type_table.operator_lowers_to_scalar(recv_inner, trait_decl);
                     if lowers_to_scalar
-                        && let Some(unary_op) =
-                            trait_method_to_unary_op(base_name, &method_name_before)
+                        && let Some(unary_op) = trait_method_to_unary_op(item, &method_name_before)
                     {
                         let operand = unref_operand(receiver, type_table);
                         expr.type_id = operand.type_id;
@@ -2406,7 +2412,7 @@ impl Monomorphizer {
                         };
                     } else if lowers_to_scalar
                         && let Some(binary_op) =
-                            trait_method_to_binary_op(base_name, &method_name_before)
+                            trait_method_to_binary_op(item, &method_name_before)
                     {
                         let left = unref_operand(receiver, type_table);
                         let Some(arg) = args.first() else {
@@ -4662,27 +4668,31 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
 /// The native instruction a unary operator trait's method is, for a receiver
 /// monomorphization turned into a scalar primitive. Primitives carry no impl
 /// for these, so the call has to become the operator again.
-fn trait_method_to_unary_op(trait_name: Option<&str>, method_name: &str) -> Option<TirUnaryOp> {
-    match (trait_name, method_name) {
-        (Some("Neg"), "neg") => Some(TirUnaryOp::Neg),
-        (Some("BitNot"), "bitnot") => Some(TirUnaryOp::BitNot),
+/// The instruction a monomorphized operator call lowers to, named by the
+/// compiler item its trait is. A user trait spelled `Neg` is a different
+/// declaration and supplies none.
+fn trait_method_to_unary_op(item: Option<CompilerItem>, method_name: &str) -> Option<TirUnaryOp> {
+    match (item?, method_name) {
+        (CompilerItem::Neg, "neg") => Some(TirUnaryOp::Neg),
+        (CompilerItem::BitNot, "bitnot") => Some(TirUnaryOp::BitNot),
         _ => None,
     }
 }
 
-fn trait_method_to_binary_op(trait_name: Option<&str>, method_name: &str) -> Option<TirBinaryOp> {
-    match (trait_name, method_name) {
-        (Some("Add"), "add") => Some(TirBinaryOp::Add),
-        (Some("Sub"), "sub") => Some(TirBinaryOp::Sub),
-        (Some("Mul"), "mul") => Some(TirBinaryOp::Mul),
-        (Some("Div"), "div") => Some(TirBinaryOp::Div),
-        (Some("Rem"), "rem") => Some(TirBinaryOp::Mod),
-        (Some("BitAnd"), "bitand") => Some(TirBinaryOp::BitAnd),
-        (Some("BitOr"), "bitor") => Some(TirBinaryOp::BitOr),
-        (Some("BitXor"), "bitxor") => Some(TirBinaryOp::BitXor),
-        (Some("Shl"), "shl") => Some(TirBinaryOp::Shl),
-        (Some("Shr"), "shr") => Some(TirBinaryOp::Shr),
-        (Some("Eq"), "eq") => Some(TirBinaryOp::Eq),
+/// [`trait_method_to_unary_op`] for the binary operators.
+fn trait_method_to_binary_op(item: Option<CompilerItem>, method_name: &str) -> Option<TirBinaryOp> {
+    match (item?, method_name) {
+        (CompilerItem::Add, "add") => Some(TirBinaryOp::Add),
+        (CompilerItem::Sub, "sub") => Some(TirBinaryOp::Sub),
+        (CompilerItem::Mul, "mul") => Some(TirBinaryOp::Mul),
+        (CompilerItem::Div, "div") => Some(TirBinaryOp::Div),
+        (CompilerItem::Rem, "rem") => Some(TirBinaryOp::Mod),
+        (CompilerItem::BitAnd, "bitand") => Some(TirBinaryOp::BitAnd),
+        (CompilerItem::BitOr, "bitor") => Some(TirBinaryOp::BitOr),
+        (CompilerItem::BitXor, "bitxor") => Some(TirBinaryOp::BitXor),
+        (CompilerItem::Shl, "shl") => Some(TirBinaryOp::Shl),
+        (CompilerItem::Shr, "shr") => Some(TirBinaryOp::Shr),
+        (CompilerItem::Eq, "eq") => Some(TirBinaryOp::Eq),
         _ => None,
     }
 }

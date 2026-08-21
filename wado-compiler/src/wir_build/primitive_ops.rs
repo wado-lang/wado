@@ -334,6 +334,10 @@ impl FunctionTranslator<'_, '_> {
             },
             // `!` is logical negation on `bool`, which is already i32-shaped.
             NirUnaryOp::Not => WirInstr::I32Eqz(operand),
+            // A `bool` holds one bit, so its complement is `i32.eqz`; the
+            // integer `xor -1` would leave `-1` / `-2`, both of which read
+            // back as `true`.
+            NirUnaryOp::BitNot if operand_type_id == TypeTable::BOOL => WirInstr::I32Eqz(operand),
             NirUnaryOp::BitNot => match self.scalar_kind(operand_type_id, op) {
                 PrimitiveKind::F32 | PrimitiveKind::F64 => {
                     panic!("[WIR] `~` has no float lowering")
