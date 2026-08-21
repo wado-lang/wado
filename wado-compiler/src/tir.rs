@@ -674,7 +674,6 @@ impl TraitRef {
     }
 }
 
-/// What an associated type belongs to: a target declaration and a [`TraitRef`].
 /// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
 /// than an instantiated type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -684,7 +683,7 @@ struct GenericAssocTypeKey {
     assoc_name: String,
 }
 
-/// What an associated type belongs to: a receiver and a [`TraitRef`].
+/// What an associated type belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AssocTypeKey {
     receiver: TypeId,

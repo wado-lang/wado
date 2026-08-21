@@ -876,11 +876,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Whether the asking frame can answer `ty` at all. An inherited bound
-    /// means what its writer's frame says, and a bound writes no trait
-    /// arguments, so `trait Foo<A>: Bar<Item = A>` leaves `T::Item` abstract
-    /// for `T: Foo` rather than binding it to whatever the asking frame spells
-    /// `A`. `Self` is the exception, being the bounded type here.
+    /// Whether the asking frame can answer `ty` at all: an inherited bound may
+    /// name its writer's own type parameters, which a bound cannot supply. Only
+    /// `Self` crosses, being the bounded type here.
     fn frame_can_answer(&self, writer: Option<crate::defs::DefId>, ty: &crate::ast::Type) -> bool {
         let Some(header) = writer.and_then(|w| self.tysys.trait_env.trait_decl_headers.get(&w))
         else {

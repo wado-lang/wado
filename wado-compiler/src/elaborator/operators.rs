@@ -670,8 +670,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // A type parameter resolves an arithmetic operator through its
-            // bounds, and reaches it no other way.
             let arithmetic = match op {
                 BinaryOp::Add => Some((CompilerItem::Add, "add", "Add")),
                 BinaryOp::Sub => Some((CompilerItem::Sub, "sub", "Sub")),
