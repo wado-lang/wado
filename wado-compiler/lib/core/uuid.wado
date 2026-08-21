@@ -300,7 +300,7 @@ fn with_variant(byte: u8) -> u8 {
 /// Collect exactly `n` random bytes, looping to tolerate short reads (the
 /// `Random` contract allows returning fewer bytes than requested).
 fn fill_random(n: i32) -> ByteList with Random {
-    let mut out: ByteList = [];
+    let mut out = Random::get_random_bytes(n as u64) as ByteList;
     while out.len() < n {
         let chunk = Random::get_random_bytes((n - out.len()) as u64);
         if chunk.is_empty() {
