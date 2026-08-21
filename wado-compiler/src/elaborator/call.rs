@@ -304,10 +304,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` is a declared effect (`interface`) or resource —
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_declared_effect_or_resource(&self, name: &str) -> bool {
-        self.decl_key_or_local(name).is_some_and(|key| {
-            self.tysys.trait_env.effect_decl_index.contains(&key)
-                || self.tysys.trait_env.resource_decl_index.contains(&key)
+    /// The effect / resource declaration `name` names here.
+    ///
+    /// The local spelling answers first — it is the one a binder or an alias
+    /// can shadow. Failing that, the declaration this module can see under some
+    /// other name: an interface-qualified call spells the declaration's own
+    /// name, which an aliasing import never brings into scope.
+    fn effect_or_resource_decl(&self, name: &str) -> Option<crate::defs::DefId> {
+        let is_effect_like = |key: &crate::defs::DefId| {
+            self.tysys.trait_env.effect_decl_index.contains(key)
+                || self.tysys.trait_env.resource_decl_index.contains(key)
+        };
+        if let Some(local) = self.decl_key_or_local(name) {
+            return is_effect_like(&local).then_some(local);
+        }
+        self.tysys.trait_env.decls_named(name).find(|def| {
+            is_effect_like(def)
+                && self
+                    .tysys
+                    .resolutions
+                    .in_scope(&self.current_module_source, *def)
         })
     }
 
@@ -1307,11 +1323,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // caller falls through to the standard "unknown function" error
             // instead of deferring an unvalidated call to codegen, where it
             // would panic instead of failing cleanly.
-            else if self.is_declared_effect_or_resource(prefix) {
+            else if let Some(decl) = self.effect_or_resource_decl(prefix) {
+                // Name the interface by its declaration: signature resolution,
+                // the effect check, dispatch and WIR all key on that name, and
+                // an aliasing import must not make them miss each other.
+                let declared = self.tysys.resolutions.defs().name(decl).to_string();
                 (
                     Some(CalleeRef::local_namespace(
                         &mut self.interner.borrow_mut(),
-                        prefix,
+                        &declared,
                         suffix,
                     )),
                     effective_name.to_string(),
@@ -1690,20 +1710,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect: &str,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let canonical_key = self.decl_key_or_local(effect)?;
-        if !self
-            .tysys
-            .trait_env
-            .effect_decl_index
-            .contains(&canonical_key)
-            && !self
-                .tysys
-                .trait_env
-                .resource_decl_index
-                .contains(&canonical_key)
-        {
-            return None;
-        }
+        let canonical_key = self.effect_or_resource_decl(effect)?;
         let decl_id = self.tysys.resolutions.defs().ast_id(canonical_key);
         let sig = self
             .tysys

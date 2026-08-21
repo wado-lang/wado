@@ -1,0 +1,32 @@
+// An effect imported under another name installs and dispatches like any other:
+// the interface is named by its declaration, not by the local spelling.
+
+use { println, Stdout } from "core:cli";
+use { Random as Rng } from "wasi:random";
+
+struct FixedRandom {
+    byte: u8,
+}
+
+impl Rng for FixedRandom {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32; i += 1 {
+            out.push(self.byte);
+        }
+        resume out;
+    }
+
+    ..trap
+}
+
+export fn run() with Stdout {
+    let fixed = FixedRandom { byte: 9 };
+    with Rng => &fixed do {
+        let bytes = Rng::get_random_bytes(3);
+        println(`${bytes.len()},${bytes[0]}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["3,9"]}
