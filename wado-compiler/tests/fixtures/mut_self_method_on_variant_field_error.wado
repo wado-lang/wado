@@ -1,0 +1,30 @@
+// The implicit borrow a `&mut self` method takes of its receiver is refused
+// wherever the explicit `&mut` is, so a variant field cannot be a receiver.
+
+trait Start {
+    fn start(&mut self);
+}
+
+variant State {
+    Idle,
+    Running(i32),
+}
+
+impl Start for State {
+    fn start(&mut self) {
+        *self = State::Running(1)
+    }
+}
+
+struct Machine {
+    state: State,
+}
+
+export fn run() {
+    let mut m = Machine { state: State::Idle };
+    m.state.start();
+    assert m.state matches { Running(1) };
+}
+
+__DATA__
+{"compile_error": "cannot call `&mut self` method `start` on a field or element of a replace-on-assign type"}

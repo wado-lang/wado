@@ -30,6 +30,13 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
+/// How the diagnostics name a place whose `&mut` would be a boxed copy. Shared
+/// so the explicit `&mut x.f` and the implicit `&mut self` borrow say the same
+/// thing about the same refusal.
+pub(super) const REPLACE_ON_ASSIGN_PLACE: &str =
+    "a field or element of a replace-on-assign type (primitive, enum, flags, variant, fn); \
+     use the containing value's reference directly";
+
 /// Lightweight reference to an impl block. Stores `(module_source,
 /// item_id)` and resolves to the block's digested [`ImplHeader`] via
 /// [`impl_header`]. Dispatch cannot reach the impl AST at all.
@@ -1211,35 +1218,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `&mut` of a scalar place in a container borrows a boxed copy, so the
+        // `&mut` of a replace-on-assign place borrows a boxed copy, so the
         // mutation would be silently dropped. `operators.rs` refuses the
         // explicit `&mut x.f`; the implicit receiver borrow must match it.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
-            && self.is_scalar_place_type(receiver.type_id)
+            && self.is_replace_on_assign_place_type(receiver.type_id)
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
-                    "cannot call `&mut self` method `{method_name}` on a primitive field or \
-                     element; use the containing value's reference directly"
+                    "cannot call `&mut self` method `{method_name}` on {REPLACE_ON_ASSIGN_PLACE}"
                 ),
                 span,
             });
         }
     }
 
-    /// A primitive or enum, or a newtype over either. `&mut` of such a place
-    /// is a boxed copy rather than a projection, so writes do not land.
-    pub(super) fn is_scalar_place_type(&self, type_id: TypeId) -> bool {
-        let table = self.tysys.type_table.borrow();
-        let is_scalar = |ty: &ResolvedType| {
-            matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
+    /// A replace-on-assign type — primitive, enum, flags, variant, or fn — or a
+    /// newtype over one. Such a place has no addressable interior, so `&mut` of
+    /// it is a boxed copy rather than a projection and writes do not land. The
+    /// boxing itself is decided in `lower::plan::boxing`.
+    pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
+        let base = {
+            let table = self.tysys.type_table.borrow();
+            let replaces_on_assign = |ty: &ResolvedType| {
+                matches!(
+                    ty,
+                    ResolvedType::Primitive(_)
+                        | ResolvedType::Enum { .. }
+                        | ResolvedType::Function { .. }
+                )
+            };
+            if replaces_on_assign(table.get(type_id)) {
+                return true;
+            }
+            let base = table.get_ultimate_base_type(type_id);
+            if replaces_on_assign(table.get(base)) {
+                return true;
+            }
+            base
         };
-        if is_scalar(table.get(type_id)) {
-            return true;
-        }
-        let base = table.get_ultimate_base_type(type_id);
-        is_scalar(table.get(base))
+        // A variant answers through its declaration, so an instantiated
+        // `Option<i32>` is recognized without a separate generic arm.
+        self.variant_of_type(type_id).is_some() || self.variant_of_type(base).is_some()
     }
 
     /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and any

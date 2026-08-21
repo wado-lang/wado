@@ -1036,13 +1036,13 @@ fn missing_field_error(name: String) -> DeserializeError {
 /// Struct deserialization derived over `ReflectStruct`.
 ///
 /// The wire delivers fields in its own order while `from_fields` takes them in
-/// declaration order, so the derivation holds them: a slot tuple seeded with
-/// the declared defaults, written at the index the format reports and read back
-/// in declaration order.
+/// declaration order, so the derivation holds them: a slot tuple starting
+/// empty, written at the index the format reports and read back in declaration
+/// order.
 ///
-/// A slot resolves to what the wire carried, else the field's declared default
-/// (already seeded into the slot). Only the empty slot names its field, so the
-/// wire name — and `members()` with it — stays on the error path.
+/// A slot resolves to what the wire carried, else the field's declared default.
+/// Only the empty slot names its field, so the wire name — and `members()` with
+/// it — stays on the error path.
 impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deserialize for T {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
         let policy = ReflectStruct::<T>::wire_name_policy();

@@ -1,0 +1,20 @@
+// A variant field replaces on assign, so `&mut` of it would borrow a boxed
+// copy and the write would be lost. An instantiated `Option<i32>` is refused
+// through its declaration, not its spelling.
+
+struct Slot {
+    value: Option<i32>,
+}
+
+fn fill(slot: &mut Option<i32>) {
+    *slot = Option::Some(7)
+}
+
+export fn run() {
+    let mut s = Slot { value: Option::None };
+    fill(&mut s.value);
+    assert s.value matches { Some(7) };
+}
+
+__DATA__
+{"compile_error": "cannot take a mutable reference to a field or element of a replace-on-assign type"}
