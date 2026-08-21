@@ -683,8 +683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Where `name` is *declared*, as seen from `fallback`. The signature
     /// tables are keyed by declaring module, so a name `fallback` merely
-    /// imported or re-exported is not found under `fallback` itself (WEP:
-    /// Default Arguments, "Name Resolution: Declaration Scope").
+    /// imported or re-exported is not found under `fallback` itself.
     fn declaring_module_of_ident(
         &self,
         name: &str,

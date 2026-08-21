@@ -1754,8 +1754,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Where the global `name` is declared, as seen from `source`, with its
     /// type and mutability. `signatures.globals` is keyed by the declaring
-    /// module, so a re-exported name needs the chain resolved first. `None`
-    /// when `name` is not a global.
+    /// module, so a re-exported name needs the chain resolved first.
     fn global_declared_for(
         state: &AnnotateState,
         symbols: &crate::symbol::SymbolTable,
