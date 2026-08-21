@@ -101,11 +101,9 @@ _Fields are private._
 
 ##### `fn on_duplicate_key(&self) -> DuplicateKeyPolicy`
 
-A command line is last-wins by convention: `prog --jobs 1 --jobs 2`
-takes 2, which is what lets a wrapper script or alias append an
-override after the defaults it supplies. (A _repeatable_ option does
-not reach this at all — `gather_option_values` collects every
-occurrence and marks them consumed, so the field is reported once.)
+A command line is last-wins by convention, so a wrapper can append an
+override. A repeatable option never reaches this — `gather_option_values`
+consumes its later occurrences.
 
 ##### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
 

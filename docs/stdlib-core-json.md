@@ -75,9 +75,7 @@ input bytes in place; every string token is validated as UTF-8 (RFC 8259
 §8.1) — skipped and key tokens included — reporting invalid bytes as
 `MalformedInput`.
 
-`max_depth` bounds container nesting; input past it is
-`DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
-a trusted source.
+`max_depth` bounds nesting; raise it only for a trusted source.
 
 ### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
@@ -198,10 +196,7 @@ _Fields are private._
 #### `depth: i32`
 
 Nesting level of the value being read. Each access re-asserts its own
-level before descending, so the field never needs unwinding.
-
-Both the typed path and `skip_value` recurse per container. Measured
-trap depths without the bound: ~2,200 typed, ~6,600 skipped.
+level before descending, so it never needs unwinding.
 
 #### `max_depth: i32`
 
@@ -255,8 +250,7 @@ a materialized one.
 
 #### `pub fn skip_value(&mut self, depth: i32) -> Result<(), DeserializeError>`
 
-Skips the next JSON value without allocating. `depth` is the level the
-value sits at; a container it opens goes one deeper.
+Skips the next JSON value without allocating.
 
 #### `impl Deserializer for JsonDeserializer`
 

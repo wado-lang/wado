@@ -53,22 +53,14 @@ Returns true if the map contains no elements.
 #### `pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value]`
 
 Inserts only if `key` is absent, and reports whether it was inserted.
-
-The losing insert leaves the existing value untouched — the difference
-from `map[key] = value`, which is last-wins. That makes this the
-duplicate-key primitive: one lookup answers both "is it there" and
-"put it there if not".
-
-Mirrors `TreeSet::insert`, which reports the same way.
+The losing insert keeps the existing value, unlike `map[key] = value`.
+Mirrors `TreeSet::insert`.
 
 #### `pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value]`
 
 The value already stored under `key`, or `value` inserted and returned.
-
-The upsert shape of TC39's `Map.prototype.getOrInsert`. It answers with
-the value rather than with whether it inserted; when the caller needs
-that instead — duplicate detection — `try_insert` reports it and copies
-nothing back out.
+The shape of TC39's `Map.prototype.getOrInsert`; for whether it
+inserted, use `try_insert`.
 
 #### `pub fn contains_key(&self, key: K) -> bool`
 

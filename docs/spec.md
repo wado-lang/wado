@@ -3136,7 +3136,7 @@ for let p of &mut points {
 }
 ```
 
-A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. Taking `&mut` of such a place is a compile error wherever it appears — `&mut` iteration, an explicit `&mut x.f` / `&mut xs[i]`, and the implicit borrow a `&mut self` method takes of its receiver. A *local* of such a type is fine: its box is the variable's own storage. Use indexed access instead:
+A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. Taking `&mut` of such a place is a compile error wherever it appears — `&mut` iteration, an explicit `&mut x.f` / `&mut xs[i]`, and the implicit borrow a `&mut self` method takes of its receiver. A _local_ of such a type is fine: its box is the variable's own storage. Use indexed access instead:
 
 ```wado
 for let mut i = 0; i < arr.len(); i += 1 {

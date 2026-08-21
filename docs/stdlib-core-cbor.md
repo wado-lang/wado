@@ -70,9 +70,7 @@ is variation-tolerant (RFC 8949 §4.1): any well-formed encoding is accepted.
 `strict = false` only when deserializing into `core:value`'s `Value`, where
 unrepresentable items fall to `Value::Unknown` instead of erroring.
 
-`max_depth` bounds container nesting; input past it is
-`DepthLimitExceeded` rather than a stack-exhausting trap. Raise it only for
-a trusted source.
+`max_depth` bounds nesting; raise it only for a trusted source.
 
 ## Structs
 
@@ -198,10 +196,8 @@ _Fields are private._
 
 ##### `fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool, i32], DeserializeError>`
 
-Open a definite/indefinite container of the expected major type,
-transparently unwrapping any self-described prefix. Returns
-`[remaining, indef, depth]` for the access to carry (`remaining` is
-`-1` for an indefinite container; `depth` is the level its items sit at).
+Open a container of the expected major type, unwrapping any
+self-described prefix. `remaining` is `-1` when indefinite.
 
 `expected` is the type-mismatch diagnostic, passed by reference (a
 module-global constant) so the common success path allocates nothing;

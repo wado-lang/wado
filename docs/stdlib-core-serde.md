@@ -90,36 +90,21 @@ impl Deserialize for Config;
 
 ### `pub global DEFAULT_MAX_DEPTH: i32`
 
-Default nesting limit shared by every self-describing format.
-
-A deserializer recurses once per open container, so unbounded nesting
-exhausts the stack and traps — unrecoverable, unlike an error. 100 covers
-realistic documents with ample headroom.
+Default nesting limit. Unbounded nesting exhausts the stack and traps,
+which is unrecoverable unlike an error.
 
 ## Functions
 
 ### `pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError>`
 
-Applies `policy` to a key the wire has already written. Returns `Err` under
-`Error`; otherwise the caller keeps the last occurrence.
-
-Detecting the repeat is the caller's job, because what it costs differs: a
-struct tests a bit, a map asks `try_insert`.
+Applies `policy` to a key the wire already wrote. Detecting the repeat is
+the caller's job: a struct tests a bit, a map asks `try_insert`.
 
 ### `pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError>`
 
-One nesting level deeper, or `DepthLimitExceeded` at the limit. `offset`
-locates the overrun in the input.
-
-Depth is threaded as a value: a container passes `depth + 1` to whatever it
-contains, and the level simply goes out of scope when that container is
-done. Nothing to decrement, so a format cannot leave the count unbalanced —
-and a descent that forgets to pass its own level down over-counts, which
-errors rather than letting nesting through.
-
-The mechanism is shared; the policy is not. A format picks its own
-`max_depth` and decides what counts as a container — only it knows where its
-recursion happens.
+One nesting level deeper, or `DepthLimitExceeded` at the limit. Threaded as
+a value, so there is nothing to decrement and a format cannot leave the
+count unbalanced; each picks its own `max_depth` and container boundaries.
 
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
 
@@ -361,9 +346,7 @@ byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 #### `fn on_duplicate_key(&self) -> DuplicateKeyPolicy`
 
-What this format does when the wire repeats a field or key. The
-mechanism is shared — detection lives in the derived struct
-deserialization — but the default is the format's to pick.
+What this format does when the wire repeats a field or key.
 
 #### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self]`
 
@@ -455,12 +438,9 @@ a spec violation: the input may be perfectly well-formed.
 
 ### `pub enum DuplicateKeyPolicy`
 
-What to do when the wire repeats a field or key.
-
-A repeat is how two readers of the same bytes are made to disagree — a
-proxy authorizing on the first occurrence, the application acting on the
-last — so rejecting is the default. `Warn` and `PassThru` both keep the
-last occurrence; they differ only in whether anything is said about it.
+What to do when the wire repeats a field or key. A repeat is how two
+readers of the same bytes are made to disagree, so rejecting is the
+default; `Warn` and `PassThru` both keep the last occurrence.
 
 #### `Error`
 
