@@ -109,6 +109,7 @@ struct StructMethods {
     members: String,
     from_fields: String,
     defaults: String,
+    empty_slots: String,
     wire_name_policy: String,
 }
 
@@ -128,6 +129,9 @@ impl StructMethods {
             defaults: items
                 .method_name(CompilerItem::ReflectStructDefaults)
                 .to_string(),
+            empty_slots: items
+                .method_name(CompilerItem::ReflectStructEmptySlots)
+                .to_string(),
             wire_name_policy: items
                 .method_name(CompilerItem::ReflectStructWireNamePolicy)
                 .to_string(),
@@ -140,6 +144,7 @@ impl StructMethods {
             &self.members,
             &self.from_fields,
             &self.defaults,
+            &self.empty_slots,
             &self.wire_name_policy,
         ]
         .into_iter()
@@ -301,7 +306,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if method == methods.from_fields {
             self_ty
-        } else if method == methods.defaults {
+        } else if method == methods.defaults || method == methods.empty_slots {
             let mut tt = self.tysys.type_table.borrow_mut();
             let slots: Vec<TypeId> = field_types.iter().map(|&f| tt.make_option(f)).collect();
             tt.make_tuple(slots)
@@ -439,7 +444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_compiler_enum(CompilerItem::CaseStyle)
-        } else if method == methods.defaults {
+        } else if method == methods.defaults || method == methods.empty_slots {
             let Some(slots_ty) =
                 self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
             else {

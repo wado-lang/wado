@@ -57,7 +57,7 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
         from_synth::synthesize_from(module);
     }
 
-    serde_synth::synthesize_serde(&mut project)?;
+    serde_synth::synthesize_serde(&mut project);
 
     // Drain `Default` after serde: `Deserialize` bodies record `Field::default()`
     // requests later than `synthesize_traits`' snapshot (WEP 2026-06-25).

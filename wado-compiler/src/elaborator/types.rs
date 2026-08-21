@@ -625,16 +625,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A `Deserialize` derive on a struct wider than the duplicate-field
-    /// bitmask.
-    SerdeStructTooWide {
-        trait_name: String,
-        type_name: String,
-        field_count: usize,
-        max_fields: usize,
-        span: Span,
-    },
-
     /// `impl Trait for Type;` requested synthesis of a trait the compiler
     /// cannot generate. Only `From`, `Serialize`, `Deserialize`, `Eq`, and
     /// `Ord` are synthesizable through the bodyless-impl form.
@@ -1401,23 +1391,6 @@ impl TypeError {
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
                 *span,
             ),
-            TypeError::SerdeStructTooWide {
-                trait_name,
-                type_name,
-                field_count,
-                max_fields,
-                span,
-            } => (
-                Code::TypeMismatch,
-                format!(
-                    "cannot derive `{trait_name}` for `{type_name}`: {field_count} fields exceeds \
-                     the {max_fields}-field limit. Deserialization tracks which fields the wire \
-                     wrote in a {max_fields}-bit mask, so duplicates can be rejected; split the \
-                     struct into nested ones, each within the limit."
-                ),
-                *span,
-            ),
-
             TypeError::UnsupportedSynthesisTrait {
                 trait_name,
                 type_name,

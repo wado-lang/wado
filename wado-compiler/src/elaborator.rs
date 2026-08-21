@@ -990,46 +990,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|_| base.to_string())
     }
 
-    /// One `i64` of duplicate-field bits, one per field.
-    const SERDE_MAX_FIELDS: usize = 64;
-
-    /// Refuse a too-wide `Deserialize` derive, so it fails to build rather than
-    /// wrapping `1 << index` onto another field's bit. A bound-driven
-    /// derivation has no marker to point at and is caught in `serde_synth`.
-    fn check_serde_derive_width(
-        &mut self,
-        trait_name: &str,
-        target_type_id: TypeId,
-        target_type_name: &str,
-        span: crate::token::Span,
-    ) {
-        // Serialization needs no mask, so only `Deserialize` is bounded.
-        let is_deserialize = matches!(
-            self.tysys
-                .classify_on_bound_trait(&self.type_lookup(), trait_name),
-            Some(trait_query::OnBoundTrait::Deserialize)
-        );
-        if !is_deserialize {
-            return;
-        }
-        let Some(count) = self
-            .struct_fields_of_type(target_type_id)
-            .map(|info| info.fields.len())
-        else {
-            return;
-        };
-        if count <= Self::SERDE_MAX_FIELDS {
-            return;
-        }
-        let _ = self.logger.error(types::TypeError::SerdeStructTooWide {
-            trait_name: trait_name.to_string(),
-            type_name: target_type_name.to_string(),
-            field_count: count,
-            max_fields: Self::SERDE_MAX_FIELDS,
-            span,
-        });
-    }
-
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
@@ -1038,7 +998,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         target_type_name: &str,
         span: crate::token::Span,
     ) {
-        self.check_serde_derive_width(trait_name, target_type_id, target_type_name, span);
         if target_type_id == tir::TypeTable::ERROR {
             return;
         }

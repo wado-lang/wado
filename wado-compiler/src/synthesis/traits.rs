@@ -697,6 +697,15 @@ fn generate_struct_reflect_methods(
         slots_tuple_type,
         span,
     );
+    let empty_slots_fn = generate_struct_empty_slots_fn(
+        type_table,
+        env,
+        reflect_trait_name,
+        receiver,
+        &slot_types,
+        slots_tuple_type,
+        span,
+    );
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         receiver,
         env.case_style_type,
@@ -711,6 +720,7 @@ fn generate_struct_reflect_methods(
         members_fn,
         from_fields_fn,
         defaults_fn,
+        empty_slots_fn,
         wire_name_policy_fn,
     ];
     for f in &mut functions {
@@ -794,6 +804,7 @@ struct ReflectSynthEnv {
     members_method: String,
     from_fields_method: String,
     defaults_method: String,
+    empty_slots_method: String,
     wire_name_policy_method: String,
 }
 
@@ -832,6 +843,9 @@ impl ReflectSynthEnv {
                 .to_string(),
             defaults_method: items
                 .method_name(CompilerItem::ReflectStructDefaults)
+                .to_string(),
+            empty_slots_method: items
+                .method_name(CompilerItem::ReflectStructEmptySlots)
                 .to_string(),
             wire_name_policy_method: items
                 .method_name(CompilerItem::ReflectStructWireNamePolicy)
@@ -1098,13 +1112,63 @@ fn generate_struct_defaults_fn(
         span,
     );
 
-    make_synthetic_method(
+    // The body is one tuple literal, so the cost heuristic reads it as large.
+    // It is not: a caller indexes one slot, and SROA plus DCE drop the rest —
+    // but only once the call is inlined. Default expressions are effect-free
+    // by construction, so dropping the unread ones is sound.
+    let mut function = make_synthetic_method(
         qualified_name,
         method_info,
         vec![],
         slots_tuple_type,
         body,
         locals,
+    );
+    function.inline_hint = InlineHint::Always;
+    function
+}
+
+/// Build `S^ReflectStruct::empty_slots() -> [Option<F_0>, …]`:
+/// `return [Option::None, …];`. Reaches no default expression, so a slot the
+/// wire fills never evaluates one.
+fn generate_struct_empty_slots_fn(
+    type_table: &RefCell<TypeTable>,
+    env: &ReflectSynthEnv,
+    reflect_trait_name: &crate::name::FqTraitName,
+    receiver: &FqTypeName,
+    slot_types: &[TypeId],
+    slots_tuple_type: TypeId,
+    span: Span,
+) -> TirFunction {
+    let method_info = trait_method_info(receiver, reflect_trait_name, &env.empty_slots_method);
+    let qualified_name = method_info.to_mangled_name();
+    let items = type_table.borrow().compiler_items().clone();
+    let elements = slot_types
+        .iter()
+        .map(|&slot_type| crate::synthesis::common::option_none(slot_type, &items))
+        .collect();
+
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(TirExpr::new(
+                    TirExprKind::TupleLiteral { elements },
+                    slots_tuple_type,
+                    span,
+                )),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        slots_tuple_type,
+        body,
+        Vec::new(),
     )
 }
 

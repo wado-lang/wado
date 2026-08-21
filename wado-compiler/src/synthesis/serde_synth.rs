@@ -90,11 +90,7 @@ fn apply_name_policy(s: &str, strategy: &str) -> String {
     }
 }
 
-/// Widest struct the derived `Deserialize` body can carry: its duplicate-field
-/// bitmask is one `i64`. Beyond that `1 << index` wraps onto another field.
-const SERDE_MAX_FIELDS: usize = 64;
-
-pub fn synthesize_serde(project: &mut Package) -> Result<(), String> {
+pub fn synthesize_serde(project: &mut Package) {
     distribute_bound_driven_requests(project);
 
     for module in project.tir_modules.values_mut() {
@@ -129,21 +125,6 @@ pub fn synthesize_serde(project: &mut Package) -> Result<(), String> {
                     if existing.contains(&key) {
                         continue;
                     }
-                    if let Some(count) = find_struct(module, &req.target_type_name)
-                        .map(|def| def.fields.len())
-                        .filter(|count| *count > SERDE_MAX_FIELDS)
-                    {
-                        // The elaborator refuses an explicit marker with a
-                        // span; a bound-driven derivation has none.
-                        return Err(format!(
-                            "cannot derive `Deserialize` for `{}`: {count} fields exceeds the \
-                             {SERDE_MAX_FIELDS}-field limit. Deserialization tracks which fields \
-                             the wire wrote in a {SERDE_MAX_FIELDS}-bit mask, so duplicates can \
-                             be rejected; split the struct into nested ones, each within the \
-                             limit.",
-                            req.target_type_name,
-                        ));
-                    }
                     if let Some((lookup_func, positional_at_func)) =
                         generate_field_schema(module, req, &names)
                     {
@@ -161,7 +142,6 @@ pub fn synthesize_serde(project: &mut Package) -> Result<(), String> {
 
         module.functions.extend(generated);
     }
-    Ok(())
 }
 
 /// Distribute bound-driven `Serialize` / `Deserialize` requests (WEP

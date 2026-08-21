@@ -3651,7 +3651,7 @@ impl Serialize for User;      // compiler generates serialize method
 impl Deserialize for User;    // compiler generates deserialize method
 ```
 
-The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait, or if a `Deserialize` target has more than 64 fields.
+The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
 
 Deserialization rejects a repeated field or key by default; a format overrides `Deserializer::on_duplicate_key` to be lenient. Nesting past a format's `max_depth` is a `DepthLimitExceeded` error, not a trap.
 
