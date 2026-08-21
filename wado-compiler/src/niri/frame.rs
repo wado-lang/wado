@@ -626,11 +626,8 @@ impl Interpreter<'_> {
 
     /// The value bound to a by-value or shared-reference parameter.
     ///
-    /// `&expr` has no value of its own — the lattice refuses a reference, since
-    /// binding one would snapshot a referent a later write could change. What a
-    /// callee reads through a shared reference is the referent, and a shared
-    /// reference cannot write, so the referent's own constant stands. A callee
-    /// that retains one past its return is refused separately, by `stores`.
+    /// A shared reference cannot write, so the referent's own constant stands.
+    /// One retained past the callee's return is refused by `stores`.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
         if let Some(e) = arg.as_expr()
             && let ExprKind::Unary {
@@ -809,9 +806,8 @@ impl Interpreter<'_> {
                 );
                 return None;
             };
-            // A reference reads as its referent only where the frame already
-            // decided what that is — a scalar constant standing for a reference
-            // would be a value where the program holds an alias.
+            // A scalar under a reference would be a value where the program
+            // holds an alias.
             if read.is_reference && value.is_scalar() {
                 crate::compiler_trace!(
                     "region_seed",

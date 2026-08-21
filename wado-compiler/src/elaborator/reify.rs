@@ -3120,9 +3120,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         // A hoisted slot binds ahead of the condition, where its scope reaches
-        // the failure branch too. The scan hoists only while everything
-        // evaluated before the operand is bound as well, so the condition still
-        // runs in source order.
+        // the failure branch too — sound because the scan hoists only while
+        // everything evaluated before the operand is bound as well.
         if hoisted {
             assert!(
                 seen_local_index.is_none(),
@@ -3151,11 +3150,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return local_ref;
         }
 
-        // Otherwise the capture is taken where the operand sits, so
-        // instrumentation moves no evaluation at all: a short-circuit above
-        // still governs whether it runs, and nothing overtakes an operand
-        // evaluated before it. Until the capture site runs, the local holds its
-        // Wasm default.
+        // Otherwise the capture sits where the operand does, moving no
+        // evaluation; until it runs, the local holds its Wasm default.
         let (decls, spliced) = if let Some(seen_index) = seen_local_index {
             let decls = vec![TirStmt::new(
                 TirStmtKind::Let {

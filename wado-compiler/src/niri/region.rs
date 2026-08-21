@@ -162,9 +162,8 @@ pub(super) fn region_free_reads(
 }
 
 /// A local a region reads without declaring, and whether it names a reference.
-/// A reference has no value of its own, so seeding one is sound only where the
-/// frame already reads it as a constant — which the caller, holding the
-/// environment, is the one to know.
+/// Seeding a reference is sound only where the frame already reads it as a
+/// constant, which only the caller, holding the environment, knows.
 pub(super) struct FreeRead {
     pub(super) index: u32,
     pub(super) is_reference: bool,

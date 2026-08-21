@@ -127,8 +127,8 @@ operand — both spellings parse to the same tree, so no fidelity is lost.
 ## Known gaps
 
 Nothing here is settled by design. Each entry is the mechanism failing rule 1,
-or an operand position rule 3 does not yet reach, or a cost not yet paid down —
-a defect or an open question, never a boundary.
+or an operand position rule 3 does not yet reach — a defect or an open question,
+never a boundary.
 
 ### Rule 1: the mechanism changes evaluation
 
@@ -161,26 +161,6 @@ a defect or an open question, never a boundary.
 
       A `Spread` needs nothing: it only ever sits inside a literal the scan
       already walks.
-
-### Cost
-
-- [ ] **Rematerialize a cold-path use** in the escape and scalarization
-      analyses. This one is cost, not correctness, and it is not a trade against
-      diagnostic value either. Rendering an aggregate operand is a genuine _use_
-      of that aggregate in the failure branch, and the analyses are right to
-      count it — `builtin::cold_path()` produces no Wasm and changes no
-      semantics, so an analysis that dropped a real use on its word would
-      scalarize an aggregate the cold branch still has to read. Measured:
-      capturing `List<T>::index_value`'s `self` stops const-object
-      globalization, LICM and array-append collapse; capturing the scrutinee of
-      `assert ok matches { Ok(6) }` stops variant-return scalarization. Binding
-      is not what costs — the read is, so re-reading instead of binding
-      regresses identically. What lifts it is letting the hot path scalarize as
-      though the cold use were absent and reconstructing at the cold use from
-      what survives; power assert makes that cheap, since the failure branch
-      wants a rendering and scalarization leaves exactly the fields `Inspect`
-      would walk. Unpinned by an e2e fixture: the regression it describes only
-      appears once the receiver entry above lands.
 
 ## Consequences
 

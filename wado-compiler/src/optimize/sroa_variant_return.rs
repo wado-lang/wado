@@ -537,9 +537,7 @@ fn rebox_call(
 }
 
 /// `match t.0 { k => Case(t.<slot>!) … }` — the variant a tuple local denotes.
-/// Reading the tuple back is what lets a scalarized result reach a context that
-/// wants the variant whole, whether the tuple came from a call this pass
-/// declined or from a temp it bound.
+/// Serves a call this pass declined and a temp it bound alike.
 fn rebuild_variant(
     body: &mut Body,
     local_index: u32,
@@ -1602,8 +1600,7 @@ fn check_uses(
                         return;
                     }
                 }
-                // A bare mention of the temp is rebuilt from the tuple by
-                // `rewrite_temp_uses`, so it costs this site nothing.
+                // Rebuilt from the tuple by `rewrite_temp_uses`.
                 ExprKind::Local { .. } => {
                     return;
                 }
@@ -2314,17 +2311,13 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     rewrite_match_on_temp(body, e, local, &layout, arms, cx);
                 }
             }
-            // A field of the temp is the destructure itself — the shape every
-            // rebuild reads the tuple through. Leaving it alone is what keeps a
-            // rebuild from nesting under the field reads it just planted, on
-            // this round and on every later one. The type cannot stand in for
-            // this: `retype_let` has already retyped every read of the local.
+            // The destructure itself. Leaving it alone keeps a rebuild from
+            // nesting under the field reads it planted; the type cannot tell
+            // them apart, `retype_let` having retyped every read before this.
             ExprKind::FieldAccess { expr, .. } if temp_local(body, expr, cx.bound).is_some() => {
                 return;
             }
-            // A read of the temp itself wants the variant whole. The tuple still
-            // holds it, so rebuild it here rather than give up the scalarized
-            // call.
+            // A read of the temp wants the variant whole; the tuple holds it.
             ExprKind::Local { index, .. } if cx.bound.contains_key(&index) => {
                 let layout = cx.layout_of(index).clone();
                 let variant_type = cx.variant_of(index);
@@ -2399,8 +2392,6 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: 
                     return;
                 }
             }
-            // A bare read rebuilds the variant from the tuple, so it is no
-            // longer a reason to decline the site.
             ExprKind::Local { index, .. } if *index == local => {
                 return;
             }
