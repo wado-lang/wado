@@ -1,0 +1,22 @@
+// Regression: inspecting a struct with a `&()` field. `&x` is transparent at
+// the WIR level, so `&()` leaves nothing on the stack — and the synthesized
+// field getter's signature has to say so too, or it promises a value its body
+// never pushes.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder<T> {
+    v: T,
+    tag: i32,
+}
+
+export fn run() with Stdout {
+    let u = ();
+    let h: Holder<&()> = Holder { v: &u, tag: 7 };
+    println(`${h:?}`);
+}
+
+__DATA__
+{
+    "stdout": "Holder { v: &(), tag: 7 }\n"
+}

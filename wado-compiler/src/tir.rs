@@ -2161,6 +2161,16 @@ impl TypeTable {
     }
 
     /// Peel through Ref/MutRef wrappers to get the underlying type.
+    /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
+    /// a reference to unit. `&x` is transparent at the WIR level, so `&()` is as
+    /// empty as `()`; a `&()` that is actually consumed was boxed upstream.
+    ///
+    /// A function's signature and its body must agree on this, or the body
+    /// returns nothing where the signature promised a value.
+    pub fn is_stackless(&self, type_id: TypeId) -> bool {
+        self.peel_refs(type_id) == TypeTable::UNIT
+    }
+
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {
             match self.get(type_id) {
