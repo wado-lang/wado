@@ -75,7 +75,7 @@ impl Monomorphizer {
             let mangled = mangled.clone();
             return Some((key, mangled));
         }
-        let trait_decl = key.method_info.as_ref().and_then(|i| i.trait_decl());
+        let trait_decl = key.method_info.as_ref().and_then(LocalMethodName::trait_decl);
         let trait_name = key
             .method_info
             .as_ref()
@@ -656,7 +656,7 @@ impl Monomorphizer {
                 && mono.is_blanket
             {
                 let info = method_func.method_info.as_ref();
-                let impl_ta = match (info.and_then(|i| i.trait_decl()), info) {
+                let impl_ta = match (info.and_then(LocalMethodName::trait_decl), info) {
                     (Some(trait_), Some(_)) => super::func_inst::blanket_pack_dispatch_args(
                         &mono.impl_type_args,
                         &self.functions.trait_env,

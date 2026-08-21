@@ -242,7 +242,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some(v);
     }
-    let trait_decl = info.and_then(|i| i.trait_decl());
+    let trait_decl = info.and_then(LocalMethodName::trait_decl);
     let trait_name = info.and_then(|i| i.base_trait_name());
     if let Some(trait_name) = trait_name {
         for candidate in struct_candidates {
@@ -1423,7 +1423,7 @@ impl Monomorphizer {
                 {
                     let generic_func = generic_func_rc.borrow();
                     let info = method_func.method_info.as_ref();
-                    let trait_name = info.and_then(|i| i.trait_decl());
+                    let trait_name = info.and_then(LocalMethodName::trait_decl);
                     // Does this dispatch go through a blanket template that keys on
                     // projected type packs (`impl<T: Bound<Assoc = [..P]>, ..P>
                     // Trait for T`, keyed by `[T, T::Assoc, …]`)? Covers

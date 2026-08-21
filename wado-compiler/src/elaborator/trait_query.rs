@@ -1131,14 +1131,12 @@ impl TypeSystem {
             if is_eq_or_ord {
                 return true;
             }
-            // Numeric primitives implement arithmetic traits. The operator is
-            // named by the declaration the compiler supplies it for, so a user
-            // `trait Rem` is a different trait and gets none of it.
-            if self.is_prelude_trait_decl(Some(trait_))
-                && primitive_name_has_arithmetic(
-                    prim.as_str(),
-                    self.resolutions.defs().name(trait_),
-                )
+            // Numeric primitives implement the operator traits the compiler
+            // supplies. Which operator is an item, not a spelling, so a user
+            // `trait Rem` is a different declaration and gets none of it.
+            if self
+                .compiler_operator_of(trait_)
+                .is_some_and(|op| primitive_has_operator(prim.as_str(), op))
             {
                 return true;
             }
@@ -1460,7 +1458,6 @@ impl TypeSystem {
     /// compiler-supplied `Add`, so a blanket bounded by one needs this.
     fn primitive_satisfies_builtin_trait(
         &self,
-        scope: &TypeLookup,
         type_key: &Receiver,
         bound: &super::trait_env::BlanketBound,
     ) -> bool {
@@ -1473,22 +1470,43 @@ impl TypeSystem {
         if !PrimitiveType::is_primitive_name(name) {
             return false;
         }
-        matches!(
-            self.classify_on_bound_trait(scope, &bound.name),
-            Some(OnBoundTrait::Eq | OnBoundTrait::Ord)
-        ) || (self.is_prelude_trait_decl(bound.decl_ref)
-            && primitive_name_has_arithmetic(name, &bound.name))
-    }
-
-    /// Whether the bound's reference site reached the prelude's own trait
-    /// declaration. The operator traits carry no compiler item, so a same-named
-    /// user trait is told apart by the module its declaration comes from.
-    fn is_prelude_trait_decl(&self, decl: Option<DefId>) -> bool {
-        let tt = self.type_table.borrow();
-        let Some(prelude) = tt.compiler_items().trait_module(CompilerItem::Ord) else {
+        let Some(trait_) = bound.decl_ref else {
             return false;
         };
-        decl.is_some_and(|def| self.resolutions.defs().module(def) == prelude)
+        matches!(
+            self.on_bound_of(trait_),
+            Some(OnBoundTrait::Eq | OnBoundTrait::Ord)
+        ) || self
+            .compiler_operator_of(trait_)
+            .is_some_and(|op| primitive_has_operator(name, op))
+    }
+
+    /// The operator the compiler supplies for a primitive under `trait_`, or
+    /// `None` for a trait it supplies none for. An identity lookup: a user
+    /// trait spelled `Rem` is a different declaration and gets nothing.
+    fn compiler_operator_of(&self, trait_: DefId) -> Option<CompilerItem> {
+        let decl = self.resolutions.defs().ast_id(trait_);
+        let item = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_item_of_decl(decl)?;
+        matches!(
+            item,
+            CompilerItem::Add
+                | CompilerItem::Sub
+                | CompilerItem::Mul
+                | CompilerItem::Div
+                | CompilerItem::Rem
+                | CompilerItem::Neg
+                | CompilerItem::BitAnd
+                | CompilerItem::BitOr
+                | CompilerItem::BitXor
+                | CompilerItem::BitNot
+                | CompilerItem::Shl
+                | CompilerItem::Shr
+        )
+        .then_some(item)
     }
 
     fn blanket_trait_impl_applies(
@@ -1527,7 +1545,7 @@ impl TypeSystem {
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
-                    || self.primitive_satisfies_builtin_trait(scope, type_key, bound)
+                    || self.primitive_satisfies_builtin_trait(type_key, bound)
                     || bound.decl_ref.is_some_and(|trait_| {
                         // The one entry, so a structurally derived `Eq` / `Ord`
                         // answers a blanket's bound as it answers a written one.
@@ -2684,16 +2702,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// Whether the compiler supplies `trait_name`'s operator for the primitive
 /// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
 /// arithmetic is lane-wise, and only the lane type's own impl knows the width.
-fn primitive_name_has_arithmetic(prim_name: &str, trait_name: &str) -> bool {
+fn primitive_has_operator(prim_name: &str, op: CompilerItem) -> bool {
     let is_int = matches!(prim_name.as_bytes().first(), Some(b'i' | b'u'));
-    match trait_name {
-        "Add" | "Sub" | "Mul" | "Div" | "Neg" => is_int || matches!(prim_name, "f32" | "f64"),
+    match op {
+        CompilerItem::Add
+        | CompilerItem::Sub
+        | CompilerItem::Mul
+        | CompilerItem::Div
+        | CompilerItem::Neg => is_int || matches!(prim_name, "f32" | "f64"),
         // `%` has no float lowering.
-        "Rem" => is_int,
+        CompilerItem::Rem => is_int,
         // Bit patterns. `bool` takes the binary three, as `b & c` does, but
         // neither `~b` nor `b << 1` is a Wado expression.
-        "BitAnd" | "BitOr" | "BitXor" => is_int || prim_name == "bool",
-        "BitNot" | "Shl" | "Shr" => is_int,
+        CompilerItem::BitAnd | CompilerItem::BitOr | CompilerItem::BitXor => {
+            is_int || prim_name == "bool"
+        }
+        CompilerItem::BitNot | CompilerItem::Shl | CompilerItem::Shr => is_int,
         _ => false,
     }
 }

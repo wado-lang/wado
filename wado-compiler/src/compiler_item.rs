@@ -223,6 +223,54 @@ pub enum CompilerItem {
     /// call through. Registered so a synthesis site names the declaration
     /// rather than spelling `IndexValue`, which a user trait may share.
     IndexValue,
+    /// `Add` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Add,
+    /// `Sub` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Sub,
+    /// `Mul` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Mul,
+    /// `Div` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Div,
+    /// `Rem` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Rem,
+    /// `Neg` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Neg,
+    /// `BitAnd` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    BitAnd,
+    /// `BitOr` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    BitOr,
+    /// `BitXor` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    BitXor,
+    /// `BitNot` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    BitNot,
+    /// `Shl` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Shl,
+    /// `Shr` — the trait an operator dispatches to. The compiler picks it
+    /// by construction, so it is an item and not a spelling a user trait
+    /// of the same name could answer for.
+    Shr,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -586,6 +634,18 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::IndexValue,
+        Self::Add,
+        Self::Sub,
+        Self::Mul,
+        Self::Div,
+        Self::Rem,
+        Self::Neg,
+        Self::BitAnd,
+        Self::BitOr,
+        Self::BitXor,
+        Self::BitNot,
+        Self::Shl,
+        Self::Shr,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -750,6 +810,18 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::IndexValue => "index_value",
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Rem => "rem",
+            Self::Neg => "neg",
+            Self::BitAnd => "bit_and",
+            Self::BitOr => "bit_or",
+            Self::BitXor => "bit_xor",
+            Self::BitNot => "bit_not",
+            Self::Shl => "shl",
+            Self::Shr => "shr",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -886,7 +958,19 @@ impl CompilerItem {
     pub fn is_required(self, world: &str) -> bool {
         match self {
             // Always loaded — `core:prelude` is auto-imported.
-            Self::List
+            Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Rem
+            | Self::Neg
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::BitNot
+            | Self::Shl
+            | Self::Shr
+            | Self::List
             | Self::Box
             | Self::I128
             | Self::U128
@@ -1119,6 +1203,18 @@ impl CompilerItem {
             | Self::UpperHex
             | Self::UpperHexAlt
             | Self::LowerExp
+            | Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Rem
+            | Self::Neg
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::BitNot
+            | Self::Shl
+            | Self::Shr
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
