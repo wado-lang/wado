@@ -1509,9 +1509,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.tysys.trait_env.effect_decl_index.contains(def)
                         || self.tysys.trait_env.resource_decl_index.contains(def)
                 }) {
-                    // The clause names the effect as this module spells it; the
-                    // declaration it reaches is the identity. An alias
-                    // (`use { Random as Rng }`) reaches the same one.
                     if let Some(use_id) = use_id {
                         let decl_ast = self.tysys.resolutions.defs().ast_id(def);
                         self.record_reference_to_def(use_id, decl_ast);
@@ -1522,11 +1519,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         module_source: defs.module(def).clone(),
                     }
                 } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    // Canonicalize: re-exports point at the importing module and
-                    // an alias spells the effect a second way, but identity is
-                    // the declaration — so two `with Stdout` clauses (one
-                    // importing from `core:cli`, one from `wasi:cli`) and a
-                    // `with Out` aliasing either refer to the same effect.
+                    // Identity is the declaration, so two `with Stdout` clauses
+                    // — one importing from `core:cli`, one from `wasi:cli` —
+                    // and a `with Out` aliasing either name one effect.
                     let declared = self
                         .symbols
                         .lookup_in_module(&source, name)

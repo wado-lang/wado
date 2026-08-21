@@ -1317,9 +1317,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else if let Some(decl) =
                 self.effect_or_resource_decl_at(ident.segments.first().map(|seg| seg.id))
             {
-                // Name the interface by its declaration: signature resolution,
-                // the effect check, dispatch and WIR all key on that name, and
-                // an aliasing import must not make them miss each other.
+                // Signature resolution, the effect check, dispatch and WIR all
+                // key on the declaration's name; an alias must not split them.
                 let declared = self.tysys.resolutions.defs().name(decl).to_string();
                 (
                     Some(CalleeRef::local_namespace(

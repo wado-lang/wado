@@ -545,11 +545,9 @@ struct EffectIndex<'a> {
     provided_import_fqs: &'a IndexSet<String>,
 }
 
-/// The effect an `impl E for T` block handles, when `E` is one.
-///
-/// Reads the trait off the elaborator's impl facts, which name it by the module
-/// that declares it: a plain trait spelled like an effect is a different
-/// declaration and grants nothing.
+/// The effect an `impl E for T` block handles, when `E` is one. Read off the
+/// impl facts, which name the trait by its declaring module: a plain trait
+/// spelled like an effect is a different declaration and grants nothing.
 fn handled_effect(
     sem: &Semantics,
     module: &ModuleSource,
@@ -622,9 +620,8 @@ fn check_function_effects_sem(
             &mut current,
         );
     }
-    // A handler method holds the effect it handles: its body runs in the outer
-    // dispatch chain, so `E::op()` from inside `impl E for T` is delegation to
-    // the outer handler, the shape `..forward` desugars to.
+    // A handler method holds the effect it handles: `E::op()` from inside
+    // `impl E for T` delegates to the outer handler, what `..forward` desugars to.
     if let Some(effect) = handled {
         current.insert(effect.clone());
     }
@@ -792,10 +789,9 @@ fn effect_named_in(
     effect_by_name.get(name).cloned()
 }
 
-/// The declaration an effect reference names. A reference the closure knows is
-/// already one. A spelling it does not — the recording module's import
-/// perspective on a re-export — resolves through the by-name index, which holds
-/// one entry per name. Effect parameters are returned unchanged.
+/// The declaration an effect reference names. One the closure knows already is;
+/// a spelling it does not — a re-export seen from the recording module —
+/// resolves through the by-name index. Effect parameters pass through.
 fn canonicalize_effect(
     effect: &EffectRef,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,

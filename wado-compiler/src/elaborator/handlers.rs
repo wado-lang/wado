@@ -217,9 +217,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source: eff_module,
         }) = &effect
         {
-            // Name the effect by its declaration, not by the spelling this
-            // module imported it under, so `use { Random as Rng }` records the
-            // same entry a plain import would.
+            // Name the effect by its declaration, so `use { Random as Rng }`
+            // records the entry a plain import would.
             let declared = effect_decl
                 .map(|def| crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), def));
             let name = declared
