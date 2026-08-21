@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787272639495,
+  "lastUpdate": 1787282836486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49777,6 +49777,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e03f09aa0c753dd0a6770deb1cbbaea91c78698b"
         },
         "date": 1787272638791,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f46102aadeb0c0138499052242c4e98afc6bebee",
+          "message": "Merge pull request #1866 from wado-lang/docs/compiler-rules\n\ndocs(compiler): the rules, and a help list that follows them",
+          "timestamp": "2026-08-21T12:14:40+09:00",
+          "tree_id": "3ceb15ad647dd190deefc7b954aa1c21e191cd4a",
+          "url": "https://github.com/wado-lang/wado/commit/f46102aadeb0c0138499052242c4e98afc6bebee"
+        },
+        "date": 1787282836197,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
