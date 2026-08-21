@@ -697,7 +697,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return (fallback.clone(), name.to_string());
         }
-        match self.symbols.imported(fallback, name) {
+        // What `fallback` imported, then what it re-exports (`pub use`) — two
+        // different maps, and a default may name either.
+        let resolved = self
+            .symbols
+            .imported(fallback, name)
+            .or_else(|| self.symbols.lookup_in_module(fallback, name));
+        match resolved {
             Some(symbol) => (symbol.module.clone(), symbol.name.clone()),
             None => (fallback.clone(), name.to_string()),
         }

@@ -1703,45 +1703,80 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(entry_module_source),
                 &state.invocations,
             );
-            let Some(declared) = state.tysys.signatures.globals.get(&source) else {
-                continue;
-            };
             // `Simple` names one global; `Namespace` brings in every reachable
             // one under its `ns$global` alias. Reachability is the symbol
             // table's answer, not a second reading of the declaration's
             // `visibility` — the analyze phase's `import_reachable` asks it the
             // same way.
-            let mut to_import: Vec<(String, String)> = Vec::new();
+            let mut to_import: Vec<(String, (ModuleSource, String, TypeId, bool))> = Vec::new();
             for use_item in &use_decl.items {
                 match use_item {
                     ast::UseItem::Simple { name, alias, .. } => {
-                        if declared.contains_key(name) {
-                            to_import.push((alias.as_ref().unwrap_or(name).clone(), name.clone()));
+                        if let Some(entry) =
+                            Self::global_declared_for(state, symbols, &source, name)
+                        {
+                            to_import.push((alias.as_ref().unwrap_or(name).clone(), entry));
                         }
                     }
                     ast::UseItem::Namespace { name: ns } => {
                         let same_package = source.same_package(module_source);
-                        for name in declared.keys() {
+                        // What `source` declares itself, plus what it re-exports:
+                        // a `pub use`d global reaches the namespace exactly as a
+                        // declared one does.
+                        let declared = state
+                            .tysys
+                            .signatures
+                            .globals
+                            .get(&source)
+                            .map(|d| d.keys().cloned().collect::<Vec<_>>())
+                            .unwrap_or_default();
+                        for name in declared.into_iter().chain(symbols.reexport_names(&source)) {
+                            let Some(entry) =
+                                Self::global_declared_for(state, symbols, &source, &name)
+                            else {
+                                continue;
+                            };
                             if symbols
-                                .lookup_in_module(&source, name)
+                                .lookup_in_module(&source, &name)
                                 .is_some_and(|s| s.visibility.reachable_from(same_package))
                             {
-                                to_import.push((
-                                    crate::name::namespace_member_alias(ns, name),
-                                    name.clone(),
-                                ));
+                                to_import
+                                    .push((crate::name::namespace_member_alias(ns, &name), entry));
                             }
                         }
                     }
                     ast::UseItem::InterfaceFunctions { .. } | ast::UseItem::Wildcard => {}
                 }
             }
-            for (local_name, source_name) in to_import {
-                let (ty, mutable) = declared[&source_name];
-                imported.insert(local_name, (source.clone(), source_name, ty, mutable));
+            for (local_name, entry) in to_import {
+                imported.insert(local_name, entry);
             }
         }
         imported
+    }
+
+    /// Where the global `name` is *declared*, as seen from `source`, with its
+    /// type and mutability.
+    ///
+    /// `signatures.globals` is keyed by the declaring module, so a name
+    /// `source` only re-exports (`pub use`) is absent under `source` itself.
+    /// The symbol table resolves the re-export chain to the module that wrote
+    /// it. Returns `None` for a name that is not a global at all.
+    fn global_declared_for(
+        state: &AnnotateState,
+        symbols: &crate::symbol::SymbolTable,
+        source: &ModuleSource,
+        name: &str,
+    ) -> Option<(ModuleSource, String, TypeId, bool)> {
+        if let Some((ty, mutable)) = state.tysys.signatures.global(source, name) {
+            return Some((source.clone(), name.to_string(), ty, mutable));
+        }
+        let symbol = symbols.lookup_in_module(source, name)?;
+        let (ty, mutable) = state
+            .tysys
+            .signatures
+            .global(symbol.module_source(), &symbol.name)?;
+        Some((symbol.module_source().clone(), symbol.name.clone(), ty, mutable))
     }
 
     /// Topologically sort modules based on struct field type dependencies.

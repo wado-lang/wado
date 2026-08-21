@@ -1,0 +1,25 @@
+// Reading a global through a re-exporting module.
+//
+// `signatures.globals` is keyed by the module that *declares* a global, so a
+// module that only `pub use`s one has no entry. The import collection gave up
+// there, the name fell through to the function branch of identifier
+// resolution, and the resulting `FuncRef` tripped `lower::translate`'s
+// unreachable — an ICE, not a diagnostic.
+//
+// Covered here: a body read, a namespace import, and a default argument naming
+// the re-exported global (which resolves in the declaring module's scope, so
+// this module deliberately does not import it).
+
+use { body_use, defaulted } from "./sub/reexport_global_mid.wado";
+use facade from "./sub/reexport_global_facade.wado";
+
+export fn run() {
+    assert body_use() == 7;
+    assert defaulted() == 7;
+    assert defaulted(1) == 1;
+    assert facade::SHARED_LIMIT == 7;
+    assert facade::OTHER_LIMIT == 11;
+}
+
+__DATA__
+{"stdout": ""}
