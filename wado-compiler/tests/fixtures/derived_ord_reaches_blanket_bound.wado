@@ -1,0 +1,24 @@
+// `Extremum`'s blanket is bounded `T: Ord`, and a struct's `Ord` is derived
+// rather than written. Answering a blanket's bound with an impl-index scan
+// alone saw no impl for a derive, so `max()` missed every struct and enum.
+use { println } from "core:cli";
+
+struct P {
+    n: i32,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+export fn run() with Stdout {
+    let xs: List<P> = [P { n: 1 }, P { n: 3 }];
+    let cs: List<Color> = [Color::Red, Color::Green];
+    assert xs.iter_value().max() matches { Some(p) && p.n == 3 };
+    assert cs.iter_value().max() matches { Some(_) };
+    println(`${xs.iter_value().max() matches { Some(p) && p.n == 3 }} ${cs.iter_value().min() matches { Some(_) }}`);
+}
+
+__DATA__
+{"stdout": "true true\n"}

@@ -651,6 +651,16 @@ impl TypeSet {
 ///
 /// `trait_args` holds only what an impl wrote beyond the declared defaults: a
 /// bound is a bare name, so the defaulted form is the empty list.
+/// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
+/// than an instantiated type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct GenericAssocTypeKey {
+    target_decl: crate::ast::AstId,
+    trait_decl: crate::defs::DefId,
+    trait_args: Vec<TypeId>,
+    assoc_name: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AssocTypeKey {
     receiver: TypeId,
@@ -687,7 +697,10 @@ pub struct TypeTable {
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, crate::defs::DefId, String), TypeId>,
+    /// A generic impl's `type X = …` before substitution, keyed like
+    /// [`Self::assoc_type_resolutions`] but by the target's declaration: two
+    /// generic impls of one trait at different instantiations are two answers.
+    generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, TypeId>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -2514,8 +2527,34 @@ impl TypeTable {
         assoc_name: String,
         type_param_id: TypeId,
     ) {
-        self.generic_assoc_type_defs
-            .insert((base_decl, trait_key, assoc_name), type_param_id);
+        self.register_generic_assoc_type_def_of_args(
+            base_decl,
+            trait_key,
+            Vec::new(),
+            assoc_name,
+            type_param_id,
+        );
+    }
+
+    /// [`Self::register_generic_assoc_type_def`] for an impl whose trait
+    /// arguments say more than the declared defaults do.
+    pub fn register_generic_assoc_type_def_of_args(
+        &mut self,
+        base_decl: crate::ast::AstId,
+        trait_key: crate::defs::DefId,
+        trait_args: Vec<TypeId>,
+        assoc_name: String,
+        type_param_id: TypeId,
+    ) {
+        self.generic_assoc_type_defs.insert(
+            GenericAssocTypeKey {
+                target_decl: base_decl,
+                trait_decl: trait_key,
+                trait_args,
+                assoc_name,
+            },
+            type_param_id,
+        );
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -2528,14 +2567,17 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<(crate::defs::DefId, TypeId)> {
         let mut found: Option<(crate::defs::DefId, TypeId)> = None;
-        for ((decl, trait_key, name), &def_id) in &self.generic_assoc_type_defs {
-            if *decl != base_decl || name != assoc_name {
+        for (key, &def_id) in &self.generic_assoc_type_defs {
+            if key.target_decl != base_decl
+                || key.assoc_name != assoc_name
+                || !key.trait_args.is_empty()
+            {
                 continue;
             }
             if found.as_ref().is_some_and(|(_, prior)| *prior != def_id) {
                 return None;
             }
-            found = Some((*trait_key, def_id));
+            found = Some((key.trait_decl, def_id));
         }
         found
     }
@@ -2551,16 +2593,29 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
-        let defs: Vec<(crate::defs::DefId, String, TypeId)> = self
+        let defs: Vec<(crate::defs::DefId, Vec<TypeId>, String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|((decl, _, _), _)| *decl == base_decl)
-            .map(|((_, trait_key, assoc_name), &def_id)| (*trait_key, assoc_name.clone(), def_id))
+            .filter(|(key, _)| key.target_decl == base_decl)
+            .map(|(key, &def_id)| {
+                (
+                    key.trait_decl,
+                    key.trait_args.clone(),
+                    key.assoc_name.clone(),
+                    def_id,
+                )
+            })
             .collect();
-        for (trait_key, assoc_name, def_id) in defs {
+        for (trait_key, trait_args, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);
             if !self.contains_type_param(resolved) {
-                self.register_assoc_type_resolution(concrete_id, trait_key, assoc_name, resolved);
+                self.register_assoc_type_resolution_of_args(
+                    concrete_id,
+                    trait_key,
+                    trait_args,
+                    assoc_name,
+                    resolved,
+                );
             }
         }
     }
@@ -2731,11 +2786,12 @@ impl TypeTable {
             return Some(resolved);
         }
         let type_args = self.nominal_type_args(concrete_id)?;
-        let def_key = (
-            self.decl_of_type(concrete_id)?,
-            *trait_key,
-            assoc_name.to_string(),
-        );
+        let def_key = GenericAssocTypeKey {
+            target_decl: self.decl_of_type(concrete_id)?,
+            trait_decl: *trait_key,
+            trait_args: Vec::new(),
+            assoc_name: assoc_name.to_string(),
+        };
         let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
         let subst: IndexMap<u32, TypeId> = type_args
             .iter()
@@ -2967,6 +3023,18 @@ impl TypeTable {
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
                 let substituted_base = self.subst_rec(param_id, substitution, vars, projections);
+                // A projection over a projection is answered by what the base
+                // carries: `IntoIterator::Iter: Iterator<Item = Self::Item>`
+                // makes `C::Iter::Item` the `C::Item` the frame already named.
+                if let ResolvedType::AssocTypeProjection {
+                    assoc_type_bindings: base_bindings,
+                    ..
+                } = self.get(substituted_base)
+                    && let Some((_, answer)) =
+                        base_bindings.iter().find(|(name, _)| *name == assoc_name)
+                {
+                    return *answer;
+                }
                 if !self.contains_type_param(substituted_base) {
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before

@@ -1933,13 +1933,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // can resolve associated types for GenericInstance types.
                     let base_decl = scope.tysys.type_table.borrow().decl_of_type(target_type_id);
                     if let Some(base_decl) = base_decl {
+                        let trait_args =
+                            impl_block.trait_type.as_ref().map_or_else(Vec::new, |t| {
+                                scope.non_default_trait_args(t, &impl_block.ty, trait_key)
+                            });
                         scope
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .register_generic_assoc_type_def(
+                            .register_generic_assoc_type_def_of_args(
                                 base_decl,
                                 trait_key,
+                                trait_args,
                                 binding.name.clone(),
                                 type_id,
                             );

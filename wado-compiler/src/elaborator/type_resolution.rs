@@ -223,6 +223,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .map(|bound| bound.name.clone())
             .collect();
+        // Two bounds *binding* it are the same coin toss as two declaring it,
+        // and `T: Add<Output = Cm> + Mul<Output = Area>` does both.
         if declaring.len() < 2 {
             return false;
         }
@@ -385,17 +387,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // First, check if the current bounds directly specify this assoc type.
-            // e.g., I: IntoIterator<Item = u8> → I::Item resolves directly to u8.
-            if let Some(direct_type) =
-                self.frame_projection(param_type_id, &namespaced.namespace, &namespaced.name)
-            {
-                return direct_type;
-            }
-
             let base_name = namespaced.namespace.clone();
             if self.report_ambiguous_assoc_type(&base_name, &namespaced.name, namespaced.span) {
                 return TypeTable::ERROR;
+            }
+            // What the frame's bounds bind it to, where they say: `I:
+            // IntoIterator<Item = u8>` answers `I::Item` directly.
+            if let Some(direct_type) =
+                self.frame_projection(param_type_id, &base_name, &namespaced.name)
+            {
+                return direct_type;
             }
             return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
         }
@@ -802,17 +803,70 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if carried.is_some() {
             return carried;
         }
+        let resolved: Vec<TypeId> = self
+            .frame_assoc_bindings_of(base_name, assoc)
+            .into_iter()
+            .map(|(_, ty)| self.resolve_bound_binding(base_name, &ty))
+            .collect();
+        // Two bounds binding it differently is the coin toss the caller's
+        // ambiguity check reports; answering with the first would hide it.
+        let first = *resolved.first()?;
+        resolved.iter().all(|t| *t == first).then_some(first)
+    }
+
+    /// A bound's right-hand side, resolved in this frame. `Self` inside one is
+    /// the bounded type, which the frame files under `base_name`.
+    fn resolve_bound_binding(&mut self, base_name: &str, ty: &crate::ast::Type) -> TypeId {
+        match self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(base_name)
+            .map(|&(_, id)| id)
+        {
+            Some(id) => self.with_self_type(id, |s| s.resolve_type(ty)),
+            None => self.resolve_type(ty),
+        }
+    }
+
+    /// Every bound on `base_name` a projection may be answered from: the ones
+    /// the frame wrote and the ones they inherit. A supertrait binds an
+    /// associated type too — `trait Scalar: Mul<Output = Self>` answers
+    /// `T::Output` for `T: Scalar` — so one walk serves every lookup.
+    fn bound_closure_of(&mut self, base_name: &str) -> Option<Vec<crate::ast::TraitBound>> {
         let bounds = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(base_name)?
             .clone();
-        bounds
+        let inherited: Vec<crate::ast::TraitBound> = bounds
             .iter()
-            .flat_map(|bound| &bound.assoc_types)
-            .find(|binding| binding.name == assoc)
-            .map(|binding| self.resolve_type(&binding.ty.clone()))
+            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+            .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
+            .map(|i| i.bound)
+            .collect();
+        Some(bounds.into_iter().chain(inherited).collect())
+    }
+
+    /// What every bound in the closure binds `assoc` to, paired with the
+    /// bound's spelling.
+    fn frame_assoc_bindings_of(
+        &mut self,
+        base_name: &str,
+        assoc: &str,
+    ) -> Vec<(String, crate::ast::Type)> {
+        self.bound_closure_of(base_name)
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|bound| {
+                bound
+                    .assoc_types
+                    .iter()
+                    .filter(|b| b.name == assoc)
+                    .map(|b| (bound.name.clone(), b.ty.clone()))
+            })
+            .collect()
     }
 
     /// The projection `base::assoc` as this frame builds it, where `base_name`
@@ -867,43 +921,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: crate::defs::DefId,
         assoc: &str,
     ) -> Option<TypeId> {
-        let bounds = self
-            .annotate_ctx
-            .trait_ctx
-            .type_param_bounds
-            .get(base_name)?
-            .clone();
-        // A supertrait pins it too: `trait Scalar: Mul<Output = Self>` answers
-        // `T::Output` for `T: Scalar`, and only the closure carries that bound.
-        let inherited: Vec<crate::ast::TraitBound> = bounds
-            .iter()
-            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
-            .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
-            .map(|i| i.bound)
-            .collect();
+        let bounds = self.bound_closure_of(base_name)?;
         let written = bounds
-            .iter()
-            .chain(inherited.iter())
+            .into_iter()
             .find_map(|bound| {
                 let fq = self.fq_trait_name_at(bound.id, &bound.name);
                 (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
-                    .then(|| bound.assoc_types.iter().find(|b| b.name == assoc))
+                    .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                     .flatten()
             })?
-            .ty
-            .clone();
-        // `Self` in a supertrait's binding is the bounded type, which this
-        // frame files under `base_name`.
-        let self_type = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(base_name)
-            .map(|&(_, id)| id);
-        Some(match self_type {
-            Some(id) => self.with_self_type(id, |s| s.resolve_type(&written)),
-            None => self.resolve_type(&written),
-        })
+            .ty;
+        Some(self.resolve_bound_binding(base_name, &written))
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this
@@ -930,8 +958,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         projections
             .into_iter()
-            .filter_map(|(name, assoc)| {
-                Some((name, self.frame_projection(base, base_name, &assoc)?))
+            .map(|(name, assoc)| {
+                // A frame that binds `Self::X` answers with the binding; one
+                // that does not answers with the projection, which is what the
+                // name means there. Dropping it left `C::Iter::Item` unable to
+                // reach the `C::Item` a bare `C: IntoIterator` still names.
+                let answer = self
+                    .frame_projection(base, base_name, &assoc)
+                    .unwrap_or_else(|| self.make_frame_projection(base, base_name, &assoc));
+                (name, answer)
             })
             .collect()
     }

@@ -1000,6 +1000,9 @@ impl TypeSystem {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;
         }
+        // Coarser than the call would be — a trait may declare a receiverless
+        // method the bound never dispatches — but the alternative is a bound
+        // holding with no instance, which reaches WIR build as an ICE.
         trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
             |sig| {
                 sig.methods
@@ -1060,8 +1063,12 @@ impl TypeSystem {
             if is_eq_or_ord {
                 return true;
             }
-            // Numeric primitives implement arithmetic traits
-            if primitive_name_has_arithmetic(prim.as_str(), trait_name) {
+            // Numeric primitives implement arithmetic traits. Keyed on the
+            // declaration, not the spelling: a user `trait Rem` is a different
+            // trait and a primitive does not implement it (WEP 2026-08-12).
+            if self.is_prelude_trait_decl(Some(trait_))
+                && primitive_name_has_arithmetic(prim.as_str(), trait_name)
+            {
                 return true;
             }
             // For other traits, check the type name
@@ -1450,14 +1457,25 @@ impl TypeSystem {
             .get(trait_name)
             .into_iter()
             .flatten()
-            .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
+            // A value blanket mints no instance for a reference, so it does not
+            // answer one. This is what left `&i32: Sum` holding with nothing to
+            // dispatch to.
+            .filter(|b| {
+                b.receiver == super::trait_env::BlanketReceiver::Value
+                    && !matches!(type_key, Receiver::Ref(_))
+            })
             .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
                     || self.primitive_satisfies_builtin_trait(scope, type_key, bound)
                     || bound.decl_ref.is_some_and(|trait_| {
-                        self.find_trait_impl_for_subject(ctx, scope, subject, type_key, trait_)
+                        // The one entry, so a structurally derived `Eq` / `Ord`
+                        // answers a blanket's bound as it answers a written one.
+                        // An impl-index scan alone sees no impl for a derive.
+                        subject.is_some_and(|id| self.type_implements_trait(ctx, scope, id, trait_))
+                            || self
+                                .find_trait_impl_for_subject(ctx, scope, subject, type_key, trait_)
                     })
             });
             if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, &blanket.bounds) {

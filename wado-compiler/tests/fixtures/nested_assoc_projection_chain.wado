@@ -1,0 +1,19 @@
+// `IntoIterator::Iter: Iterator<Item = Self::Item>` makes `C::Iter::Item` the
+// `C::Item` the frame already names. A bare `C: IntoIterator` binds nothing, so
+// the chain was left unanswered and `next()` disagreed with the signature.
+use { println } from "core:cli";
+
+fn firstv<C: IntoIterator>(c: C) -> Option<C::Item> {
+    let mut it = c.into_iter();
+    return it.next();
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [7, 8];
+    let ys: List<i32> = [7, 8];
+    assert firstv(xs) matches { Some(v) && v == 7 };
+    println(`${firstv(ys) matches { Some(v) && v == 7 }}`);
+}
+
+__DATA__
+{"stdout": "true\n"}
