@@ -24,9 +24,9 @@ function track(kind, stream) {
   return done.finally(() => inFlight.delete(done));
 }
 
-/// Every write that has started, once each has landed.
-export function settled() {
-  return Promise.allSettled([...inFlight]);
+/// Resolves once no write is in flight — including one a draining write starts.
+export async function settled() {
+  while (inFlight.size) await Promise.allSettled([...inFlight]);
 }
 
 export const types = { OutputStream: class OutputStream {} };

@@ -11,8 +11,12 @@ export const monotonicClock = {
 };
 
 export const systemClock = {
-  now: () => ({ seconds: BigInt(Math.floor(Date.now() / 1000)), nanoseconds: 0 }),
-  getResolution: () => ({ seconds: 0n, nanoseconds: 1_000_000 }),
+  // `now` answers an instant, `get-resolution` a duration.
+  now: () => {
+    const ms = Date.now();
+    return { seconds: BigInt(Math.floor(ms / 1000)), nanoseconds: (ms % 1000) * 1_000_000 };
+  },
+  getResolution: () => 1_000_000n,
 };
 
 export const types = {};

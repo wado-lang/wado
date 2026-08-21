@@ -70,15 +70,6 @@ async function collect(stream) {
 
 export default {
   async fetch(request, env, ctx) {
-    // The guest goes on writing after `task return`. The response is already
-    // sent by then, so this stretches the billed lifetime, not the client's.
-    ctx?.waitUntil?.(
-      (async () => {
-        // A turn to reach the writes, then the writes themselves.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await cli.settled();
-      })(),
-    );
     const handler = await guest();
     const url = new URL(request.url);
     const [headers] = toWasiRequest(request, url);
@@ -94,7 +85,14 @@ export default {
     wasiRequest.setScheme({ tag: url.protocol === "https:" ? "HTTPS" : "HTTP" });
     wasiRequest.setAuthority(url.host);
 
-    const response = await handler.handle(wasiRequest);
+    // jco lifts a returned `Err(error-code)` by throwing it.
+    let response;
+    try {
+      response = await handler.handle(wasiRequest);
+    } catch (err) {
+      console.log("[wado] handle failed:", err?.payload?.tag ?? err?.message ?? err);
+      return new Response("Internal Server Error", { status: 500 });
+    }
 
     const out = new Headers();
     for (const [name, value] of response.getHeaders().copyAll()) {
@@ -107,6 +105,17 @@ export default {
     const bytes = body ? await collect(body) : null;
     // A Worker cannot send trailers, but the guest writes them, so read them.
     await trailers?.read?.().catch(() => {});
+
+    // The guest goes on writing past `task return` — its access log, say. The
+    // response is built by now, so this stretches the billed lifetime only.
+    ctx?.waitUntil?.(
+      (async () => {
+        // A turn for those writes to start, then all of them.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await cli.settled();
+      })(),
+    );
+
     return new Response(NULL_BODY.has(status) || !bytes?.length ? null : bytes, {
       status,
       headers: out,
