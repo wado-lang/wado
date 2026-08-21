@@ -88,9 +88,12 @@ compile errors naming the missing `Sum` / `Extremum`, and `iter_value()` names
 the step back to the values. Nothing special-cases it — two rules on how a
 reference satisfies a bound decide, and both are the compiler's:
 
-- A receiverless method has no receiver to auto-deref, so `&T` does not inherit
-  a bound on a trait declaring one. Without this the bound held with no instance
-  to dispatch to, and the call reached WIR build as an ICE.
+- A receiverless method has no receiver to auto-deref, so `&T` inherits it by
+  forwarding to `T`'s — which forwards exactly where `Self` does not appear in
+  the signature. `sum_iter(…) -> Option<Self>` does not, so `&i32` is no `Sum`;
+  a `kind() -> String` beside it would forward, and its trait stays inherited.
+  Without the rule the bound held with no instance and reached WIR build as an
+  ICE.
 - `==` on a reference is identity ([Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)),
   so no ordering follows from it and `&T` is not `Ord` — which `Ord: Eq` would
   otherwise contradict. A struct holding a reference derives no `Ord` either.

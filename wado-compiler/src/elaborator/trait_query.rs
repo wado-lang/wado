@@ -1000,16 +1000,38 @@ impl TypeSystem {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;
         }
-        // Coarser than the call would be — a trait may declare a receiverless
-        // method the bound never dispatches — but the alternative is a bound
-        // holding with no instance, which reaches WIR build as an ICE.
+        // A receiverless method has no receiver to auto-deref, so `&T` can only
+        // inherit it by forwarding to `T`'s. That forwards only where `Self`
+        // does not appear in the signature: `kind() -> String` does,
+        // `sum_iter(…) -> Option<Self>` cannot.
         trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
             |sig| {
-                sig.methods
-                    .values()
-                    .any(|m| m.sig.self_kind == crate::ast::SelfKind::None)
+                sig.methods.values().any(|m| {
+                    m.sig.self_kind == crate::ast::SelfKind::None
+                        && self.receiverless_method_mentions_self(&m.sig)
+                })
             },
         )
+    }
+
+    /// Whether a receiverless method's signature names `Self` — in a parameter,
+    /// the return type, or a bound on one of its own type parameters. Slot 0 of
+    /// a trait method's frame is `Self`.
+    fn receiverless_method_mentions_self(&self, sig: &super::sig::MethodSig) -> bool {
+        let table = self.type_table.borrow();
+        let in_types = sig
+            .decl
+            .param_types
+            .iter()
+            .chain(sig.decl.return_type.iter())
+            .any(|t| table.mentions_slot(*t, 0));
+        in_types
+            || sig.own_params.iter().any(|p| {
+                p.bounds
+                    .iter()
+                    .flat_map(|b| &b.assoc_types)
+                    .any(|c| mentions_self(&c.ty))
+            })
     }
 
     fn type_implements_trait_inner(

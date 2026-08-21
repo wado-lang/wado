@@ -3323,6 +3323,43 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) mentions one particular slot of its frame,
+    /// projections included. Slot 0 of a trait's frame is `Self`.
+    pub fn mentions_slot(&self, id: TypeId, slot: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                *index == slot
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.mentions_slot(*inner, slot),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => {
+                self.mentions_slot(*param_id, slot)
+                    || assoc_type_bindings
+                        .iter()
+                        .any(|(_, t)| self.mentions_slot(*t, slot))
+            }
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.mentions_slot(*p, slot))
+                    || self.mentions_slot(*return_type, slot)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.mentions_slot(*t, slot))
+            }
+            _ => false,
+        }
+    }
+
     /// Whether `id` (recursively) mentions a *rigid* type parameter — a slot
     /// of some declaration's own frame, as opposed to an inference variable a
     /// solver still owns.

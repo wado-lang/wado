@@ -1,0 +1,38 @@
+// A receiverless method has no receiver to auto-deref, so `&T` inherits it by
+// forwarding to `T`'s — which forwards exactly when `Self` does not appear in
+// the signature. `kind() -> String` does; `Sum::sum_iter(…) -> Option<Self>`
+// cannot, and `error_reference_bound_receiverless.wado` pins that side.
+use { println } from "core:cli";
+
+struct P {
+    n: i32,
+}
+
+trait Named {
+    fn name(&self) -> String;
+
+    fn kind() -> String;
+}
+
+impl Named for P {
+    fn name(&self) -> String {
+        return "p";
+    }
+
+    fn kind() -> String {
+        return "P";
+    }
+}
+
+fn show<T: Named>(t: T) -> String {
+    return t.name();
+}
+
+export fn run() with Stdout {
+    let p = P { n: 1 };
+    assert show(&p) == "p";
+    println(`${show(&p)} ${show(P { n: 2 })}`);
+}
+
+__DATA__
+{"stdout": "p p\n"}
