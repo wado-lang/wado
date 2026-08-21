@@ -241,6 +241,20 @@ fn is_inert(expr: &Expr) -> bool {
     }
 }
 
+/// What the walk knows about an operand when it reaches it, snapshotted before
+/// the node's own children can change any of it.
+struct Position {
+    /// The condition itself, which `__cond` already holds.
+    is_root: bool,
+    /// A bare `Ident` here may be a function-reference coercion site.
+    in_call_arg: bool,
+    /// A short-circuit lies above, so the operand may go unevaluated.
+    conditional: bool,
+    /// Everything the condition evaluated before this operand is bound ahead of
+    /// it, so this one may be bound ahead too.
+    bindable: bool,
+}
+
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
 /// while [`Elaborator::resolve_expr`] is resolving the condition.
 pub(super) struct AssertCaptureContext {
@@ -304,13 +318,13 @@ impl CaptureScanner {
         self.scan(expr);
     }
 
-    fn add(&mut self, source: String, ast_id: AstId, is_place: bool, entered: bool) {
+    fn add(&mut self, source: String, ast_id: AstId, is_place: bool, bindable: bool) {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
         let conditional = self.conditional;
         // A conditional slot may never run and a place is re-read rather than
         // bound, so neither is bound ahead of the condition.
-        let hoisted = entered && !conditional && !is_place;
+        let hoisted = bindable && !conditional && !is_place;
         self.slots.push(Capture {
             name,
             source,
@@ -323,7 +337,7 @@ impl CaptureScanner {
         // again from the failure branch — so it is order-insensitive and passes
         // the fact through. Passes through, never restores: a receiver that
         // cleared the fact still forbids binding what follows it.
-        self.frontier_ok = hoisted || (is_place && !conditional && entered);
+        self.frontier_ok = hoisted || (is_place && !conditional && bindable);
     }
 
     fn scan(&mut self, expr: &Expr) {
@@ -331,9 +345,14 @@ impl CaptureScanner {
         let is_root = std::mem::replace(&mut self.is_root, false);
         let in_call_arg = std::mem::replace(&mut self.in_call_arg, false);
         let conditional = self.conditional;
-        let entered = self.frontier_ok;
+        let pos = Position {
+            is_root,
+            in_call_arg,
+            conditional,
+            bindable: self.frontier_ok,
+        };
 
-        self.scan_node(expr, ast_id, is_root, in_call_arg, conditional, entered);
+        self.scan_node(expr, ast_id, &pos);
 
         // A fragment the condition evaluates and leaves in place stays behind,
         // so nothing after it may be bound ahead of the condition.
@@ -342,22 +361,20 @@ impl CaptureScanner {
         }
     }
 
-    fn scan_node(
-        &mut self,
-        expr: &Expr,
-        ast_id: AstId,
-        is_root: bool,
-        in_call_arg: bool,
-        conditional: bool,
-        entered: bool,
-    ) {
+    fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
+        let Position {
+            is_root,
+            in_call_arg,
+            conditional,
+            bindable,
+        } = *pos;
         match expr {
             Expr::Ident(ident) => {
                 if in_call_arg {
                     // Function-reference coercion site — leave as-is.
                     return;
                 }
-                self.add(ident.name.clone(), ast_id, true, entered);
+                self.add(ident.name.clone(), ast_id, true, bindable);
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
@@ -369,7 +386,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -393,7 +410,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -409,7 +426,7 @@ impl CaptureScanner {
                     unparse_expr_source(expr),
                     ast_id,
                     is_place_expr(expr),
-                    entered,
+                    bindable,
                 );
             }
             Expr::MethodCall(m) => {
@@ -423,7 +440,7 @@ impl CaptureScanner {
                     unparse_expr_source(expr),
                     ast_id,
                     is_place_expr(expr),
-                    entered,
+                    bindable,
                 );
             }
             Expr::StaticMethodCall(s) => {
@@ -436,7 +453,7 @@ impl CaptureScanner {
                     unparse_expr_source(expr),
                     ast_id,
                     is_place_expr(expr),
-                    entered,
+                    bindable,
                 );
             }
             Expr::ComparisonChain(chain) => {
@@ -452,7 +469,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -466,7 +483,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -476,7 +493,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -488,7 +505,7 @@ impl CaptureScanner {
                     unparse_expr_source(expr),
                     ast_id,
                     is_place_expr(expr),
-                    entered,
+                    bindable,
                 );
             }
             Expr::TupleLiteral(t) => {
@@ -508,7 +525,7 @@ impl CaptureScanner {
                     unparse_expr_source(expr),
                     ast_id,
                     is_place_expr(expr),
-                    entered,
+                    bindable,
                 );
             }
             Expr::TemplateString(_) => {
@@ -518,7 +535,7 @@ impl CaptureScanner {
                     unparse_expr_source(expr),
                     ast_id,
                     is_place_expr(expr),
-                    entered,
+                    bindable,
                 );
             }
             Expr::If(i) => {
@@ -540,7 +557,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -552,7 +569,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -564,7 +581,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -576,7 +593,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }
@@ -587,7 +604,7 @@ impl CaptureScanner {
                         unparse_expr_source(expr),
                         ast_id,
                         is_place_expr(expr),
-                        entered,
+                        bindable,
                     );
                 }
             }

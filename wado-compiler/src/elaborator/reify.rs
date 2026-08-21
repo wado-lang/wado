@@ -3130,7 +3130,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
             let binding = TirStmt::new(
                 TirStmtKind::Let {
-                    name: cap_name.clone(),
+                    name: cap_name,
                     local_index,
                     is_mut: false,
                     is_reactive: false,
