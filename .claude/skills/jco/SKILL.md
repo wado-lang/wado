@@ -78,54 +78,14 @@ changes. **Compile every Node-bound Wado program with this flag** — a bare
 
 ## WASI shims
 
-<<<<<<< HEAD
 BA ships a `preview3-shim` implementing P3 `cli` / `clocks` / `filesystem` /
 `http`, with a browser build beside the Node one. A plain `jco transpile` wires
 it, and stdout, float formatting, `wasi:random`, `MonotonicClock` and an HTTP
 `handle` all run through it unaided. Its **browser** `cli` is unimplemented
 (`throw new Todo()`), which is why the playground keeps a hand-written one.
-||||||| f46102aade
-Minimal Node shims, selected with `--no-wasi-shim` + `--map` so they win over
-jco's built-in shim (`transpile-released.mjs` wires these automatically):
 
-- `cli.js` — stdout/stderr via `globalThis._jcoStreamWriteHook` (bypasses the
-  rendezvous). `writeViaStream` returns a `Promise` because `write-via-stream`
-  is async — jco lowers its result as a future and expects a Promise/Thenable.
-- `clocks.js` — `wasi:clocks` via `process.hrtime` / `Date.now`.
-- `random.js` — `wasi:random` via Node crypto.
-
-### `@bytecodealliance/preview3-shim`
-
-BA ships a `preview3-shim` that implements P3 `cli` / `clocks` / `filesystem` —
-but it does not currently substitute for the shims above:
-
-- Its `cli` stdout does **not** deliver output standalone with released jco (same
-  rendezvous gap the write hook works around). Keep `cli.js`.
-- Its `filesystem` read goes through a worker + `TransformStream` whose
-  `StreamReader` jco does not recognise as a lowerable stream — and even a
-  correct shim deadlocks (see Known blockers).
-=======
-Minimal Node shims, selected with `--no-wasi-shim` + `--map` so they win over
-jco's built-in shim (`transpile-released.mjs` wires these automatically):
-
-- `cli.js` — stdout/stderr via `globalThis._jcoStreamWriteHook` (bypasses the
-  rendezvous). `writeViaStream` returns a `Promise` because `write-via-stream`
-  is async — jco lowers its result as a future and expects a Promise/Thenable.
-- `clocks.js` — `wasi:clocks` via `process.hrtime` / `performance.timeOrigin`
-  (the wall clock keeps sub-millisecond precision).
-- `random.js` — `wasi:random` via Node crypto.
-
-### `@bytecodealliance/preview3-shim`
-
-BA ships a `preview3-shim` that implements P3 `cli` / `clocks` / `filesystem` —
-but it does not currently substitute for the shims above:
-
-- Its `cli` stdout does **not** deliver output standalone with released jco (same
-  rendezvous gap the write hook works around). Keep `cli.js`.
-- Its `filesystem` read goes through a worker + `TransformStream` whose
-  `StreamReader` jco does not recognise as a lowerable stream — and even a
-  correct shim deadlocks (see Known blockers).
->>>>>>> origin/main
+A hand-written clock is where precision goes missing: `system-clock.now` is an
+instant carrying sub-second nanoseconds, and `get-resolution` a bare duration.
 
 ## Benchmarking on Node
 
