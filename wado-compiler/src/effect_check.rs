@@ -621,8 +621,8 @@ fn check_function_effects_sem(
     }
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
     for name in benign_effect_names(&func.attrs) {
-        if let Some(effect) = index.effect_by_name.get(&name) {
-            current.insert(effect.clone());
+        if let Some(effect) = effect_named_in(&name, module, index.closure, index.effect_by_name) {
+            current.insert(effect);
         }
     }
     // Canonicalise before expanding so the closure keys (built from the
@@ -650,6 +650,7 @@ fn check_function_effects_sem(
         current,
         param_types,
         module: module.source_path(),
+        module_source: module.clone(),
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -756,6 +757,25 @@ fn build_propagation_closure_sem(
 /// canonical `EffectRef` per name; mapping through it makes cross-module
 /// effect comparison and closure lookups consistent. Effect parameters and
 /// names without a declaration are returned unchanged.
+/// The effect a name written in `module` refers to: the module's own declaration
+/// first, else whatever that spelling reaches. A name is all an attribute
+/// argument or a `with` clause type carries, so the module breaks the tie.
+fn effect_named_in(
+    name: &str,
+    module: &ModuleSource,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    effect_by_name: &IndexMap<String, EffectRef>,
+) -> Option<EffectRef> {
+    let local = EffectRef::Concrete {
+        name: name.to_string(),
+        module_source: module.clone(),
+    };
+    if closure.contains_key(&local) {
+        return Some(local);
+    }
+    effect_by_name.get(name).cloned()
+}
+
 fn canonicalize_effect(
     effect: &EffectRef,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
@@ -883,6 +903,7 @@ struct SemEffectWalker<'a> {
     /// `references` edge or recorded expression type at the call site).
     param_types: IndexMap<String, TypeId>,
     module: String,
+    module_source: ModuleSource,
     out: &'a mut Vec<EffectError>,
 }
 
@@ -998,9 +1019,12 @@ impl SemEffectWalker<'_> {
             .effect
             .as_ref()
             .and_then(|ty| match ty {
-                crate::ast::Type::Named(named) => {
-                    self.index.effect_by_name.get(&named.name).cloned()
-                }
+                crate::ast::Type::Named(named) => effect_named_in(
+                    &named.name,
+                    &self.module_source,
+                    self.index.closure,
+                    self.index.effect_by_name,
+                ),
                 _ => None,
             })
             .into_iter()
