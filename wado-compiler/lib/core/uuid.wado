@@ -11,8 +11,9 @@
 //! and ordering compare them in that order.
 //!
 //! `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-//! `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do; `Display`,
-//! `Inspect` and `Serialize` all render the canonical hyphenated form.
+//! `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
+//! and `Inspect` render the canonical hyphenated form, as does `Serialize` for
+//! text formats; binary ones get CBOR tag 37 and the 16 bytes.
 //!
 //! `v7` sorts by creation time under RFC 9562 method 3: the timestamp and, in
 //! `rand_a`, its sub-millisecond fraction lead the bytes, one tick per 244 ns,
@@ -27,13 +28,18 @@ use {
     Deserialize,
     Deserializer,
     DeserializeError,
-    DeserializeErrorKind,
+    DeserializeSeq,
+    DeserializeMap,
+    Visitor,
 } from "core:serde";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
 
 /// `rand_a` resolution: one tick per 1 ms / 4096 = 244 ns.
 global SUB_MS_TICKS: i64 = 4096;
+
+/// IANA CBOR tag for a UUID's 16 raw bytes.
+global CBOR_TAG_UUID: u64 = 37;
 
 #[synopsis]
 test {
@@ -72,7 +78,7 @@ impl Uuid {
     pub fn v4() -> Uuid with Random {
         let mut b = fill_random(16);
         b[6] = (b[6] as i32 & 0x0F | 0x40) as u8;
-        set_variant(&mut b);
+        b[8] = with_variant(b[8]);
         return from_byte_list(&b);
     }
 
@@ -83,16 +89,21 @@ impl Uuid {
         let now = SystemClock::now();
         let ms = now.seconds * 1000 + now.nanoseconds as i64 / 1_000_000;
         let sub_ms = now.nanoseconds as i64 % 1_000_000 * SUB_MS_TICKS / 1_000_000;
-        let mut b = fill_random(16);
-        b[0] = (ms >> 40 & 0xFF) as u8;
-        b[1] = (ms >> 32 & 0xFF) as u8;
-        b[2] = (ms >> 24 & 0xFF) as u8;
-        b[3] = (ms >> 16 & 0xFF) as u8;
-        b[4] = (ms >> 8 & 0xFF) as u8;
-        b[5] = (ms & 0xFF) as u8;
-        b[6] = (0x70 | sub_ms >> 8 & 0x0F) as u8;
-        b[7] = (sub_ms & 0xFF) as u8;
-        set_variant(&mut b);
+        // Bytes 0..=7 are all clock, so only the trailing 8 need entropy.
+        let r = fill_random(8);
+        let mut b = ByteList::with_capacity(16);
+        b.push((ms >> 40 & 0xFF) as u8);
+        b.push((ms >> 32 & 0xFF) as u8);
+        b.push((ms >> 24 & 0xFF) as u8);
+        b.push((ms >> 16 & 0xFF) as u8);
+        b.push((ms >> 8 & 0xFF) as u8);
+        b.push((ms & 0xFF) as u8);
+        b.push((0x70 | sub_ms >> 8 & 0x0F) as u8);
+        b.push((sub_ms & 0xFF) as u8);
+        b.push(with_variant(r[0]));
+        for let mut i = 1; i < 8; i += 1 {
+            b.push(r[i]);
+        }
         return from_byte_list(&b);
     }
 
@@ -192,29 +203,69 @@ impl Inspect for Uuid {
     }
 }
 
+impl InspectAlt for Uuid {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        f.write_str(&self.to_string());
+    }
+}
+
 impl Serialize for Uuid {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let str = self.to_string();
-        return s.serialize_string(&str);
+        if s.is_human_readable() {
+            let str = self.to_string();
+            return s.serialize_string(&str);
+        }
+        s.serialize_tag(CBOR_TAG_UUID)?;
+        return s.serialize_bytes(self.as_bytes().as_byte_slice());
+    }
+}
+
+/// Accepts the canonical text form or the 16 raw bytes.
+struct UuidVisitor {
+}
+
+impl Visitor for UuidVisitor {
+    type Value = Uuid;
+
+    fn visit_string(&mut self, v: String) -> Result<Uuid, DeserializeError> {
+        return match Uuid::parse(&v) {
+            Ok(id) => Result::Ok(id),
+            Err(_) => Result::Err(DeserializeError::invalid_value("invalid UUID", -1)),
+        };
+    }
+
+    fn visit_bytes(&mut self, v: ByteList) -> Result<Uuid, DeserializeError> {
+        return match Uuid::from_bytes(&v) {
+            Some(id) => Result::Ok(id),
+            None => Result::Err(DeserializeError::invalid_value("a UUID is 16 bytes", -1)),
+        };
+    }
+
+    fn visit_null(&mut self) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID, found map", -1));
     }
 }
 
 impl Deserialize for Uuid {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uuid, DeserializeError> {
-        let str = match d.deserialize_string() {
-            Ok(s) => s,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match Uuid::parse(&str) {
-            Ok(id) => Result::Ok(id),
-            Err(_) => Result::Err(DeserializeError {
-                kind: DeserializeErrorKind::InvalidValue,
-                message: "invalid UUID",
-                offset: 0,
-            }),
-        };
+        let mut v = UuidVisitor {};
+        return d.deserialize_any::<UuidVisitor>(&mut v);
     }
 }
 
@@ -246,9 +297,9 @@ impl Default for Uuid {
     }
 }
 
-/// Force the RFC 9562 variant (top two bits of byte 8) into a 16-byte buffer.
-fn set_variant(b: &mut ByteList) {
-    b[8] = (b[8] as i32 & 0x3F | 0x80) as u8;
+/// Byte 8 with the RFC 9562 variant forced into its top two bits.
+fn with_variant(byte: u8) -> u8 {
+    return (byte as i32 & 0x3F | 0x80) as u8;
 }
 
 /// Collect exactly `n` random bytes, looping to tolerate short reads (the
@@ -282,6 +333,7 @@ fn hex_digit(nibble: i32) -> char {
 }
 
 fn has_urn_prefix(s: &String) -> bool {
+    assert s.len() >= 9;
     let prefix = "urn:uuid:";
     for let mut i = 0; i < 9; i += 1 {
         let c = s.get_byte_unchecked(i) as char;

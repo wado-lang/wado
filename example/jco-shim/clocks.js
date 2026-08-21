@@ -19,10 +19,12 @@ export const monotonicClock = {
 
 export const wallClock = {
   now() {
-    // Keeps the sub-millisecond fraction `Date.now()` truncates; UUID v7 needs it.
-    const ms = performance.timeOrigin + performance.now();
+    // `Date.now()` fixes the millisecond, so the clock still follows system
+    // time; the high-resolution clock only fills in the fraction it truncates.
+    const ms = Date.now();
+    const fraction = (performance.timeOrigin + performance.now()) % 1;
     const seconds = Math.floor(ms / 1000);
-    const nanoseconds = Math.min(999999999, Math.floor((ms - seconds * 1000) * 1000000));
+    const nanoseconds = (ms % 1000) * 1000000 + Math.floor(fraction * 1000000);
     return { seconds: BigInt(seconds), nanoseconds };
   },
   resolution() {

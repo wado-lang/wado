@@ -154,6 +154,12 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+#### `fn is_human_readable(&self) -> bool`
+
+Whether the output is meant to be read by people. Text formats leave
+this true; binary ones override it to false so a value can pick a
+compact representation.
+
 #### `fn serialize_tag(&mut self, _tag: u64) -> Result<(), SerializeError>`
 
 Tag the next value with a CBOR semantic tag (major type 6, RFC 8949

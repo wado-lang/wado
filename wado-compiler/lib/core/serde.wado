@@ -215,6 +215,12 @@ pub trait Serializer {
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    /// Whether the output is meant to be read by people. Text formats leave
+    /// this true; binary ones override it to false so a value can pick a
+    /// compact representation.
+    fn is_human_readable(&self) -> bool {
+        return true;
+    }
     /// Tag the next value with a CBOR semantic tag (major type 6, RFC 8949
     /// §3.4). Formats with no tag concept ignore it; the default no-op means
     /// only tag-aware serializers (CBOR) need to implement it.

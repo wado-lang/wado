@@ -92,6 +92,7 @@ global BREAK: u8 = 0xff;  // major 7, AI_INDEFINITE — stop code for indefinite
 // Tag numbers (RFC 8949 §3.4).
 global TAG_BIGNUM_POS: u64 = 2;  // §3.4.3 — unsigned bignum (byte-string magnitude)
 global TAG_BIGNUM_NEG: u64 = 3;  // §3.4.3 — negative bignum
+global TAG_UUID: u64 = 37;  // IANA CBOR tags — binary UUID
 global TAG_SELF_DESCRIBED: u64 = 55799;  // §3.4.6 — self-described CBOR marker
 
 // The quiet binary32 NaN — the single canonical NaN, since Wado has no f16.
@@ -390,6 +391,10 @@ impl Serializer for CborSerializer {
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
         write_text(self.buf, v);
         return Result::Ok(());
+    }
+
+    fn is_human_readable(&self) -> bool {
+        return false;
     }
 
     fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError> {
@@ -692,6 +697,10 @@ impl Serializer for CanonicalCborSerializer {
         return Result::Ok(());
     }
 
+    fn is_human_readable(&self) -> bool {
+        return false;
+    }
+
     fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError> {
         write_head(self.buf, MAJOR_TAG, tag);
         return Result::Ok(());
@@ -821,8 +830,8 @@ fn simple_float_to_f64(ai: u8, bits: u64) -> f64 {
 fn is_passthrough_tag(tag: u64) -> bool {
     // Tags whose content is decoded directly, ignoring the tag number
     // (RFC 8949 §6.1): date/time text (0) / epoch (1), base64url/base64/base16
-    // hints (21/22/23), and the self-described CBOR marker (55799).
-    return tag == 0 || tag == 1 || tag == 21 || tag == 22 || tag == 23 || tag == TAG_SELF_DESCRIBED;
+    // hints (21/22/23), binary UUID (37), and the self-described marker (55799).
+    return tag == 0 || tag == 1 || tag == 21 || tag == 22 || tag == 23 || tag == TAG_UUID || tag == TAG_SELF_DESCRIBED;
 }
 
 pub struct CborDeserializer {

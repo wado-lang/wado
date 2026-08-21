@@ -1,5 +1,6 @@
 use { Uuid, ParseError } from "core:uuid";
 use { to_string, from_string } from "core:json";
+use { to_bytes, from_bytes } from "core:cbor";
 use { Random } from "wasi:random";
 use { SystemClock, Instant } from "wasi:clocks";
 
@@ -151,6 +152,8 @@ test "parse round-trips canonical form" {
 test "parse accepts uppercase hex" {
     let lower = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
     let upper = Uuid::parse(&"00010203-0405-4607-8809-0A0B0C0D0E0F");
+    assert lower matches { Ok(_) };
+    assert upper matches { Ok(_) };
     if let Ok(l) = lower {
         if let Ok(u) = upper {
             assert l == u;
@@ -185,6 +188,7 @@ test "parse reports why the input was rejected" {
 
 test "bytes round-trip" {
     let id = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert id matches { Ok(_) };
     if let Ok(id) = id {
         let bytes = id.as_bytes();
         assert bytes.len() == 16;
@@ -209,10 +213,29 @@ test "max is all ones" {
 test "Inspect shows the canonical form" {
     let id = Uuid::nil();
     assert `${id:?}` == "00000000-0000-0000-0000-000000000000";
+    assert `${id:#?}` == "00000000-0000-0000-0000-000000000000";
+}
+
+test "serializes as a CBOR binary UUID" {
+    let id = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert id matches { Ok(_) };
+    if let Ok(id) = id {
+        let encoded = to_bytes(&id);
+        assert encoded matches { Ok(_) };
+        if let Ok(bytes) = encoded {
+            // Tag 37 (binary UUID) + a 16-byte string: 2 + 1 + 16.
+            assert bytes.len() == 19;
+            assert bytes[0] == 0xD8;
+            assert bytes[1] == 37;
+            assert bytes[2] == 0x50;
+            assert from_bytes::<Uuid>(bytes) matches { Ok(back) && back == id };
+        }
+    }
 }
 
 test "serializes as a JSON string" {
     let id = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert id matches { Ok(_) };
     if let Ok(id) = id {
         assert to_string(&id) matches { Ok(json) && json == "\"00010203-0405-4607-8809-0a0b0c0d0e0f\"" };
         let back = from_string::<Uuid>("\"00010203-0405-4607-8809-0a0b0c0d0e0f\"");
@@ -240,6 +263,9 @@ test "equality compares all 128 bits" {
     let a = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
     let b = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
     let c = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e10");
+    assert a matches { Ok(_) };
+    assert b matches { Ok(_) };
+    assert c matches { Ok(_) };
     if let Ok(a) = a {
         if let Ok(b) = b {
             if let Ok(c) = c {

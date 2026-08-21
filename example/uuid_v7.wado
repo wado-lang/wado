@@ -1,7 +1,8 @@
 //! Deterministic UUID v7 via effect handlers.
 //!
 //! `Uuid::v7()` draws from two effects: `Random` for the entropy bytes and
-//! `SystemClock` for the 48-bit millisecond timestamp. In production both come
+//! `SystemClock` for the timestamp, down to its sub-millisecond fraction. In
+//! production both come
 //! from the host, so every call yields a fresh value. By installing our own
 //! handlers with `with Effect => handler do { ... }`, we pin both sources and
 //! get fully reproducible output — useful for tests, golden files, and demos.
