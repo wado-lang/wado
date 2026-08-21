@@ -907,11 +907,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_head(method_impl_type_id)
                     .expect("a newtype names a declaration");
-                let type_args = {
-                    let tt = self.tysys.type_table.borrow();
-                    let ultimate = tt.get_ultimate_base_type(method_impl_type_id);
-                    tt.generic_type_args(ultimate).unwrap_or_default()
-                };
+                // Not the base's: a base may re-shape them, and the `impl`
+                // header names the newtype.
+                let type_args = newtype_args;
                 let head = self
                     .tysys
                     .type_table

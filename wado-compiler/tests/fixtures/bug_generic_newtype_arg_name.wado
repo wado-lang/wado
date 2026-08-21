@@ -1,0 +1,16 @@
+// A newtype's mangled name dropped its type arguments, so `MyArray<i32>` and
+// `MyArray<String>` named one instantiation and the second collided with it.
+type MyArray<T> = List<T>;
+
+fn id<T>(v: T) -> T {
+    return v;
+}
+
+test "a generic newtype's arguments are part of its name" {
+    let ints: MyArray<i32> = [1, 2];
+    let strs: MyArray<String> = ["a", "b"];
+    assert id(ints).len() == 2;
+    assert id(strs).len() == 2;
+    assert builtin::black_box(ints)[0] == 1;
+    assert builtin::black_box(strs)[0] == "a";
+}

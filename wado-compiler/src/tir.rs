@@ -3850,8 +3850,12 @@ impl TypeTable {
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
-            | ResolvedType::Newtype { def, .. }
             | ResolvedType::Flags { def } => FqTypeName::declared(&self.defs, *def),
+            // `MyArray<i32>` and `MyArray<String>` are two instantiations; the
+            // head alone names them the same.
+            ResolvedType::Newtype { def, type_args, .. } => {
+                FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
+            }
             ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args = args_of(type_args);

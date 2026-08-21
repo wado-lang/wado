@@ -622,7 +622,6 @@ impl Receiver {
     }
 }
 
-/// The reference prefix a mangled name carries, and the rest.
 /// Write a receiver's reference prefix. `&` binds directly to the pointee;
 /// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
 /// `TypeTable::mangle_type_arg_for_generic` spell it the same way, and a
@@ -2264,8 +2263,9 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
 /// itself contain `/` and `<`, so no split is correct in general. Ask the fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTypeName {
-    /// Outermost `&` / `&mut`, when the receiver is a reference shape.
-    reference: Option<RefKind>,
+    /// The `&` / `&mut` this name stands behind, outermost first. Keeping only
+    /// the outer one spells `&&T` as `&T`, which is a different instantiation.
+    reference: Vec<RefKind>,
     head: TypeHead,
     /// Type arguments, already fq themselves.
     args: Vec<FqTypeName>,
@@ -2354,7 +2354,7 @@ impl TypeHead {
 impl FqTypeName {
     fn of_head_kind(head: TypeHead) -> Self {
         Self {
-            reference: None,
+            reference: Vec::new(),
             head,
             args: Vec::new(),
         }
@@ -2434,10 +2434,10 @@ impl FqTypeName {
         self
     }
 
-    /// The same name behind a `&` / `&mut`.
+    /// The same name behind one more `&` / `&mut`.
     #[must_use]
     pub fn with_reference(mut self, kind: RefKind) -> Self {
-        self.reference = Some(kind);
+        self.reference.insert(0, kind);
         self
     }
 
@@ -2451,7 +2451,7 @@ impl FqTypeName {
     #[must_use]
     pub fn head_only(&self) -> Self {
         Self {
-            reference: self.reference,
+            reference: self.reference.clone(),
             head: self.head.clone(),
             args: Vec::new(),
         }
@@ -2477,16 +2477,16 @@ impl FqTypeName {
     }
 
     #[must_use]
-    pub fn reference(&self) -> Option<RefKind> {
-        self.reference
+    pub fn references(&self) -> &[RefKind] {
+        &self.reference
     }
 
     /// The mangled spelling embedded in a mangled method name.
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let mut out = String::new();
-        if let Some(kind) = self.reference {
-            push_ref_prefix(&mut out, kind);
+        for kind in &self.reference {
+            push_ref_prefix(&mut out, *kind);
         }
         if let TypeHead::Tuple = self.head {
             let elems: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
@@ -2510,9 +2510,6 @@ impl FqTypeName {
         out
     }
 
-    /// The declaration namespace: the name as source writes it, which is what
-    /// an `impl` header spells and what every by-name declaration lookup keys
-    /// on. Also the form diagnostics show.
     /// This name with every occurrence of the type `old` replaced by `new` —
     /// the whole name when it *is* `old`, and otherwise each argument,
     /// recursively.
@@ -2527,21 +2524,18 @@ impl FqTypeName {
             return new.clone();
         }
         // A reference's pointee substitutes on its own: `&T` is `T` under a
-        // prefix, and `old` naming the pointee must reach it.
-        if let Some(kind) = self.reference
-            && self.args.is_empty()
-        {
-            let bare = FqTypeName {
-                reference: None,
+        // prefix, and `old` naming the pointee must reach it however many
+        // prefixes stand in front.
+        if let Some((outer, inner)) = self.reference.split_first() {
+            let pointee = FqTypeName {
+                reference: inner.to_vec(),
                 head: self.head.clone(),
-                args: Vec::new(),
+                args: self.args.clone(),
             };
-            if &bare == old {
-                return new.clone().with_reference(kind);
-            }
+            return pointee.substitute(old, new).with_reference(*outer);
         }
         FqTypeName {
-            reference: self.reference,
+            reference: Vec::new(),
             head: self.head.clone(),
             args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
         }
@@ -2553,8 +2547,8 @@ impl FqTypeName {
     #[must_use]
     pub fn to_display(&self) -> String {
         let mut out = String::new();
-        if let Some(kind) = self.reference {
-            push_ref_prefix(&mut out, kind);
+        for kind in &self.reference {
+            push_ref_prefix(&mut out, *kind);
         }
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
         if let TypeHead::Tuple = self.head {

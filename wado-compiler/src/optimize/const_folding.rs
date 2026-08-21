@@ -101,7 +101,12 @@ pub fn fold_constants(
     let mut buffers = EngineBuffers::default();
     let len = project.functions.len();
     gate.run_gated(GatedPass::ConstFold, len, |fid| {
-        fold_function(&project.functions[fid.index()], &mut visitor, &mut buffers)
+        fold_function(
+            &project.functions[fid.index()],
+            &mut visitor,
+            &mut buffers,
+            &type_table,
+        )
     })
 }
 
@@ -116,7 +121,7 @@ pub fn fold_constants_all(project: &mut NirPackage) -> bool {
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
-        changed |= fold_function(func_rc, &mut visitor, &mut buffers);
+        changed |= fold_function(func_rc, &mut visitor, &mut buffers, &type_table);
     }
     changed
 }
@@ -140,6 +145,7 @@ fn fold_function(
     func_rc: &RefCell<NirFunction>,
     visitor: &mut ConstFoldVisitor<'_>,
     buffers: &mut EngineBuffers,
+    type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
     let NirFunction { body, locals, .. } = &mut *func;
@@ -150,6 +156,9 @@ fn fold_function(
     visitor.interpreter.enter_function();
     visitor.interpreter.record_ref_global_aliases(body);
     visitor.interpreter.record_aggregate_locals(body);
+    visitor
+        .interpreter
+        .record_alias_classes(super::alias::alias_classes(body, type_table).to_classes());
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
@@ -947,11 +956,8 @@ impl ConstFoldVisitor<'_> {
         changed
     }
 
-    /// Walk an `Assign { target, value }` expression. The outer
-    /// `target` shape is left opaque (lvalue); only its inner
-    /// sub-expression is folded. After the walk, a bare `local = …`
-    /// reassignment drops `local`'s lattice to unknown (field / heap
-    /// writes are the engine `ValueGraph`'s concern, not niri's).
+    /// Walk an `Assign { target, value }` expression. The outer `target` shape
+    /// is left opaque (lvalue); only its inner sub-expression is folded.
     fn visit_assign(&mut self, engine: &mut Engine, e: ExprId) -> bool {
         let (target, value) = match &engine.body.exprs[e].kind {
             ExprKind::Assign { target, value } => (*target, *value),
@@ -967,11 +973,14 @@ impl ConstFoldVisitor<'_> {
         if let Some(inner) = inner_to_walk {
             changed |= self.visit_operand(engine, inner);
         }
-        // A bare `local = …` reassignment drops the local's lattice to
-        // unknown. A field / deref / index store needs nothing here — the
-        // engine `ValueGraph` models those heap writes.
-        if let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind {
-            self.interpreter.invalidate_local(*index);
+        // A bare `local = …` reassignment drops the local's lattice to unknown;
+        // a field / deref / index store drops what the frame knows about the
+        // storage written, which a borrow reaches under another name.
+        match &engine.body.exprs[target].kind {
+            ExprKind::Local { index, .. } => self.interpreter.invalidate_local(*index),
+            _ => self
+                .interpreter
+                .invalidate_place(engine.body, target.into()),
         }
         changed |= self.reduce_local(engine, e);
         changed

@@ -1,0 +1,32 @@
+// A field a pattern binds by reference is written through that binding, so a
+// read of it taken before the call must not alias the field's storage.
+struct Holder {
+    items: List<i32>,
+    tag: i32,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn poke(&mut self) {
+        match self {
+            { items: d, .. } => {
+                d.push(99);
+            },
+        }
+    }
+
+    #[inline("never")]
+    fn read_it(&mut self) -> i32 {
+        let raw = self.items;
+        self.poke();
+        return raw.len();
+    }
+}
+
+test "a pattern-bound field write reaches the field" {
+    let mut hh = Holder { items: [1, 2, builtin::black_box(3)], tag: 0 };
+    assert hh.read_it() == 3;
+}
+
+__DATA__
+{"test": {}}

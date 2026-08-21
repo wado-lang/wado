@@ -1,0 +1,59 @@
+// A binding that aliases a field instead of copying it must keep the copy once
+// a move hands its storage to a new owner: the write through that owner is one
+// the field would otherwise observe.
+struct S {
+    buf: List<i32>,
+}
+
+struct T {
+    held: List<i32>,
+}
+
+#[inline("never")]
+fn take(mut v: List<i32>) -> i32 {
+    v.push(4);
+    return v.len();
+}
+
+#[inline("never")]
+fn moved_into_a_binding(s: &S) -> i32 {
+    let a = s.buf;
+    let mut b = a;
+    b.push(4);
+    return s.buf.len();
+}
+
+#[inline("never")]
+fn moved_by_value(s: &S) -> i32 {
+    let a = s.buf;
+    let n = take(a);
+    return n + s.buf.len();
+}
+
+#[inline("never")]
+fn moved_into_a_literal(s: &S) -> i32 {
+    let a = s.buf;
+    let mut t = T { held: a };
+    t.held.push(4);
+    return s.buf.len();
+}
+
+#[inline("never")]
+fn moved_out_of_a_local() -> i32 {
+    let src = S { buf: [1, 2, builtin::black_box(3)] };
+    let a = src.buf;
+    let mut b = a;
+    b.push(4);
+    return src.buf.len();
+}
+
+test "a shared field does not escape into a mutable owner" {
+    let s = S { buf: [1, 2, builtin::black_box(3)] };
+    assert moved_into_a_binding(&s) == 3;
+    assert moved_by_value(&s) == 7;
+    assert moved_into_a_literal(&s) == 3;
+    assert moved_out_of_a_local() == 3;
+}
+
+__DATA__
+{"test": {}}

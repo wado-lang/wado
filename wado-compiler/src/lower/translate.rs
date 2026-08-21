@@ -333,6 +333,8 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
+    /// The root each reference local is taken over, so an immutable-root rule
+    /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::compute_moved_roots`]).
@@ -406,7 +408,12 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
         let ref_targets = if needs_copy_analysis {
-            value_copy::last_use::compute_ref_targets(func)
+            value_copy::last_use::compute_ref_targets(
+                func,
+                &base.type_table.borrow(),
+                &base.value_copy.return_paths,
+                &base.value_copy.returns_owned,
+            )
         } else {
             value_copy::last_use::RefTargets::default()
         };
@@ -417,7 +424,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.mut_receiver_methods,
                 &base.value_copy.ref_receiver_methods,
                 &base.value_copy.returns_receiver_alias,
-                &ref_targets,
+                &base.value_copy.mod_ref,
+                &base.type_table.borrow(),
+                &base.value_copy.return_paths,
+                &base.value_copy.returns_owned,
             )
         } else {
             IndexSet::default()
@@ -703,7 +713,14 @@ impl FunctionTranslator<'_, '_> {
     /// Whether an immutable binding may alias `value`'s storage instead of
     /// copying it: the source must be rooted at an immutable local whose
     /// storage is never moved to a new owner.
-    fn source_shares_immutable_storage(&self, value: &TirExpr) -> bool {
+    fn source_shares_immutable_storage(&self, local_index: u32, value: &TirExpr) -> bool {
+        // The alias the binding takes outlives the binding: a move hands its
+        // storage to a new — possibly mutable — owner, and a write through that
+        // owner is one the source observes. Either end being moved keeps the
+        // copy.
+        if self.moved_roots.contains(&local_index) {
+            return false;
+        }
         let type_table = self.base.type_table.borrow();
         if !value_copy::analyze::is_source_immutable(
             value,
@@ -743,25 +760,8 @@ impl FunctionTranslator<'_, '_> {
     fn try_boxing_rewrite(&self, expr: &TirExpr) -> Option<ExprId> {
         match &expr.kind {
             TirExprKind::Local { index, name } if self.address_taken.contains(index) => {
-                let original_type = expr.type_id;
-                let box_type_id = *self.base.box_plan.box_struct_types.get(&original_type)?;
-                let local_expr = self.alloc_expr(
-                    ExprKind::Local {
-                        index: *index,
-                        name: name.clone(),
-                    },
-                    box_type_id,
-                    expr.span,
-                );
-                Some(self.alloc_expr(
-                    ExprKind::FieldAccess {
-                        expr: local_expr.into(),
-                        field_index: 0,
-                        field_name: "value".to_string(),
-                    },
-                    original_type,
-                    expr.span,
-                ))
+                self.base.box_plan.box_struct_types.get(&expr.type_id)?;
+                Some(self.read_local(*index, name, expr.type_id, expr.span))
             }
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
@@ -1111,7 +1111,7 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let needs_value_copy_wrap = !*skip_value_copy
                     && !self.share_eligible_locals.contains(local_index)
-                    && (*is_mut || !self.source_shares_immutable_storage(value))
+                    && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
                     && self.should_wrap_value_copy(value);
                 let value_op = self.convert_operand(value);
                 let value_op = if needs_value_copy_wrap {
@@ -2160,10 +2160,38 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, seq_type_id, span)
     }
 
-    /// Build arena struct-field values for a closure's captures. Each field is
-    /// a `Local` reading the captured value from the outer scope at
-    /// `cap.outer_index`. Mirrors the TIR-side `build_capture_fields` that the
-    /// closure planner uses for specialized closures at `Let` bindings.
+    /// Read a local, through the box when [`crate::lower::plan::boxing`]
+    /// promoted its slot: the box *is* the storage, so the value stands one
+    /// field in.
+    fn read_local(&self, index: u32, name: &str, type_id: tir::TypeId, span: Span) -> ExprId {
+        let boxed = self
+            .address_taken
+            .contains(&index)
+            .then(|| self.base.box_plan.box_struct_types.get(&type_id).copied())
+            .flatten();
+        let local = self.alloc_expr(
+            ExprKind::Local {
+                index,
+                name: name.to_string(),
+            },
+            boxed.unwrap_or(type_id),
+            span,
+        );
+        let Some(_) = boxed else { return local };
+        self.alloc_expr(
+            ExprKind::FieldAccess {
+                expr: local.into(),
+                field_index: 0,
+                field_name: "value".to_string(),
+            },
+            type_id,
+            span,
+        )
+    }
+
+    /// Arena struct-field values for a closure's captures. Mirrors the TIR-side
+    /// `build_capture_fields` the closure planner uses for specialized closures
+    /// at `Let` bindings.
     fn build_arena_capture_fields(
         &self,
         captures: &[TirCapture],
@@ -2173,14 +2201,7 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .enumerate()
             .map(|(i, cap)| {
-                let value = self.alloc_expr(
-                    ExprKind::Local {
-                        index: cap.outer_index,
-                        name: cap.name.clone(),
-                    },
-                    cap.type_id,
-                    span,
-                );
+                let value = self.read_local(cap.outer_index, &cap.name, cap.type_id, span);
                 ArenaStructField {
                     name: format!("__capture_{i}"),
                     value: value.into(),

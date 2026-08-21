@@ -1,0 +1,82 @@
+// Every name a write can travel to a field through: a borrow of it, a pattern
+// that binds it, an element inside it. A read taken before the call must not
+// alias what the call then writes.
+struct Inner {
+    x: List<i32>,
+}
+
+struct Holder {
+    inner: Inner,
+    rows: List<List<i32>>,
+    items: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn via_borrow(&mut self) {
+        let p = &mut self.inner;
+        p.x = [9, 9];
+    }
+
+    #[inline("never")]
+    fn via_pattern(&mut self) {
+        match self {
+            { inner: d, .. } => {
+                d.x = [9, 9];
+            },
+        }
+    }
+
+    #[inline("never")]
+    fn via_element(&mut self) {
+        let p = &mut self.rows[0];
+        p.push(9);
+    }
+
+    #[inline("never")]
+    fn borrow_read(&mut self) -> i32 {
+        let raw = self.inner.x;
+        self.via_borrow();
+        return raw.len();
+    }
+
+    #[inline("never")]
+    fn pattern_read(&mut self) -> i32 {
+        let raw = self.inner.x;
+        self.via_pattern();
+        return raw.len();
+    }
+
+    #[inline("never")]
+    fn element_read(&mut self) -> i32 {
+        let raw = self.rows[0];
+        self.via_element();
+        return raw.len();
+    }
+}
+
+fn fresh() -> Holder {
+    return Holder {
+        inner: Inner { x: [1, 2, builtin::black_box(3)] },
+        rows: [[1, 2, builtin::black_box(3)]],
+        items: [],
+    };
+}
+
+test "a write through a borrowed field reaches it" {
+    let mut h = fresh();
+    assert h.borrow_read() == 3;
+}
+
+test "a write through a pattern-bound field reaches it" {
+    let mut h = fresh();
+    assert h.pattern_read() == 3;
+}
+
+test "a write through a borrowed element reaches it" {
+    let mut h = fresh();
+    assert h.element_read() == 3;
+}
+
+__DATA__
+{"test": {}}

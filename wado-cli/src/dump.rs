@@ -70,6 +70,24 @@ impl Opt {
         KnobOpt::Feature,
     ];
 
+    /// Whether this names a pipeline stage, which help lists under `Phases:`.
+    const fn is_phase(self) -> bool {
+        match self {
+            Self::Tokens
+            | Self::Ast
+            | Self::Modules
+            | Self::Symbols
+            | Self::Types
+            | Self::TirResolved
+            | Self::TirMonomorphized
+            | Self::AssertPlan
+            | Self::NirLowered
+            | Self::Nir
+            | Self::Wir => true,
+            Self::World | Self::Help => false,
+        }
+    }
+
     const fn spec(self) -> args::OptSpec {
         match self {
             Self::Tokens => args::OptSpec {
@@ -160,26 +178,8 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Phases:").unwrap();
-    write!(
-        buf,
-        "{}",
-        args::format_opts_help(
-            &[
-                Opt::Tokens,
-                Opt::Ast,
-                Opt::Modules,
-                Opt::Symbols,
-                Opt::Types,
-                Opt::TirResolved,
-                Opt::TirMonomorphized,
-                Opt::NirLowered,
-                Opt::Nir,
-                Opt::Wir,
-            ],
-            |o| o.spec(),
-        )
-    )
-    .unwrap();
+    let phases: Vec<Opt> = Opt::ALL.iter().copied().filter(|o| o.is_phase()).collect();
+    write!(buf, "{}", args::format_opts_help(&phases, |o| o.spec())).unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Other:").unwrap();
     write!(
