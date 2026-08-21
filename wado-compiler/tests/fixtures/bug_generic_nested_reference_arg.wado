@@ -1,0 +1,15 @@
+// A mangled name carried one `&`, so `&T` and `&&T` named the same
+// instantiation and the second one collided with the first.
+fn id<T>(v: T) -> T {
+    return v;
+}
+
+test "a nested reference is its own instantiation" {
+    let x = 42;
+    let rx = &x;
+    let rrx = &rx;
+    assert *id(rx) == 42;
+    assert **id(rrx) == 42;
+    assert *builtin::black_box(rx) == 42;
+    assert **builtin::black_box(rrx) == 42;
+}

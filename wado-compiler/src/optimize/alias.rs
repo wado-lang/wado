@@ -44,6 +44,10 @@ impl AliasGroups {
         self.root_of.is_empty()
     }
 
+    pub fn to_classes(&self) -> crate::niri::AliasClasses {
+        crate::niri::AliasClasses::new(self.root_of.clone(), self.members_of.clone())
+    }
+
     /// The alias class containing `local`, itself included, with the canonical
     /// root a caller sweeping many locals dedupes on.
     pub fn class_of(&self, local: u32) -> Option<(u32, &[u32])> {
@@ -144,6 +148,51 @@ pub(super) fn build_alias_info(
             alias_groups,
         },
         syntactic_mut,
+    }
+}
+
+/// Which locals name one another's storage, for [`crate::niri`]'s frame. Only
+/// the copies a body writes: a frame value is an object that body built, and an
+/// aggregate storing it or a call taking it disqualifies the local outright.
+pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups {
+    let mut edges = Vec::new();
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        collect_shared_storage_edges(body, node, type_table, &mut edges);
+    });
+    alias_groups_from_edges(edges)
+}
+
+/// A `let dst = src` / `dst = src` copy of a name that *is* the storage, by the
+/// same [`type_creates_alias`] the value graph seeds its own edges from.
+fn collect_shared_storage_edges(
+    body: &Body,
+    node: NodeRef,
+    type_table: &TypeTable,
+    edges: &mut Vec<(u32, u32)>,
+) {
+    let copy = match node {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } => Some((*local_index, *value)),
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { target, value } => match &body.exprs[*target].kind {
+                ExprKind::Local { index, .. } => Some((*index, *value)),
+                _ => None,
+            },
+            _ => None,
+        },
+        NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    };
+    let Some((dst, value)) = copy else { return };
+    let Some(ve) = value.as_expr() else { return };
+    let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind else {
+        return;
+    };
+    if type_creates_alias(body.exprs[ve].type_id, type_table) {
+        edges.push((dst, *src));
     }
 }
 

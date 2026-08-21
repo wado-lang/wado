@@ -1,6 +1,6 @@
 //! EMI (equivalence modulo inputs) harness for the optimizer: [`calibrate_corpus`]
 //! keeps the fixtures an injected `builtin::black_box(false)` guard leaves
-//! alone, and [`mutate_corpus`] reports the ones a payload behind it moves.
+//! alone, and [`mutate_corpus`] reports the ones a [`Payload`] behind it moves.
 //!
 //! The design and what is left to build are in
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
@@ -18,10 +18,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wado_compiler::ast::{
-    AstVisitor, Block, Expr, Function, Item, Module, Pattern, SelfKind, Stmt, walk_block,
-    walk_expr, walk_function, walk_item, walk_stmt,
+    AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr, Module, Param,
+    Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
 };
-use wado_compiler::hashmap::IndexSet;
+use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// Levels the calibration compares. `O0` is the reference the optimizer must
@@ -127,8 +127,8 @@ enum Excluded {
     Todo,
     FormatFailed(String),
     NoInjectionSite,
-    /// No `let mut` in scope at any site, so the payload has nothing to write.
-    NoMutableInScope,
+    /// Nothing in scope at any site, so no payload has anything to name.
+    NoBindingInScope,
     BaselineCompileFailed {
         level: OptLevel,
         detail: String,
@@ -172,7 +172,7 @@ impl Excluded {
             Excluded::Todo => "TODO module",
             Excluded::FormatFailed(_) => "formatter rejected the fixture",
             Excluded::NoInjectionSite => "no injection site",
-            Excluded::NoMutableInScope => "no mutable binding in scope",
+            Excluded::NoBindingInScope => "no binding in scope",
             Excluded::BaselineCompileFailed { .. } => "baseline failed to compile",
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
             Excluded::GuardRejected { .. } => "guard failed to compile",
@@ -186,7 +186,7 @@ impl Excluded {
         match self {
             Excluded::MalformedData(d) | Excluded::FormatFailed(d) => d.clone(),
             Excluded::UnsupportedDataKey(k) => k.clone(),
-            Excluded::Todo | Excluded::NoInjectionSite | Excluded::NoMutableInScope => {
+            Excluded::Todo | Excluded::NoInjectionSite | Excluded::NoBindingInScope => {
                 String::new()
             }
             Excluded::BaselineCompileFailed { level, detail }
@@ -210,8 +210,17 @@ impl Excluded {
 struct Site {
     offset: usize,
     kind: &'static str,
-    /// The `let mut` bindings in scope here, which a payload may write to.
+    /// The bindings in scope here a payload may write to.
     mutables: Vec<String>,
+    /// The bindings in scope here, all of them. A payload may read any.
+    readables: Vec<String>,
+}
+
+/// A binding a payload may name, and whether it may be assigned to.
+#[derive(Clone)]
+struct Binding {
+    name: String,
+    is_mut: bool,
 }
 
 fn stmt_kind(stmt: &Stmt) -> &'static str {
@@ -245,8 +254,11 @@ fn stmt_kind(stmt: &Stmt) -> &'static str {
 struct SiteCollector {
     sites: Vec<Site>,
     body_depth: u32,
-    /// `let mut` bindings per open block, innermost last.
-    scopes: Vec<Vec<String>>,
+    /// Bindings per open block, innermost last.
+    scopes: Vec<Vec<Binding>>,
+    /// Where the innermost body's own scopes start. Below it stands a closure
+    /// capture: readable, but not assignable.
+    capture_floor: usize,
 }
 
 impl SiteCollector {
@@ -255,6 +267,7 @@ impl SiteCollector {
             sites: Vec::new(),
             body_depth: 0,
             scopes: Vec::new(),
+            capture_floor: 0,
         };
         for item in &module.items {
             collector.visit_item(item);
@@ -264,44 +277,161 @@ impl SiteCollector {
         collector.sites
     }
 
-    fn visible_mutables(&self) -> Vec<String> {
-        self.scopes.iter().flatten().cloned().collect()
+    /// The bindings in scope, a shadowed name answered for by the one that
+    /// shadows it: an outer `let mut` an inner `let` shadows is not assignable
+    /// through that name.
+    fn visible(&self) -> IndexMap<&str, (usize, bool)> {
+        let mut visible = IndexMap::default();
+        for (depth, scope) in self.scopes.iter().enumerate() {
+            for binding in scope {
+                visible.insert(binding.name.as_str(), (depth, binding.is_mut));
+            }
+        }
+        visible
     }
 
-    /// Enter a body with its own scope stack, seeded with its `mut`
-    /// parameters, so a nested body does not inherit bindings it cannot name.
-    fn in_body(&mut self, params: Vec<String>, walk: impl FnOnce(&mut Self)) {
+    fn visible_mutables(&self) -> Vec<String> {
+        self.visible()
+            .iter()
+            .filter(|(_, (depth, is_mut))| *is_mut && *depth >= self.capture_floor)
+            .map(|(name, _)| (*name).to_string())
+            .collect()
+    }
+
+    fn visible_readables(&self) -> Vec<String> {
+        self.visible()
+            .keys()
+            .map(|name| (*name).to_string())
+            .collect()
+    }
+
+    /// Enter a function or `test` body with its own scope stack, seeded with
+    /// its parameters, so a nested body does not inherit bindings it cannot
+    /// name.
+    fn in_body(&mut self, params: Vec<Binding>, walk: impl FnOnce(&mut Self)) {
         self.body_depth += 1;
         let outer = std::mem::take(&mut self.scopes);
+        let floor = std::mem::replace(&mut self.capture_floor, 0);
         self.scopes.push(params);
         walk(self);
         self.scopes = outer;
+        self.capture_floor = floor;
         self.body_depth -= 1;
+    }
+
+    /// Enter a closure body, which keeps the enclosing scopes: a capture is a
+    /// name the body may read. The floor rises so the write payload does not
+    /// reach one.
+    fn in_closure(&mut self, params: Vec<Binding>, walk: impl FnOnce(&mut Self)) {
+        self.body_depth += 1;
+        let floor = std::mem::replace(&mut self.capture_floor, self.scopes.len());
+        self.scopes.push(params);
+        walk(self);
+        self.scopes.pop();
+        self.capture_floor = floor;
+        self.body_depth -= 1;
+    }
+
+    /// Walk what a binding construct — a loop, a `match` arm, an `if let` —
+    /// scopes its bindings over.
+    fn in_scope(&mut self, bindings: Vec<Binding>, walk: impl FnOnce(&mut Self)) {
+        self.scopes.push(bindings);
+        walk(self);
+        self.scopes.pop();
     }
 }
 
-/// The name a statement introduces as an assignable binding.
+/// The bindings a statement introduces.
 ///
 /// An uninitialized `let mut x: i32;` is left out: a payload that reads it
 /// before its first assignment would not compile.
-fn mut_binding(stmt: &Stmt) -> Option<String> {
+fn let_bindings(stmt: &Stmt) -> Vec<Binding> {
     let Stmt::Let(let_stmt) = stmt else {
-        return None;
+        return Vec::new();
     };
     if let_stmt.is_reactive || let_stmt.value.is_none() {
-        return None;
+        return Vec::new();
     }
     // `let mut x` carries the `mut` on the statement; `MutIdent` is what a
     // nested pattern binds.
-    if let Pattern::MutIdent { name, .. } = &let_stmt.pattern {
-        return Some(name.clone());
+    let mut bindings = Vec::new();
+    let refutable = let_stmt.else_block.is_some();
+    pattern_bindings(&let_stmt.pattern, let_stmt.is_mut, refutable, &mut bindings);
+    bindings
+}
+
+/// A plain name in a refutable pattern is either a binding or a unit variant
+/// and the parser cannot tell, so an initial capital is read as the variant
+/// Wado spells that way: naming one costs the payload the whole fixture.
+fn pattern_bindings(pattern: &Pattern, is_mut: bool, refutable: bool, out: &mut Vec<Binding>) {
+    let recurse = |pattern, out: &mut Vec<Binding>| {
+        pattern_bindings(pattern, is_mut, refutable, out);
+    };
+    match pattern {
+        Pattern::Ident { name, .. } => {
+            if !refutable || !name.starts_with(char::is_uppercase) {
+                out.push(Binding {
+                    name: name.clone(),
+                    is_mut,
+                });
+            }
+        }
+        Pattern::MutIdent { name, .. } => out.push(Binding {
+            name: name.clone(),
+            is_mut: true,
+        }),
+        Pattern::Tuple(patterns, _) => {
+            for pattern in patterns {
+                recurse(pattern, out);
+            }
+        }
+        Pattern::Variant { bindings, .. } => {
+            for pattern in bindings {
+                recurse(pattern, out);
+            }
+        }
+        Pattern::Struct { fields, .. } => {
+            for field in fields {
+                recurse(&field.pattern, out);
+            }
+        }
+        // An `|` alternative binds the same names in each branch, so the first
+        // answers for all of them; the rest bind nothing new.
+        Pattern::Or(patterns) => {
+            if let Some(first) = patterns.first() {
+                recurse(first, out);
+            }
+        }
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
     }
-    if let Pattern::Ident { name, .. } = &let_stmt.pattern
-        && let_stmt.is_mut
-    {
-        return Some(name.clone());
+}
+
+/// What a `let` chain binds over the body it guards. A `mut` leaf carries its
+/// own mutability; the chain itself declares none.
+fn condition_bindings(condition: &Condition) -> Vec<Binding> {
+    let Condition::LetChain { elements, .. } = condition else {
+        return Vec::new();
+    };
+    let mut bindings = Vec::new();
+    for element in elements {
+        if let ConditionElement::Let { pattern, .. } = element {
+            pattern_bindings(pattern, false, true, &mut bindings);
+        }
     }
-    None
+    bindings
+}
+
+fn params_of(params: &[Param]) -> Vec<Binding> {
+    params
+        .iter()
+        // A `self` receiver is not a name a payload may write to, and reading
+        // it is what `self.field` already does.
+        .filter(|param| param.self_kind == SelfKind::None)
+        .map(|param| Binding {
+            name: param.name.clone(),
+            is_mut: param.is_mut,
+        })
+        .collect()
 }
 
 impl AstVisitor for SiteCollector {
@@ -316,19 +446,12 @@ impl AstVisitor for SiteCollector {
     }
 
     fn visit_function(&mut self, func: &Function) {
-        // A `self` receiver is not a name the body may assign to.
-        let params = func
-            .params
-            .iter()
-            .filter(|param| param.is_mut && param.self_kind == SelfKind::None)
-            .map(|param| param.name.clone())
-            .collect();
-        self.in_body(params, |s| walk_function(s, func));
+        self.in_body(params_of(&func.params), |s| walk_function(s, func));
     }
 
-    /// A closure gets its own scope stack, not for hygiene but for typing: a
-    /// payload writing to a binding the closure captured would promote it to
-    /// `fn mut`, and every call through a plain `let` then stops compiling.
+    /// A closure body keeps the enclosing scopes: it may read a capture, while
+    /// assigning to one would promote it to `fn mut` and every call through a
+    /// plain `let` would stop compiling.
     fn visit_expr(&mut self, expr: &Expr) {
         let Expr::Closure(closure) = expr else {
             walk_expr(self, expr);
@@ -337,32 +460,73 @@ impl AstVisitor for SiteCollector {
         let params = closure
             .params
             .iter()
-            .filter(|param| param.is_mut)
-            .map(|param| param.name.clone())
+            .map(|param| Binding {
+                name: param.name.clone(),
+                is_mut: param.is_mut,
+            })
             .collect();
-        self.in_body(params, |s| walk_expr(s, expr));
+        self.in_closure(params, |s| walk_expr(s, expr));
     }
 
-    /// `else if` is an `else` block holding one `If`, and that `If`'s span
-    /// starts at the `if` keyword. Visiting the block would offer the keyword
-    /// as a site, and a guard there splits the chain into an `else` that takes
-    /// the guard and a stray `if` — so the nested statement is visited
-    /// directly, contributing its interior without the position in front of it.
-    /// An `else { if … }` written with braces has the same shape and loses that
-    /// one site too; the interior sites are unaffected.
+    /// The statements that scope a binding over a body. An `else if` is an
+    /// `else` block holding one `If`, and a guard injected in front of it would
+    /// split the chain, so that `If` is visited directly instead.
     fn visit_stmt(&mut self, stmt: &Stmt) {
-        let Stmt::If(if_stmt) = stmt else {
-            walk_stmt(self, stmt);
-            return;
-        };
-        self.visit_condition(&if_stmt.condition);
-        self.visit_block(&if_stmt.then_block);
-        let Some(else_block) = &if_stmt.else_block else {
-            return;
-        };
-        match else_block.stmts.as_slice() {
-            [nested @ Stmt::If(_)] => self.visit_stmt(nested),
-            _ => self.visit_block(else_block),
+        match stmt {
+            Stmt::If(if_stmt) => {
+                self.visit_condition(&if_stmt.condition);
+                let bound = condition_bindings(&if_stmt.condition);
+                self.in_scope(bound, |s| s.visit_block(&if_stmt.then_block));
+                let Some(else_block) = &if_stmt.else_block else {
+                    return;
+                };
+                match else_block.stmts.as_slice() {
+                    [nested @ Stmt::If(_)] => self.visit_stmt(nested),
+                    _ => self.visit_block(else_block),
+                }
+            }
+            Stmt::While(while_stmt) => {
+                self.visit_condition(&while_stmt.condition);
+                let bound = condition_bindings(&while_stmt.condition);
+                self.in_scope(bound, |s| s.visit_block(&while_stmt.body));
+            }
+            Stmt::For(for_stmt) => {
+                let bound = for_stmt.init.as_deref().map_or(Vec::new(), |init| {
+                    self.visit_stmt(init);
+                    let_bindings(init)
+                });
+                self.in_scope(bound, |s| {
+                    if let Some(condition) = &for_stmt.condition {
+                        s.visit_condition(condition);
+                    }
+                    if let Some(update) = &for_stmt.update {
+                        s.visit_expr(update);
+                    }
+                    s.visit_block(&for_stmt.body);
+                });
+            }
+            Stmt::ForOf(for_of) => {
+                self.visit_expr(&for_of.iterable);
+                let mut bound = Vec::new();
+                pattern_bindings(&for_of.binding, for_of.is_mut, false, &mut bound);
+                self.in_scope(bound, |s| s.visit_block(&for_of.body));
+            }
+            _ => walk_stmt(self, stmt),
+        }
+    }
+
+    /// An arm's pattern is in scope in its guard and its body, and nowhere else.
+    fn visit_match_expr(&mut self, match_expr: &MatchExpr) {
+        self.visit_expr(&match_expr.expr);
+        for arm in &match_expr.arms {
+            let mut bound = Vec::new();
+            pattern_bindings(&arm.pattern, false, true, &mut bound);
+            self.in_scope(bound, |s| {
+                if let Some(guard) = &arm.guard {
+                    s.visit_expr(guard);
+                }
+                s.visit_expr(&arm.body);
+            });
         }
     }
 
@@ -380,11 +544,15 @@ impl AstVisitor for SiteCollector {
                     offset: stmt.span().start,
                     kind: stmt_kind(stmt),
                     mutables: self.visible_mutables(),
+                    readables: self.visible_readables(),
                 });
             }
             self.visit_stmt(stmt);
-            if let Some(name) = mut_binding(stmt) {
-                self.scopes.last_mut().expect("a scope is open").push(name);
+            for binding in let_bindings(stmt) {
+                self.scopes
+                    .last_mut()
+                    .expect("a scope is open")
+                    .push(binding);
             }
         }
         self.scopes.pop();
@@ -450,16 +618,48 @@ fn inject_each(source: &str, sites: &[Site], payload: impl Fn(&Site) -> String) 
     mutant
 }
 
+/// What the dead region does to the live program.
+///
+/// A payload reaching no binding renders empty, and the site is not one it can
+/// be injected at.
+struct Payload {
+    name: &'static str,
+    render: fn(&Site) -> String,
+}
+
+/// Ordered by the analysis family each attacks: alias and mod/ref for the
+/// write, liveness and escape for the read.
+const PAYLOADS: [Payload; 2] = [
+    Payload {
+        name: "write",
+        render: opaque_writes,
+    },
+    Payload {
+        name: "read",
+        render: opaque_reads,
+    },
+];
+
 /// An opaque write to every binding the dead region can name.
 ///
 /// `black_box` is generic and the assignment is the identity, so this needs no
 /// type inference.
 fn opaque_writes(site: &Site) -> String {
-    site.mutables
-        .iter()
-        .map(|name| format!("{name} = builtin::black_box({name});"))
-        .collect::<Vec<_>>()
-        .join(" ")
+    render(&site.mutables, |name| {
+        format!("{name} = builtin::black_box({name});")
+    })
+}
+
+/// An opaque read of every binding the dead region can name. It demands no
+/// mutability, so it reaches sites [`opaque_writes`] leaves empty.
+fn opaque_reads(site: &Site) -> String {
+    render(&site.readables, |name| {
+        format!("builtin::black_box({name});")
+    })
+}
+
+fn render(names: &[String], one: impl Fn(&String) -> String) -> String {
+    names.iter().map(one).collect::<Vec<_>>().join(" ")
 }
 
 // ---------------------------------------------------------------------------
@@ -721,21 +921,42 @@ enum Misbehaviour {
     Crashed,
 }
 
-/// Inject an opaque write to every binding in scope at every site, and compare
-/// the result against the program it came from.
+/// The sites `payload` has something to say at.
+fn sites_for(sites: &[Site], payload: &Payload) -> Vec<Site> {
+    sites
+        .iter()
+        .filter(|site| !(payload.render)(site).is_empty())
+        .cloned()
+        .collect()
+}
+
+fn is_finding(excluded: &Excluded) -> bool {
+    matches!(
+        excluded,
+        Excluded::GuardCrashed { .. } | Excluded::GuardChangedOutput { .. }
+    )
+}
+
+/// Inject each payload at every site it reaches, and compare the result against
+/// the program it came from.
+///
+/// A payload the compiler refuses is dropped rather than the fixture, which
+/// stays a subject as long as one payload survives.
 fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
     let name = fixture_name(path);
     let spec = Spec::parse(source)?;
     let canonical =
         wado_compiler::format(source).map_err(|e| Excluded::FormatFailed(e.to_string()))?;
 
-    let sites: Vec<Site> = injection_sites(&canonical)
-        .into_iter()
-        .filter(|site| !site.mutables.is_empty())
+    let all = injection_sites(&canonical);
+    let mut alive: Vec<&Payload> = PAYLOADS
+        .iter()
+        .filter(|payload| !sites_for(&all, payload).is_empty())
         .collect();
-    if sites.is_empty() {
-        return Err(Excluded::NoMutableInScope);
+    if alive.is_empty() {
+        return Err(Excluded::NoBindingInScope);
     }
+    let mut refused = None;
 
     for level in CALIBRATION_LEVELS {
         let baseline = match evaluate(path, &canonical, &spec, level) {
@@ -747,56 +968,108 @@ fn mutate(path: &Path, source: &str) -> Result<Eligible, Excluded> {
                 return Err(Excluded::BaselineUnhealthy { level, detail });
             }
         };
-        let reproduces = |subset: &[Site], what: Misbehaviour| {
-            let mutant = inject_each(&canonical, subset, opaque_writes);
-            match evaluate(path, &mutant, &spec, level) {
-                Evaluation::Ran(outcome) => {
-                    what == Misbehaviour::Diverged && !baseline.differences(&outcome).is_empty()
-                }
-                Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
-                Evaluation::CompileError(_) => false,
+        let mut survivors = Vec::new();
+        for payload in alive {
+            let sites = sites_for(&all, payload);
+            match mutate_once(
+                path, &canonical, &spec, level, &baseline, payload, sites, &name,
+            ) {
+                Ok(()) => survivors.push(payload),
+                Err(excluded) if is_finding(&excluded) => return Err(excluded),
+                Err(excluded) => refused = Some(excluded),
             }
-        };
-
-        let mutant = inject_each(&canonical, &sites, opaque_writes);
-        match evaluate(path, &mutant, &spec, level) {
-            Evaluation::Ran(outcome) => {
-                let differences = baseline.differences(&outcome);
-                if !differences.is_empty() {
-                    if let Some(detail) = baseline_moved(path, &canonical, &spec, level, &baseline)
-                    {
-                        return Err(Excluded::Nondeterministic { level, detail });
-                    }
-                    let (reduced, narrowed) = narrow(&canonical, sites, &|subset| {
-                        reproduces(subset, Misbehaviour::Diverged)
-                    });
-                    write_finding(&name, &inject_each(&canonical, &reduced, opaque_writes));
-                    return Err(Excluded::GuardChangedOutput {
-                        level,
-                        detail: format!("{narrowed} — {}", differences.join("; ")),
-                    });
-                }
-            }
-            Evaluation::CompileError(detail) => {
-                return Err(Excluded::GuardRejected { level, detail });
-            }
-            Evaluation::Crashed(detail) => {
-                let (reduced, narrowed) = narrow(&canonical, sites, &|subset| {
-                    reproduces(subset, Misbehaviour::Crashed)
-                });
-                write_finding(&name, &inject_each(&canonical, &reduced, opaque_writes));
-                return Err(Excluded::GuardCrashed {
-                    level,
-                    detail: format!("{narrowed} — {detail}"),
-                });
-            }
+        }
+        alive = survivors;
+        if alive.is_empty() {
+            return Err(refused.expect("a payload that dropped out left its reason"));
         }
     }
 
+    let covered = all
+        .iter()
+        .filter(|site| {
+            alive
+                .iter()
+                .any(|payload| !(payload.render)(site).is_empty())
+        })
+        .count();
     Ok(Eligible {
         name,
-        sites: sites.len(),
+        sites: covered,
     })
+}
+
+/// Run one payload at one level: inject it at every site at once, and reduce
+/// what misbehaves back to the guards that cause it.
+#[expect(clippy::too_many_arguments, reason = "one call site, all of it needed")]
+fn mutate_once(
+    path: &Path,
+    canonical: &str,
+    spec: &Spec,
+    level: OptLevel,
+    baseline: &Outcome,
+    payload: &Payload,
+    sites: Vec<Site>,
+    name: &str,
+) -> Result<(), Excluded> {
+    let reproduces = |subset: &[Site], what: Misbehaviour| {
+        let mutant = inject_each(canonical, subset, payload.render);
+        match evaluate(path, &mutant, spec, level) {
+            Evaluation::Ran(outcome) => {
+                what == Misbehaviour::Diverged && !baseline.differences(&outcome).is_empty()
+            }
+            Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
+            Evaluation::CompileError(_) => false,
+        }
+    };
+    let report = |detail: String| format!("{} payload: {detail}", payload.name);
+
+    let mutant = inject_each(canonical, &sites, payload.render);
+    match evaluate(path, &mutant, spec, level) {
+        Evaluation::Ran(outcome) => {
+            let differences = baseline.differences(&outcome);
+            if !differences.is_empty() {
+                if let Some(detail) = baseline_moved(path, canonical, spec, level, baseline) {
+                    return Err(Excluded::Nondeterministic {
+                        level,
+                        detail: report(detail),
+                    });
+                }
+                let (reduced, narrowed) = narrow(canonical, sites, &|subset| {
+                    reproduces(subset, Misbehaviour::Diverged)
+                });
+                write_finding(
+                    &format!("{}-{name}", payload.name),
+                    &inject_each(canonical, &reduced, payload.render),
+                );
+                return Err(Excluded::GuardChangedOutput {
+                    level,
+                    detail: report(format!("{narrowed} — {}", differences.join("; "))),
+                });
+            }
+        }
+        Evaluation::CompileError(detail) => {
+            return Err(Excluded::GuardRejected {
+                level,
+                detail: report(detail),
+            });
+        }
+        Evaluation::Crashed(detail) => {
+            let (reduced, narrowed) = narrow(canonical, sites, &|subset| {
+                reproduces(subset, Misbehaviour::Crashed)
+            });
+            write_finding(
+                &format!("{}-{name}", payload.name),
+                &inject_each(canonical, &reduced, payload.render),
+            );
+            return Err(Excluded::GuardCrashed {
+                level,
+                detail: report(format!("{narrowed} — {detail}")),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 /// Write the reduced mutant so a finding can be read, and re-run, as source.
@@ -1083,20 +1356,15 @@ fn calibrate_corpus() {
     );
 }
 
-/// Mutate the calibrated corpus: every dead region writes to every binding it
-/// can name, and the program must not notice.
+/// Mutate the calibrated corpus: every dead region writes to and reads every
+/// binding it can name, and the program must not notice.
 ///
 /// Reads `corpus.txt`, so the calibration runs first.
 #[test]
 #[ignore = "EMI campaign — minutes to hours over the calibrated corpus"]
 fn mutate_corpus() {
     let paths = corpus_paths();
-    let results = campaign(&paths, mutate, |excluded| {
-        matches!(
-            excluded,
-            Excluded::GuardCrashed { .. } | Excluded::GuardChangedOutput { .. }
-        )
-    });
+    let results = campaign(&paths, mutate, is_finding);
     write_report(&results, paths.len(), "mutation");
 
     assert!(
@@ -1423,6 +1691,134 @@ fn a_site_sees_the_mutable_bindings_in_scope() {
     assert_eq!(seen, expected);
 }
 
+/// The read payload demands no mutability, so a site has to know every binding
+/// it may name and not only the assignable ones.
+#[test]
+fn a_site_sees_the_readable_bindings_in_scope() {
+    let source = r#"fn f(n: i32) -> i32 {
+    let a = 1;
+    let mut b = 2;
+    return n + a + b;
+}
+"#;
+    let seen: Vec<(Vec<String>, Vec<String>)> = injection_sites(source)
+        .iter()
+        .map(|site| (site.mutables.clone(), site.readables.clone()))
+        .collect();
+    let expected: Vec<(Vec<String>, Vec<String>)> = vec![
+        (vec![], vec!["n".into()]),
+        (vec![], vec!["n".into(), "a".into()]),
+        (vec!["b".into()], vec!["n".into(), "a".into(), "b".into()]),
+    ];
+    assert_eq!(seen, expected);
+}
+
+/// A name reaches the binding that shadows it, so an outer `let mut` an inner
+/// `let` shadows is not assignable — writing to it would not compile.
+#[test]
+fn a_shadowed_binding_is_answered_for_by_the_one_that_shadows_it() {
+    let source = r#"fn f() -> i32 {
+    let mut x = 1;
+    if x > 0 {
+        let x = x + 10;
+        assert x == 11;
+    }
+    return x;
+}
+"#;
+    let site = injection_sites(source)
+        .into_iter()
+        .find(|site| site.kind == "assert")
+        .expect("the assert is a site");
+    assert!(site.mutables.is_empty(), "{:?}", site.mutables);
+    assert_eq!(site.readables, vec!["x"]);
+}
+
+/// A destructuring pattern binds names the same way a plain `let` does, and a
+/// `mut` leaf inside one is assignable.
+#[test]
+fn a_destructured_binding_is_named_by_its_leaves() {
+    let source = r#"fn f(p: [i32, i32]) -> i32 {
+    let [a, mut b] = p;
+    return a + b;
+}
+"#;
+    let last = injection_sites(source)
+        .pop()
+        .expect("the return statement is a site");
+    assert_eq!(last.mutables, vec!["b".to_string()]);
+    assert_eq!(last.readables, vec!["p", "a", "b"]);
+}
+
+/// A loop, a `match` arm and an `if let` each bind over a body, and those
+/// bodies are where the passes the payloads attack do their work.
+#[test]
+fn a_binding_a_body_is_entered_with_is_in_scope_inside_it() {
+    let source = r#"fn f(l: List<i32>, o: Option<i32>) -> i32 {
+    for let x of l {
+        assert x >= 0;
+    }
+    match o {
+        Some(v) => { assert v >= 0; },
+        None => { assert true; },
+    }
+    if let Some(w) = o {
+        assert w >= 0;
+    }
+    return 0;
+}
+"#;
+    let inner: Vec<Vec<String>> = injection_sites(source)
+        .iter()
+        .filter(|site| site.kind == "assert")
+        .map(|site| site.readables.clone())
+        .collect();
+    assert_eq!(
+        inner,
+        vec![
+            vec!["l", "o", "x"],
+            vec!["l", "o", "v"],
+            // `None` parses as a plain name and is a variant, not a binding.
+            vec!["l", "o"],
+            vec!["l", "o", "w"],
+        ]
+    );
+}
+
+/// A closure may read what it captured — that is just a use — but assigning to
+/// a capture promotes it to `fn mut` and every call through a plain `let` then
+/// stops compiling, so the write payload stays inside the closure's own scope.
+#[test]
+fn a_closure_reads_its_captures_and_writes_only_its_own_bindings() {
+    let source = r#"fn f(mut n: i32) -> i32 {
+    let g = |mut k: i32| -> i32 {
+        return k + n;
+    };
+    return g(1);
+}
+"#;
+    let inside = injection_sites(source)
+        .into_iter()
+        .find(|site| site.kind == "return" && site.readables.contains(&"k".to_string()))
+        .expect("the closure body has a site");
+    assert_eq!(inside.mutables, vec!["k".to_string()]);
+    assert_eq!(
+        inside.readables,
+        vec!["n", "k"],
+        "`g` is not in scope inside its own initializer"
+    );
+}
+
+/// The payload the roadmap adds: it reaches a site the write payload leaves
+/// empty, which is most of the corpus.
+#[test]
+fn the_read_payload_reaches_a_site_the_write_payload_cannot() {
+    let source = "fn f(n: i32) -> i32 {\n    return n;\n}\n";
+    let site = &injection_sites(source)[0];
+    assert_eq!(opaque_writes(site), "");
+    assert_eq!(opaque_reads(site), "builtin::black_box(n);");
+}
+
 /// A finding arrives as a mutant carrying every site at once, so the reduction
 /// is what names the guards that actually moved the output.
 #[test]
@@ -1432,6 +1828,7 @@ fn reduction_keeps_only_the_sites_that_matter() {
             offset,
             kind: "let",
             mutables: Vec::new(),
+            readables: Vec::new(),
         })
         .collect();
     let culprits = [3, 11];
@@ -1469,6 +1866,7 @@ fn narrowing_names_the_guards_that_carry_a_finding() {
             offset,
             kind: "let",
             mutables: Vec::new(),
+            readables: Vec::new(),
         })
         .collect();
 
