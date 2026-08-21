@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787311394780,
+  "lastUpdate": 1787324753349,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49909,6 +49909,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c023e87e5e36daf57328abb786e4417f7d67b28"
         },
         "date": 1787311394300,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "66a0bee5ad1a9e5cfbdccdad1793917f63eecc03",
+          "message": "Merge pull request #1870 from wado-lang/gale-lexer-command-surface\n\nfeat(gale): give a superClass action op the lexer command surface",
+          "timestamp": "2026-08-21T23:53:00+09:00",
+          "tree_id": "ea023f2efb7365156914f190db2143e6184d46ff",
+          "url": "https://github.com/wado-lang/wado/commit/66a0bee5ad1a9e5cfbdccdad1793917f63eecc03"
+        },
+        "date": 1787324752652,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
