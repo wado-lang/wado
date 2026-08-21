@@ -1252,7 +1252,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             suppress_reference_recording: false,
             infer_holes: super::infer_hole::InferHoleTable::default(),
             assoc_binding_stack: crate::hashmap::IndexSet::default(),
-            reported_bound_failures: crate::hashmap::IndexSet::default(),
         }
     }
 

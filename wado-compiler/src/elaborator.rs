@@ -133,18 +133,6 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Self::A>` has no fixpoint, so a pair already on the walk contributes no
     /// binding and stays abstract.
     pub(super) assoc_binding_stack: crate::hashmap::IndexSet<(crate::tir::TypeId, String)>,
-    /// Bound failures already reported, keyed by what the message states. A
-    /// defaulted method type parameter reaches enforcement twice — at its call
-    /// site and as a hole at finalize — and one failure is one diagnostic. The
-    /// module is part of the key: one walk covers every module and a `Span`
-    /// carries no file, so the same offset in two of them is two failures.
-    pub(super) reported_bound_failures: crate::hashmap::IndexSet<(
-        crate::module_source::ModuleSource,
-        crate::tir::TypeId,
-        crate::defs::DefId,
-        String,
-        crate::token::Span,
-    )>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {

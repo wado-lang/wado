@@ -2204,15 +2204,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         if !self.check_and_register_bound(type_arg, trait_) {
-            if !self.reported_bound_failures.insert((
-                self.current_module_source.clone(),
-                type_arg,
-                trait_,
-                param_name.to_string(),
-                span,
-            )) {
-                return;
-            }
             let type_name = self.tysys.type_id_to_string(type_arg);
             let reason = self.tysys.trait_unimpl_reason_chain(
                 &self.annotate_ctx,

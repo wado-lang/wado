@@ -973,8 +973,8 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
 
 /// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A
 /// `Reflect*` bound holds exactly when the receiver is that kind; any other
-/// bound is treated as satisfiable, preserving existing blanket dispatch
-/// (e.g. `IntoIterator`).
+/// bound is treated as satisfiable — deciding one needs the elaborator's
+/// trait query, which monomorphization has no access to.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: Vec<BlanketBound>,
@@ -996,10 +996,14 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
         CompilerItem::ReflectFlags,
     ];
     bounds.iter().all(|bound| {
-        match reflect_bounds
-            .into_iter()
-            .find(|item| bound.name == items.trait_name(*item))
-        {
+        // The bound names a declaration, not a spelling: a user trait called
+        // `ReflectStruct` is not the compiler's and claims no kind.
+        let declared = bound.decl_ref.map(|decl| tt.defs().ast_id(decl));
+        match declared.and_then(|decl| {
+            reflect_bounds
+                .into_iter()
+                .find(|item| items.trait_decl(*item) == Some(decl))
+        }) {
             Some(required) => kind == Some(required),
             None => true,
         }

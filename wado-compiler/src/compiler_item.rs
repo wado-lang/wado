@@ -1573,6 +1573,25 @@ impl Default for CompilerItems {
     }
 }
 
+/// Discriminant → slot in [`CompilerItems::items`]. `ALL` groups the variants
+/// by kind rather than by discriminant, so the registry cannot index by
+/// `item as usize` directly. A variant missing from `ALL` leaves its slot
+/// `usize::MAX`, which the assertion below rejects at compile time.
+const SLOT_OF_ITEM: [usize; CompilerItem::COUNT] = {
+    let mut table = [usize::MAX; CompilerItem::COUNT];
+    let mut i = 0;
+    while i < CompilerItem::COUNT {
+        table[CompilerItem::ALL[i] as usize] = i;
+        i += 1;
+    }
+    let mut i = 0;
+    while i < CompilerItem::COUNT {
+        assert!(table[i] != usize::MAX, "every CompilerItem must be in ALL");
+        i += 1;
+    }
+    table
+};
+
 impl CompilerItems {
     pub fn new() -> Self {
         Self {
@@ -1583,10 +1602,7 @@ impl CompilerItems {
     /// Internal: convert a [`CompilerItem`] to its dense index.
     /// `CompilerItem::ALL` is the source of truth for the ordering.
     fn index_of(item: CompilerItem) -> usize {
-        CompilerItem::ALL
-            .iter()
-            .position(|i| *i == item)
-            .expect("CompilerItem must appear in CompilerItem::ALL")
+        SLOT_OF_ITEM[item as usize]
     }
 
     /// Get the resolved data for `item`, or `None` if the stdlib has
@@ -1798,10 +1814,15 @@ impl CompilerItems {
     /// prelude's when a scope shadows it.
     #[must_use]
     pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
-        CompilerItem::ALL
+        self.items
             .iter()
-            .copied()
-            .find(|item| self.trait_decl(*item) == Some(decl))
+            .zip(CompilerItem::ALL)
+            .find_map(|(resolved, item)| match resolved {
+                Some(Resolved::Trait {
+                    decl: registered, ..
+                }) if *registered == decl => Some(*item),
+                _ => None,
+            })
     }
 
     /// The declaring node of a [`CompilerItemKind::Variant`] item.

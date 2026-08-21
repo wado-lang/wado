@@ -262,6 +262,27 @@ impl TypeSystem {
     }
 }
 
+/// The compiler item `op` dispatches through, or `None` for the short-circuit
+/// operators. [`TySys::operator_trait_method`] answers the same question with a
+/// spelling; a caller that must compare declarations asks here.
+pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
+    match op {
+        BinaryOp::Add => Some(CompilerItem::Add),
+        BinaryOp::Sub => Some(CompilerItem::Sub),
+        BinaryOp::Mul => Some(CompilerItem::Mul),
+        BinaryOp::Div => Some(CompilerItem::Div),
+        BinaryOp::Mod => Some(CompilerItem::Rem),
+        BinaryOp::BitAnd => Some(CompilerItem::BitAnd),
+        BinaryOp::BitOr => Some(CompilerItem::BitOr),
+        BinaryOp::BitXor => Some(CompilerItem::BitXor),
+        BinaryOp::Shl => Some(CompilerItem::Shl),
+        BinaryOp::Shr => Some(CompilerItem::Shr),
+        BinaryOp::Eq | BinaryOp::NotEq => Some(CompilerItem::Eq),
+        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some(CompilerItem::Ord),
+        BinaryOp::And | BinaryOp::Or => None,
+    }
+}
+
 /// Pure type-shape helpers answerable from the type table alone (peel
 /// references, extract a declared type's name, newtype-base resolution, type
 /// stringification). They touch only `self.type_table`; the body walk and

@@ -161,6 +161,12 @@ struct TestSpec {
     #[serde(default)]
     compile_error: Option<String>,
 
+    /// How many times `compile_error` must occur in the reported message. One
+    /// fault is one diagnostic, and a signature walked twice used to say it
+    /// twice.
+    #[serde(default)]
+    compile_error_count: Option<usize>,
+
     /// Preopened directories, each `[template, guest_path]`. Every preopen is a
     /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
     /// `""` for empty scratch, or a workspace-relative path to copy in.
@@ -759,6 +765,13 @@ fn run_normal_test(
                     error_msg.contains(expected_error),
                     "[{test_id}] compile error mismatch:\n  expected to contain: {expected_error}\n  actual error: {error_msg}"
                 );
+                if let Some(expected_count) = spec.compile_error_count {
+                    let actual = error_msg.matches(expected_error.as_str()).count();
+                    assert_eq!(
+                        actual, expected_count,
+                        "[{test_id}] expected '{expected_error}' {expected_count} time(s), found {actual}:\n  {error_msg}"
+                    );
+                }
                 return; // Test passed - expected compile error occurred
             }
             Ok(_) => {

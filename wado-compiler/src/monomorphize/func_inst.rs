@@ -1636,8 +1636,10 @@ impl Monomorphizer {
 
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
     /// call: a `newtype` inherits its base's trait impl, so peel it to the base
-    /// unless the newtype has its own impl, or a blanket serving it — a blanket
-    /// is not inherited, and its bounds are the newtype's to satisfy.
+    /// unless the newtype has its own impl, or a value blanket the newtype is
+    /// not disqualified from — a blanket is not inherited. Only the reflection
+    /// bounds are decidable here; see
+    /// [`receiver_satisfies_blanket_bounds`](crate::synthesis::template::receiver_satisfies_blanket_bounds).
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,

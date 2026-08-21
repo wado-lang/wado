@@ -736,6 +736,11 @@ pub struct TypeTable {
     /// [`Self::assoc_type_resolutions`] but by the target's declaration: two
     /// generic impls of one trait at different instantiations are two answers.
     generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, TypeId>,
+    /// Whether either registry holds a key at non-default trait arguments.
+    /// A projection names the bare instantiation, which is a map hit; the
+    /// scan that answers from an arguments-writing impl runs only for a
+    /// program that has one.
+    assoc_keys_carry_args: bool,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -912,6 +917,7 @@ impl TypeTable {
             compiler_items: crate::compiler_item::CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
+            assoc_keys_carry_args: false,
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
             shared_box_type_ids: TypeSet::default(),
@@ -2448,6 +2454,7 @@ impl TypeTable {
         assoc_name: String,
         resolved_id: TypeId,
     ) {
+        self.assoc_keys_carry_args |= !trait_ref.is_bare();
         self.assoc_type_resolutions.insert(
             AssocTypeKey {
                 receiver: concrete_id,
@@ -2477,6 +2484,9 @@ impl TypeTable {
             assoc_name: assoc_name.to_string(),
         }) {
             return Some(resolved);
+        }
+        if !self.assoc_keys_carry_args {
+            return None;
         }
         let candidates: Vec<(bool, TypeId)> = self
             .assoc_type_resolutions
@@ -2541,6 +2551,7 @@ impl TypeTable {
         assoc_name: String,
         type_param_id: TypeId,
     ) {
+        self.assoc_keys_carry_args |= !trait_ref.is_bare();
         self.generic_assoc_type_defs.insert(
             GenericAssocTypeKey {
                 target_decl: base_decl,
@@ -2593,6 +2604,9 @@ impl TypeTable {
             assoc_name: assoc_name.to_string(),
         }) {
             return Some(def_id);
+        }
+        if !self.assoc_keys_carry_args {
+            return None;
         }
         let candidates: Vec<(bool, TypeId)> = self
             .generic_assoc_type_defs
