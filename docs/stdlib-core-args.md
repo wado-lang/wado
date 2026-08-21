@@ -133,8 +133,7 @@ _Fields are private._
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
-An argv token is always text, so a type that deserializes dynamically
-(`Uuid`, `Instant`, …) gets the raw token.
+An argv token is always text, so a dynamic `Deserialize` gets it raw.
 
 ## Enums
 

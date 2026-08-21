@@ -952,8 +952,7 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
     }
 
-    /// A path parameter is always text, so a type that deserializes
-    /// dynamically (`Uuid`, `Instant`, …) gets the raw segment.
+    /// A path segment is always text, so a dynamic `Deserialize` gets it raw.
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
         let text = self.deserialize_string()?;
         return visitor.visit_string(text);

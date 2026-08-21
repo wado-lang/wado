@@ -17,9 +17,8 @@ export const monotonicClock = {
   },
 };
 
-// The high-resolution clock has the sub-millisecond precision UUID v7 orders
-// by but runs from process start, so anchor it to `Date.now()` and re-anchor
-// once the two disagree by more than the millisecond `Date.now()` truncates.
+// The high-resolution clock has sub-millisecond precision but runs from process
+// start, so anchor it to `Date.now()` and re-anchor once the two diverge.
 let anchor = null;
 
 export const wallClock = {

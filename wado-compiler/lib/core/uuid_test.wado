@@ -4,10 +4,8 @@ use { to_bytes, from_bytes } from "core:cbor";
 use { Random } from "wasi:random";
 use { SystemClock, Instant } from "wasi:clocks";
 
-// A deterministic `Random` handler that hands out a fixed byte stream. This is
-// what makes `Uuid::v4` / `Uuid::v7` testable: the only non-determinism in
-// those functions is the `Random` effect, so installing a fixed source pins
-// the output exactly.
+// A fixed byte stream: `Uuid::v4` / `Uuid::v7` draw all their non-determinism
+// from `Random`, so pinning it pins the output.
 struct MockRandom {
     data: List<u8>,
     pos: i32,
@@ -178,7 +176,6 @@ test "parse reports why the input was rejected" {
     // 35 chars, 33 hex digits: neither length is a UUID.
     assert Uuid::parse(&"0001020-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidLength) };
     assert Uuid::parse(&"000102030405460788090a0b0c0d0e0ff") matches { Err(ParseError::InvalidLength) };
-    // Hyphens, braces and the URN prefix must sit exactly where they belong.
     assert Uuid::parse(&"000102030-405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
     assert Uuid::parse(&"00010203f0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
     assert Uuid::parse(&"{00010203-0405-4607-8809-0a0b0c0d0e0f]") matches { Err(ParseError::InvalidGroups) };

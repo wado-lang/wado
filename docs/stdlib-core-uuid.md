@@ -11,18 +11,14 @@ Only the two versions in common use today are provided:
 - `Uuid::v7()` — time-ordered UUID, ideal for database keys and log
   correlation.
 
-A `Uuid` is a single 128-bit value, held as 16 big-endian bytes; equality
-and ordering compare them in that order.
-
 `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
 `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
 and `Inspect` render the canonical hyphenated form, as does `Serialize` for
 text formats; binary ones get CBOR tag 37 and the 16 bytes.
 
-`v7` sorts by creation time under RFC 9562 method 3: the timestamp and, in
-`rand_a`, its sub-millisecond fraction lead the bytes, one tick per 244 ns,
-needing no generator state. Values within a tick, across a backwards clock
-step, or from a coarser clock are unordered.
+`v7` sorts by creation time under RFC 9562 method 3: the timestamp leads the
+bytes, `rand_a` holding its sub-millisecond fraction, one tick per 244 ns.
+Values within a tick, or across a backwards clock step, are unordered.
 
 ## Synopsis
 
