@@ -12,7 +12,7 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 
 1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. Empty right now.
 2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-08-21 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
-3. **Stage C**, starting with the lexer command surface for a superClass base op: the largest block, and the gate for drop-in ANTLR4 replacement.
+3. **Stage C**, starting with the superClass lifecycle hooks: the largest block, and the gate for drop-in ANTLR4 replacement.
 4. Everything else, in whatever order a live case surfaces it.
 
 The two LL-prediction gaps are deliberately parked, not queued — see below.
@@ -45,8 +45,7 @@ Gale still silently discards action / predicate contents on the **parser** side 
 Both call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass mechanism, not just action translation.
 
 - **The SuperClass effect interface.** Landed for lexer bases, predicate and action ops alike, including `language = Java`: `RustLexer`, `TypeScriptLexer` and `ANTLRv4Lexer` all tokenize through a hand-written `impl` (the ports live in their driver tests). An action op runs from the winner replay, so it never fires for a losing candidate, and a grammar whose action language Gale does not translate runs an action body only when it is nothing but base calls (`{this.m();}` — every real-world case); anything else is reported. See `action.md` ("SuperClass — an effect interface"). What is left before the two grammars behave as ANTLR4 does:
-  - **The lexer command surface for a base op.** An operation receives a read-only `LexerView`, so a base cannot `setType` / `skip` / `more` / push or pop a mode. ANTLRv4's `LexerAdaptor` drives the whole `Argument` mode from `handleBeginArgument`, so its `[ ... ]` bodies stay DEFAULT-mode tokens and `END_ARGUMENT` never fires (pinned in `driver_cst_antlr4_test`).
-  - **Lifecycle hooks** (`nextToken` / `emit`) for the last-token and current-rule state a base branches on — TypeScript's `IsRegexPossible`, ANTLRv4's rule-type tracking. Both ports approximate it from the match window instead.
+  - **Lifecycle hooks** (`nextToken` / `emit`) for the last-token and current-rule state a base branches on — TypeScript's `IsRegexPossible`, ANTLRv4's rule-type tracking. Both ports approximate it from the match window instead; ANTLRv4's `handleBeginArgument` therefore always takes the parser-rule branch, so a lexer rule's `[...]` char set enters `Argument` rather than `LexerCharSet`.
   - **The parser side**: parser-rule superClass predicates like `{this.NextGT()}?` are still discarded.
 
 Then the paths that still warn — each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong:

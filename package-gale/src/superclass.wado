@@ -440,27 +440,28 @@ fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
     }
 }
 
-/// Emit `interface Foo { ... }`, one operation per op. Each receives a
-/// `LexerView` (the match-window runtime handle); a predicate returns `bool`, an
-/// action returns unit. Names are snake_cased to match the call-site rewrite.
+/// Emit `interface Foo { ... }`, one operation per op. A predicate takes the
+/// read-only `LexerView` and returns `bool`; an action also takes the `Lexer`,
+/// for the command surface. Names are snake_cased to match the call rewrite.
 pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
         if op.is_predicate {
             w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView) -> bool;`);
         } else {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView);`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer);`);
         }
     }
     w.line(&"}");
     w.blank();
 }
 
-/// The Wado expression `this.<method>(...)` lowers to: the ambient operation
-/// `Foo::<method>(LexerView { chars, start, pos })`, reading the match-fn locals
-/// in scope at every lexer action / predicate site. Arguments are dropped.
-pub fn super_call_expr(base_name: &String, method: &String) -> String {
-    return `${*base_name}::${to_snake_case(method)}(LexerView { chars, start, pos })`;
+/// The ambient operation call, reading the match-fn locals in scope at every
+/// lexer action / predicate site. An action also passes the replay fn's `lx`.
+/// Arguments are dropped.
+pub fn super_call_expr(base_name: &String, method: &String, is_action: bool) -> String {
+    let lx = if is_action { ", lx" } else { "" };
+    return `${*base_name}::${to_snake_case(method)}(LexerView { chars, start, pos }${lx})`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each
@@ -476,7 +477,7 @@ pub fn rewrite_superclass_calls(grammar: &mut Grammar, base_name: &String) {
 
 fn rewrite_lexer_alt(alt: &mut LexerAlternative, base_name: &String) {
     for let a of &mut alt.actions {
-        a.source.text = rewrite_this_calls(&a.source.text, base_name);
+        a.source.text = rewrite_this_calls(&a.source.text, base_name, a.kind matches { Action });
     }
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         alt.elements[i] = rewrite_lexer_elem(&alt.elements[i], base_name);
@@ -508,7 +509,7 @@ fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
 /// copying everything else verbatim and skipping string / comment spans so a
 /// `this.` inside host text is never rewritten. Call arguments are dropped
 /// (zero-argument today).
-pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
+pub fn rewrite_this_calls(body: &String, base_name: &String, is_action: bool) -> String {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(n + 8);
@@ -520,7 +521,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
             '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
             _ => match this_call_at(&chars, i, n) {
                 Some([method, close]) => {
-                    out.push_str(&super_call_expr(base_name, &method));
+                    out.push_str(&super_call_expr(base_name, &method, is_action));
                     close;
                 },
                 None => {

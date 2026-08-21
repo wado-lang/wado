@@ -20,7 +20,7 @@ use {
     TK_Divide,
     TK_RegularExpressionLiteral,
 } from "./grammars/TypeScriptLexer.g4";
-use { TypeScriptLexerBase, LexerView } from "./grammars/TypeScriptLexer.g4";
+use { TypeScriptLexerBase, LexerView, Lexer } from "./grammars/TypeScriptLexer.g4";
 
 // A hand-written TypeScriptLexerBase port, installed around every recognizer
 // call: the action ops carry the brace / template state the predicate ops read.
@@ -62,7 +62,7 @@ impl TypeScriptLexerBase for TsBase {
         resume self.strict;
     }
 
-    fn process_open_brace(&mut self, view: LexerView) {
+    fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
         let n = self.interp_braces.len();
         if n > 0 {
             self.interp_braces[n - 1] += 1;
@@ -70,7 +70,7 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn process_close_brace(&mut self, view: LexerView) {
+    fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
         let n = self.interp_braces.len();
         if n > 0 && self.interp_braces[n - 1] > 0 {
             self.interp_braces[n - 1] -= 1;
@@ -78,7 +78,7 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn process_string_literal(&mut self, view: LexerView) {
+    fn process_string_literal(&mut self, view: LexerView, lx: &mut Lexer) {
         let text = view.text();
         if text == "'use strict'" || text == "\"use strict\"" {
             self.strict = true;
@@ -86,19 +86,19 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn increase_template_depth(&mut self, view: LexerView) {
+    fn increase_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
         self.template_marks.push(self.interp_braces.len());
         resume ();
     }
 
-    fn decrease_template_depth(&mut self, view: LexerView) {
+    fn decrease_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
         if let Some(mark) = self.template_marks.pop() {
             self.interp_braces.truncate(mark);
         }
         resume ();
     }
 
-    fn start_template_string(&mut self, view: LexerView) {
+    fn start_template_string(&mut self, view: LexerView, lx: &mut Lexer) {
         self.interp_braces.push(0);
         resume ();
     }

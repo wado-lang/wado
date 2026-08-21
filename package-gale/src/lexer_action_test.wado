@@ -265,10 +265,37 @@ options { superClass = B; language = Wado; }
 A : 'a' { this.hit() } ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("fn hit(view: LexerView);"), "an action op returns unit";
+    assert src.contains("fn hit(view: LexerView, lx: &mut Lexer);"), "an action op returns unit and reaches the lexer";
     assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with (B, stores[lx])"), "the replay carries the base effect";
-    assert src.contains("B::hit(LexerView { chars, start, pos });"), "the action op is called from the replay";
+    assert src.contains("B::hit(LexerView { chars, start, pos }, lx);"), "the action op is called from the replay";
     assert src.contains("fn try_A(chars: &List<char>, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
+}
+
+test "a superClass action op reaches the lexer mode state" {
+    // ANTLRv4's LexerAdaptor shape: pop a mode, then branch on the remaining
+    // depth. The depth is a tokenize-loop local, so it rides on the `Lexer`.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : '[' { this.hit() } ;
+WS : ' ' -> skip ;
+mode Arg;
+C : ']' ;
+");
+    assert src.contains("fn mode(&self) -> i32 {"), "the base can read the current mode";
+    assert src.contains("fn mode_depth(&self) -> i32 {"), "the base can read the mode-stack depth";
+    assert src.contains("lexer.reset_actions(current_mode, mode_stack.len());"), "the mode state is seeded per token";
+    assert src.contains("self.act_mode_depth += 1;"), "push_mode keeps the depth the base reads consistent";
+    assert src.contains("self.act_mode_depth -= 1;"), "pop_mode keeps the depth the base reads consistent";
+}
+
+test "a modeless grammar keeps the mode-state surface off" {
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("fn mode_depth(&self)"), "no modes, no mode-state reads";
+    assert src.contains("lexer.reset_actions();"), "a modeless reset takes no mode state";
 }
 
 test "a superClass grammar's host-code action body is reported, not emitted" {

@@ -13,29 +13,35 @@ use antlr4 from "./grammars/ANTLRv4Lexer.g4"
         },
     };
 use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.g4";
-use { LexerAdaptor, LexerView } from "./grammars/ANTLRv4Lexer.g4";
+use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, MODE_Argument } from "./grammars/ANTLRv4Lexer.g4";
+use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
 
-// A hand-written stand-in for ANTLR's LexerAdaptor. The real adaptor drives the
-// lexer from these two ops — `handleBeginArgument` pushes the Argument mode and
-// calls `more()`, `handleEndArgument` pops it and retypes the token — and a
-// Gale base reaches none of that: an operation gets a read-only `LexerView`,
-// not the lexer's command surface, and the rule-type state it branches on needs
-// the `emit` / `nextToken` hooks (both open Stage C items, see TODO.md). This
-// port therefore only counts the ops, leaving `[ ... ]` bodies as the ordinary
-// DEFAULT-mode tokens they were before the base was wired.
+// A hand-written port of ANTLR's LexerAdaptor: these two ops drive the whole
+// `Argument` mode through the lexer command surface an action op reaches.
 struct Antlr4Base {
     begins: i32,
     ends: i32,
 }
 
 impl LexerAdaptor for Antlr4Base {
-    fn handle_begin_argument(&mut self, view: LexerView) {
+    // ANTLR branches here on `inLexerRule()`, which needs the rule-type state
+    // the `emit` / `nextToken` hooks carry (an open Stage C item, see TODO.md).
+    // Without it this always takes the parser-rule branch, so a lexer rule's
+    // `[...]` char set enters `Argument` rather than `LexerCharSet`.
+    fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.begins += 1;
+        lx.push_mode(MODE_Argument);
         resume ();
     }
 
-    fn handle_end_argument(&mut self, view: LexerView) {
+    fn handle_end_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.ends += 1;
+        lx.pop_mode();
+        // A nested `[` pushed another Argument mode, so the closing bracket of
+        // an inner pair is content, not the end of the argument list.
+        if lx.mode_depth() > 0 {
+            lx.set_type(TK_ARGUMENT_CONTENT);
+        }
         resume ();
     }
 }
@@ -176,9 +182,36 @@ test "the base's argument-bracket ops run on the winning tokens" {
         assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
     };
     assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
-    // END_ARGUMENT lives in the `Argument` mode, which nothing enters: only the
-    // adaptor's own `pushMode` would, and a base has no lexer command surface
-    // yet. So the closing bracket never reaches the base — flip this to 1 when
-    // that lands.
-    assert base.ends == 0, `expected 0 handleEndArgument, got ${base.ends}`;
+    assert base.ends == 1, `expected 1 handleEndArgument, got ${base.ends}`;
+}
+
+test "the base drives the Argument mode from handleBeginArgument" {
+    // The base pushes `Argument` on `[`, so the rule-argument body lexes as
+    // ARGUMENT_CONTENT rather than DEFAULT-mode grammar tokens.
+    let tokens = a4_tokenize(&"r[int x] : 'a' ;");
+    let mut content = 0;
+    let mut ends = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_ARGUMENT_CONTENT {
+            content += 1;
+        }
+        if tokens.kinds[i] == TK_END_ARGUMENT {
+            ends += 1;
+        }
+    }
+    assert content > 0, "the argument body must lex as ARGUMENT_CONTENT";
+    assert ends == 1, `expected 1 END_ARGUMENT, got ${ends}`;
+}
+
+test "a nested bracket retypes its closing bracket as content" {
+    // The inner `]` pops back into the outer Argument mode, where the base's
+    // depth check retypes it to content; only the outer one stays END_ARGUMENT.
+    let tokens = a4_tokenize(&"r[int[] a] : 'a' ;");
+    let mut ends = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_END_ARGUMENT {
+            ends += 1;
+        }
+    }
+    assert ends == 1, `expected 1 END_ARGUMENT, got ${ends}`;
 }
