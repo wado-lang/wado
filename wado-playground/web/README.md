@@ -87,6 +87,7 @@ Open the URL in a JSPI-capable browser and click **Run**.
 - **Compute + stdout/stderr only.** Programs that read files (`wasi:filesystem` /
   preopens) hang on a known jco async read-stream gap — same blocker as the Node
   jco pipeline (see `.claude/skills/jco`).
-- `wasi:http/service` programs don't transpile through released jco.
+- `wasi:http/service` programs transpile, but the page runs `run` exports only —
+  serving one needs a `fetch` harness the playground does not have.
 - Multi-file programs (relative `use "./x.wado"`) would need the host to feed
   those sources into `InMemoryCompilerHost`; the current UI compiles one file.

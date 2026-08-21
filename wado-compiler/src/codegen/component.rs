@@ -4304,11 +4304,12 @@ fn append_interface_instance_exports(
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 
     // Collect the named CM types a boundary type references, as
-    // `(cm_name, type-index)` re-export items in signature order, deduped by name.
+    // `(owning-interface, cm_name, type-index)` items in signature order,
+    // deduped by name.
     fn collect_type_items(
         ty: &CmExportType,
         ctx: &ComponentModelContext,
-        out: &mut Vec<(String, u32)>,
+        out: &mut Vec<(String, String, u32)>,
     ) {
         match ty {
             CmExportType::Unit => {}
@@ -4320,7 +4321,7 @@ fn append_interface_instance_exports(
                 cm_name,
                 is_resource,
             } => {
-                if out.iter().any(|(name, _)| name == cm_name) {
+                if out.iter().any(|(_, name, _)| name == cm_name) {
                     return;
                 }
                 let pkg = crate::world_registry::fq_name_package(interface_fq);
@@ -4330,7 +4331,7 @@ fn append_interface_instance_exports(
                 } else {
                     ctx.type_idx(&format!("{pkg}-{cm_name}"))
                 };
-                out.push((cm_name.clone(), idx));
+                out.push((interface_fq.clone(), cm_name.clone(), idx));
             }
             CmExportType::HandlerResult { ok, err } => {
                 collect_type_items(ok, ctx, out);
@@ -4362,12 +4363,23 @@ fn append_interface_instance_exports(
             // by `emit_world_exports` and recorded on the context.
             type_items.extend(ctx.lib_export_types().iter().cloned());
         } else {
+            // An interface exports the types it defines. One it `use`s from
+            // another interface stays that interface's, and re-exporting it
+            // here would register the same type under two owners — which a
+            // WIT decode of the component rejects.
+            let mut named: Vec<(String, String, u32)> = Vec::new();
             for export in group {
                 for (_, cm_ty) in &export.cm_params {
-                    collect_type_items(cm_ty, ctx, &mut type_items);
+                    collect_type_items(cm_ty, ctx, &mut named);
                 }
-                collect_type_items(&export.cm_result, ctx, &mut type_items);
+                collect_type_items(&export.cm_result, ctx, &mut named);
             }
+            type_items.extend(
+                named
+                    .into_iter()
+                    .filter(|(owner, _, _)| owner == fq)
+                    .map(|(_, name, idx)| (name, idx)),
+            );
         }
 
         let mut items: Vec<(&str, ComponentExportKind, u32)> = type_items

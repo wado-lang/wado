@@ -60,7 +60,7 @@ mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transp
 
 | Capability                   | Status                                                                                                                                               |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Transpile (GC component)     | ✅ works                                                                                                                                             |
+| Transpile (GC component)     | ✅ works, `wasi:http/service` included                                                                                                               |
 | JSPI                         | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
 | Wide-arithmetic component    | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
 | Future-end intrinsic classes | ❌ not emitted on the future-drop path → inject (post-process)                                                                                       |
@@ -86,7 +86,7 @@ runtime-affecting patches, so released jco can run what it otherwise can't:
 
 Not replicated: the async-non-void-export fix (fork patch #3). Void exports
 (`run`, `test` blocks) don't need it; result-returning async exports (HTTP
-`handle`) do — but those don't transpile through released jco yet anyway.
+`handle`) do, so running one needs the fork.
 
 ## wide-arithmetic (`-f no-wide-arithmetic`)
 
@@ -177,12 +177,6 @@ injection to a suspended read task), not the shim or a missing hook. Fixing it
 needs fork-level work on jco's async task/waitable machinery — bigger than the
 stdout write hook. The data-embedding workaround for benchmarks is deferred until
 jco's filesystem path works.
-
-### HTTP service (jco)
-
-`wasi:http/service` (async `handle` returning `Result`) does **not** transpile
-through released jco (`cannot represent this component in WIT: the type
-'request' appears more than once`) and is a separate server harness anyway.
 
 ## The fork path (`vendor/jco`)
 
