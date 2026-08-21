@@ -36,6 +36,9 @@ pub struct SuperOp {
     pub name: String,
     pub is_predicate: bool,
     pub has_args: bool,
+    /// The same name reached from both a predicate and an action body: the two
+    /// call forms differ, so one site would mismatch the operation's signature.
+    pub mixed_role: bool = false,
 }
 
 /// One `this.<method>(...)` call site found in a body.
@@ -201,21 +204,18 @@ fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
-/// role (predicate vs action). A later occurrence still contributes its
-/// `has_args`: one call site passing arguments makes the operation
-/// unrepresentable.
+/// role. A later occurrence still contributes `has_args` and `mixed_role`,
+/// either of which makes the operation unrepresentable.
 pub fn add_super_op(ops: &mut List<SuperOp>, call: &SuperCall, kind: &ActionKind) {
+    let is_predicate = kind matches { Predicate };
     for let mut i = 0; i < ops.len(); i += 1 {
         if ops[i].name == call.name {
             ops[i].has_args = ops[i].has_args || call.has_args;
+            ops[i].mixed_role = ops[i].mixed_role || ops[i].is_predicate != is_predicate;
             return;
         }
     }
-    ops.push(SuperOp {
-        name: call.name,
-        is_predicate: kind matches { Predicate },
-        has_args: call.has_args,
-    });
+    ops.push(SuperOp { name: call.name, is_predicate, has_args: call.has_args });
 }
 
 /// Operations called with arguments anywhere in the grammar. A base is wired
@@ -230,9 +230,20 @@ pub fn super_ops_with_args(ops: &List<SuperOp>) -> List<String> {
     return out;
 }
 
+/// A base is wired only when this is empty.
+pub fn super_ops_mixed_role(ops: &List<SuperOp>) -> List<String> {
+    let mut out: List<String> = [];
+    for let op of ops {
+        if op.mixed_role {
+            out.push(op.name);
+        }
+    }
+    return out;
+}
+
 /// Collect the superClass operations across a grammar's lexer rules: every
 /// distinct `this.<method>` call in an action / predicate body, in source
-/// order, deduped by name (first role wins).
+/// order, deduped by name.
 pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
     let mut ops: List<SuperOp> = [];
     for let rule of &grammar.lexer_rules {
@@ -321,7 +332,10 @@ fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool 
 /// unexecuted, each reported.
 pub fn superclass_is_refused(grammar: &Grammar) -> bool {
     return match superclass_base_name(grammar) {
-        Some(_) => !super_ops_with_args(&collect_lexer_super_ops(grammar)).is_empty(),
+        Some(_) => {
+            let ops = collect_lexer_super_ops(grammar);
+            !super_ops_with_args(&ops).is_empty() || !super_ops_mixed_role(&ops).is_empty();
+        },
         None => false,
     };
 }
@@ -440,27 +454,28 @@ fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
     }
 }
 
-/// Emit `interface Foo { ... }`, one operation per op. Each receives a
-/// `LexerView` (the match-window runtime handle); a predicate returns `bool`, an
-/// action returns unit. Names are snake_cased to match the call-site rewrite.
+/// Emit `interface Foo { ... }`, one operation per op. A predicate takes the
+/// read-only `LexerView` and returns `bool`; an action also takes the `Lexer`,
+/// for the command surface. Names are snake_cased to match the call rewrite.
 pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
     w.line(&`pub interface ${*name} {`);
     for let op of ops {
         if op.is_predicate {
             w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView) -> bool;`);
         } else {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView);`);
+            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer);`);
         }
     }
     w.line(&"}");
     w.blank();
 }
 
-/// The Wado expression `this.<method>(...)` lowers to: the ambient operation
-/// `Foo::<method>(LexerView { chars, start, pos })`, reading the match-fn locals
-/// in scope at every lexer action / predicate site. Arguments are dropped.
-pub fn super_call_expr(base_name: &String, method: &String) -> String {
-    return `${*base_name}::${to_snake_case(method)}(LexerView { chars, start, pos })`;
+/// The ambient operation call, reading the match-fn locals in scope at every
+/// lexer action / predicate site. An action also passes the replay fn's `lx`.
+/// Arguments are dropped.
+pub fn super_call_expr(base_name: &String, method: &String, is_action: bool) -> String {
+    let lx = if is_action { ", lx" } else { "" };
+    return `${*base_name}::${to_snake_case(method)}(LexerView { chars, start, pos }${lx})`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each
@@ -476,7 +491,7 @@ pub fn rewrite_superclass_calls(grammar: &mut Grammar, base_name: &String) {
 
 fn rewrite_lexer_alt(alt: &mut LexerAlternative, base_name: &String) {
     for let a of &mut alt.actions {
-        a.source.text = rewrite_this_calls(&a.source.text, base_name);
+        a.source.text = rewrite_this_calls(&a.source.text, base_name, a.kind matches { Action });
     }
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         alt.elements[i] = rewrite_lexer_elem(&alt.elements[i], base_name);
@@ -508,7 +523,7 @@ fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
 /// copying everything else verbatim and skipping string / comment spans so a
 /// `this.` inside host text is never rewritten. Call arguments are dropped
 /// (zero-argument today).
-pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
+pub fn rewrite_this_calls(body: &String, base_name: &String, is_action: bool) -> String {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(n + 8);
@@ -520,7 +535,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String) -> String {
             '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
             _ => match this_call_at(&chars, i, n) {
                 Some([method, close]) => {
-                    out.push_str(&super_call_expr(base_name, &method));
+                    out.push_str(&super_call_expr(base_name, &method, is_action));
                     close;
                 },
                 None => {

@@ -2292,17 +2292,17 @@ pub global TK_ERROR: i32 = 150;
 
 pub interface TypeScriptLexerBase {
     fn is_regex_possible(view: LexerView) -> bool;
-    fn process_open_brace(view: LexerView);
+    fn process_open_brace(view: LexerView, lx: &mut Lexer);
     fn is_in_template_string(view: LexerView) -> bool;
-    fn process_close_brace(view: LexerView);
+    fn process_close_brace(view: LexerView, lx: &mut Lexer);
     fn is_strict_mode(view: LexerView) -> bool;
-    fn process_string_literal(view: LexerView);
-    fn increase_template_depth(view: LexerView);
-    fn decrease_template_depth(view: LexerView);
-    fn start_template_string(view: LexerView);
+    fn process_string_literal(view: LexerView, lx: &mut Lexer);
+    fn increase_template_depth(view: LexerView, lx: &mut Lexer);
+    fn decrease_template_depth(view: LexerView, lx: &mut Lexer);
+    fn start_template_string(view: LexerView, lx: &mut Lexer);
 }
 
-struct Lexer {
+pub struct Lexer {
     chars: List<char>,
     pos: i32,
     act_output: String = "",
@@ -2313,6 +2313,7 @@ struct Lexer {
     act_push_mode: i32 = -1,
     act_pop_mode: bool = false,
     act_set_mode: i32 = -1,
+    act_mode_depth: i32 = 0,
 }
 
 impl Lexer {
@@ -2328,11 +2329,11 @@ impl Lexer {
         return LexerSlice::new(&self.chars, start, end);
     }
 
-    fn emit(&mut self, s: String) {
+    pub fn emit(&mut self, s: String) {
         self.act_output.push_str(&s);
     }
 
-    fn reset_actions(&mut self) {
+    fn reset_actions(&mut self, depth: i32) {
         self.act_type = -1;
         self.act_channel = -1;
         self.act_skip = false;
@@ -2340,34 +2341,44 @@ impl Lexer {
         self.act_push_mode = -1;
         self.act_pop_mode = false;
         self.act_set_mode = -1;
+        self.act_mode_depth = depth;
     }
 
-    fn set_type(&mut self, t: i32) {
+    pub fn set_type(&mut self, t: i32) {
         self.act_type = t;
     }
 
-    fn set_channel(&mut self, c: i32) {
+    pub fn set_channel(&mut self, c: i32) {
         self.act_channel = c;
     }
 
-    fn skip(&mut self) {
+    pub fn skip(&mut self) {
         self.act_skip = true;
     }
 
-    fn more(&mut self) {
+    pub fn more(&mut self) {
         self.act_more = true;
     }
 
-    fn push_mode(&mut self, m: i32) {
+    pub fn push_mode(&mut self, m: i32) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_push_mode = m;
+        self.act_mode_depth += 1;
     }
 
-    fn pop_mode(&mut self) {
+    pub fn pop_mode(&mut self) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_pop_mode = true;
+        self.act_mode_depth -= 1;
     }
 
-    fn set_mode(&mut self, m: i32) {
+    pub fn set_mode(&mut self, m: i32) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_set_mode = m;
+    }
+
+    pub fn mode_depth(&self) -> i32 {
+        return self.act_mode_depth;
     }
 }
 
@@ -2379,7 +2390,7 @@ fn apply_OpenBrace_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScrip
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '{' { return; }
     pos += 1;
-    TypeScriptLexerBase::process_open_brace(LexerView { chars, start, pos });
+    TypeScriptLexerBase::process_open_brace(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_CloseBrace_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
@@ -2387,13 +2398,13 @@ fn apply_CloseBrace_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScri
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '}' { return; }
     pos += 1;
-    TypeScriptLexerBase::process_close_brace(LexerView { chars, start, pos });
+    TypeScriptLexerBase::process_close_brace(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_StringLiteral_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
     let chars = &lx.chars;
     let pos = end;
-    TypeScriptLexerBase::process_string_literal(LexerView { chars, start, pos });
+    TypeScriptLexerBase::process_string_literal(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_BackTick_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
@@ -2401,7 +2412,7 @@ fn apply_BackTick_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScript
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '`' { return; }
     pos += 1;
-    TypeScriptLexerBase::increase_template_depth(LexerView { chars, start, pos });
+    TypeScriptLexerBase::increase_template_depth(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_BackTickInside_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
@@ -2409,7 +2420,7 @@ fn apply_BackTickInside_actions(lx: &mut Lexer, start: i32, end: i32) with (Type
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '`' { return; }
     pos += 1;
-    TypeScriptLexerBase::decrease_template_depth(LexerView { chars, start, pos });
+    TypeScriptLexerBase::decrease_template_depth(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_TemplateStringStartExpression_actions(lx: &mut Lexer, start: i32, end: i32) with (TypeScriptLexerBase, stores[lx]) {
@@ -2419,7 +2430,7 @@ fn apply_TemplateStringStartExpression_actions(lx: &mut Lexer, start: i32, end: 
     pos += 1;
     if pos >= chars.len() || chars[pos] != '{' { return; }
     pos += 1;
-    TypeScriptLexerBase::start_template_string(LexerView { chars, start, pos });
+    TypeScriptLexerBase::start_template_string(LexerView { chars, start, pos }, lx);
 }
 
 fn try_MultiLineComment(chars: &List<char>, start: i32) -> i32 {
@@ -6040,7 +6051,7 @@ pub fn tokenize(input: &String) -> TokenStream with TypeScriptLexerBase {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                lexer.reset_actions();
+                lexer.reset_actions(mode_stack.len());
                 if best_act == 0 {
                     apply_OpenBrace_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {
