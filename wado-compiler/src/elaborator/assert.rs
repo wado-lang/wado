@@ -246,8 +246,6 @@ fn is_inert(expr: &Expr) -> bool {
 struct Position {
     /// The condition itself, which `__cond` already holds.
     is_root: bool,
-    /// A bare `Ident` here may be a function-reference coercion site.
-    in_call_arg: bool,
     /// A short-circuit lies above, so the operand may go unevaluated.
     conditional: bool,
     /// Everything the condition evaluated before this operand is bound ahead of
@@ -290,9 +288,6 @@ struct CaptureScanner {
     ast_id_to_slot: IndexMap<AstId, usize>,
     /// The condition itself, which `__cond` already holds.
     is_root: bool,
-    /// A bare `Ident` here may be a function-reference coercion site, and a
-    /// binding would lose that context.
-    in_call_arg: bool,
     /// A short-circuit lies above, so the capture may go unevaluated.
     conditional: bool,
     /// Everything the condition has evaluated so far is bound ahead of it, so
@@ -307,7 +302,6 @@ impl CaptureScanner {
             slots: Vec::new(),
             ast_id_to_slot: IndexMap::default(),
             is_root: true,
-            in_call_arg: false,
             conditional: false,
             frontier_ok: true,
         }
@@ -343,11 +337,9 @@ impl CaptureScanner {
     fn scan(&mut self, expr: &Expr) {
         let ast_id = expr.id();
         let is_root = std::mem::replace(&mut self.is_root, false);
-        let in_call_arg = std::mem::replace(&mut self.in_call_arg, false);
         let conditional = self.conditional;
         let pos = Position {
             is_root,
-            in_call_arg,
             conditional,
             bindable: self.frontier_ok,
         };
@@ -378,16 +370,11 @@ impl CaptureScanner {
     fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
         let Position {
             is_root,
-            in_call_arg,
             conditional,
             bindable,
         } = *pos;
         match expr {
             Expr::Ident(ident) => {
-                if in_call_arg {
-                    // Function-reference coercion site — leave as-is.
-                    return;
-                }
                 self.add(ident.name.clone(), ast_id, true, bindable);
             }
             Expr::Binary(b) => {
@@ -410,15 +397,18 @@ impl CaptureScanner {
                 if is_inert(expr) {
                     return;
                 }
-                // `&fn_name` is the function-reference coercion, lost either way.
-                if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
-                    return;
-                }
                 // `&mut` needs a mutable lvalue; the binding is immutable.
                 if u.op == UnaryOp::MutRef {
                     return;
                 }
                 self.scan(&u.expr);
+                // `&fn_name` is the function-reference coercion, and a binding
+                // for the `&` node would lose it — the scan cannot tell it from
+                // `&value`. The operand under it is a place, so it renders on
+                // its own without a binding either way.
+                if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
+                    return;
+                }
                 if !is_root {
                     self.add(
                         unparse_expr_source(expr),
@@ -433,7 +423,6 @@ impl CaptureScanner {
                 // call into an indirect one.
                 self.frontier_ok = false;
                 for arg in &c.args {
-                    self.in_call_arg = true;
                     self.scan(arg);
                 }
                 self.add(
@@ -446,7 +435,6 @@ impl CaptureScanner {
             Expr::MethodCall(m) => {
                 self.scan_receiver(&m.receiver);
                 for arg in &m.args {
-                    self.in_call_arg = true;
                     self.scan(arg);
                 }
                 self.add(
@@ -459,7 +447,6 @@ impl CaptureScanner {
             Expr::StaticMethodCall(s) => {
                 self.frontier_ok = false;
                 for arg in &s.args {
-                    self.in_call_arg = true;
                     self.scan(arg);
                 }
                 self.add(
@@ -621,10 +608,20 @@ impl CaptureScanner {
                     );
                 }
             }
+            // A closure renders its signature, which is all `Inspect` has for
+            // one. Its body is not walked: a sub-expression there has no value
+            // at the moment the condition failed.
+            Expr::Closure(_) => {
+                self.add(
+                    unparse_expr_source(expr),
+                    ast_id,
+                    is_place_expr(expr),
+                    bindable,
+                );
+            }
             // Neither captured nor walked; the WEP's *Known gaps* has the
             // reason for each.
             Expr::Literal(_)
-            | Expr::Closure(_)
             | Expr::WithHandler(_)
             | Expr::Resume(_)
             | Expr::Spread(_, _)
