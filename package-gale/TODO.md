@@ -44,9 +44,10 @@ Gale still silently discards action / predicate contents on the **parser** side 
 
 Both call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass mechanism, not just action translation.
 
-- **The SuperClass effect interface.** Landed for lexer bases, predicate and action ops alike, including `language = Java`: `RustLexer`, `TypeScriptLexer` and `ANTLRv4Lexer` all tokenize through a hand-written `impl` (the ports live in their driver tests). An action op runs from the winner replay, so it never fires for a losing candidate, and a grammar whose action language Gale does not translate runs an action body only when it is nothing but base calls (`{this.m();}` — every real-world case); anything else is reported. See `action.md` ("SuperClass — an effect interface"). What is left before the two grammars behave as ANTLR4 does:
-  - **Lifecycle hooks** (`nextToken` / `emit`) for the last-token and current-rule state a base branches on — TypeScript's `IsRegexPossible`, ANTLRv4's rule-type tracking. Both ports approximate it from the match window instead; ANTLRv4's `handleBeginArgument` therefore always takes the parser-rule branch, so a lexer rule's `[...]` char set enters `Argument` rather than `LexerCharSet`.
-  - **The parser side**: parser-rule superClass predicates like `{this.NextGT()}?` are still discarded.
+The lexer half of that mechanism is in place — `action.md` ("SuperClass — an effect interface") is its design. What is left before the two grammars behave as ANTLR4 does:
+
+- **Lifecycle hooks** (`nextToken` / `emit`) for the last-token and current-rule state a base branches on — TypeScript's `IsRegexPossible`, ANTLRv4's rule-type tracking. Both ports approximate it from the match window instead; ANTLRv4's `handleBeginArgument` therefore always takes the parser-rule branch, so a lexer rule's `[...]` char set enters `Argument` rather than `LexerCharSet`.
+- **The parser side**: parser-rule superClass predicates like `{this.NextGT()}?` are still discarded.
 
 Then the paths that still warn — each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong:
 
