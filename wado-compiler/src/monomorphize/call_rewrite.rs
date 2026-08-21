@@ -75,7 +75,10 @@ impl Monomorphizer {
             let mangled = mangled.clone();
             return Some((key, mangled));
         }
-        let trait_decl = key.method_info.as_ref().and_then(LocalMethodName::trait_decl);
+        let trait_decl = key
+            .method_info
+            .as_ref()
+            .and_then(LocalMethodName::trait_decl);
         let trait_name = key
             .method_info
             .as_ref()

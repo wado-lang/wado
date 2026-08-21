@@ -1,7 +1,6 @@
 // A bound cannot write trait arguments, so it constrains only the positions
-// that declare a default. `trait Pick<K>` declares none, and `impl Pick<i32>`
-// answers `T: Pick`; requiring the defaulted form rejected every such impl,
-// `From` and `IndexValue` included.
+// that declare a default. `From<T>` and `IndexValue<I>` declare none, so
+// requiring the defaulted form rejected every impl of them.
 use { println } from "core:cli";
 
 struct Cm {
@@ -26,9 +25,16 @@ impl IndexValue<i32> for Bag {
     }
 }
 
+// The impl's own arguments are not what the bound names, so `Output` still
+// answers the bound's constraint.
+fn width<T: IndexValue<Output = i32>>(x: &T) -> i32 {
+    return 1;
+}
+
 export fn run() with Stdout {
     let c: Cm = Cm::from(7);
     let b = Bag { xs: [1, 2, 3] };
+    assert width(&b) == 1;
     assert c.v == 7;
     assert b[1] == 2;
     println(`${c.v} ${b[1]}`);

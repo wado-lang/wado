@@ -1063,7 +1063,12 @@ pub(crate) fn blanket_dispatch_for(
                 // Substituting a pack needs interning, so a mutable table.
                 // Record it here, the one place that has one; later readers
                 // hold a shared borrow.
-                tt.register_assoc_type_resolution(type_id, bound_trait, assoc, projected);
+                tt.register_assoc_type_resolution(
+                    type_id,
+                    crate::tir::TraitRef::bare(bound_trait),
+                    assoc,
+                    projected,
+                );
                 impl_type_args.push(projected);
             }
         }

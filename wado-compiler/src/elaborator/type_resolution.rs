@@ -10,6 +10,10 @@ use super::Elaborator;
 use super::types::TypeError;
 use crate::symbol::SymbolKind;
 
+/// A bound reachable from a frame, paired with the trait that wrote it —
+/// `None` for one the frame wrote itself.
+type FrameBound = (crate::ast::TraitBound, Option<crate::defs::DefId>);
+
 /// Substitute named type parameters in an AST type.
 /// `params[i]` is replaced by `args[i]` throughout the type.
 pub(super) fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
@@ -165,16 +169,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// The trait arguments an impl writes beyond the declared defaults, as the
-    /// identity its associated types register under. `Rhs = Self` makes
-    /// `impl Add<Cm> for Cm` the defaulted instantiation a bare bound reaches,
-    /// while `impl Add<Inch> for Cm` keys its own.
-    pub(super) fn non_default_trait_args(
+    /// The identity an impl header names: the trait, plus the arguments it
+    /// writes beyond the declared defaults. `Rhs = Self` makes
+    /// `impl Add<Cm> for Cm` the bare instantiation a bound reaches, while
+    /// `impl Add<Inch> for Cm` keys its own.
+    pub(super) fn impl_trait_ref(
         &mut self,
         trait_type: &crate::ast::Type,
         target: &crate::ast::Type,
         trait_decl: crate::defs::DefId,
-    ) -> Vec<TypeId> {
+    ) -> crate::tir::TraitRef {
         let Some(params) = self
             .tysys
             .trait_env
@@ -182,7 +186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(&trait_decl)
             .map(|header| header.type_params.clone())
         else {
-            return Vec::new();
+            return crate::tir::TraitRef::bare(trait_decl);
         };
         let kept = super::trait_env::non_default_arg_count(
             trait_type,
@@ -195,11 +199,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(ns) => ns.args.clone(),
             _ => Vec::new(),
         };
-        written
+        let args = written
             .iter()
             .take(kept)
             .map(|arg| self.resolve_type(arg))
-            .collect()
+            .collect();
+        crate::tir::TraitRef::new(trait_decl, args)
     }
 
     /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
@@ -215,23 +220,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
-        let declaring: Vec<String> = bounds
+        let declaring: Vec<&crate::ast::TraitBound> = bounds
             .iter()
             .filter(|bound| {
                 self.trait_assoc_type_decl(&bound.name, assoc_name)
                     .is_some()
             })
-            .map(|bound| bound.name.clone())
             .collect();
-        // Two bounds *binding* it are the same coin toss as two declaring it,
-        // and `T: Add<Output = Cm> + Mul<Output = Area>` does both.
         if declaring.len() < 2 {
+            return false;
+        }
+        // Bounds that all pin the name to one type name one answer between
+        // them: `T: Add<Output = T> + Mul<Output = T>` is not a coin toss,
+        // where `Add<Output = Cm> + Mul<Output = Area>` is.
+        let pins: Vec<Option<crate::name::FqTypeName>> = declaring
+            .iter()
+            .map(|bound| {
+                bound
+                    .assoc_types
+                    .iter()
+                    .find(|constraint| constraint.name == assoc_name)
+                    .map(|constraint| {
+                        super::trait_env::written_type_arg(&constraint.ty, &self.tysys.resolutions)
+                    })
+            })
+            .collect();
+        if pins.iter().all(|pin| pin.is_some() && *pin == pins[0]) {
             return false;
         }
         let _ = self.emit(TypeError::AmbiguousAssocType {
             assoc: assoc_name.to_string(),
             param: param_name.to_string(),
-            traits: declaring,
+            traits: declaring.iter().map(|bound| bound.name.clone()).collect(),
             span,
         });
         true
@@ -829,28 +849,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Every bound on `base_name` a projection may be answered from: the ones
-    /// the frame wrote and the ones they inherit. A supertrait binds an
-    /// associated type too — `trait Scalar: Mul<Output = Self>` answers
-    /// `T::Output` for `T: Scalar` — so one walk serves every lookup.
-    fn bound_closure_of(&mut self, base_name: &str) -> Option<Vec<crate::ast::TraitBound>> {
+    /// Every bound on `base_name` a projection may be answered from, each
+    /// paired with the trait that wrote it: the ones the frame wrote itself
+    /// (`None`) and the ones they inherit. A supertrait binds an associated
+    /// type too — `trait Scalar: Mul<Output = Self>` answers `T::Output` for
+    /// `T: Scalar` — so one walk serves every lookup.
+    fn bound_closure_of(&mut self, base_name: &str) -> Option<Vec<FrameBound>> {
         let bounds = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(base_name)?
             .clone();
-        let inherited: Vec<crate::ast::TraitBound> = bounds
+        let inherited: Vec<FrameBound> = bounds
             .iter()
             .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
             .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
-            .map(|i| i.bound)
+            .map(|i| (i.bound, Some(i.writer)))
             .collect();
-        Some(bounds.into_iter().chain(inherited).collect())
+        Some(
+            bounds
+                .into_iter()
+                .map(|bound| (bound, None))
+                .chain(inherited)
+                .collect(),
+        )
+    }
+
+    /// Whether the asking frame can answer `ty` at all. An inherited bound
+    /// means what its writer's frame says, and a bound writes no trait
+    /// arguments, so `trait Foo<A>: Bar<Item = A>` leaves `T::Item` abstract
+    /// for `T: Foo` rather than binding it to whatever the asking frame spells
+    /// `A`. `Self` is the exception, being the bounded type here.
+    fn frame_can_answer(&self, writer: Option<crate::defs::DefId>, ty: &crate::ast::Type) -> bool {
+        let Some(header) = writer.and_then(|w| self.tysys.trait_env.trait_decl_headers.get(&w))
+        else {
+            return true;
+        };
+        let mut mentioned = Vec::new();
+        ty.mentioned_names(&mut mentioned);
+        !header
+            .type_params
+            .iter()
+            .any(|param| mentioned.contains(&param.name))
     }
 
     /// What every bound in the closure binds `assoc` to, paired with the
-    /// bound's spelling.
+    /// bound's spelling. A binding the asking frame cannot answer is dropped.
     fn frame_assoc_bindings_of(
         &mut self,
         base_name: &str,
@@ -859,11 +904,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.bound_closure_of(base_name)
             .unwrap_or_default()
             .iter()
-            .flat_map(|bound| {
+            .flat_map(|(bound, writer)| {
                 bound
                     .assoc_types
                     .iter()
-                    .filter(|b| b.name == assoc)
+                    .filter(|b| b.name == assoc && self.frame_can_answer(*writer, &b.ty))
                     .map(|b| (bound.name.clone(), b.ty.clone()))
             })
             .collect()
@@ -924,11 +969,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bounds = self.bound_closure_of(base_name)?;
         let written = bounds
             .into_iter()
-            .find_map(|bound| {
+            .find_map(|(bound, writer)| {
                 let fq = self.fq_trait_name_at(bound.id, &bound.name);
                 (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
                     .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                     .flatten()
+                    .filter(|b| self.frame_can_answer(writer, &b.ty))
             })?
             .ty;
         Some(self.resolve_bound_binding(base_name, &written))

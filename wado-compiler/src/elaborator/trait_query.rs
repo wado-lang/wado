@@ -1072,7 +1072,7 @@ impl TypeSystem {
             .param_types
             .iter()
             .chain(sig.decl.return_type.iter())
-            .any(|t| table.mentions_slot(*t, 0));
+            .any(|t| table.contains_type_param_index(*t, 0));
         in_types
             || sig.own_params.iter().any(|p| {
                 p.bounds
@@ -2427,9 +2427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Resolve and register each associated type in this substituted context
-            let trait_key = info.trait_key;
-            let trait_args =
-                scope.non_default_trait_args(&info.trait_type, &info.target, trait_key);
+            let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);
             for binding in &info.assoc_types {
                 let resolved_id = scope.resolve_type(&binding.ty);
                 if !scope
@@ -2442,10 +2440,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .register_assoc_type_resolution_of_args(
+                        .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_key,
-                            trait_args.clone(),
+                            trait_ref.clone(),
                             binding.name.clone(),
                             resolved_id,
                         );
@@ -2547,7 +2544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            trait_key,
+                            crate::tir::TraitRef::bare(trait_key),
                             binding.name.clone(),
                             resolved_id,
                         );

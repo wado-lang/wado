@@ -107,7 +107,7 @@ this.
 
 - [x] Recognise a compiler item by `DefId`, and drop `trait_name: &str` from the
       satisfaction path.
-- [ ] `TraitRef` at every bound, replacing the `(DefId, Vec<TypeId>)` pairs
+- [x] `TraitRef` at every bound, replacing the `(DefId, Vec<TypeId>)` pairs
       threaded by hand.
 - [ ] `solve` returning `Solution`; associated types and methods read off it.
 - [ ] Frames on obligations.

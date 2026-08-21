@@ -1,0 +1,35 @@
+// Two bounds declaring `Output` are a coin toss only when they bind it
+// differently. Both pinning it to `T` names one answer between them, and
+// reporting them ambiguous rejected `T: Add<Output = T> + Mul<Output = T>`.
+use { println } from "core:cli";
+
+struct Cm {
+    v: i32,
+}
+
+impl Add for Cm {
+    type Output = Cm;
+
+    fn add(&self, rhs: &Cm) -> Cm {
+        return Cm { v: self.v + rhs.v };
+    }
+}
+
+impl Mul for Cm {
+    type Output = Cm;
+
+    fn mul(&self, rhs: &Cm) -> Cm {
+        return Cm { v: self.v * rhs.v };
+    }
+}
+
+fn poly<T: Add<Output = T> + Mul<Output = T>>(a: T, b: T) -> T::Output {
+    return a * b + a;
+}
+
+export fn run() with Stdout {
+    println(`${poly(Cm { v: 2 }, Cm { v: 3 }).v}`);
+}
+
+__DATA__
+{"stdout": "8\n"}

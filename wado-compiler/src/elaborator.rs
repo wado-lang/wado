@@ -1918,18 +1918,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 else {
                     continue;
                 };
+                let trait_ref = impl_block.trait_type.as_ref().map_or_else(
+                    || crate::tir::TraitRef::bare(trait_key),
+                    |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
+                );
                 if is_concrete {
-                    let trait_args = impl_block.trait_type.as_ref().map_or_else(Vec::new, |t| {
-                        scope.non_default_trait_args(t, &impl_block.ty, trait_key)
-                    });
                     scope
                         .tysys
                         .type_table
                         .borrow_mut()
-                        .register_assoc_type_resolution_of_args(
+                        .register_assoc_type_resolution(
                             target_type_id,
-                            trait_key,
-                            trait_args,
+                            trait_ref,
                             binding.name.clone(),
                             type_id,
                         );
@@ -1938,18 +1938,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // can resolve associated types for GenericInstance types.
                     let base_decl = scope.tysys.type_table.borrow().decl_of_type(target_type_id);
                     if let Some(base_decl) = base_decl {
-                        let trait_args =
-                            impl_block.trait_type.as_ref().map_or_else(Vec::new, |t| {
-                                scope.non_default_trait_args(t, &impl_block.ty, trait_key)
-                            });
                         scope
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .register_generic_assoc_type_def_of_args(
+                            .register_generic_assoc_type_def(
                                 base_decl,
-                                trait_key,
-                                trait_args,
+                                trait_ref,
                                 binding.name.clone(),
                                 type_id,
                             );

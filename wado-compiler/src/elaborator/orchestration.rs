@@ -3488,7 +3488,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_key,
+                            crate::tir::TraitRef::bare(trait_key),
                             binding.name.clone(),
                             type_param_id,
                         );

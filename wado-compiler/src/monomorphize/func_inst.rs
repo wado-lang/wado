@@ -174,7 +174,7 @@ pub(super) fn blanket_pack_dispatch_args(
         match source {
             BlanketParamSource::Receiver => out.push(receiver),
             BlanketParamSource::Projection(bound_trait, assoc) => {
-                out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
+                out.push(type_table.resolve_assoc_type_of_trait(receiver, &bound_trait, &assoc)?);
             }
             BlanketParamSource::Unresolved => return None,
         }
@@ -3338,7 +3338,7 @@ impl Monomorphizer {
                     // shared borrow and cannot substitute, sees the same answer.
                     type_table.register_assoc_type_resolution(
                         recv_inner,
-                        *bound_trait,
+                        crate::tir::TraitRef::bare(*bound_trait),
                         assoc.clone(),
                         pack,
                     );

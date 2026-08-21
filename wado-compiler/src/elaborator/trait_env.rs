@@ -509,10 +509,16 @@ pub(super) type TraitDeclIndex = IndexSet<DefId>;
 
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
+///
+/// `writer` is the trait whose declaration listed it. A bound means what its
+/// writer's frame says, so `trait Foo<A>: Bar<Item = A>` binds `Item` to
+/// `Foo`'s `A` and to nothing an asking frame happens to spell the same
+/// (WEP 2026-08-21).
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
     pub(super) decl: DefId,
+    pub(super) writer: DefId,
 }
 
 /// Pre-built index: trait declaration → the transitive closure of its
@@ -1399,15 +1405,6 @@ impl TraitEnv {
         self.decls_by_name.get(name).into_iter().flatten().copied()
     }
 
-    /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
-    /// blanket impl and for a receiver no concrete impl represents (an
-    /// anonymous function type whose `Inspect` synthesis auto-derives
-    /// per-module).
-    ///
-    /// The AST layer answers first: it holds the impls a module wrote, and the
-    /// synthesis layer records both receiver namespaces, so preferring it would
-    /// return a different module. When several modules implement the trait for
-    /// same-named receivers, `type_module` picks the entry whose module matches.
     /// The trait `header` implements, named as a bound can reach it. See
     /// [`args_without_declared_defaults`] for why an argument may drop out.
     pub(super) fn fq_trait_of_impl(
@@ -1446,6 +1443,15 @@ impl TraitEnv {
         fq.with_args(args)
     }
 
+    /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
+    /// blanket impl and for a receiver no concrete impl represents (an
+    /// anonymous function type whose `Inspect` synthesis auto-derives
+    /// per-module).
+    ///
+    /// The AST layer answers first: it holds the impls a module wrote, and the
+    /// synthesis layer records both receiver namespaces, so preferring it would
+    /// return a different module. When several modules implement the trait for
+    /// same-named receivers, `type_module` picks the entry whose module matches.
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
@@ -2009,6 +2015,7 @@ fn expand_supertraits(
             &InheritedBound {
                 bound: direct.clone(),
                 decl: super_loc,
+                writer: loc,
             },
         );
         for inherited in expand_supertraits(
