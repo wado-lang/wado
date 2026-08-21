@@ -992,15 +992,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if unary.op == UnaryOp::MutRef
             && matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
+            && self.is_replace_on_assign_place_type(expr_type)
         {
-            if self.is_replace_on_assign_place_type(expr_type) {
-                let _ = self.emit(TypeError::CannotAssign {
-                    message: format!(
-                        "cannot take a mutable reference to {REPLACE_ON_ASSIGN_PLACE}"
-                    ),
-                    span: unary.span,
-                });
-            }
+            let _ = self.emit(TypeError::CannotAssign {
+                message: format!("cannot take a mutable reference to {REPLACE_ON_ASSIGN_PLACE}"),
+                span: unary.span,
+            });
         }
 
         // Unary trait operators (`-x`, `~x`) dispatch through the same
