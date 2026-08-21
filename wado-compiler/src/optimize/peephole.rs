@@ -20,6 +20,7 @@ use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sr
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
+use super::tuple_projection::TupleProjectionRule;
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
@@ -54,6 +55,7 @@ pub(super) fn run_peephole(
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
+    let tuple_projection_rule = TupleProjectionRule;
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -139,6 +141,7 @@ pub(super) fn run_peephole(
             &elide_rule,
             &const_fold_rule,
             &branch_prune_rule,
+            &tuple_projection_rule,
         ]);
         if let Some(push_rule) = push_rule.as_ref() {
             rules.push(push_rule);

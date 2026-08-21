@@ -38,6 +38,8 @@ use {
     SerializeErrorKind,
     DeserializeError,
     DeserializeErrorKind,
+    deeper,
+    DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
 #[synopsis]
@@ -774,11 +776,6 @@ pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, Serialize
     return Result::Ok(buf as ByteList);
 }
 
-// Maximum nesting depth for arrays/maps/tags. A bounded recursion guard
-// (RFC 8949 §10): a small header can claim deeply nested structure, so the
-// decoder caps the depth rather than exhausting the native stack.
-global MAX_DEPTH: i32 = 256;
-
 /// Reconstruct `2^e` exactly as an `f64` by writing its IEEE-754 exponent
 /// field directly. Used by the binary16 widening path; `e` stays within the
 /// normal `f64` exponent range there, so the result is exact.
@@ -837,7 +834,10 @@ fn is_passthrough_tag(tag: u64) -> bool {
 pub struct CborDeserializer {
     input: ByteSlice,
     pos: i32,
-    depth: i32,
+    /// Nesting level of the item being read. A one-byte header can claim deep
+    /// structure (RFC 8949 §10), so a CBOR bomb is compact.
+    depth: i32 = 0,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
     strict: bool,
 }
 
@@ -860,16 +860,8 @@ impl CborDeserializer {
         return Result::Ok(self.input.get_unchecked(self.pos));
     }
 
-    fn enter(&mut self) -> Result<(), DeserializeError> {
-        self.depth += 1;
-        if self.depth > MAX_DEPTH {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::malformed(
-                "maximum nesting depth exceeded",
-                self.pos as i64,
-            ));
-        }
-        return Result::Ok(());
+    fn inner_depth(&self) -> Result<i32, DeserializeError> {
+        return deeper(self.depth, self.max_depth, self.pos as i64);
     }
 
     /// Read `n` big-endian bytes into a `u64` (the argument of a head). A single
@@ -1192,31 +1184,23 @@ impl CborDeserializer {
     }
 
     /// One step of a container walk, shared by the seq / map / struct accesses.
-    /// Returns `true` when the container is exhausted — consuming an indefinite
-    /// container's break and balancing the depth taken by `enter`. On `false`
-    /// the caller consumes one element; a definite container's caller then
-    /// decrements its own `remaining`. (A bare `bool` rather than a
-    /// `[bool, i64]` pair keeps the hottest decode loop allocation-free.)
+    /// `true` when exhausted, consuming an indefinite container's break; on
+    /// `false` the caller consumes one element and decrements a definite count.
     fn container_step(&mut self, remaining: i64, indef: bool) -> Result<bool, DeserializeError> {
         if indef {
             if self.peek_byte()? == BREAK {
                 self.pos += 1;
-                self.depth -= 1;
                 return Result::Ok(true);
             }
             return Result::Ok(false);
         }
-        if remaining <= 0 {
-            self.depth -= 1;
-            return Result::Ok(true);
-        }
-        return Result::Ok(false);
+        return Result::Ok(remaining <= 0);
     }
 
     /// Skip one well-formed item (RFC 8949 §4.1), for unknown struct fields and
     /// for capturing the raw bytes of an unrepresentable item. Skipping checks
     /// only well-formedness, never validity (so it does not UTF-8-validate).
-    fn skip_item(&mut self) -> Result<(), DeserializeError> {
+    fn skip_item(&mut self, depth: i32) -> Result<(), DeserializeError> {
         let [major, ai, arg, indef] = self.read_head()?;
         match major {
             MAJOR_UINT | MAJOR_NINT => {
@@ -1238,48 +1222,48 @@ impl CborDeserializer {
                 return self.skip_string_raw(arg, indef, major);
             },
             MAJOR_TAG => {
-                return self.skip_item();
+                return self.skip_item(depth);
             },
             MAJOR_ARRAY => {
-                self.enter()?;
+                // The threaded `depth`, not `self.depth`: skipping does not
+                // move the deserializer's level.
+                let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 if indef {
                     loop {
                         if self.peek_byte()? == BREAK {
                             self.pos += 1;
                             break;
                         }
-                        self.skip_item()?;
+                        self.skip_item(inner)?;
                     }
                 } else {
                     let mut i: u64 = 0;
                     while i < arg {
-                        self.skip_item()?;
+                        self.skip_item(inner)?;
                         i += 1;
                     }
                 }
-                self.depth -= 1;
                 return Result::Ok(());
             },
             MAJOR_MAP => {
-                self.enter()?;
+                let inner = deeper(depth, self.max_depth, self.pos as i64)?;
                 if indef {
                     loop {
                         if self.peek_byte()? == BREAK {
                             self.pos += 1;
                             break;
                         }
-                        self.skip_item()?;
-                        self.skip_item()?;
+                        self.skip_item(inner)?;
+                        self.skip_item(inner)?;
                     }
                 } else {
                     let mut i: u64 = 0;
                     while i < arg {
-                        self.skip_item()?;
-                        self.skip_item()?;
+                        self.skip_item(inner)?;
+                        self.skip_item(inner)?;
                         i += 1;
                     }
                 }
-                self.depth -= 1;
                 return Result::Ok(());
             },
             _ => {
@@ -1313,28 +1297,32 @@ impl CborDeserializer {
 
 struct CborSeqAccess {
     de: &mut CborDeserializer,
+    depth: i32,
     remaining: i64,
     indef: bool,
-    /// Whether `at_end` already saw the array's end (and balanced the depth).
-    /// Fixed-arity consumers (tuples) stop calling `next_element` before the
-    /// end, so `end` finishes the array itself when this is still false.
+    /// Whether `at_end` already saw the array's end. Fixed-arity consumers
+    /// (tuples) stop calling `next_element` before the end, so `end` finishes
+    /// the array itself when this is still false.
     done: bool,
 }
 
 struct CborMapAccess {
     de: &mut CborDeserializer,
+    depth: i32,
     remaining: i64,
     indef: bool,
 }
 
 struct CborStructAccess {
     de: &mut CborDeserializer,
+    depth: i32,
     remaining: i64,
     indef: bool,
 }
 
 struct CborVariantAccess {
     de: &mut CborDeserializer,
+    depth: i32,
     variant: String,
     is_map: bool,
     indef: bool,
@@ -1357,6 +1345,7 @@ impl DeserializeSeq for CborSeqAccess {
         if self.at_end()? {
             return Result::Ok(null);
         }
+        self.de.depth = self.depth;
         let v = T::deserialize(self.de)?;
         return Result::Ok(Option::Some(v));
     }
@@ -1384,7 +1373,6 @@ impl DeserializeSeq for CborSeqAccess {
                 self.de.pos as i64,
             ));
         }
-        self.de.depth -= 1;
         return Result::Ok(());
     }
 }
@@ -1402,6 +1390,7 @@ impl DeserializeMap for CborMapAccess {
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        self.de.depth = self.depth;
         return V::deserialize(self.de);
     }
 
@@ -1445,11 +1434,12 @@ impl DeserializeStruct for CborStructAccess {
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        self.de.depth = self.depth;
         return T::deserialize(self.de);
     }
 
     fn skip(&mut self) -> Result<(), DeserializeError> {
-        return self.de.skip_item();
+        return self.de.skip_item(self.depth);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -1472,6 +1462,7 @@ impl DeserializeVariant for CborVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        self.de.depth = self.depth;
         return T::deserialize(self.de);
     }
 
@@ -1493,8 +1484,6 @@ impl DeserializeVariant for CborVariantAccess {
                 }
                 self.de.pos += 1;
             }
-            // Balance the `enter` taken for a payload-carrying variant map.
-            self.de.depth -= 1;
         }
         return Result::Ok(());
     }
@@ -1863,15 +1852,10 @@ impl Deserializer for CborDeserializer {
         }
     }
 
-    /// Open a definite/indefinite container of the expected major type,
-    /// transparently unwrapping any self-described prefix and entering the
-    /// depth guard. Returns `[remaining, indef]` for the access to carry
-    /// (`remaining` is `-1` for an indefinite container).
-    ///
-    /// `expected` is the type-mismatch diagnostic, passed by reference (a
-    /// module-global constant) so the common success path allocates nothing;
-    /// the message is only copied on the cold error path.
-    fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool], DeserializeError> {
+    /// Open a container of the expected major type, unwrapping any
+    /// self-described prefix. `remaining` is `-1` when indefinite; `expected`
+    /// is the type-mismatch diagnostic, by reference so success allocates none.
+    fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool, i32], DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             if major == MAJOR_TAG && arg == TAG_SELF_DESCRIBED {
@@ -1881,20 +1865,20 @@ impl Deserializer for CborDeserializer {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::unexpected_type(*expected, self.pos as i64));
             }
-            self.enter()?;
+            let depth = self.inner_depth()?;
             let remaining: i64 = if indef { -1 } else { arg as i64 };
-            return Result::Ok([remaining, indef]);
+            return Result::Ok([remaining, indef, depth]);
         }
     }
 
     fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self] {
-        let [remaining, indef] = self.begin_container(MAJOR_ARRAY, &MSG_EXPECTED_ARRAY)?;
-        return Result::Ok(CborSeqAccess { de: self, remaining, indef, done: false });
+        let [remaining, indef, depth] = self.begin_container(MAJOR_ARRAY, &MSG_EXPECTED_ARRAY)?;
+        return Result::Ok(CborSeqAccess { de: self, depth, remaining, indef, done: false });
     }
 
     fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self] {
-        let [remaining, indef] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP)?;
-        return Result::Ok(CborMapAccess { de: self, remaining, indef });
+        let [remaining, indef, depth] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP)?;
+        return Result::Ok(CborMapAccess { de: self, depth, remaining, indef });
     }
 
     fn begin_struct(
@@ -1902,8 +1886,8 @@ impl Deserializer for CborDeserializer {
         name: &String,
         num_fields: i32,
     ) -> Result<CborStructAccess, DeserializeError> with stores[self] {
-        let [remaining, indef] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP_FOR_STRUCT)?;
-        return Result::Ok(CborStructAccess { de: self, remaining, indef });
+        let [remaining, indef, depth] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP_FOR_STRUCT)?;
+        return Result::Ok(CborStructAccess { de: self, depth, remaining, indef });
     }
 
     fn begin_variant(
@@ -1919,7 +1903,8 @@ impl Deserializer for CborDeserializer {
                 },
                 MAJOR_TEXT => {
                     let name = self.read_text_body(arg, indef)?;
-                    return Result::Ok(CborVariantAccess { de: self, variant: name, is_map: false, indef: false });
+                    let depth = self.depth;
+                    return Result::Ok(CborVariantAccess { de: self, depth, variant: name, is_map: false, indef: false });
                 },
                 MAJOR_MAP => {
                     // External tagging encodes a payload-carrying variant as a map
@@ -1935,12 +1920,10 @@ impl Deserializer for CborDeserializer {
                             self.pos as i64,
                         ));
                     }
-                    // The map may nest (recursive variants), so bound the depth
-                    // like other containers (RFC 8949 §10). The matching decrement
-                    // is in `end`.
-                    self.enter()?;
+                    // The map may nest (recursive variants).
+                    let depth = self.inner_depth()?;
                     let key = self.deserialize_string()?;
-                    return Result::Ok(CborVariantAccess { de: self, variant: key, is_map: true, indef });
+                    return Result::Ok(CborVariantAccess { de: self, depth, variant: key, is_map: true, indef });
                 },
                 _ => {
                     builtin::cold_path();
@@ -2029,7 +2012,8 @@ impl Deserializer for CborDeserializer {
                         builtin::cold_path();
                         return Result::Err(DeserializeError::unexpected_type("unknown CBOR tag", start as i64));
                     }
-                    self.skip_item()?;
+                    // A tag opens no container, so its content is at this level.
+                    self.skip_item(self.depth)?;
                     return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
                 },
                 // major == MAJOR_SIMPLE (7), the only remaining 3-bit value.
@@ -2077,20 +2061,18 @@ impl Deserializer for CborDeserializer {
     }
 }
 
-/// Deserialize a value from CBOR — the primary entry point.
-///
-/// Accepts any byte source via `AsByteSlice` (`ByteList`, `ByteArray`,
-/// `ByteSlice`, or a `String`'s bytes), scanned directly with no copy. Decoding
-/// is variation-tolerant (RFC 8949 §4.1): any well-formed encoding is accepted.
-///
-/// `strict` (default `true`) rejects items the target cannot represent; set
-/// `strict = false` only when deserializing into `core:value`'s `Value`, where
-/// unrepresentable items fall to `Value::Unknown` instead of erroring.
-pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true) -> Result<T, DeserializeError> {
+/// Deserialize a value from CBOR — the primary entry point. Accepts any
+/// `AsByteSlice` source with no copy. `strict` rejects items the target cannot
+/// represent; `max_depth` bounds nesting, raised only for a trusted source.
+pub fn from_bytes<T: Deserialize, B: AsByteSlice>(
+    input: B,
+    strict: bool = true,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
     let mut de = CborDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
-        depth: 0,
+        max_depth,
         strict,
     };
     let v = T::deserialize(&mut de)?;

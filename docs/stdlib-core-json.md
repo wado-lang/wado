@@ -60,20 +60,16 @@ Serializes a value to a pretty JSON string. Convenience over
 
 `trailing_char`, when `Some`, is appended after the value.
 
-### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
+### `pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from a JSON string. Convenience wrapper over
 `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
 
-### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError>`
+### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from UTF-8 JSON bytes — the primary entry point.
-
-Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
-`ByteSlice`, or a `String` (its UTF-8 bytes). The deserializer scans the
-input bytes in place; every string token is validated as UTF-8 (RFC 8259
-§8.1) — skipped and key tokens included — reporting invalid bytes as
-`MalformedInput`.
+Accepts any `AsByteSlice` source, scanned in place; every string token is
+validated as UTF-8 (RFC 8259 §8.1). `max_depth` bounds nesting.
 
 ### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 
@@ -191,6 +187,13 @@ _Fields are private._
 
 #### `pos: i32`
 
+#### `depth: i32`
+
+Nesting level of the value being read. Each access re-asserts its own
+level before descending, so it never needs unwinding.
+
+#### `max_depth: i32`
+
 #### `pub fn peek(&self) -> i32`
 
 #### `pub fn advance(&mut self)`
@@ -239,7 +242,7 @@ Skips a string token without allocating. Shares `scan_string_run` with
 the reading path, so a skipped string is held to the same UTF-8 rule as
 a materialized one.
 
-#### `pub fn skip_value(&mut self) -> Result<(), DeserializeError>`
+#### `pub fn skip_value(&mut self, depth: i32) -> Result<(), DeserializeError>`
 
 Skips the next JSON value without allocating.
 

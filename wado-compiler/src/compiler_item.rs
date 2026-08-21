@@ -385,6 +385,8 @@ pub enum CompilerItem {
     ReflectStructFromFields,
     /// `ReflectStruct::defaults` — the declared field defaults as `[..Option<F>]`.
     ReflectStructDefaults,
+    /// `ReflectStruct::empty_slots` — `[..Option<F>]` with every slot empty.
+    ReflectStructEmptySlots,
     /// `ReflectStruct::wire_name_policy` — the struct's `#[wire(name_policy)]` policy.
     ReflectStructWireNamePolicy,
     /// `Member::name` — the member's source field name.
@@ -643,6 +645,7 @@ impl CompilerItem {
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
         Self::ReflectStructDefaults,
+        Self::ReflectStructEmptySlots,
         Self::ReflectStructWireNamePolicy,
         Self::MemberName,
         Self::MemberWireNameOverride,
@@ -807,6 +810,7 @@ impl CompilerItem {
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructDefaults => "reflect_struct_defaults",
+            Self::ReflectStructEmptySlots => "reflect_struct_empty_slots",
             Self::ReflectStructWireNamePolicy => "reflect_struct_wire_name_policy",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
@@ -927,6 +931,7 @@ impl CompilerItem {
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
+            | Self::ReflectStructEmptySlots
             | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride
@@ -1126,6 +1131,7 @@ impl CompilerItem {
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
+            | Self::ReflectStructEmptySlots
             | Self::ReflectStructWireNamePolicy
             | Self::MemberName
             | Self::MemberWireNameOverride

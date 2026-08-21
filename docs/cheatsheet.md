@@ -1346,8 +1346,7 @@ if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 
 ### core:collections
 
-`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. `TreeMap` has
-no `insert` — use `map[key] = value` or a `{ key: value }` literal. See
+`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
 [`core:collections`](./stdlib-core-collections.md).
 
 ```wado
@@ -1358,6 +1357,8 @@ map["key"] = 42;              // index assignment
 let v = map["key"];           // index access (panics if absent)
 let opt = map.get("key");     // fallible access -> Option<V>
 map.remove("key");            // -> bool
+map.try_insert("k", 1);       // insert if absent -> bool
+map.get_or_insert("k", 1);    // the stored value, or the inserted one
 for let [k, v] of map.entries() { println(`${k}=${v}`); }
 
 let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;

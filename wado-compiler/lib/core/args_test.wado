@@ -379,3 +379,13 @@ test "kebab subcommand tag from name_policy" {
         panic("expected Ok");
     }
 }
+
+struct ScalarOpt {
+    jobs: i32 = 1,
+}
+impl Deserialize for ScalarOpt;
+
+test "a repeated scalar option takes the last occurrence" {
+    let r = parse::<ScalarOpt>(["--jobs", "1", "--jobs", "2"]);
+    assert r matches { Ok(o) && o.jobs == 2 };
+}

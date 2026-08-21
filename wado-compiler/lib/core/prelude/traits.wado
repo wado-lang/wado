@@ -71,7 +71,7 @@ internal trait ReflectStruct {
     type Members;
 
     /// The field slots `[Option<F_0>, ...]` — the value-level companion of
-    /// `FieldTypes`, seeded by `defaults()`.
+    /// `FieldTypes`. A filled slot is one the wire wrote.
     type FieldSlots;
 
     /// Returns the struct name.
@@ -87,9 +87,15 @@ internal trait ReflectStruct {
     fn from_fields(fields: Self::FieldTypes) -> Self;
 
     /// The declared field defaults (`f: T = expr`), `None` where a field
-    /// declares none. Seeds a build over a wire-ordered stream.
+    /// declares none. Read per field, so only a slot the wire left empty
+    /// evaluates its default.
     #[compiler_item("reflect_struct_defaults")]
     fn defaults() -> Self::FieldSlots;
+
+    /// All slots empty. Starting here is what makes a filled slot mean "the
+    /// wire wrote this", so a repeat is visible without a second record.
+    #[compiler_item("reflect_struct_empty_slots")]
+    fn empty_slots() -> Self::FieldSlots;
 
     /// The struct's `#[wire(name_policy)]` (`Identity` if none).
     #[compiler_item("reflect_struct_wire_name_policy")]

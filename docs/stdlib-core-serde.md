@@ -86,7 +86,25 @@ impl Deserialize for Config;
 //   -> Config { host: "localhost", port: 0, timeout: 30 }
 ```
 
+## Globals
+
+### `pub global DEFAULT_MAX_DEPTH: i32`
+
+Default nesting limit. Unbounded nesting exhausts the stack and traps,
+which is unrecoverable unlike an error.
+
 ## Functions
+
+### `pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError>`
+
+Applies `policy` to a key the wire already wrote. Detecting the repeat is
+the caller's job: a struct sees a filled slot, a map asks `try_insert`.
+
+### `pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError>`
+
+One nesting level deeper, or `DepthLimitExceeded` at the limit. Threaded as
+a value, so there is nothing to decrement and a format cannot leave the
+count unbalanced; each picks its own `max_depth` and container boundaries.
 
 ### `pub fn apply_case(style: CaseStyle, s: String) -> String`
 
@@ -331,6 +349,10 @@ byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 #### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
+#### `fn on_duplicate_key(&self) -> DuplicateKeyPolicy`
+
+What this format does when the wire repeats a field or key.
+
 #### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self]`
 
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self]`
@@ -380,6 +402,10 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `pub fn overflow(msg: String, offset: i64) -> DeserializeError`
 
+#### `pub fn depth_limit(msg: String, offset: i64) -> DeserializeError`
+
+#### `pub fn duplicate_field(name: String) -> DeserializeError`
+
 ## Enums
 
 ### `pub enum SerializeErrorKind`
@@ -409,3 +435,20 @@ Used by variadic tuple deserialization via type pack expansion.
 #### `Eof`
 
 #### `Custom`
+
+#### `DepthLimitExceeded`
+
+Nesting ran past the deserializer's depth limit. A resource bound, not
+a spec violation: the input may be perfectly well-formed.
+
+### `pub enum DuplicateKeyPolicy`
+
+What to do when the wire repeats a field or key. A repeat is how two
+readers of the same bytes are made to disagree, so rejecting is the
+default; `Warn` and `PassThru` both keep the last occurrence.
+
+#### `Error`
+
+#### `Warn`
+
+#### `PassThru`

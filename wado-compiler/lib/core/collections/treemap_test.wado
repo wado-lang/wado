@@ -507,3 +507,61 @@ test "serde Serializer" {
     let result: Result<String, SerializeError> = to_string(&map);
     assert result matches { Ok(s) && s == `\{"foo":"1","bar":"2","baz":"3"\}` };
 }
+
+test "try_insert reports whether the key was new" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    assert map.try_insert("a", 1);
+    assert !map.try_insert("a", 2);
+    assert map.len() == 1;
+}
+
+test "try_insert leaves the existing value alone" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map.try_insert("a", 1);
+    map.try_insert("a", 99);
+    assert map.get("a") matches { Some(v) && v == 1 };
+}
+
+test "a losing try_insert keeps insertion order" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map.try_insert("a", 1);
+    map.try_insert("b", 2);
+    map.try_insert("a", 3);
+    let keys: List<String> = map.keys().collect();
+    assert keys.len() == 2;
+    assert keys[0] == "a";
+    assert keys[1] == "b";
+}
+
+test "try_insert after remove re-appends at the end" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map.try_insert("a", 1);
+    map.try_insert("b", 2);
+    assert map.remove("a");
+    assert map.try_insert("a", 3);
+    let keys: List<String> = map.keys().collect();
+    assert keys[0] == "b";
+    assert keys[1] == "a";
+    assert map.get("a") matches { Some(v) && v == 3 };
+}
+
+test "get_or_insert returns the existing value without overwriting" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map.try_insert("a", 1);
+    assert map.get_or_insert("a", 99) == 1;
+    assert map.get("a") matches { Some(v) && v == 1 };
+}
+
+test "get_or_insert inserts and returns when absent" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    assert map.get_or_insert("a", 7) == 7;
+    assert map.len() == 1;
+    assert map.get("a") matches { Some(v) && v == 7 };
+}
+
+test "index assignment still overwrites" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map["a"] = 1;
+    map["a"] = 2;
+    assert map.get("a") matches { Some(v) && v == 2 };
+}

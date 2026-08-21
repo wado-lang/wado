@@ -39,11 +39,11 @@ text contexts; serde I/O is bytes-primary.
 
 `trailing_char`, when `Some`, is appended after the value.
 
-### `pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError>`
+### `pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from a JSON NSD string.
 
-### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError>`
+### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from UTF-8 JSON NSD bytes — the primary entry point.
 Accepts any byte source via `AsByteSlice` (including a `String`).

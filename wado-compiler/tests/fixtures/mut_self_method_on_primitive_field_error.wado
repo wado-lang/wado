@@ -1,0 +1,27 @@
+// `&mut` of a primitive is a `Box<T>`: a local's box is its storage, but a
+// field has none to project into, so the call site boxes a copy and the write
+// is lost. The explicit `&mut h.b` was always refused; this form was not.
+
+type Budget = i32;
+
+impl Budget {
+    fn spend(&mut self) {
+        *self -= 1;
+    }
+}
+
+struct Holder {
+    b: Budget,
+}
+
+export fn run() {
+    let mut h = Holder { b: 5 };
+    h.b.spend();
+    assert h.b as i32 == 4;
+
+    let mut xs: List<Budget> = [5];
+    xs[0].spend();
+}
+
+__DATA__
+{"compile_error": "cannot call `&mut self` method `spend` on a field or element of a replace-on-assign type"}

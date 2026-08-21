@@ -30,6 +30,11 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
+/// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say
+/// the same thing about the same refusal.
+pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replace-on-assign type (primitive, enum, flags, fn); \
+     use the containing value's reference directly";
+
 /// Lightweight reference to an impl block. Stores `(module_source,
 /// item_id)` and resolves to the block's digested [`ImplHeader`] via
 /// [`impl_header`]. Dispatch cannot reach the impl AST at all.
@@ -1210,14 +1215,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+
+        // `operators.rs` refuses the explicit `&mut x.f`; the implicit receiver
+        // borrow must match it.
+        if receiver_ast
+            .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
+            && self.is_replace_on_assign_place_type(receiver.type_id)
+        {
+            let _ = self.emit(TypeError::CannotMutate {
+                message: format!(
+                    "cannot call `&mut self` method `{method_name}` on {REPLACE_ON_ASSIGN_PLACE}"
+                ),
+                span,
+            });
+        }
     }
 
-    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and any
-    /// nesting of those. A reference step ends the walk — `&mut T` makes the
-    /// place writable however the binding holding it was declared, and `&T` is
-    /// [`Self::place_roots_at_immutable_ref`]'s to report. A root the frame
-    /// cannot see (a capture, a temporary) reports nothing, so this only ever
-    /// speaks where the binding is provably immutable.
+    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
+    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
+    /// shared GC struct, so mutation through the payload lands.
+    pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
+        let table = self.tysys.type_table.borrow();
+        let replaces_on_assign = |ty: &ResolvedType| {
+            matches!(
+                ty,
+                ResolvedType::Primitive(_)
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Function { .. }
+            )
+        };
+        if replaces_on_assign(table.get(type_id)) {
+            return true;
+        }
+        let base = table.get_ultimate_base_type(type_id);
+        replaces_on_assign(table.get(base))
+    }
+
+    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
+    /// any nesting of those. A reference step ends the walk; `&T` is
+    /// [`Self::place_roots_at_immutable_ref`]'s to report.
     pub(super) fn place_roots_at_immutable_binding(
         &self,
         expr: &ast::Expr,

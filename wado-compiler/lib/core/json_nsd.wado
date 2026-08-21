@@ -25,6 +25,8 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     Visitor,
+    deeper,
+    DEFAULT_MAX_DEPTH,
 } from "core:serde";
 
 use { write_escaped_string, JsonDeserializer } from "core:json";
@@ -307,16 +309,19 @@ impl Serializer for NsdSerializer {
 
 struct NsdSeqAccess {
     de: &mut JsonDeserializer,
+    depth: i32,
     first: bool,
 }
 
 struct NsdMapAccess {
     de: &mut JsonDeserializer,
+    depth: i32,
     first: bool,
 }
 
 struct NsdStructAccess {
     de: &mut JsonDeserializer,
+    depth: i32,
     index: i32,
     num_fields: i32,
     first: bool,
@@ -324,6 +329,7 @@ struct NsdStructAccess {
 
 struct NsdVariantAccess {
     de: &mut JsonDeserializer,
+    depth: i32,
     disc: i32,
     is_unit: bool,
 }
@@ -341,6 +347,7 @@ impl DeserializeSeq for NsdSeqAccess {
             self.de.expect_char(',' as i32)?;
         }
         self.first = false;
+        self.de.depth = self.depth;
         let v = T::deserialize(&mut NsdDeserializer { de: self.de })?;
         return Result::Ok(Option::Some(v));
     }
@@ -369,6 +376,7 @@ impl DeserializeMap for NsdMapAccess {
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        self.de.depth = self.depth;
         return V::deserialize(&mut NsdDeserializer { de: self.de });
     }
 
@@ -400,11 +408,12 @@ impl DeserializeStruct for NsdStructAccess {
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        self.de.depth = self.depth;
         return T::deserialize(&mut NsdDeserializer { de: self.de });
     }
 
     fn skip(&mut self) -> Result<(), DeserializeError> {
-        return self.de.skip_value();
+        return self.de.skip_value(self.depth);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -426,6 +435,7 @@ impl DeserializeVariant for NsdVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        self.de.depth = self.depth;
         return T::deserialize(&mut NsdDeserializer { de: self.de });
     }
 
@@ -501,16 +511,20 @@ impl Deserializer for NsdDeserializer {
 
     fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> with stores[self] {
         self.de.expect_char('[' as i32)?;
+        let depth = self.de.inner_depth()?;
         return Result::Ok(NsdSeqAccess {
             de: self.de,
+            depth,
             first: true,
         });
     }
 
     fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> with stores[self] {
         self.de.expect_char('{' as i32)?;
+        let depth = self.de.inner_depth()?;
         return Result::Ok(NsdMapAccess {
             de: self.de,
+            depth,
             first: true,
         });
     }
@@ -522,8 +536,10 @@ impl Deserializer for NsdDeserializer {
     ) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
         // NSD: struct encoded as array
         self.de.expect_char('[' as i32)?;
+        let depth = self.de.inner_depth()?;
         return Result::Ok(NsdStructAccess {
             de: self.de,
+            depth,
             index: 0,
             num_fields,
             first: true,
@@ -543,18 +559,22 @@ impl Deserializer for NsdDeserializer {
         if b == '[' as i32 {
             // Payload variant: [disc, payload]
             self.de.pos += 1;
+            let depth = self.de.inner_depth()?;
             let disc = self.de.parse_i32_direct()?;
             self.de.expect_char(',' as i32)?;
             return Result::Ok(NsdVariantAccess {
                 de: self.de,
+                depth,
                 disc,
                 is_unit: false,
             });
         }
-        // Unit variant: bare integer discriminant
+        // Unit variant: a bare discriminant opens no container.
+        let depth = self.de.depth;
         let disc = self.de.parse_i32_direct()?;
         return Result::Ok(NsdVariantAccess {
             de: self.de,
+            depth,
             disc,
             is_unit: true,
         });
@@ -594,16 +614,20 @@ pub fn to_string<T: Serialize>(value: &T, trailing_char: Option<char> = null) ->
 }
 
 /// Deserializes a value from a JSON NSD string.
-pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
-    return from_bytes::<T, String>(input);
+pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError> {
+    return from_bytes::<T, String>(input, max_depth);
 }
 
 /// Deserializes a value from UTF-8 JSON NSD bytes — the primary entry point.
 /// Accepts any byte source via `AsByteSlice` (including a `String`).
-pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, DeserializeError> {
+pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
+    input: S,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
     let mut de = JsonDeserializer {
         input: input.as_byte_slice(),
         pos: 0,
+        max_depth,
     };
     let mut nsd = NsdDeserializer { de: &mut de };
     let v = T::deserialize(&mut nsd)?;

@@ -1,0 +1,38 @@
+// Skipping an unknown key's value must be depth-bounded like the typed path.
+// `skip_item` threads its own `depth`: skipping does not move the
+// deserializer's level, so reading `self.depth` leaves the path unbounded.
+
+use { Deserialize, DeserializeErrorKind } from "core:serde";
+use { from_bytes } from "core:cbor";
+
+struct Small {
+    a: i32 = 0,
+}
+
+impl Deserialize for Small;
+
+/// map(1) { "z": <levels of array(1) head> 0 } — one byte per level.
+fn nested_skip(levels: i32) -> ByteList {
+    let mut b: ByteList = [];
+    b.push(0xa1);
+    b.push(0x61);
+    b.push(0x7a);
+    for let mut i = 0; i < levels; i += 1 {
+        b.push(0x81);
+    }
+    b.push(0x00);
+    return b;
+}
+
+export fn run() {
+    assert from_bytes::<Small, ByteList>(nested_skip(200000)) matches {
+        Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded
+    };
+    assert from_bytes::<Small, ByteList>(nested_skip(3000)) matches {
+        Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded
+    };
+    assert from_bytes::<Small, ByteList>(nested_skip(5)) matches { Ok(_) };
+}
+
+__DATA__
+{"stdout": ""}

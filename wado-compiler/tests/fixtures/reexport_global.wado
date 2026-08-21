@@ -1,0 +1,17 @@
+// Reading a global through a re-exporting module: body read, namespace import,
+// and a default argument naming it. `signatures.globals` is keyed by the
+// declaring module, so the import was dropped and the read ICEd.
+
+use { body_use, defaulted } from "./sub/reexport_global_mid.wado";
+use facade from "./sub/reexport_global_facade.wado";
+
+export fn run() {
+    assert body_use() == 7;
+    assert defaulted() == 7;
+    assert defaulted(1) == 1;
+    assert facade::SHARED_LIMIT == 7;
+    assert facade::OTHER_LIMIT == 11;
+}
+
+__DATA__
+{"stdout": ""}
