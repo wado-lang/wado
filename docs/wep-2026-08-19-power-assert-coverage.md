@@ -36,6 +36,18 @@ so hoisting either sibling inverts that pair. An operand may be bound ahead of
 the condition only when nothing evaluated before it stays behind; otherwise the
 capture is taken where the operand sits.
 
+The scanner walks the condition in evaluation order and carries one fact: is
+everything evaluated so far bound ahead of the condition. While it holds, the
+next slot is bound ahead too, as `let __vK = …;` before the condition — a scope
+the failure branch reaches, so the operand is read rather than recomputed there,
+and the optimizer sees an ordinary binding. The first fragment left behind
+clears it, and every slot after that is captured where it sits. A receiver and a
+callee clear it for the operands nested under them, since both run first and
+neither is captured; the node containing them may still be bound ahead, because
+binding it moves the whole group and so moves nothing within it. A place is
+neither bound nor moved — the failure branch re-reads it, which is the same
+assumption seen from the other side — so it passes the fact through.
+
 A capture may not copy. Value semantics deep-copy on binding, so a captured
 receiver would take the copy's mutation and leave the original untouched. The
 answer is to capture without copying — in place, or by re-reading a binding the
@@ -63,8 +75,10 @@ nothing for it.
 ### 3. No silent degradation
 
 Every operand position in a condition is captured, save what _Known gaps_
-lists as not yet reached. A `Literal` is the one position needing no slot of its
+lists as not yet reached. A literal is the one position needing no slot of its
 own: its value is its source text, which the `condition:` line already shows.
+A cast or a negation of one renders the same text back, so neither earns a slot
+either.
 There is no second outcome to report for a
 type: `Inspect` is total (WEP-2026-06-25), so a `T: Inspect` obligation always
 holds and every operand has a rendering. An operand the compiler declines to
@@ -80,11 +94,11 @@ short-circuit can skip each one:
 
 ```
 6: assert i < list.len() && list[i] == 1
-  __v0  always       i
-  __v1  always       list.len()
-  __v2  always       i < list.len()
-  __v3  conditional  list[i]
-  __v4  conditional  list[i] == 1
+  __v0  always       re-read   i
+  __v1  always       hoisted   list.len()
+  __v2  always       hoisted   i < list.len()
+  __v3  conditional  in-place  list[i]
+  __v4  conditional  in-place  list[i] == 1
 ```
 
 `tests/integration/assert_capture_plan.rs` reads that back for one `assert` per
@@ -106,16 +120,6 @@ or an operand position rule 3 does not yet reach, or a cost not yet paid down �
 a defect or an open question, never a boundary.
 
 ### Rule 1: the mechanism changes evaluation
-
-- [ ] **Stop hoisting a capture past an operand left in place.** A method call's
-      receiver is evaluated before its arguments and a subscript's receiver
-      before its index, but neither receiver is captured, so binding the sibling
-      ahead of the condition inverts the pair: `assert recv().take(arg())` runs
-      `arg` first where `if !recv().take(arg())` runs `recv` first. An operand
-      may be bound ahead of the condition only when nothing evaluated before it
-      stays behind; otherwise it is captured where it sits, as a conditional
-      slot already is. Red: `assert_eval_order_method_receiver`,
-      `assert_eval_order_subscript_receiver`.
 
 - [ ] **Capture a receiver and a `matches` scrutinee.** Value semantics copy on
       binding, so a bound receiver takes its own `&mut self` mutation and leaves
@@ -182,8 +186,11 @@ A slot whose operand is a plain binding gets no binding of its own: the failure
 branch re-reads it, which straight-line code makes exact. A conditional slot
 costs one `bool` flag, cleared ahead of the condition and set at the capture
 site; the failure branch reads its value local under that flag, so nothing has
-to synthesize a zero value for an arbitrary `T`. Unconditional captures keep the
-hoisted `let`. `-Os` still drops the whole expansion through `bare-asserts`.
+to synthesize a zero value for an arbitrary `T`. A slot captured where it sits
+writes a function-scoped slot, which the optimizer cannot fold through, so a
+condition built from such slots survives to run time even when its value is a
+constant; a slot bound ahead of the condition is an ordinary binding and folds.
+`-Os` still drops the whole expansion through `bare-asserts`.
 
 Rule 2 adds one `String` binding per conditional slot to the cold branch. Rule 3
 costs a dump surface and its tests, and returns a compile error or a test
