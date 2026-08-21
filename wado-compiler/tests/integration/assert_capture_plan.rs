@@ -1,7 +1,7 @@
 //! What each condition shape contributes to a power-assert failure, read back
 //! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what
 //! renders nothing today; `docs/wep-2026-08-19-power-assert-coverage.md` lists
-//! each one as a gap.
+//! each one as a gap, so an entry here is a gap that has not closed yet.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -61,9 +61,9 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("a < b", &["a", "b"]),
     ("!(a > b)", &["a", "b", "a > b"]),
     ("twice(a) == b", &["twice(a)", "b"]),
-    ("s.len() == 5", &["s.len()"]),
+    ("s.len() == 5", &["s", "s.len()"]),
     ("o.inner.v == 1", &["o.inner.v"]),
-    ("list[a] == 20", &["a", "list[a]"]),
+    ("list[a] == 20", &["list", "a", "list[a]"]),
     ("a as i64 == 1", &["a", "a as i64"]),
     ("0 <= a < b", &["a", "b"]),
     ("[a, b] == [1, 2]", &["a", "b"]),
@@ -77,6 +77,7 @@ const EXPECTED: &[(&str, &[&str])] = &[
         &["a", "match a { 1 => a, _ => b, }"],
     ),
     ("(a..<b).contains(&a)", &["(a..<b).contains(&a)"]),
+    ("shape matches { Point }", &["shape"]),
     ("a < b && b < 3", &["a", "b", "a < b", "b", "b < 3"]),
     ("a > b || b > 0", &["a", "b", "a > b", "b", "b > 0"]),
 ];
@@ -192,9 +193,16 @@ const EXPECTED_BINDING: &[(&str, &[(&str, &str)])] = &[
         &[("twice(a)", "hoisted"), ("b", "re-read")],
     ),
     ("o.inner.v == 1", &[("o.inner.v", "hoisted")]),
-    // A subscript's receiver runs first and is not captured, so the index
-    // stays where it sits; the subscript itself moves as one group.
-    ("list[a] == 20", &[("a", "re-read"), ("list[a]", "hoisted")]),
+    // A subscript's receiver runs first and is re-read rather than bound, and
+    // the index after it stays where it sits; the subscript moves as one group.
+    (
+        "list[a] == 20",
+        &[
+            ("list", "re-read"),
+            ("a", "re-read"),
+            ("list[a]", "hoisted"),
+        ],
+    ),
     // Past a short-circuit nothing binds ahead: the operand may not run.
     (
         "a < b && b < 3",
@@ -218,7 +226,7 @@ fn a_capture_binds_ahead_only_while_order_allows() {
 }
 
 /// The shapes that render nothing today, each one a WEP *Known gaps* entry.
-const EXPECTED_EMPTY: &[&str] = &["shape matches { Point }"];
+const EXPECTED_EMPTY: &[&str] = &[];
 
 #[test]
 fn only_the_documented_shapes_render_an_empty_plan() {

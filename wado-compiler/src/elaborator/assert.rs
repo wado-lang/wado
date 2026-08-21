@@ -361,6 +361,19 @@ impl CaptureScanner {
         }
     }
 
+    /// A receiver runs before everything nested under it and is never bound —
+    /// binding would copy, and value semantics would then hide the call's own
+    /// mutation. Only a place earns a slot here: the failure branch re-reads it,
+    /// which moves nothing and copies nothing. Either way nothing after the
+    /// receiver may be bound ahead of the condition, since the receiver itself
+    /// stays where it is.
+    fn scan_receiver(&mut self, expr: &Expr) {
+        if is_place_expr(expr) {
+            self.scan(expr);
+        }
+        self.frontier_ok = false;
+    }
+
     fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
         let Position {
             is_root,
@@ -430,8 +443,7 @@ impl CaptureScanner {
                 );
             }
             Expr::MethodCall(m) => {
-                // The receiver runs before the arguments and is not captured.
-                self.frontier_ok = false;
+                self.scan_receiver(&m.receiver);
                 for arg in &m.args {
                     self.in_call_arg = true;
                     self.scan(arg);
@@ -487,7 +499,8 @@ impl CaptureScanner {
                     );
                 }
             }
-            Expr::Matches(_) => {
+            Expr::Matches(m) => {
+                self.scan_receiver(&m.expr);
                 if !is_root {
                     self.add(
                         unparse_expr_source(expr),
@@ -498,8 +511,7 @@ impl CaptureScanner {
                 }
             }
             Expr::Index(i) => {
-                // The receiver runs before the index and is not captured.
-                self.frontier_ok = false;
+                self.scan_receiver(&i.expr);
                 self.scan(&i.index);
                 self.add(
                     unparse_expr_source(expr),
