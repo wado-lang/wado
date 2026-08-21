@@ -28,6 +28,10 @@ fn twice(n: i32) -> i32 {
     return n * 2;
 }
 
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
 export fn run() {
     let a = 1;
     let b = 2;
@@ -52,6 +56,7 @@ export fn run() {
     assert (a..<b).contains(&a);
     assert a < b && b < 3;
     assert a > b || b > 0;
+    assert apply(|y: i32| -> i32 { return y; }, a) == 1;
 }
 "#;
 
@@ -60,7 +65,7 @@ export fn run() {
 const EXPECTED: &[(&str, &[&str])] = &[
     ("a < b", &["a", "b"]),
     ("!(a > b)", &["a", "b", "a > b"]),
-    ("twice(a) == b", &["twice(a)", "b"]),
+    ("twice(a) == b", &["a", "twice(a)", "b"]),
     ("s.len() == 5", &["s", "s.len()"]),
     ("o.inner.v == 1", &["o.inner.v"]),
     ("list[a] == 20", &["list", "a", "list[a]"]),
@@ -78,6 +83,10 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ),
     ("(a..<b).contains(&a)", &["(a..<b).contains(&a)"]),
     ("shape matches { Point }", &["shape"]),
+    (
+        "apply(|y: i32| -> i32 { return y; }, a) == 1",
+        &["|y: i32| -> i32 { return y; }", "a"],
+    ),
     ("a < b && b < 3", &["a", "b", "a < b", "b", "b < 3"]),
     ("a > b || b > 0", &["a", "b", "a > b", "b", "b > 0"]),
 ];
