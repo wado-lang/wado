@@ -214,6 +214,19 @@ pub(crate) fn trait_sig_of_with<'a>(
     signatures.trait_sig(resolutions.defs().ast_id(decl))
 }
 
+/// The structural-conformance rule's answer for one type: whether every member
+/// satisfies the trait, and which one decided when they do not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StructuralConformance {
+    /// Not a shape the rule applies to.
+    NotApplicable,
+    Holds,
+    Fails {
+        member: String,
+        type_id: TypeId,
+    },
+}
+
 impl TypeSystem {
     /// The traits the compiler auto-derives for eligible aggregate types
     /// (`struct` / `variant` / `enum` / generic instance) and exposes through
@@ -615,6 +628,35 @@ impl TypeSystem {
         result
     }
 
+    /// Whether every member of `resolved` satisfies `trait_` under `tr`'s
+    /// structural rule, and which one decided when they do not. The single
+    /// structural-conformance walk: the satisfaction check takes the yes and
+    /// the diagnostic takes the no, so they cannot name different members.
+    fn structural_conformance(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        resolved: &ResolvedType,
+        tr: OnBoundTrait,
+        trait_: DefId,
+    ) -> StructuralConformance {
+        let mut failing: Option<(String, TypeId)> = None;
+        let walked =
+            self.walk_structural_derive_members(scope, resolved, tr, &mut |member, member_tid| {
+                if self.type_implements_trait(ctx, scope, member_tid, trait_) {
+                    true
+                } else {
+                    failing = Some((member.describe(), member_tid));
+                    false
+                }
+            });
+        match (walked, failing) {
+            (Some(true), _) => StructuralConformance::Holds,
+            (_, Some((member, type_id))) => StructuralConformance::Fails { member, type_id },
+            _ => StructuralConformance::NotApplicable,
+        }
+    }
+
     /// Explain *why* `type_id` does not implement `trait_name` by walking the
     /// auto-derive / `on_bound` structure. Each returned entry is one step of a
     /// reason chain, deepest cause last; an empty result means no structural
@@ -657,7 +699,6 @@ impl TypeSystem {
         }
         let resolved = self.type_table.borrow().get(type_id).clone();
 
-        let mut failing: Option<(String, TypeId)> = None;
         // Every trait that drives a structural derivation is a compiler item,
         // so the declaration comes off the registry. Resolving the spelling in
         // the frame instead answers nothing for a module that never named
@@ -665,15 +706,11 @@ impl TypeSystem {
         let Some(trait_) = self.compiler_trait_def(tr.compiler_item()) else {
             return;
         };
-        self.walk_structural_derive_members(scope, &resolved, tr, &mut |member, member_tid| {
-            if self.type_implements_trait(ctx, scope, member_tid, trait_) {
-                true
-            } else {
-                failing = Some((member.describe(), member_tid));
-                false
-            }
-        });
-        if let Some((label, member_tid)) = failing {
+        if let StructuralConformance::Fails {
+            member: label,
+            type_id: member_tid,
+        } = self.structural_conformance(ctx, scope, &resolved, tr, trait_)
+        {
             let owner = self.type_id_to_string(type_id);
             let member_ty = self.type_id_to_string(member_tid);
             chain.push(format!(
@@ -1164,9 +1201,8 @@ impl TypeSystem {
             let serde_blocked = tr.is_serde()
                 && self.has_real_trait_impl_for_type(ctx, scope, Some(type_id), &receiver, trait_);
             if !serde_blocked
-                && self.walk_structural_derive_members(scope, resolved, tr, &mut |_, member| {
-                    self.type_implements_trait(ctx, scope, member, trait_)
-                }) == Some(true)
+                && self.structural_conformance(ctx, scope, resolved, tr, trait_)
+                    == StructuralConformance::Holds
             {
                 if let Some(key) = self.synth_trait_key(tr) {
                     self.type_table
