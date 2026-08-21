@@ -572,17 +572,6 @@ echo "Transpiled to: $OUTPUT_DIR"
 description = "Install the released jco for the vendor-free pipeline (scripts/jco)"
 run = "cd scripts/jco && npm install"
 
-[tasks.jco-harvest-intrinsics]
-description = "Harvest the future-end runtime classes from released jco (regenerate after a jco bump)"
-depends = ["jco-deps"]
-run = """
-#!/usr/bin/env bash
-set -e -o pipefail
-WASM="$(mktemp -d)/future_trigger.wasm"
-cargo run -q -p wado-cli -- compile -O2 -o "$WASM" scripts/jco/future_trigger.wado
-node scripts/jco/harvest-intrinsics.mjs "$WASM" scripts/jco/missing-intrinsics.js
-"""
-
 [tasks.jco-transpile-released]
 description = "Transpile a Wado .wasm component to JS via the released jco + runtime post-process"
 depends = ["jco-deps"]
@@ -606,7 +595,9 @@ node scripts/jco/transpile-released.mjs "$WASM" "$OUT"
 # Node 26 ships stable JSPI (WebAssembly.Suspending), so no flag is needed.
 node -e "
   process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
-  import('$OUT/hello.js').then(m => m.run.run()).then(() => process.exit(0))
+  // The shim flushes stdout after run() resolves, so let the loop drain rather
+  // than exiting on it.
+  import('$OUT/hello.js').then(m => m.run.run())
     .catch(e => { console.error(e); process.exit(1); });
 "
 """
@@ -632,7 +623,7 @@ for i in $(seq 1 "$RUNS"); do
   # benchmarks (Preopens) hang forever, so cap each run instead of wedging.
   if ! timeout 120 node -e "
     process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
-    import('$WORK/jco/$NAME.js').then(m => m.run.run()).then(() => process.exit(0))
+    import('$WORK/jco/$NAME.js').then(m => m.run.run())
       .catch(e => { console.error(e.message || e); process.exit(1); });
   "; then
     echo "error: '$NAME' did not finish on Node (timed out or errored). Filesystem-backed benchmarks are not yet supported via jco." >&2

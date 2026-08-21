@@ -3,7 +3,6 @@
 
 import { transpileBytes } from "./vendor/jco-transpile.browser.js";
 // Shared with the Node pipeline (staged by build.sh) to avoid drift on jco bumps.
-import { postprocess } from "./vendor/postprocess.js";
 
 const BASE = new URL(".", import.meta.url);
 
@@ -64,17 +63,6 @@ export async function compile(source, onPhase) {
   throw new Error(new TextDecoder().decode(payload));
 }
 
-let _missingIntrinsics = null;
-async function missingIntrinsics() {
-  if (_missingIntrinsics == null) {
-    const url = new URL("./vendor/missing-intrinsics.js", BASE);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`failed to load ${url}: HTTP ${res.status}`);
-    _missingIntrinsics = await res.text();
-  }
-  return _missingIntrinsics;
-}
-
 /** Transpile a component to a single importable ES module URL (blob). */
 export async function transpileToModule(componentBytes, name = "program") {
   const shim = (m) => `${new URL(`./shims/${m}`, BASE).href}#*`;
@@ -95,9 +83,7 @@ export async function transpileToModule(componentBytes, name = "program") {
   if (jsFiles.length !== 1) {
     throw new Error(`expected a single JS file, got: ${jsFiles.map(([f]) => f).join(", ")}`);
   }
-  const { js } = postprocess(decoder.decode(jsFiles[0][1]), await missingIntrinsics());
-
-  const blob = new Blob([js], { type: "text/javascript" });
+  const blob = new Blob([decoder.decode(jsFiles[0][1])], { type: "text/javascript" });
   return URL.createObjectURL(blob);
 }
 

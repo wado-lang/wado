@@ -12,8 +12,8 @@ doc covers what works today, the workarounds, and what is still blocked.
 
 ## TL;DR
 
-- Use the **released npm jco as a library + a thin JS post-process layer**
-  (`scripts/jco`, `mise run jco-*`). No Rust fork build needed for what works.
+- Use the **released npm jco as a library** (`scripts/jco`, `mise run jco-*`).
+  No Rust fork build, no post-process.
 - Compile Wado with **`-f no-wide-arithmetic`** — V8 has no wide-arithmetic
   proposal, and float formatting / `i128` emit it.
 - Run on **Node 26+** — stable JSPI, no flag.
@@ -36,21 +36,18 @@ doc covers what works today, the workarounds, and what is still blocked.
 
 ## Vendor-free pipeline (`scripts/jco`)
 
-Preferred path: released `@bytecodealliance/jco` as a library + post-process.
+Released `@bytecodealliance/jco` as a library. `transpile-released.mjs` is a
+plain `transpile()` — jco's own `preview3-shim` serves every import a Wado
+program makes, and the output links to it through a `node_modules` symlink the
+script writes beside the files.
 
-| File                     | Role                                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `transpile-released.mjs` | `transpile()` (released jco) + `--no-wasi-shim` + `--map` to `example/jco-shim`, then post-process |
-| `postprocess.mjs`        | Inject the future-end classes + the stream-write hook into the transpiled JS                       |
-| `harvest-intrinsics.mjs` | Extract the future-end classes from released jco's own output (version-matched)                    |
-| `missing-intrinsics.js`  | The harvested classes (generated; regenerate after a jco bump)                                     |
-| `future_trigger.wado`    | One-line `Future::<i32>::new()` that makes released jco emit those classes                         |
+The shim flushes stdout **after** `run()` resolves, so a runner that calls
+`process.exit` on that promise loses the output. Let the event loop drain.
 
 mise tasks:
 
 ```sh
 mise run jco-deps                       # npm install released jco under scripts/jco
-mise run jco-harvest-intrinsics         # regenerate scripts/jco/missing-intrinsics.js
 mise run jco-transpile-released foo.wasm [out-dir]
 mise run jco-hello-released             # compile + transpile + run hello on Node
 mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transpile, self-time
@@ -58,35 +55,13 @@ mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transp
 
 ### Released jco status (verified at 1.30.0)
 
-| Capability                   | Status                                                                                                                                               |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Transpile (GC component)     | ✅ works, `wasi:http/service` included                                                                                                               |
-| JSPI                         | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
-| Wide-arithmetic component    | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
-| Future-end intrinsic classes | ✅ emitted; the post-process injection finds them present and skips                                                                                  |
-| Stdout via stream            | ✅ jco's own shim delivers it; the write hook + `cli.js` are what this repo still wires                                                              |
-| Filesystem read stream       | ⚠️ no longer deadlocks; reading through a preopen is unverified                                                                                      |
-
-### The post-process transforms
-
-`postprocess.mjs` applies two string transforms that mirror the fork's
-runtime-affecting patches, so released jco can run what it otherwise can't:
-
-1. **Inject future-end classes** (`FutureEnd` / `FutureReadableEnd` /
-   `FutureWritableEnd`) at module scope before `class InternalFuture`. Released
-   jco references them on the future-drop path (stdout write) but never emits
-   their definitions → `FutureReadableEnd is not defined`. They **must** be at
-   module scope (they reference module-scoped `NESTED_FUTURE_SYMBOL`,
-   `getOrCreateAsyncState`, `FUTURES`), not on `globalThis`. Sourced from
-   released jco itself via `harvest-intrinsics.mjs`, so they stay version-matched.
-2. **Stream-write hook**: insert a `globalThis._jcoStreamWriteHook` fast-path
-   before `streamEnd.copy(...)` in `streamWrite`, so `cli.js` receives stdout
-   bytes directly from linear memory (jco's byte-at-a-time rendezvous does not
-   deliver them on its own).
-
-Not replicated: the async-non-void-export fix (fork patch #3). Void exports
-(`run`, `test` blocks) don't need it; result-returning async exports (HTTP
-`handle`) do, so running one needs the fork.
+| Capability                | Status                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transpile (GC component)  | ✅ works, `wasi:http/service` included                                                                                                               |
+| JSPI                      | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
+| Wide-arithmetic component | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
+| Stdout via stream         | ✅ jco's own shim delivers it, flushed after `run()` resolves                                                                                        |
+| Filesystem read stream    | ⚠️ no longer deadlocks; reading through a preopen is unverified                                                                                      |
 
 ## wide-arithmetic (`-f no-wide-arithmetic`)
 
@@ -104,30 +79,24 @@ changes. **Compile every Node-bound Wado program with this flag** — a bare
 
 ## WASI shims (`example/jco-shim`)
 
-Minimal Node shims, selected with `--no-wasi-shim` + `--map` so they win over
-jco's built-in shim (`transpile-released.mjs` wires these automatically):
-
-- `cli.js` — stdout/stderr via `globalThis._jcoStreamWriteHook` (bypasses the
-  rendezvous). `writeViaStream` returns a `Promise` because `write-via-stream`
-  is async — jco lowers its result as a future and expects a Promise/Thenable.
-- `clocks.js` — `wasi:clocks` via `process.hrtime` / `Date.now`.
-- `random.js` — `wasi:random` via Node crypto.
+Hand-written Node `cli` / `clocks` / `random` shims, mapped in with
+`--no-wasi-shim`. Only the fork path (`mise run jco-transpile`) wires them; the
+released path uses jco's own shim.
 
 ### `@bytecodealliance/preview3-shim`
 
 BA ships a `preview3-shim` implementing P3 `cli` / `clocks` / `filesystem` /
 `http`, with a browser build beside the Node one. A plain `jco transpile` wires
 it, and stdout, float formatting, `wasi:random`, `MonotonicClock` and an HTTP
-`handle` all run with no post-process and none of the shims above — so this
-repo's Node path carries a layer it no longer needs. The playground still
-imports `postprocess.js`, so removing one does not remove the other.
+`handle` all run through it unaided. Its **browser** `cli` is unimplemented
+(`throw new Todo()`), which is why the playground keeps a hand-written one.
 
 ## Benchmarking on Node
 
 `mise run jco-bench <program.wado> [runs]` compiles with `-f no-wide-arithmetic`,
 transpiles via the released pipeline, and runs the program self-timed `runs`
 times (default 3; keep the best). The benchmark programs already self-time via
-`core:benchmark` + `MonotonicClock` (served by `clocks.js`) and print their own
+`core:benchmark` + `MonotonicClock` and print their own
 throughput line, so no host timing is needed.
 
 ```sh
@@ -203,8 +172,7 @@ Or `mise run build-jco`, then `mise run jco-transpile <file.wasm>`.
    async export returns `undefined` (result delivered via `task.return`), fall
    back to `task.completionPromise()` instead of lifting `undefined`.
 
-The released pipeline reproduces patches #1 and #2 as JS post-process (see
-`postprocess.mjs`); #3 is fork-only.
+Released jco needs none of #1 and #2; #3 is fork-only.
 
 ### Saving patches
 
