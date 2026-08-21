@@ -1,0 +1,20 @@
+// An effect is its declaration, not its spelling: a module that declares its
+// own `Stdout` holds that one, and the `core:cli` operations still want theirs.
+
+use { println } from "core:cli";
+
+interface Stdout {
+    fn beep();
+}
+
+fn f() with Stdout {
+    Stdout::beep();
+    println("needs the other Stdout");
+}
+
+export fn run() {
+    let _ = 0;
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'println'"}

@@ -1505,24 +1505,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         self.record_reference(use_id, decl_id);
                     }
                     tir::EffectRef::Param { name: name.clone() }
+                } else if let Some(def) = self.decl_key_or_local(name).filter(|def| {
+                    self.tysys.trait_env.effect_decl_index.contains(def)
+                        || self.tysys.trait_env.resource_decl_index.contains(def)
+                }) {
+                    if let Some(use_id) = use_id {
+                        let decl_ast = self.tysys.resolutions.defs().ast_id(def);
+                        self.record_reference_to_def(use_id, decl_ast);
+                    }
+                    let defs = self.tysys.resolutions.defs();
+                    tir::EffectRef::Concrete {
+                        name: defs.name(def).to_string(),
+                        module_source: defs.module(def).clone(),
+                    }
                 } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    // Canonicalize: re-exports point at the importing module, but
-                    // identity must match the defining module so two `with Stdout`
-                    // clauses (one importing from `core:cli`, one from `wasi:cli`)
-                    // refer to the same effect.
-                    let canonical = self
+                    // Identity is the declaration, so two `with Stdout` clauses
+                    // — one importing from `core:cli`, one from `wasi:cli` —
+                    // and a `with Out` aliasing either name one effect.
+                    let declared = self
                         .symbols
                         .lookup_in_module(&source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_def(use_id, sym.defined_at);
                             }
-                            sym.module_source().clone()
+                            (sym.name.clone(), sym.module_source().clone())
                         })
-                        .unwrap_or_else(|| source.clone());
+                        .unwrap_or_else(|| (name.clone(), source.clone()));
                     tir::EffectRef::Concrete {
-                        name: name.clone(),
-                        module_source: canonical,
+                        name: declared.0,
+                        module_source: declared.1,
                     }
                 } else {
                     if let Some(use_id) = use_id {
@@ -1533,18 +1545,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // canonicalise to their defining module rather than the
                     // current module. Falls through to `current_module_source`
                     // only when no symbol exists (genuinely-local declaration).
-                    let canonical = self
+                    let declared = self
                         .symbol_named(&self.current_module_source, name)
                         .map(|sym| {
                             if let Some(use_id) = use_id {
                                 self.record_reference_to_def(use_id, sym.defined_at);
                             }
-                            sym.module_source().clone()
+                            (sym.name.clone(), sym.module_source().clone())
                         })
-                        .unwrap_or_else(|| self.current_module_source.clone());
+                        .unwrap_or_else(|| (name.clone(), self.current_module_source.clone()));
                     tir::EffectRef::Concrete {
-                        name: name.clone(),
-                        module_source: canonical,
+                        name: declared.0,
+                        module_source: declared.1,
                     }
                 }
             })

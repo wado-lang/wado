@@ -308,23 +308,24 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, index, out);
+                    check_function_effects_sem(sem, src, func, index, None, out);
                 }
                 Item::Impl(impl_block) => {
+                    let handled = handled_effect(sem, src, impl_block, index);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, handled.as_ref(), out);
                     }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
                 // performs is checked like any other function's.
                 Item::Interface(interface_decl) => {
                     for method in &interface_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 _ => {}
@@ -347,6 +348,9 @@ struct OwnedEffectData {
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: IndexMap<String, EffectRef>,
     interface_meta: IndexMap<String, (ModuleSource, Option<String>)>,
+    /// `#[cm]` FQ per interface declaration — the same question `interface_meta`
+    /// answers by spelling, asked by identity.
+    interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
     /// reconstructed host-leaf import in this set is discharged (composition-
@@ -445,6 +449,8 @@ impl OwnedEffectData {
         // nothing.
         let mut interface_meta: IndexMap<String, (ModuleSource, Option<String>)> =
             IndexMap::default();
+        let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
+            IndexMap::default();
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
@@ -459,6 +465,7 @@ impl OwnedEffectData {
                 interface_meta
                     .entry(decl.name.clone())
                     .or_insert_with(|| (src.clone(), cm_fq.clone()));
+                interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
                     module_source: src.clone(),
@@ -482,6 +489,7 @@ impl OwnedEffectData {
             closure,
             effect_by_name,
             interface_meta,
+            interface_cm_fq,
             effect_by_cm_fq,
             provided_import_fqs,
         }
@@ -499,6 +507,7 @@ impl OwnedEffectData {
             closure: &self.closure,
             effect_by_name: &self.effect_by_name,
             interface_meta: &self.interface_meta,
+            interface_cm_fq: &self.interface_cm_fq,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
         }
@@ -528,6 +537,7 @@ struct EffectIndex<'a> {
     /// Declared interface name → (declaring module, its `#[cm]` FQ), for
     /// resolving a direct `E::op()` callee to its effect and FQ.
     interface_meta: &'a IndexMap<String, (ModuleSource, Option<String>)>,
+    interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
@@ -535,11 +545,41 @@ struct EffectIndex<'a> {
     provided_import_fqs: &'a IndexSet<String>,
 }
 
+/// The effect an `impl E for T` block handles, when `E` is one. Read off the
+/// impl facts, which name the trait by its declaring module: a plain trait
+/// spelled like an effect is a different declaration and grants nothing.
+fn handled_effect(
+    sem: &Semantics,
+    module: &ModuleSource,
+    impl_block: &crate::ast::ImplBlock,
+    index: &EffectIndex,
+) -> Option<EffectRef> {
+    let facts = sem
+        .state
+        .as_ref()?
+        .module_semantics
+        .get(module)?
+        .types
+        .impl_facts
+        .get(&impl_block.id)?;
+    if !facts.is_handler_method {
+        return None;
+    }
+    let trait_name = facts.trait_name.as_ref()?;
+    let effect = EffectRef::Concrete {
+        name: trait_name.base_name().to_string(),
+        module_source: trait_name.module()?.clone(),
+    };
+    index.closure.contains_key(&effect).then_some(effect)
+}
+
+/// `handled` is the effect a method of `impl E for T` handles.
 fn check_function_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
+    handled: Option<&EffectRef>,
     out: &mut Vec<EffectError>,
 ) {
     let Some(body) = &func.body else {
@@ -580,10 +620,17 @@ fn check_function_effects_sem(
             &mut current,
         );
     }
+    // A handler method holds the effect it handles: `E::op()` from inside
+    // `impl E for T` delegates to the outer handler, what `..forward` desugars to.
+    if let Some(effect) = handled {
+        current.insert(effect.clone());
+    }
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
     for name in benign_effect_names(&func.attrs) {
-        if let Some(effect) = index.effect_by_name.get(&name) {
-            current.insert(effect.clone());
+        if let Some(effect) =
+            effect_named_in(&name, module, sem, index.closure, index.effect_by_name)
+        {
+            current.insert(effect);
         }
     }
     // Canonicalise before expanding so the closure keys (built from the
@@ -591,7 +638,7 @@ fn check_function_effects_sem(
     // `Stdout` may call operations that internally need `Stream`, etc.
     let current: IndexSet<EffectRef> = current
         .iter()
-        .map(|effect| canonicalize_effect(effect, index.effect_by_name))
+        .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
         .collect();
     let current = expand_through_closure(&current, index.closure);
 
@@ -611,6 +658,7 @@ fn check_function_effects_sem(
         current,
         param_types,
         module: module.source_path(),
+        module_source: module.clone(),
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -709,18 +757,49 @@ fn build_propagation_closure_sem(
     direct
 }
 
-/// Canonicalise an effect by name through the declaration index. The raw
-/// `EffectRef::Concrete.module_source` recorded in `function_effects` reflects
-/// the recording module's import perspective, so two references to the same
-/// effect can carry different module sources (user entry vs `wasi:cli`). The
-/// declaration index (built from the propagation-closure keys) holds one
-/// canonical `EffectRef` per name; mapping through it makes cross-module
-/// effect comparison and closure lookups consistent. Effect parameters and
-/// names without a declaration are returned unchanged.
+/// The effect a name written in `module` refers to. An attribute argument and a
+/// `with` clause type carry a spelling, so the declaration it reaches decides —
+/// the module's own first, then what it imported, aliases and all.
+fn effect_named_in(
+    name: &str,
+    module: &ModuleSource,
+    sem: &Semantics,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    effect_by_name: &IndexMap<String, EffectRef>,
+) -> Option<EffectRef> {
+    let local = EffectRef::Concrete {
+        name: name.to_string(),
+        module_source: module.clone(),
+    };
+    if closure.contains_key(&local) {
+        return Some(local);
+    }
+    if let Some(resolutions) = sem.resolutions()
+        && let Some(def) = resolutions.imported_as(module, name)
+    {
+        let defs = resolutions.defs();
+        let imported = EffectRef::Concrete {
+            name: defs.name(def).to_string(),
+            module_source: defs.module(def).clone(),
+        };
+        if closure.contains_key(&imported) {
+            return Some(imported);
+        }
+    }
+    effect_by_name.get(name).cloned()
+}
+
+/// The declaration an effect reference names. One the closure knows already is;
+/// a spelling it does not — a re-export seen from the recording module —
+/// resolves through the by-name index. Effect parameters pass through.
 fn canonicalize_effect(
     effect: &EffectRef,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: &IndexMap<String, EffectRef>,
 ) -> EffectRef {
+    if closure.contains_key(effect) {
+        return effect.clone();
+    }
     match effect {
         EffectRef::Concrete { name, .. } => effect_by_name
             .get(name)
@@ -837,6 +916,7 @@ struct SemEffectWalker<'a> {
     /// `references` edge or recorded expression type at the call site).
     param_types: IndexMap<String, TypeId>,
     module: String,
+    module_source: ModuleSource,
     out: &'a mut Vec<EffectError>,
 }
 
@@ -893,7 +973,11 @@ impl SemEffectWalker<'_> {
     /// itself; for a CM-component-imported interface it is the reconstructed
     /// host-leaf effect set — empty for a purely-computational component, so its
     /// operations need no `with`. Returns empty for a non-effect-op callee.
-    fn effect_op_requirement(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
+    fn effect_op_requirement(
+        &self,
+        func_ref: &FunctionRef,
+        receiver_site: Option<crate::ast::AstId>,
+    ) -> Vec<EffectRef> {
         if func_ref.method_info.is_some() {
             return Vec::new();
         }
@@ -901,8 +985,21 @@ impl SemEffectWalker<'_> {
             return Vec::new();
         }
         let interface = func_ref.module_source.to_string();
-        let Some((decl_module, cm_fq)) = self.index.interface_meta.get(&interface) else {
-            return Vec::new();
+        // The callee names its interface's declaration; the site says which one
+        // that is, so a same-named local `interface` cannot stand in for it.
+        let declared = receiver_site
+            .and_then(|site| self.sem.resolutions()?.declared(site))
+            .map(|def| {
+                let defs = self.sem.resolutions().expect("resolutions").defs();
+                (defs.module(def).clone(), defs.name(def).to_string())
+            })
+            .filter(|key| self.index.interface_cm_fq.contains_key(key));
+        let (decl_module, name, cm_fq) = match &declared {
+            Some(key) => (&key.0, key.1.clone(), &self.index.interface_cm_fq[key]),
+            None => match self.index.interface_meta.get(&interface) {
+                Some((module, fq)) => (module, interface, fq),
+                None => return Vec::new(),
+            },
         };
         // Only a host-backed effect (`#[cm]`) is a capability the caller must
         // hold. A user-defined effect is resolved by the handler machinery, so
@@ -925,7 +1022,7 @@ impl SemEffectWalker<'_> {
                 .collect();
         }
         vec![EffectRef::Concrete {
-            name: interface,
+            name,
             module_source: decl_module.clone(),
         }]
     }
@@ -941,24 +1038,24 @@ impl SemEffectWalker<'_> {
             return facts
                 .effects
                 .iter()
-                .filter_map(|entry| {
-                    let resolved = self.index.effect_by_name.get(&entry.name).cloned();
-                    debug_assert!(
-                        resolved.is_some(),
-                        "granted effect '{}' from handler_bindings facts is absent from effect_by_name",
-                        entry.name
-                    );
-                    resolved
+                .map(|entry| EffectRef::Concrete {
+                    name: entry.name.clone(),
+                    module_source: entry.module_source.clone(),
                 })
+                .filter(|effect| self.index.closure.contains_key(effect))
                 .collect();
         }
         binding
             .effect
             .as_ref()
             .and_then(|ty| match ty {
-                crate::ast::Type::Named(named) => {
-                    self.index.effect_by_name.get(&named.name).cloned()
-                }
+                crate::ast::Type::Named(named) => effect_named_in(
+                    &named.name,
+                    &self.module_source,
+                    self.sem,
+                    self.index.closure,
+                    self.index.effect_by_name,
+                ),
                 _ => None,
             })
             .into_iter()
@@ -1047,7 +1144,7 @@ impl SemEffectWalker<'_> {
             // records `Stdout` against the entry module, while stdlib records
             // it against `wasi:cli`), so compare through the declaration's
             // canonical form rather than by raw `module_source`.
-            let effect = canonicalize_effect(effect, self.index.effect_by_name);
+            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
             // Any `Param` left after resolution did not bind to a concrete
             // effect; skip it rather than report a spurious miss.
             if effect.is_param() || self.current.contains(&effect) {
@@ -1130,8 +1227,12 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .and_then(|ann| ann.static_method_dispatch.get(&call.id))
                     .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
                 {
+                    let receiver_site = match &call.callee {
+                        Expr::Ident(ident) => ident.segments.first().map(|seg| seg.id),
+                        _ => None,
+                    };
                     let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref));
+                    effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
                     let params = self.method_param_types(&func_ref);
                     // A qualified (UFCS) call spells the receiver as its
                     // first argument, so the args already align with the
@@ -1156,7 +1257,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 if let Some(dispatch) = self.sem.method_dispatch.get(&call_key) {
                     let func_ref = dispatch.function_ref.clone();
                     let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref));
+                    effects.extend(self.effect_op_requirement(&func_ref, None));
                     let params = self.method_param_types(&func_ref);
                     let resolved =
                         self.resolve_effect_params(&effects, &params, true, &method_call.args);
@@ -1171,7 +1272,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
                 {
                     let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref));
+                    effects.extend(self.effect_op_requirement(&func_ref, None));
                     let params = self.method_param_types(&func_ref);
                     // See the `Call` arm: a trait-turbofish qualified call
                     // carries its receiver in the argument list.

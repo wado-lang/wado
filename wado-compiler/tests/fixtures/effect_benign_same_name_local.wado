@@ -1,0 +1,21 @@
+// `#[benign(E)]` admits the `E` this module declares, which is not the
+// same-named effect another module declares.
+
+use { println } from "core:cli";
+
+interface Stdout {
+    fn beep();
+}
+
+#[benign(Stdout)]
+fn f() {
+    Stdout::beep();
+    println("needs the other Stdout");
+}
+
+export fn run() {
+    let _ = 0;
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'println'"}
