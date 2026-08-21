@@ -523,6 +523,31 @@ fn rebox_call(
         span,
     });
 
+    let match_expr = rebuild_variant(body, local_index, &name, variant_type, &layout, span);
+    let tail = body.stmts.push(StmtNode {
+        kind: StmtKind::Expr(Operand::Expr(match_expr)),
+        span,
+    });
+    let block = body.blocks.push(BlockNode {
+        stmts: vec![let_stmt, tail],
+        span,
+    });
+    body.exprs[call].kind = ExprKind::Block(block);
+    body.exprs[call].type_id = variant_type;
+}
+
+/// `match t.0 { k => Case(t.<slot>!) … }` — the variant a tuple local denotes.
+/// Reading the tuple back is what lets a scalarized result reach a context that
+/// wants the variant whole, whether the tuple came from a call this pass
+/// declined or from a temp it bound.
+fn rebuild_variant(
+    body: &mut Body,
+    local_index: u32,
+    name: &str,
+    variant_type: TypeId,
+    layout: &Layout,
+    span: Span,
+) -> ExprId {
     let mut arms: Vec<ArmData> = Vec::with_capacity(layout.case_names.len());
     for case_index in 0..layout.case_names.len() {
         let case_index = u32::try_from(case_index).expect("variant case index overflow");
@@ -530,7 +555,7 @@ fn rebox_call(
             let read = tuple_field(
                 body,
                 local_index,
-                &name,
+                name,
                 layout.tuple_type,
                 slot.index + 1,
                 layout.slot_types[slot.index],
@@ -583,7 +608,7 @@ fn rebox_call(
     let tag = tuple_field(
         body,
         local_index,
-        &name,
+        name,
         layout.tuple_type,
         0,
         TypeTable::I32,
@@ -594,16 +619,7 @@ fn rebox_call(
         type_id: variant_type,
         span,
     });
-    let tail = body.stmts.push(StmtNode {
-        kind: StmtKind::Expr(Operand::Expr(match_expr)),
-        span,
-    });
-    let block = body.blocks.push(BlockNode {
-        stmts: vec![let_stmt, tail],
-        span,
-    });
-    body.exprs[call].kind = ExprKind::Block(block);
-    body.exprs[call].type_id = variant_type;
+    match_expr
 }
 
 /// `t.<field>` on a named local.
@@ -1586,11 +1602,9 @@ fn check_uses(
                         return;
                     }
                 }
-                // A bare mention of the temp escapes the destructure.
-                ExprKind::Local { index, .. } => {
-                    if let Some(f) = bound.get(index) {
-                        invalid.insert(*f);
-                    }
+                // A bare mention of the temp is rebuilt from the tuple by
+                // `rewrite_temp_uses`, so it costs this site nothing.
+                ExprKind::Local { .. } => {
                     return;
                 }
                 // A candidate call at a position `accepted` does not list has
@@ -2130,6 +2144,10 @@ struct SiteCx<'a> {
 }
 
 impl SiteCx<'_> {
+    fn variant_of(&self, local: u32) -> TypeId {
+        self.candidates[&self.bound[&local]].variant_type
+    }
+
     fn layout_of(&self, local: u32) -> &Layout {
         &self.candidates[&self.bound[&local]].layout
     }
@@ -2296,6 +2314,26 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     rewrite_match_on_temp(body, e, local, &layout, arms, cx);
                 }
             }
+            // A field of the temp is the destructure itself — the shape every
+            // rebuild reads the tuple through. Leaving it alone is what keeps a
+            // rebuild from nesting under the field reads it just planted, on
+            // this round and on every later one. The type cannot stand in for
+            // this: `retype_let` has already retyped every read of the local.
+            ExprKind::FieldAccess { expr, .. } if temp_local(body, expr, cx.bound).is_some() => {
+                return;
+            }
+            // A read of the temp itself wants the variant whole. The tuple still
+            // holds it, so rebuild it here rather than give up the scalarized
+            // call.
+            ExprKind::Local { index, .. } if cx.bound.contains_key(&index) => {
+                let layout = cx.layout_of(index).clone();
+                let variant_type = cx.variant_of(index);
+                let name = cx.names[index as usize].clone();
+                let rebuilt = rebuild_variant(body, index, &name, variant_type, &layout, cx.span);
+                body.exprs[e].kind = body.exprs[rebuilt].kind.clone();
+                body.exprs[e].type_id = variant_type;
+                return;
+            }
             _ => {}
         }
     }
@@ -2306,9 +2344,9 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
     }
 }
 
-/// Whether every mention of `local` is a destructure the rewrite lowers. A bare
-/// read escapes the tuple, and a `Match` arm deeper than one level has no tag
-/// form — either leaves the site to the rebox.
+/// Whether every mention of `local` is one the rewrite lowers: a destructure, or
+/// a bare read it rebuilds the variant for. A `Match` arm deeper than one level
+/// has no tag form, and leaves the site to the rebox.
 fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind) -> bool {
     let mut ok = true;
     check_temp_uses(body, NodeRef::Block(body.root), local, rebind, &mut ok);
@@ -2361,8 +2399,9 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: 
                     return;
                 }
             }
+            // A bare read rebuilds the variant from the tuple, so it is no
+            // longer a reason to decline the site.
             ExprKind::Local { index, .. } if *index == local => {
-                *ok = false;
                 return;
             }
             _ => {}
