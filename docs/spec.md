@@ -3136,7 +3136,7 @@ for let p of &mut points {
 }
 ```
 
-A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
+A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. Taking `&mut` of such a place is a compile error wherever it appears — `&mut` iteration, an explicit `&mut x.f` / `&mut xs[i]`, and the implicit borrow a `&mut self` method takes of its receiver. A *local* of such a type is fine: its box is the variable's own storage. Use indexed access instead:
 
 ```wado
 for let mut i = 0; i < arr.len(); i += 1 {
@@ -3651,7 +3651,9 @@ impl Serialize for User;      // compiler generates serialize method
 impl Deserialize for User;    // compiler generates deserialize method
 ```
 
-The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
+The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait, or if a `Deserialize` target has more than 64 fields (deserialization records which fields the wire wrote in a 64-bit mask, so repeats can be rejected).
+
+Deserialization rejects a repeated field or key by default; a format sets its own policy through `Deserializer::on_duplicate_key` (`core:args` keeps last-wins, the command-line convention). Container nesting is bounded by each format's `max_depth`, so a deeply nested input is a `DepthLimitExceeded` error rather than a stack-exhausting trap.
 
 Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `name` / `name_policy` overrides.
 
