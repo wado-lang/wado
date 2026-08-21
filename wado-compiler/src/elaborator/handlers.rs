@@ -217,12 +217,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source: eff_module,
         }) = &effect
         {
+            // Name the effect by its declaration, not by the spelling this
+            // module imported it under, so `use { Random as Rng }` records the
+            // same entry a plain import would.
+            let declared = effect_decl
+                .map(|def| crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), def));
+            let name = declared
+                .as_ref()
+                .map(|fq| fq.base_name().to_string())
+                .unwrap_or_else(|| eff_name.clone());
+            let module_source = declared
+                .as_ref()
+                .and_then(|fq| fq.module())
+                .cloned()
+                .unwrap_or_else(|| eff_module.clone());
             self.record_handler_binding_facts(
                 binding.id,
                 super::sem::types::HandlerBindingFacts {
                     effects: vec![super::sem::types::HandlerEffectEntry {
-                        name: eff_name.clone(),
-                        module_source: eff_module.clone(),
+                        name,
+                        module_source,
                         trait_type_args,
                     }],
                     bundle_group: None,

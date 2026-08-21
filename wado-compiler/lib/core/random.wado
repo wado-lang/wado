@@ -26,10 +26,10 @@ pub struct BufferedRandom {
 
 impl Random for BufferedRandom {
     fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
-        let n = max_len as i32;
-        if n > POOL_BYTES {
+        if max_len > POOL_BYTES as u64 {
             resume Random::get_random_bytes(max_len);
         }
+        let n = max_len as i32;
         if self.available() < n {
             self.refill();
         }

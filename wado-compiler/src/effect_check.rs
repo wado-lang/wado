@@ -311,7 +311,7 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                     check_function_effects_sem(sem, src, func, index, None, out);
                 }
                 Item::Impl(impl_block) => {
-                    let handled = handled_effect(impl_block, index);
+                    let handled = handled_effect(sem, src, impl_block, index);
                     for method in &impl_block.methods {
                         check_function_effects_sem(sem, src, method, index, handled.as_ref(), out);
                     }
@@ -537,11 +537,33 @@ struct EffectIndex<'a> {
 }
 
 /// The effect an `impl E for T` block handles, when `E` is one.
-fn handled_effect(impl_block: &crate::ast::ImplBlock, index: &EffectIndex) -> Option<EffectRef> {
-    match impl_block.trait_type.as_ref()? {
-        crate::ast::Type::Named(named) => index.effect_by_name.get(&named.name).cloned(),
-        _ => None,
+///
+/// Reads the trait off the elaborator's impl facts, which name it by the module
+/// that declares it: a plain trait spelled like an effect is a different
+/// declaration and grants nothing.
+fn handled_effect(
+    sem: &Semantics,
+    module: &ModuleSource,
+    impl_block: &crate::ast::ImplBlock,
+    index: &EffectIndex,
+) -> Option<EffectRef> {
+    let facts = sem
+        .state
+        .as_ref()?
+        .module_semantics
+        .get(module)?
+        .types
+        .impl_facts
+        .get(&impl_block.id)?;
+    if !facts.is_handler_method {
+        return None;
     }
+    let trait_name = facts.trait_name.as_ref()?;
+    let effect = EffectRef::Concrete {
+        name: trait_name.base_name().to_string(),
+        module_source: trait_name.module()?.clone(),
+    };
+    index.closure.contains_key(&effect).then_some(effect)
 }
 
 /// `handled` is the effect a method of `impl E for T` handles.
@@ -958,15 +980,11 @@ impl SemEffectWalker<'_> {
             return facts
                 .effects
                 .iter()
-                .filter_map(|entry| {
-                    let resolved = self.index.effect_by_name.get(&entry.name).cloned();
-                    debug_assert!(
-                        resolved.is_some(),
-                        "granted effect '{}' from handler_bindings facts is absent from effect_by_name",
-                        entry.name
-                    );
-                    resolved
+                .map(|entry| EffectRef::Concrete {
+                    name: entry.name.clone(),
+                    module_source: entry.module_source.clone(),
                 })
+                .filter(|effect| self.index.closure.contains_key(effect))
                 .collect();
         }
         binding

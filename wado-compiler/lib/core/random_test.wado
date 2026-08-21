@@ -12,7 +12,7 @@ struct CountingRandom {
 impl Random for CountingRandom {
     fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
         self.calls += 1;
-        let mut n = max_len as i32;
+        let mut n = if max_len > 65536 { 65536 } else { max_len as i32 };
         if self.chunk > 0 && self.chunk < n {
             n = self.chunk;
         }
@@ -111,6 +111,18 @@ test "a read larger than the block goes straight to the host" {
         };
     };
     assert host.calls == 1;
+}
+
+test "a read too large for an i32 goes straight to the host" {
+    let mut host = CountingRandom { next: 0, calls: 0, chunk: 16 };
+    with Random => &mut host do {
+        let mut rng = BufferedRandom {};
+        with Random => &mut rng do {
+            assert Random::get_random_bytes(2147483664).len() == 16;
+            // The block is untouched, so the stream continues where it was.
+            assert Random::get_random_bytes(4)[0] == 16;
+        };
+    };
 }
 
 test "leftover bytes survive a refill" {

@@ -1,0 +1,23 @@
+// A plain trait spelled like an effect is a different declaration: implementing
+// it grants nothing, so a method performing `Stdout` still needs the capability.
+
+use { println } from "core:cli";
+
+trait Stdout {
+    fn show(&self);
+}
+
+struct Card {
+}
+
+impl Stdout for Card {
+    fn show(&self) {
+        println("card");
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'println'"}
