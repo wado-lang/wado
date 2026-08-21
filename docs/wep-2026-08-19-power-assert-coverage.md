@@ -87,7 +87,9 @@ Every operand position in a condition is captured, save what _Known gaps_
 lists as not yet reached. A literal is the one position needing no slot of its
 own: its value is its source text, which the `condition:` line already shows.
 A cast or a negation of one renders the same text back, so neither earns a slot
-either.
+either. `&<ident>` earns none for the `&` itself: the scan cannot tell it from
+`&fn_name`, whose coercion a binding would lose — the place under it renders
+instead, which needs no binding and so loses nothing.
 There is no second outcome to report for a
 type: `Inspect` is total (WEP-2026-06-25), so a `T: Inspect` obligation always
 holds and every operand has a rendering. An operand the compiler declines to
@@ -142,13 +144,11 @@ a defect or an open question, never a boundary.
 
 ### Rule 3: operand positions that render nothing
 
-- [ ] **Render a closure, `WithHandler` or `Resume` operand.** `Inspect` is
-      total, so a closure value has a rendering — `assert apply(|x: i32| -> i32
-      { return x * 2; }, n)` could show `|i32| -> i32` and shows nothing today.
-      Their _children_ stay unwalked for a separate reason that does hold: a
-      sub-expression of a closure body has no value at the moment the condition
-      failed. Red: `assert_gap_closure_operand`, which pins the closure half
-      only — `WithHandler` and `Resume` are unpinned.
+- [ ] **Render a `WithHandler` or `Resume` operand.** A closure renders its
+      signature now (`assert_closure_operand`); these two still render nothing.
+      Their _children_ stay unwalked for a separate reason that does hold, and
+      holds for a closure too: a sub-expression of a closure body has no value
+      at the moment the condition failed. Unpinned.
 
 - [ ] **Capture the operands inside the branch a run took.** The scan stops at
       an `If` / `Match` branch body and at a block's statements, on the argument
