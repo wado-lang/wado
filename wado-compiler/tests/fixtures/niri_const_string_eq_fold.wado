@@ -1,0 +1,33 @@
+// A comparison between two compile-time constant strings is decided at compile
+// time, so neither the comparison nor the list it read from reaches the WIR.
+//
+// `String::eq` walks bytes through `&Array<u8>` parameters, and the index it
+// reads at needs a temporary — a region the frame has to run, not a value the
+// lattice can read off.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn greeting() -> String {
+    return "hello";
+}
+
+export fn run() with Stdout {
+    let s = "hello";
+    assert s == "hello";
+
+    let list: List<String> = ["hello", "world"];
+    assert list[0] == "hello";
+    assert list[1] == "world";
+
+    println(`${greeting()}`);
+}
+
+__DATA__
+{
+    "stdout": "hello\n",
+    "wir_not_expect:O2": [
+        "String^core:prelude/traits.wado/Eq::eq\"(",
+        "array.new_fixed<ref \"core:prelude/string.wado//String\">("
+    ]
+}
