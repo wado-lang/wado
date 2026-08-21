@@ -35,6 +35,7 @@ mod peephole;
 mod ref_elim;
 mod scalar_forward;
 mod select_lowering;
+mod single_assign_to_let;
 mod sroa;
 mod sroa_param;
 mod sroa_variant_return;
@@ -572,6 +573,10 @@ fn run_optimization_passes(
             let_block_flatten::flatten_let_blocks
         );
         gated!("nir/sroa", scalar_replace_aggregates);
+        gated!(
+            "nir/single_assign_to_let",
+            single_assign_to_let::promote_single_assignments
+        );
         gated!("nir/copy_prop", propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
         // let-bindings before `const_fold` revisits the simplified body.

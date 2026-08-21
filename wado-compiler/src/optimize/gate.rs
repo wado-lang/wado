@@ -41,10 +41,11 @@ pub enum GatedPass {
     ValueCopyDemote,
     ScalarForward,
     LetBlockFlatten,
+    SingleAssignToLet,
 }
 
 impl GatedPass {
-    const COUNT: usize = 16;
+    const COUNT: usize = 17;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -232,6 +233,7 @@ mod tests {
             GatedPass::ValueCopyDemote,
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
+            GatedPass::SingleAssignToLet,
         ];
         for p in all {
             match p {
