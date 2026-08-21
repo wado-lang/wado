@@ -625,7 +625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.lookup_function_type_params(&callee).is_empty() {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
-        let return_type = self.lookup_function_return_type(&callee);
+        let return_type = self.lookup_function_return_type(&callee, None);
         self.class_of_type(return_type)
     }
 

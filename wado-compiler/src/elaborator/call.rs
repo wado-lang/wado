@@ -304,27 +304,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` is a declared effect (`interface`) or resource —
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    /// The effect / resource declaration `name` names here.
-    ///
-    /// The local spelling answers first — it is the one a binder or an alias
-    /// can shadow. Failing that, the declaration this module can see under some
-    /// other name: an interface-qualified call spells the declaration's own
-    /// name, which an aliasing import never brings into scope.
-    fn effect_or_resource_decl(&self, name: &str) -> Option<crate::defs::DefId> {
-        let is_effect_like = |key: &crate::defs::DefId| {
-            self.tysys.trait_env.effect_decl_index.contains(key)
-                || self.tysys.trait_env.resource_decl_index.contains(key)
-        };
-        if let Some(local) = self.decl_key_or_local(name) {
-            return is_effect_like(&local).then_some(local);
-        }
-        self.tysys.trait_env.decls_named(name).find(|def| {
-            is_effect_like(def)
-                && self
-                    .tysys
-                    .resolutions
-                    .in_scope(&self.current_module_source, *def)
-        })
+    fn is_effect_or_resource_decl(&self, def: crate::defs::DefId) -> bool {
+        self.tysys.trait_env.effect_decl_index.contains(&def)
+            || self.tysys.trait_env.resource_decl_index.contains(&def)
+    }
+
+    /// The effect / resource declaration a qualified callee's receiver segment
+    /// names — answered by the site the walk resolved, so an import alias needs
+    /// no translation back into a spelling.
+    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<crate::defs::DefId> {
+        let def = self.tysys.resolutions.declared(site?)?;
+        self.is_effect_or_resource_decl(def).then_some(def)
+    }
+
+    /// The same declaration for a callee with no site: a rewritten or
+    /// synthesized call names it as this module spells it.
+    fn effect_or_resource_decl_named(&self, name: &str) -> Option<crate::defs::DefId> {
+        self.decl_key_or_local(name)
+            .filter(|def| self.is_effect_or_resource_decl(*def))
     }
 
     pub(super) fn resolve_call(
@@ -499,7 +496,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_site = callee_kind.receiver_site();
 
         // First, determine expected parameter types to handle coercion.
-        let (mut param_types, callee_slots) = self.lookup_function_signature(effective_name);
+        let (mut param_types, callee_slots) =
+            self.lookup_function_signature(effective_name, receiver_site);
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -1323,7 +1321,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // caller falls through to the standard "unknown function" error
             // instead of deferring an unvalidated call to codegen, where it
             // would panic instead of failing cleanly.
-            else if let Some(decl) = self.effect_or_resource_decl(prefix) {
+            else if let Some(decl) = self
+                .effect_or_resource_decl_at(ident.segments.first().map(|seg| seg.id))
+                .or_else(|| self.effect_or_resource_decl_named(prefix))
+            {
                 // Name the interface by its declaration: signature resolution,
                 // the effect check, dispatch and WIR all key on that name, and
                 // an aliasing import must not make them miss each other.
@@ -1499,7 +1500,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Look up function return type
-        let mut return_type = self.lookup_function_return_type(&callee);
+        let mut return_type =
+            self.lookup_function_return_type(&callee, callee_kind.receiver_site());
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
@@ -1659,7 +1661,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Look up the return type of a function
-    pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
+    pub(super) fn lookup_function_return_type(
+        &mut self,
+        callee: &CalleeRef,
+        receiver_site: Option<ast::AstId>,
+    ) -> TypeId {
         let callee_module = &callee.module;
         let func_name = callee.name.as_str();
         // Handle builtin functions
@@ -1675,8 +1681,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `ModuleSource::Local { path }` matches `is_effect_like()`.
         if callee_module.is_effect_like()
             && let Some(interface_name) = callee_module.interface_name()
-            && let Some((_, Some(return_type))) =
-                self.resolve_effect_op_signature(&interface_name, func_name)
+            && let Some(decl) = self
+                .effect_or_resource_decl_at(receiver_site)
+                .or_else(|| self.effect_or_resource_decl_named(&interface_name))
+            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
         {
             return return_type;
         }
@@ -1707,11 +1715,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// kinds as a [`MethodSig`] in the declaration's own frame.
     fn resolve_effect_op_signature(
         &self,
-        effect: &str,
+        effect: crate::defs::DefId,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let canonical_key = self.effect_or_resource_decl(effect)?;
-        let decl_id = self.tysys.resolutions.defs().ast_id(canonical_key);
+        let decl_id = self.tysys.resolutions.defs().ast_id(effect);
         let sig = self
             .tysys
             .signatures
@@ -1748,7 +1755,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// slots are instantiated, and a rigid slot is opaque — a literal checked
     /// against one can only be rejected. The qualified spellings report no
     /// slots; they infer through their own paths.
-    pub(super) fn lookup_function_signature(&mut self, name: &str) -> (Vec<TypeId>, Vec<TypeId>) {
+    pub(super) fn lookup_function_signature(
+        &mut self,
+        name: &str,
+        receiver_site: Option<ast::AstId>,
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
         // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
@@ -1776,7 +1787,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return (sig.decl.param_types.clone(), Vec::new());
             }
 
-            if let Some((params, _)) = self.resolve_effect_op_signature(prefix, suffix) {
+            if let Some(decl) = self
+                .effect_or_resource_decl_at(receiver_site)
+                .or_else(|| self.effect_or_resource_decl_named(prefix))
+                && let Some((params, _)) = self.resolve_effect_op_signature(decl, suffix)
+            {
                 return (params, Vec::new());
             }
 
