@@ -1,10 +1,7 @@
 //! Deterministic UUID v7 via effect handlers.
 //!
-//! `Uuid::v7()` draws from two effects: `Random` for the entropy bytes and
-//! `SystemClock` for the 48-bit millisecond timestamp. In production both come
-//! from the host, so every call yields a fresh value. By installing our own
-//! handlers with `with Effect => handler do { ... }`, we pin both sources and
-//! get fully reproducible output — useful for tests, golden files, and demos.
+//! `Uuid::v7()` draws from `Random` and `SystemClock`; installing our own
+//! handlers pins both, so the output is reproducible.
 //!
 //!     wado run example/uuid_v7.wado
 
@@ -79,21 +76,20 @@ export fn run() with Stdout {
     println(`v7 @ 1000ms: ${a}`);
     println(`v7 @ 2000ms: ${b}`);
 
-    // The timestamp lives in the most significant bytes, so a later instant
-    // always sorts after an earlier one — the defining property of v7.
     assert a < b, "v7 values must sort by timestamp";
     assert a.version() == 7;
 
-    // Determinism: the same handlers reproduce the same UUID byte for byte.
+    let fine = gen_v7(1, 250_000, repeat(0xAB, 16));
+    assert a < fine, "v7 values must sort within a millisecond too";
+
     assert gen_v7(1, 0, repeat(0xAB, 16)) == a;
     println("deterministic: re-running yields the same UUID");
 }
 
 test "v7 is fully determined by the installed handlers" {
-    // seconds = 1, nanoseconds = 0 -> 1000 ms = 0x0000_0000_03E8.
-    // Entropy is all 0xFF, so byte 6 -> 0x7F (version) and byte 8 -> 0xBF.
+    // 1000 ms = 0x3E8, fraction 0 -> bytes 6..=7 = 0x70, 0x00; 0xFF entropy -> byte 8 = 0xBF.
     let id = gen_v7(1, 0, repeat(0xFF, 16));
-    assert id.to_string() == "00000000-03e8-7fff-bfff-ffffffffffff";
+    assert id.to_string() == "00000000-03e8-7000-bfff-ffffffffffff";
     assert id.version() == 7;
 }
 

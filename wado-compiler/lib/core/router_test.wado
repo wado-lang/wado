@@ -1,6 +1,8 @@
 use { Router } from "core:router";
 use { Method } from "wasi:http";
 use { Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
+use { Uuid } from "core:uuid";
+use { Instant } from "core:temporal";
 
 test "router: static routes" {
     let mut r = Router::<i32>::new();
@@ -289,6 +291,38 @@ struct NestedParam {
     inner: InnerParam,
 }
 impl Deserialize for NestedParam;
+
+struct UuidParam {
+    id: Uuid,
+}
+impl Deserialize for UuidParam;
+
+struct InstantParam {
+    at: Instant,
+}
+impl Deserialize for InstantParam;
+
+test "router: deserialize a param type that asks for any" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id", 1);
+    r.get("/events/:at", 2);
+
+    let m = r.match_path(Method::Get, &"/users/00010203-0405-4607-8809-0a0b0c0d0e0f").unwrap();
+    let p = m.params.deserialize::<UuidParam>().unwrap();
+    assert p.id.to_string() == "00010203-0405-4607-8809-0a0b0c0d0e0f";
+
+    let e = r.match_path(Method::Get, &"/events/2026-08-21T00:00:00Z").unwrap();
+    let q = e.params.deserialize::<InstantParam>().unwrap();
+    assert q.at.seconds == 1787270400;
+}
+
+test "router: deserialize rejects a malformed any-shaped param" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/:id", 1);
+
+    let m = r.match_path(Method::Get, &"/users/nope").unwrap();
+    assert m.params.deserialize::<UuidParam>() matches { Err(_) };
+}
 
 test "router: deserialize params into struct" {
     let mut r = Router::<i32>::new();

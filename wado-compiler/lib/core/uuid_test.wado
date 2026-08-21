@@ -1,11 +1,10 @@
-use { Uuid } from "core:uuid";
+use { Uuid, ParseError } from "core:uuid";
+use { to_string, from_string } from "core:json";
+use { to_bytes, from_bytes } from "core:cbor";
 use { Random } from "wasi:random";
 use { SystemClock, Instant } from "wasi:clocks";
 
-// A deterministic `Random` handler that hands out a fixed byte stream. This is
-// what makes `Uuid::v4` / `Uuid::v7` testable: the only non-determinism in
-// those functions is the `Random` effect, so installing a fixed source pins
-// the output exactly.
+// Pinning `Random` pins `Uuid::v4` / `v7`: it is their only non-determinism.
 struct MockRandom {
     data: List<u8>,
     pos: i32,
@@ -26,7 +25,6 @@ impl Random for MockRandom {
     ..trap
 }
 
-// A deterministic `SystemClock` handler returning a fixed instant.
 struct MockClock {
     instant: Instant,
 }
@@ -76,16 +74,46 @@ test "v4 always sets version 4 and the RFC variant" {
 }
 
 test "v7 embeds the millisecond timestamp big-endian" {
-    // seconds = 1, nanoseconds = 0  ->  1000 ms = 0x0000_0000_03E8
+    // seconds = 1, nanoseconds = 0  ->  1000 ms = 0x0000_0000_03E8, rand_a = 0
     let mut rng = MockRandom { data: repeated(0xFF, 16), pos: 0 };
     let clock = MockClock {
         instant: Instant { seconds: 1, nanoseconds: 0 },
     };
     with Random => &mut rng, SystemClock => &clock do {
         let id = Uuid::v7();
-        assert id.to_string() == "00000000-03e8-7fff-bfff-ffffffffffff";
+        assert id.to_string() == "00000000-03e8-7000-bfff-ffffffffffff";
         assert id.version() == 7;
     };
+}
+
+test "v7 encodes the sub-millisecond fraction in rand_a" {
+    // 500_000 ns into the millisecond -> 500_000 * 4096 / 1_000_000 = 2048 = 0x800.
+    let mut rng = MockRandom { data: repeated(0xFF, 16), pos: 0 };
+    let clock = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 500_000 },
+    };
+    with Random => &mut rng, SystemClock => &clock do {
+        let id = Uuid::v7();
+        assert id.to_string() == "00000000-03e8-7800-bfff-ffffffffffff";
+    };
+}
+
+test "v7 sorts by sub-millisecond time within one millisecond" {
+    // Same millisecond, same entropy: only rand_a can order these.
+    let mut rng = MockRandom { data: repeated(0x00, 32), pos: 0 };
+    let early = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 100_000 },
+    };
+    let late = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 900_000 },
+    };
+    let a = with Random => &mut rng, SystemClock => &early do {
+        Uuid::v7();
+    };
+    let b = with Random => &mut rng, SystemClock => &late do {
+        Uuid::v7();
+    };
+    assert a < b;
 }
 
 test "v7 values sort by timestamp" {
@@ -110,8 +138,8 @@ test "v7 values sort by timestamp" {
 test "parse round-trips canonical form" {
     let s: String = "00010203-0405-4607-8809-0a0b0c0d0e0f";
     let parsed = Uuid::parse(&s);
-    assert parsed matches { Some(_) };
-    if let Some(id) = parsed {
+    assert parsed matches { Ok(_) };
+    if let Ok(id) = parsed {
         assert id.to_string() == s;
         assert id.version() == 4;
     }
@@ -120,41 +148,99 @@ test "parse round-trips canonical form" {
 test "parse accepts uppercase hex" {
     let lower = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
     let upper = Uuid::parse(&"00010203-0405-4607-8809-0A0B0C0D0E0F");
-    assert lower matches { Some(_) };
-    assert upper matches { Some(_) };
-    if let Some(l) = lower {
-        if let Some(u) = upper {
+    assert lower matches { Ok(_) };
+    assert upper matches { Ok(_) };
+    if let Ok(l) = lower {
+        if let Ok(u) = upper {
             assert l == u;
         }
     }
 }
 
-test "parse accepts the simple (hyphenless) form" {
-    // 32 hex digits, no hyphens — same value as the hyphenated form.
-    let simple = Uuid::parse(&"000102030405460788090a0b0c0d0e0f");
-    let hyphenated = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
-    assert simple matches { Some(_) };
-    if let Some(s) = simple {
-        assert s.to_string() == "00010203-0405-4607-8809-0a0b0c0d0e0f";
-        if let Some(h) = hyphenated {
-            assert s == h;
+test "parse accepts every form Go's uuid does" {
+    let canonical = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert canonical matches { Ok(_) };
+    if let Ok(want) = canonical {
+        assert Uuid::parse(&"000102030405460788090a0b0c0d0e0f") matches { Ok(id) && id == want };
+        assert Uuid::parse(&"{00010203-0405-4607-8809-0a0b0c0d0e0f}") matches { Ok(id) && id == want };
+        assert Uuid::parse(&"urn:uuid:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Ok(id) && id == want };
+        assert Uuid::parse(&"URN:UUID:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Ok(id) && id == want };
+    }
+}
+
+test "parse reports why the input was rejected" {
+    assert Uuid::parse(&"") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::parse(&"not-a-uuid") matches { Err(ParseError::InvalidLength) };
+    // 35 chars, 33 hex digits: neither length is a UUID.
+    assert Uuid::parse(&"0001020-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::parse(&"000102030405460788090a0b0c0d0e0ff") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::parse(&"000102030-405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::parse(&"00010203f0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::parse(&"{00010203-0405-4607-8809-0a0b0c0d0e0f]") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::parse(&"urn:uuiX:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::parse(&"0001020g-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidCharacter) };
+}
+
+test "bytes round-trip" {
+    let id = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert id matches { Ok(_) };
+    if let Ok(id) = id {
+        let bytes = id.as_bytes();
+        assert bytes.len() == 16;
+        assert bytes[0] == 0x00;
+        assert bytes[6] == 0x46;
+        assert bytes[15] == 0x0F;
+        assert Uuid::from_bytes(&bytes) matches { Some(back) && back == id };
+    }
+}
+
+test "from_bytes rejects any length but 16" {
+    assert Uuid::from_bytes(&[]) matches { None };
+    assert Uuid::from_bytes(&[0, 1, 2]) matches { None };
+}
+
+test "max is all ones" {
+    let max = Uuid::max();
+    assert max.to_string() == "ffffffff-ffff-ffff-ffff-ffffffffffff";
+    assert Uuid::nil() < max;
+}
+
+test "Inspect shows the canonical form" {
+    let id = Uuid::nil();
+    assert `${id:?}` == "00000000-0000-0000-0000-000000000000";
+    assert `${id:#?}` == "00000000-0000-0000-0000-000000000000";
+}
+
+test "serializes as a CBOR binary UUID" {
+    let id = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert id matches { Ok(_) };
+    if let Ok(id) = id {
+        let encoded = to_bytes(&id);
+        assert encoded matches { Ok(_) };
+        if let Ok(bytes) = encoded {
+            // Tag 37 (binary UUID) + a 16-byte string: 2 + 1 + 16.
+            assert bytes.len() == 19;
+            assert bytes[0] == 0xD8;
+            assert bytes[1] == 37;
+            assert bytes[2] == 0x50;
+            assert from_bytes::<Uuid>(bytes) matches { Ok(back) && back == id };
         }
     }
 }
 
-test "parse rejects malformed input" {
-    assert Uuid::parse(&"") matches { None };
-    assert Uuid::parse(&"not-a-uuid") matches { None };
-    // wrong length (35 chars)
-    assert Uuid::parse(&"0001020-0405-4607-8809-0a0b0c0d0e0f") matches { None };
-    // hyphen in the wrong place (strict field boundaries)
-    assert Uuid::parse(&"000102030-405-4607-8809-0a0b0c0d0e0f") matches { None };
-    // a field boundary that is not a hyphen
-    assert Uuid::parse(&"00010203f0405-4607-8809-0a0b0c0d0e0f") matches { None };
-    // non-hex digit
-    assert Uuid::parse(&"0001020g-0405-4607-8809-0a0b0c0d0e0f") matches { None };
-    // 33 hex digits (neither 32 nor 36 chars)
-    assert Uuid::parse(&"000102030405460788090a0b0c0d0e0ff") matches { None };
+test "serializes as a JSON string" {
+    let id = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
+    assert id matches { Ok(_) };
+    if let Ok(id) = id {
+        assert to_string(&id) matches { Ok(json) && json == "\"00010203-0405-4607-8809-0a0b0c0d0e0f\"" };
+        let back = from_string::<Uuid>("\"00010203-0405-4607-8809-0a0b0c0d0e0f\"");
+        assert back matches { Ok(parsed) && parsed == id };
+    }
+}
+
+test "deserializing a malformed UUID fails" {
+    let back = from_string::<Uuid>("\"nope\"");
+    assert back matches { Err(_) };
 }
 
 test "Default is the nil UUID" {
@@ -172,9 +258,12 @@ test "equality compares all 128 bits" {
     let a = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
     let b = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e0f");
     let c = Uuid::parse(&"00010203-0405-4607-8809-0a0b0c0d0e10");
-    if let Some(a) = a {
-        if let Some(b) = b {
-            if let Some(c) = c {
+    assert a matches { Ok(_) };
+    assert b matches { Ok(_) };
+    assert c matches { Ok(_) };
+    if let Ok(a) = a {
+        if let Ok(b) = b {
+            if let Ok(c) = c {
                 assert a == b;
                 assert a != c;
                 assert a < c;

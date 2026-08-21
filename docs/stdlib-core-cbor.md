@@ -100,6 +100,8 @@ _Fields are private._
 
 ##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
 
+##### `fn is_human_readable(&self) -> bool`
+
 ##### `fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError>`
 
 ##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
@@ -143,6 +145,8 @@ _Fields are private._
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
 ##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+
+##### `fn is_human_readable(&self) -> bool`
 
 ##### `fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError>`
 
