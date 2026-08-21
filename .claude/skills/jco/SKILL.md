@@ -117,8 +117,10 @@ jco's built-in shim (`transpile-released.mjs` wires these automatically):
 
 BA ships a `preview3-shim` implementing P3 `cli` / `clocks` / `filesystem` /
 `http`, with a browser build beside the Node one. A plain `jco transpile` wires
-it and prints stdout with no post-process, so the shims above and the write hook
-are a layer this repo can likely drop — measure before removing it.
+it, and stdout, float formatting, `wasi:random`, `MonotonicClock` and an HTTP
+`handle` all run with no post-process and none of the shims above — so this
+repo's Node path carries a layer it no longer needs. The playground still
+imports `postprocess.js`, so removing one does not remove the other.
 
 ## Benchmarking on Node
 

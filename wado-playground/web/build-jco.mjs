@@ -42,12 +42,15 @@ const NODE_STUBS = {
   `,
   "node:fs": `export function readFileSync() { throw new Error("node:fs is not available in the browser transpile path"); }`,
   "node:child_process": `export function spawn() { throw new Error("node:child_process is not available in the browser transpile path"); }`,
+  // oxc-minify's browser entry re-exports a platform binding that is an
+  // optional install. Transpiling never minifies, so the call never lands.
+  "@oxc-minify/binding-wasm32-wasi": `export function minify() { throw new Error("oxc-minify is not available in the browser transpile path"); }`,
 };
 
 const nodeStubPlugin = {
   name: "node-stub",
   setup(b) {
-    const filter = /^node:/;
+    const filter = /^(node:|@oxc-minify\/)/;
     b.onResolve({ filter }, (args) => ({ path: args.path, namespace: "node-stub" }));
     b.onLoad({ filter: /.*/, namespace: "node-stub" }, (args) => {
       const contents = NODE_STUBS[args.path];
