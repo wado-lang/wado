@@ -1,0 +1,23 @@
+// A guarded operand does not run when its guard fails, so the assertion is
+// what gets reported.
+
+export fn run() with Stdout {
+    let list: List<i32> = [10, 20, 30];
+    let i = 99;
+    assert i < list.len() && list[i] == 1, "index out of bounds";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "Assertion failed in run at",
+        ": index out of bounds",
+        "condition: i < list.len() && list[i] == 1",
+        "i: 99",
+        "list.len(): 3",
+        "i < list.len(): false",
+        "list[i]: <not evaluated>",
+        "list[i] == 1: <not evaluated>"
+    ]
+}

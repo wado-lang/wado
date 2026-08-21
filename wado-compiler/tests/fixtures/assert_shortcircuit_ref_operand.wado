@@ -1,0 +1,20 @@
+// A conditional slot of reference type: its local is never assigned when the
+// run short-circuits, so the failure branch reads it only behind the flag.
+
+export fn run() with Stdout {
+    let names: List<String> = ["alice"];
+    let i = 7;
+    assert i < names.len() && names[i] == "bob", "name lookup";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: i < names.len() && names[i] == \"bob\"",
+        "i: 7",
+        "names.len(): 1",
+        "names[i]: <not evaluated>",
+        "names[i] == \"bob\": <not evaluated>"
+    ]
+}

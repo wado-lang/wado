@@ -56,6 +56,10 @@ Payload decides what the dead region does to the live program:
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
+Each payload is its own subject, injected alone against the same baseline: a
+fixture the compiler refuses one payload at stays in the campaign under the
+others.
+
 ### Calibration precedes mutation
 
 A fixture must be a valid oracle before it can be a subject. Calibration injects
@@ -93,12 +97,16 @@ Work is sharded so every run covers the whole corpus, and findings fail the run.
 
 ## Roadmap
 
-Ordered by yield per cost. The corpus is 1571 fixtures and 23414 injection
-sites; the write payload reaches 568 fixtures and 5685 sites, so most of the
-corpus currently receives no payload at all.
+Ordered by yield per cost. Each run reports the corpus it drew and the sites
+each payload reached.
 
-- [ ] Opaque read payload. Reaches every site and attacks a different analysis
-      family than the write.
+- [x] Opaque read payload. Its first full run found three bugs: two colliding
+      mangled names (`&&T` spelled as `&T`, a generic newtype spelled without
+      its arguments) and a closure capture handed the box where the field
+      holds the value.
+- [ ] Retry a payload the compiler refuses without the bindings the error
+      names. A resource binding whose read is a move costs a fixture the whole
+      read payload.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
 - [ ] `while builtin::black_box(false) { … }` as a second guard shape.

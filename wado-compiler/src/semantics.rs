@@ -153,6 +153,22 @@ impl std::fmt::Display for SymbolResolveError {
 impl std::error::Error for SymbolResolveError {}
 
 impl Semantics {
+    /// Power-assert capture plans across every module that annotate reached,
+    /// for `wado dump --assert-plan`. `None` before annotate has run.
+    pub fn assert_plan_text(&self) -> Option<String> {
+        let state = self.state.as_ref()?;
+        let mut out = String::new();
+        for (module_source, module_sem) in &state.module_semantics {
+            let plans = crate::elaborator::assert::render_plans(module_sem);
+            if plans.is_empty() {
+                continue;
+            }
+            out.push_str(&format!("// --- Module: {module_source} ---\n"));
+            out.push_str(&plans);
+        }
+        Some(out)
+    }
+
     /// True when every analysis phase ran to completion without bailing.
     ///
     /// Batch compilation should treat `false` here as a hard error

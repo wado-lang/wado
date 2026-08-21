@@ -1,6 +1,6 @@
-// Regression: two closure types differing only in their parameter types both
-// mangled to `Fn<1,i32>`, so a generic instantiated at each landed two
-// functions under one name and `monomorphize`'s duplicate check fired.
+// A closure type's mangle carries its parameter types, so a generic
+// instantiated at two closures differing only there lands two names rather
+// than tripping `monomorphize`'s duplicate check.
 use { println, Stdout } from "core:cli";
 
 fn count<T>(v: T) -> i32 {

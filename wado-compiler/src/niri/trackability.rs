@@ -12,6 +12,7 @@ use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtI
 
 use super::place::{borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of};
 use crate::nir_visitor::reachable_exprs;
+use crate::tir::TypeTable;
 
 use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
 
@@ -233,12 +234,21 @@ enum Reach {
 /// `value_reads` sources sweep the whole arena instead: an in-place rewrite
 /// shares ids between a live node and the displaced parent that held it, so a
 /// mention's only witness may sit where nothing live refers to.
-pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet {
+pub(super) fn aggregate_safe_locals(
+    body: &Body,
+    reached: &Reached,
+    type_table: &TypeTable,
+) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
         }
     }
+    let share_root = |body: &Body, op: Operand, set: &mut LocalSet| {
+        if let Some(index) = shared_reference_root(body, op, type_table) {
+            set.insert(index);
+        }
+    };
     fn read_value(op: Operand, reads: &mut IndexSet<ExprId>) {
         if let Some(e) = op.as_expr() {
             reads.insert(e);
@@ -263,11 +273,13 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for element in elements {
                     read_value(*element, &mut value_reads);
+                    share_root(body, *element, &mut disqualified);
                 }
             }
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
                     read_value(field.value, &mut value_reads);
+                    share_root(body, field.value, &mut disqualified);
                 }
             }
             ExprKind::Assign { target, value } => {
@@ -340,7 +352,7 @@ pub(super) fn aggregate_safe_locals(body: &Body, reached: &Reached) -> LocalSet 
 ///
 /// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
 /// node an in-place rewrite displaced, and one nothing refers to cannot run.
-pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
+pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &TypeTable) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             set.insert(index);
@@ -380,10 +392,43 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached) -> LocalSet {
                     }
                 }
             }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for element in elements {
+                    if let Some(index) = shared_reference_root(body, *element, type_table) {
+                        set.insert(index);
+                    }
+                }
+            }
+            ExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    if let Some(index) = shared_reference_root(body, field.value, type_table) {
+                        set.insert(index);
+                    }
+                }
+            }
             _ => {}
         }
     }
     set
+}
+
+/// The local a stored reference names. An aggregate holding one is a second
+/// holder of its object — a closure environment over a boxed local is the shape
+/// this reaches. A value element copies, so only a reference shape answers.
+fn shared_reference_root(body: &Body, op: Operand, type_table: &TypeTable) -> Option<u32> {
+    let e = op.as_expr()?;
+    if !type_table.is_reference_shaped(body.exprs[e].type_id) {
+        return None;
+    }
+    let mut e = e;
+    // A cast names the same storage as its operand, so it hides no holder.
+    while let ExprKind::Cast { expr: inner, .. } = &body.exprs[e].kind {
+        e = inner.as_expr()?;
+    }
+    let ExprKind::Local { index, .. } = &body.exprs[e].kind else {
+        return None;
+    };
+    Some(*index)
 }
 
 /// What a walk of a body may hold values for: which locals may bind an
@@ -395,20 +440,24 @@ pub(super) struct Trackability {
 
 impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
-    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
         let reached = Reached::in_frame(body, facts);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached),
-            clobbered: clobbered_locals(body, &reached),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
+            clobbered: clobbered_locals(body, &reached, type_table),
         }
     }
 
     /// For an ordinary walk, which performs nothing, so no write it reaches is
     /// one it carries out.
-    pub(super) fn outside_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn outside_frame(
+        body: &Body,
+        facts: ProgramFacts<'_>,
+        type_table: &TypeTable,
+    ) -> Self {
         let reached = Reached::outside_frame(body, facts);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
             clobbered: LocalSet::default(),
         }
     }

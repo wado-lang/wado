@@ -1,0 +1,15 @@
+// A block-carrying condition renders as one line of source, rather than a
+// placeholder or a fragment cut at the first line break.
+
+export fn run() with Stdout {
+    let a = 1;
+    assert l: { break l: a == 5 }, "block condition";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: l: { break l: a == 5; }"
+    ]
+}

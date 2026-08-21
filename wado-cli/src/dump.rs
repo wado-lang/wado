@@ -17,6 +17,7 @@ pub struct DumpOptions {
     pub show_types: bool,
     pub show_tir_resolved: bool,
     pub show_tir_monomorphized: bool,
+    pub show_assert_plan: bool,
     pub show_nir_lowered: bool,
     pub show_nir: bool,
     pub show_wir: bool,
@@ -34,6 +35,7 @@ enum Opt {
     Types,
     TirResolved,
     TirMonomorphized,
+    AssertPlan,
     NirLowered,
     Nir,
     Wir,
@@ -50,6 +52,7 @@ impl Opt {
         Self::Types,
         Self::TirResolved,
         Self::TirMonomorphized,
+        Self::AssertPlan,
         Self::NirLowered,
         Self::Nir,
         Self::Wir,
@@ -66,6 +69,24 @@ impl Opt {
         KnobOpt::NoCache,
         KnobOpt::Feature,
     ];
+
+    /// Whether this names a pipeline stage, which help lists under `Phases:`.
+    const fn is_phase(self) -> bool {
+        match self {
+            Self::Tokens
+            | Self::Ast
+            | Self::Modules
+            | Self::Symbols
+            | Self::Types
+            | Self::TirResolved
+            | Self::TirMonomorphized
+            | Self::AssertPlan
+            | Self::NirLowered
+            | Self::Nir
+            | Self::Wir => true,
+            Self::World | Self::Help => false,
+        }
+    }
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -104,6 +125,12 @@ impl Opt {
                 short: None,
                 value: None,
                 desc: "Show TIR after type resolution (before lowering)",
+            },
+            Self::AssertPlan => args::OptSpec {
+                long: Some("assert-plan"),
+                short: None,
+                value: None,
+                desc: "Show which operands each `assert` captures",
             },
             Self::TirMonomorphized => args::OptSpec {
                 long: Some("tir-monomorphized"),
@@ -151,26 +178,8 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Phases:").unwrap();
-    write!(
-        buf,
-        "{}",
-        args::format_opts_help(
-            &[
-                Opt::Tokens,
-                Opt::Ast,
-                Opt::Modules,
-                Opt::Symbols,
-                Opt::Types,
-                Opt::TirResolved,
-                Opt::TirMonomorphized,
-                Opt::NirLowered,
-                Opt::Nir,
-                Opt::Wir,
-            ],
-            |o| o.spec(),
-        )
-    )
-    .unwrap();
+    let phases: Vec<Opt> = Opt::ALL.iter().copied().filter(|o| o.is_phase()).collect();
+    write!(buf, "{}", args::format_opts_help(&phases, |o| o.spec())).unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Other:").unwrap();
     write!(
@@ -194,6 +203,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut show_symbols = false;
     let mut show_modules = false;
     let mut show_types = false;
+    let mut show_assert_plan = false;
     let mut show_tir_resolved = false;
     let mut show_tir_monomorphized = false;
     let mut show_nir_lowered = false;
@@ -238,6 +248,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     show_tir_monomorphized = true;
                     any_phase = true;
                 }
+                Opt::AssertPlan => {
+                    show_assert_plan = true;
+                    any_phase = true;
+                }
                 Opt::NirLowered => {
                     show_nir_lowered = true;
                     any_phase = true;
@@ -276,6 +290,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         show_types,
         show_tir_resolved,
         show_tir_monomorphized,
+        show_assert_plan,
         show_nir_lowered,
         show_nir,
         show_wir,
@@ -552,6 +567,14 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
             println!("=== TIR Resolved ===");
             println!("(TIR resolution failed or not available)");
             println!();
+        }
+    }
+    if opts.show_assert_plan {
+        println!("=== Assert Plans ===");
+        match result.assert_plan_text {
+            Some(ref text) if !text.is_empty() => println!("{text}"),
+            Some(_) => println!("(no assert in this program)"),
+            None => println!("(elaboration failed or not available)"),
         }
     }
     if opts.show_tir_monomorphized {

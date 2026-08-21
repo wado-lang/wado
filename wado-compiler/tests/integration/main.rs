@@ -8,6 +8,10 @@
 #[path = "../common.rs"]
 mod common;
 
+mod assert_capture_plan;
+mod box_local_unwrap;
+mod closure_confinement;
+mod closure_frame_moves;
 mod cm_catalog;
 mod cm_donut_canary;
 mod cm_newtype_boundary;
@@ -33,9 +37,11 @@ mod lib_async_task_return_free;
 mod lib_sync_lift_post_return;
 mod literals;
 mod loader_canonical_identity;
+mod match_place_scrutinee;
 mod niri;
 mod redundant_bce;
 mod remarks;
+mod scalar_read_move;
 mod semantics;
 mod serde_positional;
 mod stores_check_sem;

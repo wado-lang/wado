@@ -2,7 +2,7 @@
 
 Performance comparison of Wado (Wasm/wasmtime) against native compilers.
 
-Environment: Wado 2026-08-17, wasmtime 47.0.3, gcc 11.4.0, wasi-sdk 33.0,
+Environment: Wado 2026-08-21, wasmtime 47.0.3, gcc 11.4.0, wasi-sdk 33.0,
 rustc 1.97.1, Node.js v26.7.0, Bun 1.3.14, Linux x86_64.
 
 Throughput is work per second (higher is better), with per-iteration time in
@@ -22,9 +22,9 @@ Count primes up to 1M (integer arithmetic, trial division).
 
 | Implementation |     Throughput |   ms/iter | vs best |
 | -------------- | -------------: | --------: | ------- |
-| C              | 11.67 M nums/s | 85.678 ms | 1.00x   |
-| **Wado**       | 11.37 M nums/s | 87.949 ms | 1.03x   |
-| JavaScript     | 10.98 M nums/s | 91.038 ms | 1.06x   |
+| C              | 11.20 M nums/s | 89.315 ms | 1.00x   |
+| **Wado**       | 10.92 M nums/s | 91.581 ms | 1.03x   |
+| JavaScript     | 10.63 M nums/s | 94.051 ms | 1.05x   |
 
 ### Mandelbrot
 
@@ -32,9 +32,9 @@ Count primes up to 1M (integer arithmetic, trial division).
 
 | Implementation |  Throughput |    ms/iter | vs best |
 | -------------- | ----------: | ---------: | ------- |
-| JavaScript     | 7.87 M px/s |  99.894 ms | 1.00x   |
-| **Wado**       | 7.84 M px/s | 100.261 ms | 1.00x   |
-| C              | 7.77 M px/s | 101.228 ms | 1.01x   |
+| **Wado**       | 7.57 M px/s | 103.938 ms | 1.00x   |
+| JavaScript     | 7.56 M px/s | 104.067 ms | 1.00x   |
+| C              | 7.51 M px/s | 104.721 ms | 1.01x   |
 
 ### Sieve
 
@@ -42,9 +42,9 @@ Sieve of Eratosthenes up to 2M (array operations).
 
 | Implementation |      Throughput |  ms/iter | vs best |
 | -------------- | --------------: | -------: | ------- |
-| C              |   1.07 G nums/s | 1.862 ms | 1.00x   |
-| JavaScript     | 553.17 M nums/s | 3.615 ms | 1.94x   |
-| **Wado**       | 378.61 M nums/s | 5.282 ms | 2.84x   |
+| C              |   1.03 G nums/s | 1.933 ms | 1.00x   |
+| JavaScript     | 538.71 M nums/s | 3.713 ms | 1.92x   |
+| **Wado**       | 370.73 M nums/s | 5.394 ms | 2.79x   |
 
 The 2 MB buffer stays within the L2 TLB's 4K-page reach. A larger one makes the
 row turn on whether a runtime's allocator got transparent huge pages.
@@ -55,9 +55,9 @@ row turn on whether a runtime's allocator got transparent huge pages.
 
 | Implementation   |     Throughput |    ms/iter | vs best |
 | ---------------- | -------------: | ---------: | ------- |
-| Rust (core::fmt) | 20.41 M conv/s |  48.985 ms | 1.00x   |
-| **Wado**         | 20.11 M conv/s |  49.737 ms | 1.02x   |
-| C (printf)       |  9.28 M conv/s | 107.785 ms | 2.20x   |
+| Rust (core::fmt) | 19.37 M conv/s |  51.635 ms | 1.00x   |
+| **Wado**         | 19.18 M conv/s |  52.124 ms | 1.01x   |
+| C (printf)       |  8.75 M conv/s | 114.336 ms | 2.21x   |
 
 ## Serialization & Compression
 
@@ -80,31 +80,31 @@ JSON serialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)    |   2.05 GB/s | 0.307 ms | 1.00x   |
-| JavaScript (JSON)    |   1.44 GB/s | 0.438 ms | 1.43x   |
-| **Wado** (core:json) | 618.01 MB/s | 1.021 ms | 3.33x   |
+| Rust (serde_json)    |   2.03 GB/s | 0.311 ms | 1.00x   |
+| JavaScript (JSON)    |   1.41 GB/s | 0.449 ms | 1.44x   |
+| **Wado** (core:json) | 612.11 MB/s | 1.031 ms | 3.32x   |
 
 JSON deserialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| JavaScript (JSON)    | 557.12 MB/s | 1.134 ms | 1.00x   |
-| Rust (serde_json)    | 544.87 MB/s | 1.159 ms | 1.02x   |
-| **Wado** (core:json) | 158.42 MB/s | 3.986 ms | 3.51x   |
+| JavaScript (JSON)    | 544.97 MB/s | 1.159 ms | 1.00x   |
+| Rust (serde_json)    | 533.34 MB/s | 1.184 ms | 1.02x   |
+| **Wado** (core:json) | 155.21 MB/s | 4.068 ms | 3.51x   |
 
 CBOR serialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_cbor)    |   2.48 GB/s | 0.254 ms | 1.00x   |
-| **Wado** (core:cbor) | 731.65 MB/s | 0.863 ms | 3.40x   |
+| Rust (serde_cbor)    |   2.37 GB/s | 0.267 ms | 1.00x   |
+| **Wado** (core:cbor) | 688.24 MB/s | 0.917 ms | 3.43x   |
 
 CBOR deserialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_cbor)    | 854.32 MB/s | 0.739 ms | 1.00x   |
-| **Wado** (core:cbor) | 208.00 MB/s | 3.036 ms | 4.11x   |
+| Rust (serde_cbor)    | 804.46 MB/s | 0.785 ms | 1.00x   |
+| **Wado** (core:cbor) | 202.07 MB/s | 3.125 ms | 3.98x   |
 
 ### canada
 
@@ -115,31 +115,31 @@ JSON serialize:
 
 | Implementation       |  Throughput |   ms/iter | vs best |
 | -------------------- | ----------: | --------: | ------- |
-| Rust (serde_json)    | 915.57 MB/s |  2.459 ms | 1.00x   |
-| JavaScript (JSON)    | 556.16 MB/s |  4.048 ms | 1.65x   |
-| **Wado** (core:json) | 166.94 MB/s | 13.484 ms | 5.48x   |
+| Rust (serde_json)    | 913.79 MB/s |  2.463 ms | 1.00x   |
+| JavaScript (JSON)    | 546.55 MB/s |  4.119 ms | 1.67x   |
+| **Wado** (core:json) | 177.45 MB/s | 12.685 ms | 5.15x   |
 
 JSON deserialize:
 
 | Implementation       |  Throughput |   ms/iter | vs best |
 | -------------------- | ----------: | --------: | ------- |
-| JavaScript (JSON)    | 348.82 MB/s |  6.453 ms | 1.00x   |
-| Rust (serde_json)    | 332.99 MB/s |  6.760 ms | 1.05x   |
-| **Wado** (core:json) | 173.79 MB/s | 12.952 ms | 2.01x   |
+| JavaScript (JSON)    | 352.44 MB/s |  6.387 ms | 1.00x   |
+| Rust (serde_json)    | 334.11 MB/s |  6.738 ms | 1.05x   |
+| **Wado** (core:json) | 162.15 MB/s | 13.882 ms | 2.17x   |
 
 CBOR serialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_cbor)    |   2.54 GB/s | 0.887 ms | 1.00x   |
-| **Wado** (core:cbor) | 509.39 MB/s | 4.419 ms | 4.98x   |
+| Rust (serde_cbor)    |   2.46 GB/s | 0.914 ms | 1.00x   |
+| **Wado** (core:cbor) | 531.04 MB/s | 4.238 ms | 4.64x   |
 
 CBOR deserialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_cbor)    |   1.08 GB/s | 2.087 ms | 1.00x   |
-| **Wado** (core:cbor) | 317.10 MB/s | 7.098 ms | 3.40x   |
+| Rust (serde_cbor)    |   1.04 GB/s | 2.167 ms | 1.00x   |
+| **Wado** (core:cbor) | 305.86 MB/s | 7.359 ms | 3.40x   |
 
 ### catalog
 
@@ -150,35 +150,35 @@ JSON serialize:
 
 | Implementation       | Throughput |  ms/iter | vs best |
 | -------------------- | ---------: | -------: | ------- |
-| Rust (serde_json)    |  3.96 GB/s | 0.437 ms | 1.00x   |
-| JavaScript (JSON)    |  1.40 GB/s | 1.231 ms | 2.82x   |
-| **Wado** (core:json) |  1.02 GB/s | 1.685 ms | 3.86x   |
+| Rust (serde_json)    |  3.99 GB/s | 0.433 ms | 1.00x   |
+| JavaScript (JSON)    |  1.37 GB/s | 1.257 ms | 2.90x   |
+| **Wado** (core:json) |  1.03 GB/s | 1.674 ms | 3.87x   |
 
 JSON deserialize:
 
 | Implementation        |  Throughput |  ms/iter | vs best |
 | --------------------- | ----------: | -------: | ------- |
-| Rust (serde_json)     |   1.00 GB/s | 1.726 ms | 1.00x   |
-| JavaScript (JSON)     | 735.33 MB/s | 2.349 ms | 1.36x   |
-| **Wado** (PoC parser) | 394.42 MB/s | 4.379 ms | 2.54x   |
-| **Wado** (core:json)  | 260.99 MB/s | 6.617 ms | 3.83x   |
+| Rust (serde_json)     |   1.00 GB/s | 1.725 ms | 1.00x   |
+| JavaScript (JSON)     | 728.40 MB/s | 2.371 ms | 1.37x   |
+| **Wado** (PoC parser) | 378.74 MB/s | 4.560 ms | 2.64x   |
+| **Wado** (core:json)  | 249.82 MB/s | 6.913 ms | 4.01x   |
 
 The PoC row (`json_catalog_v2.wado`) is a hand-written parser for this one
-schema, not a general decoder. It is the mark `core:json` should reach first.
+schema, not a general decoder — the mark `core:json` should reach first.
 
 CBOR serialize:
 
 | Implementation       | Throughput |  ms/iter | vs best |
 | -------------------- | ---------: | -------: | ------- |
-| Rust (serde_cbor)    |  3.54 GB/s | 0.489 ms | 1.00x   |
-| **Wado** (core:cbor) |  1.28 GB/s | 1.354 ms | 2.77x   |
+| Rust (serde_cbor)    |  3.45 GB/s | 0.501 ms | 1.00x   |
+| **Wado** (core:cbor) |  1.23 GB/s | 1.399 ms | 2.79x   |
 
 CBOR deserialize:
 
 | Implementation       |  Throughput |  ms/iter | vs best |
 | -------------------- | ----------: | -------: | ------- |
-| Rust (serde_cbor)    |   2.57 GB/s | 0.673 ms | 1.00x   |
-| **Wado** (core:cbor) | 614.52 MB/s | 2.810 ms | 4.18x   |
+| Rust (serde_cbor)    |   2.26 GB/s | 0.764 ms | 1.00x   |
+| **Wado** (core:cbor) | 594.87 MB/s | 2.903 ms | 3.80x   |
 
 ### Compression: zlib
 
@@ -192,19 +192,19 @@ Compress:
 
 | Implementation         |  Throughput |  ms/iter | vs best |
 | ---------------------- | ----------: | -------: | ------- |
-| Rust (zlib-rs)         | 324.72 MB/s | 1.945 ms | 1.00x   |
-| JavaScript (node:zlib) | 201.83 MB/s | 3.129 ms | 1.61x   |
-| C (zlib 1.3.1, Wasm)   | 131.51 MB/s | 4.802 ms | 2.47x   |
-| **Wado** (core:zlib)   |  73.66 MB/s | 8.573 ms | 4.41x   |
+| Rust (zlib-rs)         | 312.21 MB/s | 2.023 ms | 1.00x   |
+| JavaScript (node:zlib) | 191.96 MB/s | 3.290 ms | 1.63x   |
+| C (zlib 1.3.1, Wasm)   | 126.89 MB/s | 4.977 ms | 2.46x   |
+| **Wado** (core:zlib)   |  69.00 MB/s | 9.152 ms | 4.52x   |
 
 Decompress:
 
 | Implementation         |  Throughput |  ms/iter | vs best |
 | ---------------------- | ----------: | -------: | ------- |
-| Rust (zlib-rs)         |   3.20 GB/s | 0.198 ms | 1.00x   |
-| JavaScript (node:zlib) |   1.76 GB/s | 0.359 ms | 1.81x   |
-| C (zlib 1.3.1, Wasm)   | 824.44 MB/s | 0.766 ms | 3.87x   |
-| **Wado** (core:zlib)   | 380.76 MB/s | 1.658 ms | 8.37x   |
+| Rust (zlib-rs)         |   3.06 GB/s | 0.206 ms | 1.00x   |
+| JavaScript (node:zlib) |   1.75 GB/s | 0.361 ms | 1.75x   |
+| C (zlib 1.3.1, Wasm)   | 795.18 MB/s | 0.794 ms | 3.85x   |
+| **Wado** (core:zlib)   | 350.41 MB/s | 1.802 ms | 8.75x   |
 
 ## Parsing
 
@@ -216,9 +216,9 @@ Parse 81 SQL statements (13321 bytes). Two parsers are generated from the same
 
 | Implementation      | Throughput |    ms/iter | vs best |
 | ------------------- | ---------: | ---------: | ------- |
-| Rust (sqlparser-rs) | 11.35 MB/s |   1.174 ms | 1.00x   |
-| **Wado** (Gale)     |  9.69 MB/s |   1.374 ms | 1.17x   |
-| Java (ANTLR4)       |  0.10 MB/s | 138.706 ms | 118.15x |
+| Rust (sqlparser-rs) | 11.24 MB/s |   1.185 ms | 1.00x   |
+| **Wado** (Gale)     | 10.03 MB/s |   1.328 ms | 1.12x   |
+| Java (ANTLR4)       |  0.09 MB/s | 140.234 ms | 118.34x |
 
 Java (ANTLR4) is the head-to-head for Gale's generated parser, on the JVM and
 JIT-warmed to steady state, so the gap is algorithmic rather than a warmup
@@ -244,14 +244,14 @@ reference SQL highlighters:
 Labels here name the highlighter rather than the language: this benchmark is
 about what a browser would run.
 
-| Implementation                |  Throughput |   ms/iter | vs best |
-| ----------------------------- | ----------: | --------: | ------- |
-| Prism.js                      |  11.18 MB/s |  1.191 ms | 1.00x   |
-| **Gale** (Wado)               |   7.46 MB/s |  1.785 ms | 1.50x   |
-| Lezer (CodeMirror)            |   4.52 MB/s |  2.950 ms | 2.48x   |
-| tree-sitter (Rust native)     |   4.25 MB/s |  3.135 ms | 2.63x   |
-| tree-sitter (web-tree-sitter) |   2.62 MB/s |  5.087 ms | 4.27x   |
-| Shiki (JS engine)             | 976.63 KB/s | 13.640 ms | 11.45x  |
+| Implementation                | Throughput |   ms/iter | vs best |
+| ----------------------------- | ---------: | --------: | ------- |
+| Prism.js                      | 11.02 MB/s |  1.208 ms | 1.00x   |
+| **Gale** (Wado)               |  7.65 MB/s |  1.741 ms | 1.44x   |
+| Lezer (CodeMirror)            |  4.50 MB/s |  2.962 ms | 2.45x   |
+| tree-sitter (Rust native)     |  4.22 MB/s |  3.158 ms | 2.61x   |
+| tree-sitter (web-tree-sitter) |  2.62 MB/s |  5.093 ms | 4.22x   |
+| Shiki (JS engine)             |  0.96 MB/s | 13.549 ms | 11.22x  |
 
 Every highlighter parses the corpus without errors: a highlighter that gives up
 on a region skips the work of colouring it, so the constructs two of them
@@ -268,8 +268,8 @@ per second (higher is better).
 
 | Implementation  |  Throughput |    ms/iter | vs best |
 | --------------- | ----------: | ---------: | ------- |
-| Java (ANTLR4)   | 611.67 KB/s |  56.223 ms | 1.00x   |
-| **Wado** (Gale) | 222.64 KB/s | 154.467 ms | 2.75x   |
+| Java (ANTLR4)   | 588.02 KB/s |  58.485 ms | 1.00x   |
+| **Wado** (Gale) | 236.78 KB/s | 145.238 ms | 2.48x   |
 
 Both rows run in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk.

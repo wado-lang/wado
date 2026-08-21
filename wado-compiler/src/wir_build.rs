@@ -52,7 +52,7 @@ pub fn build_wir_package(package: &NirPackage) -> WirPackage {
     translate::register_closure_wrappers(&mut ctx);
 
     // Step 3: Translate function bodies. Auto-derived
-    // `Fn<arity, ret>^Inspect / InspectAlt` dispatch stubs (kind
+    // `fn(..)^Inspect / InspectAlt` dispatch stubs (kind
     // `FnCanonicalDispatch`) get their indirect-call body supplied
     // here directly — see `translate_function_bodies`.
     translate::translate_function_bodies(&mut ctx);

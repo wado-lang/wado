@@ -1,12 +1,6 @@
-//! `Fn<arity, ret>` dispatch stubs are synthesized only for signatures whose
-//! return type is fully determined.
-//!
-//! Regression: the collector filtered candidates with a predicate that looked
-//! at the top-level constructor alone, so `fn(I::Item) -> U` was rejected only
-//! because its return type happened to be a bare `TypeParam`. Once a use site
-//! instantiated that slot into an inference variable, nothing rejected it and
-//! the compiler emitted `Fn<1,?1>^Inspect::inspect` — a stub named after a
-//! variable, which no monomorphized closure can ever dispatch through.
+//! A closure dispatch stub is named after the type it dispatches for, so it is
+//! synthesized only for a `fn(..)` type every part of which is determined —
+//! parameters included. An inference variable in a stub name reaches no closure.
 
 use std::collections::BTreeSet;
 
@@ -65,24 +59,22 @@ fn no_inference_variable_reaches_monomorphized_tir() {
     );
 }
 
-/// Every quoted `"Fn<…>^Trait::method"` declaration name in `text`. Only the
-/// name is keyed on the return type; a stub's `&self` parameter is built from
-/// whichever `Function` type represented the signature and may still spell a
-/// type parameter, which codegen never reads.
+/// Every quoted `"fn(..)->..^Trait::method"` declaration name in `text` — a
+/// closure dispatch stub, named after the type it dispatches for.
 fn fn_stub_names(text: &str) -> Vec<&str> {
     text.split("pub fn \"")
         .skip(1)
         .filter_map(|rest| rest.split_once('"'))
         .map(|(name, _)| name)
-        .filter(|name| name.starts_with("Fn<"))
+        .filter(|name| name.starts_with("fn(") || name.starts_with("fn mut("))
         .collect()
 }
 
 #[test]
-fn fn_dispatch_stubs_name_only_determined_return_types() {
+fn fn_dispatch_stubs_name_only_determined_types() {
     let text = monomorphized_tir(SOURCE);
     let names = fn_stub_names(&text);
-    assert!(!names.is_empty(), "expected some `Fn<…>` dispatch stubs");
+    assert!(!names.is_empty(), "expected some closure dispatch stubs");
     // Every module that reaches the stub re-declares it, so dedup before
     // reporting or one bad key prints hundreds of times.
     let undetermined: BTreeSet<&str> = names

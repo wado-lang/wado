@@ -9,7 +9,9 @@ pub mod callgraph;
 pub mod confine;
 pub mod funcset;
 pub mod last_use;
+pub mod modref;
 pub mod ownership;
+pub mod place;
 pub mod stores;
 pub mod synthesize;
 
@@ -87,6 +89,12 @@ impl<T> ValueCopyHelpers<T> {
 /// telling the fold whether a call result is owned (a move) or borrowed.
 pub struct ValueCopyPlan {
     pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
+    /// What each call writes into its receiver, as fields of the receiver's
+    /// type: a read of one field is undisturbed by a call that writes another.
+    pub mod_ref: modref::ModRef,
+    /// The projection each accessor returns out of its receiver, so a name
+    /// taken from one resolves to the storage it stands for.
+    pub return_paths: place::ReturnPaths,
     pub returns_owned: FuncKeySet,
     /// Functions whose every returned value is owned *or* a projection of the
     /// receiver / first parameter (`build(&self) -> List { return *self }`). A
@@ -118,7 +126,8 @@ pub struct ValueCopyPlan {
     /// borrowing, not consuming, receiver. Used by the read-only-share analysis.
     pub ref_receiver_methods: FuncKeySet,
     /// Functions whose result aliases their receiver's storage (a borrowed
-    /// projection / element read). Used only by the read-only-share analysis.
+    /// projection / element read). Because it admits borrowed projections it
+    /// must not feed the move / owned decision.
     pub returns_receiver_alias: FuncKeySet,
     /// Return types for which every closure `__call` — the complete set of
     /// indirect-call targets after closure lowering — returns owned, so an
@@ -152,10 +161,14 @@ pub fn plan(
         );
     }
     let returns_receiver_alias = ownership::compute_receiver_alias(flat);
+    let return_paths =
+        place::compute_return_paths(flat, &flat.type_table.borrow(), &conventions.returns_owned);
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
         helpers,
+        mod_ref: modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned),
+        return_paths,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         stored_params,

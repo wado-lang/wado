@@ -346,18 +346,18 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     let i: i32;
     let val: i32;
     let j: i32;
+    let _licm_used_25: i32;
+    let _licm_repr_26: ref Array<i32>;
     let _licm_used_27: i32;
     let _licm_repr_28: ref Array<i32>;
-    let _licm_used_29: i32;
-    let _licm_repr_30: ref Array<i32>;
     temp = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     i = 0;
-    _licm_used_27 = self.used;
-    _licm_repr_28 = self.repr;
+    _licm_used_25 = self.used;
+    _licm_repr_26 = self.repr;
     b18: block {
         l19: loop {
-            break_if b18 i >= _licm_used_27;
-            val = builtin::array_get_value<i32>(_licm_repr_28, i);
+            break_if b18 i >= _licm_used_25;
+            val = builtin::array_get_value<i32>(_licm_repr_26, i);
             if (val % 2) == 0 {
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(temp, val);
             }
@@ -366,12 +366,12 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
         };
     };
     j = 0;
-    _licm_used_29 = temp.used;
-    _licm_repr_30 = temp.repr;
+    _licm_used_27 = temp.used;
+    _licm_repr_28 = temp.repr;
     b21: block {
         l22: loop {
-            break_if b21 j >= _licm_used_29;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, builtin::array_get_value<i32>(_licm_repr_30, j) + 100);
+            break_if b21 j >= _licm_used_27;
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(self, builtin::array_get_value<i32>(_licm_repr_28, j) + 100);
             j = j + 1;
             continue l22;
         };

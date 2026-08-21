@@ -270,6 +270,7 @@ struct FrameState {
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
+    alias_classes: AliasClasses,
     /// What this frame folded a node to, read back by
     /// [`Interpreter::expr_to_lattice`]. Load-bearing on both backends: the
     /// scratch body promotes nothing, and on a real body the committing rewrite
@@ -461,12 +462,16 @@ impl<'a> Interpreter<'a> {
             .map_or(Lattice::Unevaluated, Lattice::Const)
     }
 
+    pub fn record_alias_classes(&mut self, classes: AliasClasses) {
+        self.frame.alias_classes = classes;
+    }
+
     /// Record which of `body`'s locals may bind an aggregate constant. The
     /// driving visitor calls this once per function, next to
     /// [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
         self.frame.aggregate_locals =
-            Trackability::outside_frame(body, self.facts).aggregate_locals;
+            Trackability::outside_frame(body, self.facts, self.type_table).aggregate_locals;
     }
 
     /// Record which locals a `let` bound to `&GLOBAL`.
@@ -593,6 +598,50 @@ impl<'a> Interpreter<'a> {
     /// prior binding is dropped.
     pub fn invalidate_local(&mut self, index: u32) {
         self.frame.env.insert(index, Lattice::NonConst);
+    }
+
+    /// Drop what the frame holds for the storage `place` writes into and for
+    /// every local naming it: the frame tracks values per local, not per object.
+    pub fn invalidate_place(&mut self, body: &Body, place: Operand) {
+        let Some((root, _)) = self.frame_place_of(body, place) else {
+            // A place no frame root names — through a call result, a global —
+            // may still be reachable from a tracked local.
+            for lattice in self.frame.env.values_mut() {
+                *lattice = Lattice::NonConst;
+            }
+            return;
+        };
+        self.invalidate_local(root);
+        for member in self.frame.alias_classes.members(root).to_vec() {
+            self.invalidate_local(member);
+        }
+    }
+}
+
+/// Locals that may name one another's storage.
+#[derive(Default, Clone, Debug)]
+pub struct AliasClasses {
+    root_of: IndexMap<u32, u32>,
+    members_of: IndexMap<u32, Vec<u32>>,
+}
+
+impl AliasClasses {
+    #[must_use]
+    pub fn new(root_of: IndexMap<u32, u32>, members_of: IndexMap<u32, Vec<u32>>) -> Self {
+        Self {
+            root_of,
+            members_of,
+        }
+    }
+
+    /// The locals sharing `local`'s storage, itself included. Empty for a local
+    /// no copy aliases.
+    #[must_use]
+    pub fn members(&self, local: u32) -> &[u32] {
+        self.root_of
+            .get(&local)
+            .and_then(|root| self.members_of.get(root))
+            .map_or(&[], Vec::as_slice)
     }
 }
 

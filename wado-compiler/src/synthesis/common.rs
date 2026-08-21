@@ -308,8 +308,8 @@ pub fn option_none(option_type_id: TypeId, items: &CompilerItems) -> TirExpr {
     )
 }
 
-/// Create a default/zero value expression (ref.null for reference types, 0 for integers).
-/// Used as a placeholder initial value for mutable locals in synthesized code.
+/// A `ref.null` placeholder for a synthesized mutable local of *reference*
+/// type. Not a zero of an arbitrary type — `lower` asserts on the difference.
 pub fn null_expr(type_id: TypeId) -> TirExpr {
     TirExpr::new(TirExprKind::Null, type_id, synth_span())
 }

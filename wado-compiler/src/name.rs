@@ -207,13 +207,6 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 
-/// Canonical name of the synthesised closure-trait family (`Fn<N, Ret>`).
-/// Like [`CLOSURE_CALL_METHOD`] / [`CLOSURE_STRUCT_PREFIX`], the trait is
-/// compiler-internal — there is no Wado-side `trait Fn { ... }` declaration
-/// to attach a `#[compiler_item("...")]` to — so a `const` is the right
-/// anchor shape.
-pub const CLOSURE_FN_TRAIT: &str = "Fn";
-
 /// Prefix every compiler-synthesised block label carries.
 ///
 /// Reserved in source — the parser rejects a label that starts with it — so a
@@ -629,7 +622,6 @@ impl Receiver {
     }
 }
 
-/// The reference prefix a mangled name carries, and the rest.
 /// Write a receiver's reference prefix. `&` binds directly to the pointee;
 /// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
 /// `TypeTable::mangle_type_arg_for_generic` spell it the same way, and a
@@ -994,9 +986,9 @@ impl LocalMethodName {
 
     /// True for the synthesized `__call` on a `__Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
-    /// `Fn<arity, ret>` canonical type, whose Wasm signature is fixed — so a
-    /// caller that reshapes ABIs must filter them out or the signature will no
-    /// longer match the vtable slot they are installed into.
+    /// closure's canonical type, whose Wasm signature is fixed — so a caller
+    /// that reshapes ABIs must filter them out or the signature will no longer
+    /// match the vtable slot they are installed into.
     pub fn is_closure_call(&self) -> bool {
         self.method_name == CLOSURE_CALL_METHOD
             && self
@@ -1679,8 +1671,7 @@ pub fn mangle_method_generic(struct_name: &str, type_args: &[String], method_nam
 /// Spell a function type the way source does, minus the optional whitespace.
 ///
 /// A function type names no declaration, so the rendering *is* the identity
-/// and owes injectivity over everything `ResolvedType::Function` interns on —
-/// which `Fn<N,Ret>`, spelling two of the five, did not.
+/// and owes injectivity over everything `ResolvedType::Function` interns on.
 ///
 /// Examples:
 /// - `mangle_fn_type(false, &["i32"], "i32", false, &[])` → `"fn(i32)->i32"`
@@ -1711,6 +1702,13 @@ pub fn mangle_fn_type(
     out
 }
 
+/// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
+/// it — the receiver a closure value dispatches through.
+#[must_use]
+pub fn is_fn_type_name(name: &str) -> bool {
+    name.starts_with("fn(") || name.starts_with("fn mut(")
+}
+
 /// A `stores[...]` member of a `with` clause, by parameter position.
 ///
 /// The type carries positions where source writes parameter names; a mangle is
@@ -1718,25 +1716,6 @@ pub fn mangle_fn_type(
 #[must_use]
 pub fn mangle_stores_member(param_index: u32) -> String {
     format!("stores[{param_index}]")
-}
-
-/// Canonical struct-type-argument names for a closure / [`CLOSURE_FN_TRAIT`]
-/// receiver: `[arity, return-type]`.
-///
-/// A *representation* key, not a type name, and deliberately coarser than
-/// [`mangle_fn_type`]: every closure of one arity and return type shares a
-/// `CanonicalClosure_K` and one `Fn<N,Ret>^Inspect` vtable.
-///
-/// Examples:
-/// - `fn_type_arg_names(2, "i32")` → `["2", "i32"]`
-pub fn fn_type_arg_names(arity: usize, return_type_name: &str) -> Vec<String> {
-    vec![arity.to_string(), return_type_name.to_string()]
-}
-
-/// [`fn_type_arg_names`] in the structured namespace.
-#[must_use]
-pub fn fn_type_args(arity: usize, return_type: &FqTypeName) -> Vec<FqTypeName> {
-    vec![FqTypeName::arity(arity), return_type.clone()]
 }
 
 /// Build an Option type name from inner type name.
@@ -2245,8 +2224,8 @@ mod tests {
 /// mangler spells it the same way wherever it appears. See
 /// [`FqTypeName::builtin`].
 ///
-/// An instantiated shape is its head: `Fn<1,i32>`, `Array<u8>` and `[]<A,B>`
-/// are as module-less as the heads they instantiate.
+/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>` are as
+/// module-less as the heads they instantiate.
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
     fn head_of(name: &str) -> &str {
@@ -2284,8 +2263,9 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
 /// itself contain `/` and `<`, so no split is correct in general. Ask the fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FqTypeName {
-    /// Outermost `&` / `&mut`, when the receiver is a reference shape.
-    reference: Option<RefKind>,
+    /// The `&` / `&mut` this name stands behind, outermost first. Keeping only
+    /// the outer one spells `&&T` as `&T`, which is a different instantiation.
+    reference: Vec<RefKind>,
     head: TypeHead,
     /// Type arguments, already fq themselves.
     args: Vec<FqTypeName>,
@@ -2318,8 +2298,8 @@ pub enum TypeHead {
 
 impl TypeHead {
     /// A monomorphized instantiation, named by the fused spelling it mangles to
-    /// (`Fn<1,i32>`, `List<…/Token>`). No declaration names one, so its
-    /// rendering is its identity — the same rule [`Self::Shape`] carries.
+    /// (`List<…/Token>`). No declaration names one, so its rendering is its
+    /// identity — the same rule [`Self::Shape`] carries.
     #[must_use]
     pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
         Self::Shape {
@@ -2374,7 +2354,7 @@ impl TypeHead {
 impl FqTypeName {
     fn of_head_kind(head: TypeHead) -> Self {
         Self {
-            reference: None,
+            reference: Vec::new(),
             head,
             args: Vec::new(),
         }
@@ -2436,13 +2416,6 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Builtin(name.to_string()))
     }
 
-    /// The arity that spells a [`CLOSURE_FN_TRAIT`] head's first argument
-    /// (`Fn<2,i32>`). It names no type, so it mangles bare like a builtin shape.
-    #[must_use]
-    pub fn arity(arity: usize) -> Self {
-        Self::of_head_kind(TypeHead::Builtin(arity.to_string()))
-    }
-
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
@@ -2461,10 +2434,10 @@ impl FqTypeName {
         self
     }
 
-    /// The same name behind a `&` / `&mut`.
+    /// The same name behind one more `&` / `&mut`.
     #[must_use]
     pub fn with_reference(mut self, kind: RefKind) -> Self {
-        self.reference = Some(kind);
+        self.reference.insert(0, kind);
         self
     }
 
@@ -2478,7 +2451,7 @@ impl FqTypeName {
     #[must_use]
     pub fn head_only(&self) -> Self {
         Self {
-            reference: self.reference,
+            reference: self.reference.clone(),
             head: self.head.clone(),
             args: Vec::new(),
         }
@@ -2504,16 +2477,16 @@ impl FqTypeName {
     }
 
     #[must_use]
-    pub fn reference(&self) -> Option<RefKind> {
-        self.reference
+    pub fn references(&self) -> &[RefKind] {
+        &self.reference
     }
 
     /// The mangled spelling embedded in a mangled method name.
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let mut out = String::new();
-        if let Some(kind) = self.reference {
-            push_ref_prefix(&mut out, kind);
+        for kind in &self.reference {
+            push_ref_prefix(&mut out, *kind);
         }
         if let TypeHead::Tuple = self.head {
             let elems: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();
@@ -2537,9 +2510,6 @@ impl FqTypeName {
         out
     }
 
-    /// The declaration namespace: the name as source writes it, which is what
-    /// an `impl` header spells and what every by-name declaration lookup keys
-    /// on. Also the form diagnostics show.
     /// This name with every occurrence of the type `old` replaced by `new` —
     /// the whole name when it *is* `old`, and otherwise each argument,
     /// recursively.
@@ -2554,21 +2524,18 @@ impl FqTypeName {
             return new.clone();
         }
         // A reference's pointee substitutes on its own: `&T` is `T` under a
-        // prefix, and `old` naming the pointee must reach it.
-        if let Some(kind) = self.reference
-            && self.args.is_empty()
-        {
-            let bare = FqTypeName {
-                reference: None,
+        // prefix, and `old` naming the pointee must reach it however many
+        // prefixes stand in front.
+        if let Some((outer, inner)) = self.reference.split_first() {
+            let pointee = FqTypeName {
+                reference: inner.to_vec(),
                 head: self.head.clone(),
-                args: Vec::new(),
+                args: self.args.clone(),
             };
-            if &bare == old {
-                return new.clone().with_reference(kind);
-            }
+            return pointee.substitute(old, new).with_reference(*outer);
         }
         FqTypeName {
-            reference: self.reference,
+            reference: Vec::new(),
             head: self.head.clone(),
             args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
         }
@@ -2580,8 +2547,8 @@ impl FqTypeName {
     #[must_use]
     pub fn to_display(&self) -> String {
         let mut out = String::new();
-        if let Some(kind) = self.reference {
-            push_ref_prefix(&mut out, kind);
+        for kind in &self.reference {
+            push_ref_prefix(&mut out, *kind);
         }
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
         if let TypeHead::Tuple = self.head {

@@ -695,14 +695,19 @@ pub(crate) struct ClosureCaptureInfo {
 
 /// One power-assert capture slot — a sub-expression of the assert
 /// condition that the [`super::super::assert::CaptureScanner`] flagged
-/// for capture as `let __vK = …;` so the panic template can quote its
-/// value.
+/// for capture so the panic template can quote its value.
 #[derive(Clone)]
 pub(crate) struct AssertSlot {
     /// The flagged sub-expression's [`AstId`].
     pub(crate) ast_id: AstId,
     /// The user-facing label the panic template uses for this slot.
     pub(crate) capture_label: String,
+    /// A short-circuit can skip this operand, so it is captured where it sits
+    /// and renders `<not evaluated>` when the run stopped before it.
+    pub(crate) conditional: bool,
+    /// A binding the failure branch can re-read, so the slot needs none of its
+    /// own — straight-line code makes the read exact.
+    pub(crate) is_place: bool,
 }
 
 /// Power-assert capture map recorded by
@@ -712,6 +717,10 @@ pub(crate) struct AssertSlot {
 /// resolution stay unbound and are skipped by the template).
 #[derive(Clone)]
 pub(crate) struct AssertCaptureInfo {
+    /// The condition as source, quoted on the failure's `condition:` line.
+    pub(crate) condition_source: String,
+    /// 1-based line of the `assert`.
+    pub(crate) line: usize,
     pub(crate) slots: Vec<AssertSlot>,
 }
 

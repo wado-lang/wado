@@ -833,7 +833,7 @@ fn apply_inspect_edges(
     }
 }
 
-/// Every `(arity, return_type)` signature receiving a `Fn<…>^Inspect` or
+/// Every `(arity, return_type)` signature receiving a `fn(..)^Inspect` or
 /// `^InspectAlt` call. Gates the per-functor root marking from
 /// `ClosureToCanonical`: with no real caller those impls cannot be invoked
 /// indirectly. The two methods are tracked separately, so formatting closures
@@ -913,7 +913,7 @@ fn scan_inspect_signatures_block(
         if let NodeRef::Expr(e) = node
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
-            && info.base_struct_name() == "Fn"
+            && crate::name::is_fn_type_name(&info.base_struct_name())
             && let Some(trait_name) = info.base_trait_name()
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
@@ -1292,21 +1292,12 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                // `Fn<arity, ret>` method, e.g. `Fn<2,i32>^Inspect::inspect`.
-                // The arity is a literal, not a type — a builtin head with no
-                // module, same as the `Fn` shape itself.
-                let shape_args = vec![
-                    FqTypeName::builtin(&params.len().to_string()),
-                    self.type_table.fq_type_name(return_type),
-                ];
+            ResolvedType::Function { .. } => {
+                // A `fn(..)` method hangs off the type's own name, the same
+                // spelling `synthesis::traits` registers its stub under.
                 let method_id = FunctionId::Method(MethodName::new(
                     self.current_module.clone(),
-                    FqTypeName::builtin(crate::name::CLOSURE_FN_TRAIT).with_args(shape_args),
+                    self.type_table.fn_receiver_name(&base_receiver_type),
                     trait_name,
                     method_name,
                 ));
@@ -1373,7 +1364,7 @@ impl<'a> DceWalker<'a> {
             )));
 
         // Per-functor `__Closure_N^Inspect` / `^InspectAlt` impls only
-        // need to stay alive when their matching `Fn<arity, ret>^Inspect[Alt]`
+        // need to stay alive when their matching `fn(..)^Inspect[Alt]`
         // dispatch stub is reachable — tracked independently per trait so a
         // program using only `:?` doesn't keep `^InspectAlt` (and its
         // per-literal source-string constant) alive. The gating set isn't

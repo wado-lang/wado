@@ -1,0 +1,24 @@
+// A range's bounds are operands, and the range itself is one. It sits in
+// argument position here — a method receiver is never captured.
+
+fn span(r: RangeExclusive<i32>) -> i32 {
+    return r.end - r.start;
+}
+
+export fn run() with Stdout {
+    let lo = 0;
+    let hi = 5;
+    assert span(lo..<hi) == 9, "wrong span";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: span(lo..<hi) == 9",
+        "lo: 0",
+        "hi: 5",
+        "lo..<hi: RangeExclusive { start: 0, end: 5 }",
+        "span(lo..<hi): 5"
+    ]
+}

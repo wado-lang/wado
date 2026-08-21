@@ -278,6 +278,21 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
+A `match` over a place needs no temp of its own: the arms project the place
+where it lies and each binding asks the fold for itself. Only a non-place
+scrutinee is hoisted for `labeled_block_fusion`, whose temp the fold defends.
+
+What a call writes is read off the callee rather than assumed: `modref.rs`
+collects each function's writes as fields of the type carrying them and closes
+them over the call graph, so a read of one field survives a `&mut self` call
+that writes another. A callee with no body reaches only the `&mut` arguments it
+is handed; anything this cannot name writes everything.
+
+Every analysis here asks one resolver what an expression names (`place.rs`).
+Its answer separates a value of its own from a place the walk cannot follow, so
+a shape no arm covers costs an elision rather than becoming a write nobody
+records.
+
 ### Which helpers exist
 
 `$value_copy$T` is additive synthesis, so the helpers are created in `plan` —
@@ -401,9 +416,16 @@ Verified against the tree.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
       deep-copying the error it propagates.
 - [x] A place repointed after a binding read it releases that binding.
+- [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
+      counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
+- [x] A closure costs its captures their move, their share and their
+      confinement, not its whole frame's.
+- [x] A projection to a scalar keeps its root live without consuming it, so
+      `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
-      kind).
+      kind; `closure_capture_move`, `closure_confinement`,
+      `scalar_read_before_move`).
 - [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
       The share analysis is a forward walk with no liveness and no control flow,
       so a write anywhere refuses the binding.

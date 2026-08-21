@@ -1,5 +1,6 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::funcset::FuncKeySet;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
@@ -134,12 +135,14 @@ pub struct Lowering {
     string_struct_name: FqTypeName,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
+    /// Callees whose every return aliases the receiver.
+    returns_receiver_alias: FuncKeySet,
 }
 
 impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
-    pub fn new(flat: &FlatPackage) -> Self {
+    pub fn new(flat: &FlatPackage, returns_receiver_alias: &FuncKeySet) -> Self {
         let mut variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>> =
             IndexMap::default();
         for variant in &flat.variants {
@@ -182,6 +185,7 @@ impl Lowering {
             eq_trait_name,
             string_struct_name,
             const_int_globals,
+            returns_receiver_alias: returns_receiver_alias.clone(),
         }
     }
 
@@ -202,6 +206,7 @@ impl Lowering {
             &self.variant_case_map,
             &self.struct_fields_map,
             &self.const_int_globals,
+            &self.returns_receiver_alias,
         );
         lowerer.lower_block(&mut body, type_table);
 
@@ -233,9 +238,27 @@ struct PatternLowerer<'a> {
     struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
+    returns_receiver_alias: &'a FuncKeySet,
     /// Locals bound to a scrutinee here. Their `Let` goes through the fold, so
     /// each already reads a place nothing can write.
     owned_temps: IndexSet<u32>,
+}
+
+/// `PatternLowerer::place_is_writable` must read the same grammar: a shape only
+/// this one admits is a place nobody asks about.
+fn is_place(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr: inner,
+        } => is_place(inner),
+        _ => false,
+    }
 }
 
 /// Such a binding aliases the place it reads, so it must read one nothing can
@@ -286,6 +309,7 @@ impl<'a> PatternLowerer<'a> {
         variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
+        returns_receiver_alias: &'a FuncKeySet,
     ) -> Self {
         Self {
             local_count,
@@ -296,6 +320,7 @@ impl<'a> PatternLowerer<'a> {
             variant_case_map,
             struct_fields_map,
             const_int_globals,
+            returns_receiver_alias,
             owned_temps: IndexSet::default(),
         }
     }
@@ -1563,13 +1588,14 @@ impl<'a> PatternLowerer<'a> {
                 // Two reasons: `labeled_block_fusion` keys on the
                 // `(Let, Match)` pair and stops firing on an inline scrutinee,
                 // and an owning arm binding needs a scrutinee nothing can
-                // write.
+                // write. A place scrutinee needs neither: the arms project it
+                // where it lies, and fusion's producers are calls.
                 if let TirExprKind::Match {
                     expr: scrutinee,
                     arms,
                     ..
                 } = &mut expr.kind
-                    && (!matches!(scrutinee.kind, TirExprKind::Local { .. })
+                    && (!is_place(scrutinee)
                         || self.needs_owned_scrutinee(scrutinee, arms, type_table))
                 {
                     let temp_let = self.bind_scrutinee_to_temp(scrutinee, type_table, stmt.span);
@@ -1697,6 +1723,9 @@ impl<'a> PatternLowerer<'a> {
                 .get(*index as usize)
                 .is_none_or(|local| local.is_mut),
             TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
                 expr: inner,
@@ -1705,6 +1734,16 @@ impl<'a> PatternLowerer<'a> {
                     type_table.get(inner.type_id),
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 ) || self.place_is_writable(inner, type_table)
+            }
+            // `xs[0]` is `xs.index_value(0)` by now, and such an accessor hands
+            // back a piece of its receiver.
+            TirExprKind::Call { func, args, .. }
+                if self
+                    .returns_receiver_alias
+                    .contains(&func.module_source, &func.name) =>
+            {
+                args.first()
+                    .is_some_and(|a| self.place_is_writable(&a.expr, type_table))
             }
             _ => false,
         }

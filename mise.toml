@@ -210,10 +210,11 @@ run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture calibrate
 
 [tasks.emi-mutate]
 description = """\
-Mutate the calibrated EMI corpus: behind an undecidable guard, write to every \
-`let mut` in scope at every statement boundary, and report any fixture whose \
-output moves. Reads target/emi/corpus.txt, so run emi-calibrate first. Writes \
-target/emi/mutation.txt and the reduced mutants under target/emi/findings/.\
+Mutate the calibrated EMI corpus: behind an undecidable guard, write to and \
+read every binding in scope at every statement boundary, and report any \
+fixture whose output moves. Reads target/emi/corpus.txt, so run emi-calibrate \
+first. Writes target/emi/mutation.txt and the reduced mutants under \
+target/emi/findings/.\
 """
 run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture mutate_corpus"
 

@@ -1,10 +1,6 @@
-// Helper module that uses a closure of shape `fn(i32) -> bool`.
-// `synthesize_traits` produces a `Fn<1, bool>^Inspect::inspect` stub for
-// it. The entry module uses a closure of shape `fn(i32) -> i32`, which
-// requires its own distinct `Fn<1, i32>^Inspect::inspect` stub. The
-// project-wide synthesis layer must not collapse these into a single
-// `(Fn, Inspect)` entry — doing so makes per-module dedup skip the
-// second shape and produces an unresolved trait-method call.
+// The helper half of `inspect_fn_cross_module.wado`: a `fn(i32) -> bool`
+// closure, whose `^Inspect` stub must not stand in for the entry module's
+// `fn(i32) -> i32` one.
 use { println, Stdout } from "core:cli";
 
 pub fn show_in_helper() with Stdout {

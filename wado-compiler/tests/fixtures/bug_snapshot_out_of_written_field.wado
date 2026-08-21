@@ -1,0 +1,16 @@
+// A binding out of a field the program writes takes its own copy: the write
+// through the reference must not reach what the snapshot holds.
+struct Holder {
+    items: List<i32>,
+}
+
+fn observe(h: &mut Holder) -> i32 {
+    let snapshot = h.items;
+    h.items = [9, 9];
+    return snapshot[0];
+}
+
+test "a snapshot out of a written field keeps its own value" {
+    let mut hh = Holder { items: [1, 2] };
+    assert observe(&mut hh) == 1;
+}

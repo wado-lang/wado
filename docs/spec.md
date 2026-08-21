@@ -4233,6 +4233,21 @@ assert x > 0;
 assert x > 0, "x must be checked elsewhere";
 ```
 
+`assert` evaluates its condition exactly as the surrounding code would, so a
+guarded operand never runs when its guard fails. An operand the run did not
+reach is reported as `<not evaluated>`.
+
+```wado
+let i = 99;
+assert i < list.len() && list[i] == 1;
+// condition: i < list.len() && list[i] == 1
+// i: 99
+// list.len(): 3
+// i < list.len(): false
+// list[i]: <not evaluated>
+// list[i] == 1: <not evaluated>
+```
+
 To keep a failure readable, each captured operand is rendered with `Inspect`
 (`:?`), which caps sequence types at a default length (`DEFAULT_SEQ_LIMIT` = 256):
 a `String` operand is truncated to 256 characters with a `...` marker and an

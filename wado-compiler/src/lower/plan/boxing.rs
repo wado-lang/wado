@@ -209,13 +209,9 @@ impl TypeBuilder {
         }
     }
 
-    /// Get or create a Box<T> struct type for the given inner type.
     /// The `TypeId` a `Box` is keyed on: itself, or for a function type the
-    /// first one seen with its `(arity, return type)`.
-    ///
-    /// Every `Box<fn(...)>` holds one `ref struct` field whatever the
-    /// signature, and the `Fn<N,Ret>^Inspect` stubs share one receiver across
-    /// a signature, so one wrapper serves them all.
+    /// first one seen with its `(arity, return type)`. Every `Box<fn(...)>`
+    /// holds one `ref struct` field whatever the signature, so one serves all.
     fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
         let ResolvedType::Function {
             params,
@@ -552,9 +548,17 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
             remap_locals_in_block(body, remap);
         }
         TirExprKind::Resume { value } => remap_locals_in_expr(value, remap),
-        // Closure bodies and Capture references live in the closure's own
-        // local-index scope; do not descend.
-        TirExprKind::Closure { .. } | TirExprKind::Capture { .. } => {}
+        // A closure body and a `Capture` read live in the closure's own
+        // local-index scope, so neither is descended into. What a capture
+        // *names* is a local here, which shadowing a parameter moves.
+        TirExprKind::Closure { captures, .. } => {
+            for capture in captures {
+                if let Some(&new_idx) = remap.get(&capture.outer_index) {
+                    capture.outer_index = new_idx;
+                }
+            }
+        }
+        TirExprKind::Capture { .. } => {}
         // Leaf nodes with no sub-expressions or no Local references.
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }

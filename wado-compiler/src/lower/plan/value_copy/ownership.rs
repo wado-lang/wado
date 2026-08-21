@@ -110,8 +110,8 @@ pub struct ReturnConventions {
 
 /// Functions whose every value-return aliases the receiver / first parameter
 /// (a *borrowed* projection, through `array_get_value` and nested accessor calls).
-/// Because it admits borrowed projections it must NOT feed the move/owned
-/// decision; only the read-only-share analysis consumes it.
+/// Because it admits borrowed projections it must NOT feed the move / owned
+/// decision; the read-only-share analysis and pattern lowering consume it.
 pub fn compute_receiver_alias(project: &FlatPackage) -> FuncKeySet {
     let call_graph = CallGraph::build(project);
     let mut set = FuncKeySet::default();

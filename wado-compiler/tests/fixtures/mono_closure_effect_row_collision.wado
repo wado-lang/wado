@@ -1,6 +1,6 @@
-// Regression: `Fn<0,()>` spelled neither the effect row nor the module a
-// concrete effect is declared in, so two closure types differing only in their
-// effects monomorphized a generic to one name.
+// A closure type's mangle spells its effect row and each effect's module, so
+// two closures differing only in their effects monomorphize a generic to two
+// names rather than colliding on one.
 use { eprintln, println, Stdout, Stderr } from "core:cli";
 
 fn count<T>(v: T) -> i32 {

@@ -1,0 +1,18 @@
+// A tuple literal's elements are rendered. The literal itself is not captured
+// — it takes its shape from the expected type.
+
+export fn run() with Stdout {
+    let a = 1;
+    let b = 2;
+    assert [a, b] == [3, 4], "pair mismatch";
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: [a, b] == [3, 4]",
+        "a: 1",
+        "b: 2"
+    ]
+}
