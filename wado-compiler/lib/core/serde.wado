@@ -183,10 +183,7 @@ pub enum DuplicateKeyPolicy {
 
 /// Applies `policy` to a key the wire already wrote. Detecting the repeat is
 /// the caller's job: a struct tests a bit, a map asks `try_insert`.
-pub fn report_duplicate_key(
-    policy: DuplicateKeyPolicy,
-    name: &String,
-) -> Result<(), DeserializeError> {
+pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError> {
     match policy {
         DuplicateKeyPolicy::Error => {
             builtin::cold_path();
@@ -1062,8 +1059,8 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                 if i == index {
                     // `i` is constant per unrolled arm, so the bit and the
                     // name fold. An unknown field is `-1` and matches no arm.
-                    let bit: i64 = (1 as i64) << (i as i64);
-                    if (seen & bit) != 0 {
+                    let bit: i64 = 1 as i64 << i as i64;
+                    if seen & bit != 0 {
                         report_duplicate_key(
                             on_duplicate,
                             &wire_name(&ReflectStruct::<T>::members()[i], policy),

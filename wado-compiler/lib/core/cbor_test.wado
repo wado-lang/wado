@@ -3,13 +3,7 @@
 //! value and its canonical diagnostic/hex form from that table.
 
 use { to_bytes, to_bytes_canonical, from_bytes } from "core:cbor";
-use {
-    Serialize,
-    Deserialize,
-    DeserializeError,
-    DeserializeErrorKind,
-    DEFAULT_MAX_DEPTH,
-} from "core:serde";
+use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind, DEFAULT_MAX_DEPTH } from "core:serde";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
 
@@ -735,9 +729,7 @@ fn nested_more(levels: i32) -> ByteList {
 
 test "reject: deeply nested recursive variant exceeds the depth bound" {
     // A depth bound is a resource limit: these bytes are well-formed CBOR.
-    assert decode_err_kind::<Nest>(nested_more(400)) matches {
-        Some(DeserializeErrorKind::DepthLimitExceeded)
-    };
+    assert decode_err_kind::<Nest>(nested_more(400)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
 }
 
 test "nesting within the depth bound decodes" {

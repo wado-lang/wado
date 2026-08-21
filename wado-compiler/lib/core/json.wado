@@ -2532,10 +2532,7 @@ pub fn to_string_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = n
 
 /// Deserializes a value from a JSON string. Convenience wrapper over
 /// `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
-pub fn from_string<T: Deserialize>(
-    input: String,
-    max_depth: i32 = DEFAULT_MAX_DEPTH,
-) -> Result<T, DeserializeError> {
+pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError> {
     return from_bytes(input, max_depth);
 }
 
