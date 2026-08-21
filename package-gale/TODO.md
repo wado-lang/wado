@@ -11,7 +11,7 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 ## Order of attack
 
 1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. Empty right now.
-2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-07-30 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
+2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-08-21 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
 3. **Stage C**, starting with the lexer command surface for a superClass base op: the largest block, and the gate for drop-in ANTLR4 replacement.
 4. Everything else, in whatever order a live case surfaces it.
 
@@ -71,7 +71,7 @@ And the corpus side, which is extractor work rather than codegen work (see "Desc
 
 The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized.
 
-`[stage_b_oracle_skip]` has been re-triaged (2026-07-30) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
+`[stage_b_oracle_skip]` has been re-triaged (2026-08-21) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
 
 Stage B′ is the **fallback** for descriptors Stage B cannot compare, not a parallel pin: the oracle manifest is written only on the paths where the descriptor's own `[output]` is not a tree Stage B can use. So a category having no `stage_b_oracle/` directory is not by itself a gap — it can equally mean every comparable descriptor is already covered by Stage B directly. Read coverage per descriptor, not per directory.
 
