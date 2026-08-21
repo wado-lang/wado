@@ -33,8 +33,7 @@ use super::util::placeholder;
 /// How the diagnostics name a place whose `&mut` would be a boxed copy. Shared
 /// so the explicit `&mut x.f` and the implicit `&mut self` borrow say the same
 /// thing about the same refusal.
-pub(super) const REPLACE_ON_ASSIGN_PLACE: &str =
-    "a field or element of a replace-on-assign type (primitive, enum, flags, variant, fn); \
+pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replace-on-assign type (primitive, enum, flags, fn); \
      use the containing value's reference directly";
 
 /// Lightweight reference to an impl block. Stores `(module_source,
@@ -1234,33 +1233,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// A replace-on-assign type — primitive, enum, flags, variant, or fn — or a
-    /// newtype over one. Such a place has no addressable interior, so `&mut` of
-    /// it is a boxed copy rather than a projection and writes do not land. The
-    /// boxing itself is decided in `lower::plan::boxing`.
+    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
+    /// fn, or a newtype over one. `&mut` of such a place is a boxed copy rather
+    /// than a projection, so every write through it is lost.
+    /// `lower::plan::boxing` decides the boxing itself.
+    ///
+    /// A `variant` is boxed the same way but excluded: its payload is a shared
+    /// GC struct, so mutation *through* the payload lands, and `&mut xs[i]` is
+    /// the sanctioned stand-in for the `&mut` iteration a variant list cannot
+    /// have. Only replacing the whole value is lost, which takes a narrower
+    /// check than a question about the type alone.
     pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
-        let base = {
-            let table = self.tysys.type_table.borrow();
-            let replaces_on_assign = |ty: &ResolvedType| {
-                matches!(
-                    ty,
-                    ResolvedType::Primitive(_)
-                        | ResolvedType::Enum { .. }
-                        | ResolvedType::Function { .. }
-                )
-            };
-            if replaces_on_assign(table.get(type_id)) {
-                return true;
-            }
-            let base = table.get_ultimate_base_type(type_id);
-            if replaces_on_assign(table.get(base)) {
-                return true;
-            }
-            base
+        let table = self.tysys.type_table.borrow();
+        let replaces_on_assign = |ty: &ResolvedType| {
+            matches!(
+                ty,
+                ResolvedType::Primitive(_)
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Function { .. }
+            )
         };
-        // A variant answers through its declaration, so an instantiated
-        // `Option<i32>` is recognized without a separate generic arm.
-        self.variant_of_type(type_id).is_some() || self.variant_of_type(base).is_some()
+        if replaces_on_assign(table.get(type_id)) {
+            return true;
+        }
+        let base = table.get_ultimate_base_type(type_id);
+        replaces_on_assign(table.get(base))
     }
 
     /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and any

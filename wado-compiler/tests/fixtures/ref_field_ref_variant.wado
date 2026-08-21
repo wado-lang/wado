@@ -1,20 +1,42 @@
-// A variant field replaces on assign, so `&mut` of it would borrow a boxed
-// copy and the write would be lost. An instantiated `Option<i32>` is refused
-// through its declaration, not its spelling.
+// A variant is boxed by `&mut` like any replace-on-assign type, but its payload
+// is a shared GC struct, so mutation through the payload lands. Taking `&mut`
+// of a variant place is therefore allowed, unlike a primitive or fn place.
 
-struct Slot {
-    value: Option<i32>,
+use { println, Stdout } from "core:cli";
+
+struct Named {
+    name: String,
 }
 
-fn fill(slot: &mut Option<i32>) {
-    *slot = Option::Some(7)
+variant Element {
+    Ref(Named),
+    Wildcard,
 }
 
-export fn run() {
-    let mut s = Slot { value: Option::None };
-    fill(&mut s.value);
-    assert s.value matches { Some(7) };
+struct Label {
+    element: Element,
+}
+
+fn rename(elem: &mut Element) {
+    match elem {
+        Ref(r) => {
+            r.name = `renamed`;
+        },
+        Wildcard => (),
+    }
+}
+
+export fn run() with Stdout {
+    let mut lab = Label { element: Element::Ref(Named { name: `original` }) };
+    rename(&mut lab.element);
+    assert lab.element matches { Ref(r) && r.name == `renamed` };
+
+    let mut local = Element::Ref(Named { name: `original` });
+    rename(&mut local);
+    assert local matches { Ref(r) && r.name == `renamed` };
+
+    println(`ok`);
 }
 
 __DATA__
-{"compile_error": "cannot take a mutable reference to a field or element of a replace-on-assign type"}
+{"stdout": "ok\n"}

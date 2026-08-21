@@ -3136,13 +3136,17 @@ for let p of &mut points {
 }
 ```
 
-A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. Taking `&mut` of such a place is a compile error — in `&mut` iteration, in an explicit `&mut x.f` / `&mut xs[i]`, and in a `&mut self` receiver. A _local_ is fine: its box is the variable's own storage. Use indexed access instead:
+A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
 
 ```wado
 for let mut i = 0; i < arr.len(); i += 1 {
     arr[i] = arr[i] * 2;
 }
 ```
+
+Where nothing survives the copy — `primitive`, `enum`, `flags`, `fn` — taking `&mut` of a field or element is a compile error outright, whether written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A _local_ is fine: its box is the variable's own storage.
+
+A `variant` place admits `&mut`, because its payload is a shared GC struct: mutation *through* the payload lands. Replacing the whole value does not.
 
 #### Custom Iterables
 
