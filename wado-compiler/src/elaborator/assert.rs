@@ -312,23 +312,41 @@ impl CaptureScanner {
     }
 
     fn add(&mut self, source: String, ast_id: AstId, is_place: bool, bindable: bool) {
-        let idx = self.slots.len();
-        let name = format!("__v{idx}");
         let conditional = self.conditional;
         // A conditional slot may never run, and a place is re-read, not bound.
         let hoisted = bindable && !conditional && !is_place;
-        self.slots.push(Capture {
-            name,
-            source,
-            conditional,
-            is_place,
-            hoisted,
-        });
+        let idx = match self.place_slot(&source, is_place, conditional) {
+            Some(idx) => idx,
+            None => {
+                let idx = self.slots.len();
+                self.slots.push(Capture {
+                    name: format!("__v{idx}"),
+                    source,
+                    conditional,
+                    is_place,
+                    hoisted,
+                });
+                idx
+            }
+        };
         self.ast_id_to_slot.insert(ast_id, idx);
         // A place is neither bound nor moved, so it passes the fact through —
         // never restores it: a receiver that cleared it still forbids binding
         // what follows.
         self.frontier_ok = hoisted || (is_place && !conditional && bindable);
+    }
+
+    /// The slot an earlier occurrence of this place already earned. A place is
+    /// re-read in the failure branch, so every occurrence renders the same line
+    /// — one slot serves them all. Two that may each go unread stay apart,
+    /// since one flag cannot say which of them ran.
+    fn place_slot(&self, source: &str, is_place: bool, conditional: bool) -> Option<usize> {
+        if !is_place || conditional {
+            return None;
+        }
+        self.slots
+            .iter()
+            .position(|slot| slot.is_place && !slot.conditional && slot.source == source)
     }
 
     fn scan(&mut self, expr: &Expr) {

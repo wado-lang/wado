@@ -57,6 +57,7 @@ export fn run() {
     assert a < b && b < 3;
     assert a > b || b > 0;
     assert apply(|y: i32| -> i32 { return y; }, a) == 1;
+    assert list[a] + list[b] == 99;
 }
 "#;
 
@@ -157,6 +158,20 @@ fn some_plan_line_has(block: &str, label: &str, column: &str) -> bool {
         "no plan line for `{label}` in:\n{block}"
     );
     lines.any(|line| line.contains(column))
+}
+
+/// A place is re-read in the failure branch, so every occurrence of one renders
+/// the same line. One slot serves them all, however often the condition names it.
+#[test]
+fn a_place_named_twice_is_captured_once() {
+    let plan = entry_plan();
+    let block = plan_of(&plan, "list[a] + list[b] == 99");
+
+    let occurrences = block
+        .lines()
+        .filter(|line| line.ends_with("  list"))
+        .count();
+    assert_eq!(occurrences, 1, "`list` should be captured once, got:\n{block}");
 }
 
 #[test]
