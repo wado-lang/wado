@@ -320,9 +320,10 @@ impl CaptureScanner {
         });
         self.ast_id_to_slot.insert(ast_id, idx);
         // A place is neither bound nor moved, and the design already reads it
-        // again from the failure branch — so it is order-insensitive, and an
-        // operand after it may still be bound ahead.
-        self.frontier_ok = hoisted || (is_place && !conditional);
+        // again from the failure branch — so it is order-insensitive and passes
+        // the fact through. Passes through, never restores: a receiver that
+        // cleared the fact still forbids binding what follows it.
+        self.frontier_ok = hoisted || (is_place && !conditional && entered);
     }
 
     fn scan(&mut self, expr: &Expr) {

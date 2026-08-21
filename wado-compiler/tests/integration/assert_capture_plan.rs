@@ -134,6 +134,14 @@ fn plan_of<'a>(plan: &'a str, condition: &str) -> &'a str {
     &rest[..end]
 }
 
+/// The plan line for one operand label, which ends the line.
+fn plan_line<'a>(block: &'a str, label: &str) -> &'a str {
+    block
+        .lines()
+        .find(|line| line.ends_with(&format!("  {label}")))
+        .unwrap_or_else(|| panic!("no plan line for `{label}` in:\n{block}"))
+}
+
 #[test]
 fn every_condition_shape_captures_its_operands() {
     let plan = entry_plan();
@@ -157,10 +165,46 @@ fn a_short_circuited_operand_is_marked_conditional() {
     for (condition, labels) in EXPECTED_CONDITIONAL {
         let block = plan_of(&plan, condition);
         for label in *labels {
-            let needle = format!("conditional  {label}\n");
             assert!(
-                block.contains(&needle),
+                plan_line(block, label).contains("conditional"),
                 "`{condition}` should mark `{label}` conditional, got:\n{block}"
+            );
+        }
+    }
+}
+
+/// Where each operand's capture is taken. `hoisted` binds ahead of the
+/// condition, `re-read` takes no binding at all, and `in-place` writes a slot
+/// where the operand sits — which WEP rule 1 requires as soon as anything
+/// evaluated earlier stays behind.
+const EXPECTED_BINDING: &[(&str, &[(&str, &str)])] = &[
+    // A place passes the fact through, so the operand after it still binds.
+    ("a < b", &[("a", "re-read"), ("b", "re-read")]),
+    (
+        "twice(a) == b",
+        &[("twice(a)", "hoisted"), ("b", "re-read")],
+    ),
+    ("o.inner.v == 1", &[("o.inner.v", "hoisted")]),
+    // A subscript's receiver runs first and is not captured, so the index
+    // stays where it sits; the subscript itself moves as one group.
+    ("list[a] == 20", &[("a", "re-read"), ("list[a]", "hoisted")]),
+    // Past a short-circuit nothing binds ahead: the operand may not run.
+    (
+        "a < b && b < 3",
+        &[("a < b", "hoisted"), ("b < 3", "in-place")],
+    ),
+];
+
+#[test]
+fn a_capture_binds_ahead_only_while_order_allows() {
+    let plan = entry_plan();
+
+    for (condition, bindings) in EXPECTED_BINDING {
+        let block = plan_of(&plan, condition);
+        for (label, binding) in *bindings {
+            assert!(
+                plan_line(block, label).contains(binding),
+                "`{condition}` should take `{label}` {binding}, got:\n{block}"
             );
         }
     }
