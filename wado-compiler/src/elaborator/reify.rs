@@ -3093,7 +3093,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
-        let local_index = ctx.add_local(cap_name.clone(), type_id, conditional, None);
+        let local_index = ctx.add_local(cap_name.clone(), type_id, true, None);
         let seen_local_index = conditional.then(|| {
             ctx.add_local(
                 super::assert::seen_local_name(&cap_name),
@@ -3162,23 +3162,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
             )
         } else {
-            // Bound where the operand sits, not assigned to a local declared
-            // elsewhere: a closure body is lifted into its own function, and a
-            // local that is only ever assigned has no declaration to lift.
             let capture_block = crate::tir::TirBlock::new(
                 vec![
-                    TirStmt::new(
-                        TirStmtKind::Let {
-                            name: cap_name,
-                            local_index,
-                            is_mut: false,
-                            is_reactive: false,
-                            type_id,
-                            value: resolved,
-                            skip_value_copy: false,
-                        },
-                        cap_span,
-                    ),
+                    assign_stmt(local_ref.clone(), resolved, cap_span),
                     TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
                 ],
                 cap_span,
