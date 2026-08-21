@@ -630,7 +630,7 @@ fn check_function_effects_sem(
     // `Stdout` may call operations that internally need `Stream`, etc.
     let current: IndexSet<EffectRef> = current
         .iter()
-        .map(|effect| canonicalize_effect(effect, index.effect_by_name))
+        .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
         .collect();
     let current = expand_through_closure(&current, index.closure);
 
@@ -758,8 +758,15 @@ fn build_propagation_closure_sem(
 /// names without a declaration are returned unchanged.
 fn canonicalize_effect(
     effect: &EffectRef,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: &IndexMap<String, EffectRef>,
 ) -> EffectRef {
+    // A ref that already names a declaration is canonical, module and all.
+    // Only a spelling the closure does not know — a re-export path — has to be
+    // looked up, and there a name is all there is to go on.
+    if closure.contains_key(effect) {
+        return effect.clone();
+    }
     match effect {
         EffectRef::Concrete { name, .. } => effect_by_name
             .get(name)
@@ -1082,7 +1089,7 @@ impl SemEffectWalker<'_> {
             // records `Stdout` against the entry module, while stdlib records
             // it against `wasi:cli`), so compare through the declaration's
             // canonical form rather than by raw `module_source`.
-            let effect = canonicalize_effect(effect, self.index.effect_by_name);
+            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
             // Any `Param` left after resolution did not bind to a concrete
             // effect; skip it rather than report a spurious miss.
             if effect.is_param() || self.current.contains(&effect) {
