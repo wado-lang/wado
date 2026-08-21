@@ -1075,8 +1075,8 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
         let mut slots = ReflectStruct::<T>::defaults();
         // One bit per field records what the *wire* wrote. The slots cannot
         // answer that themselves: they are seeded with the declared defaults,
-        // so an occupied slot means nothing.
-        assert slots.len() <= 64;
+        // so an occupied slot means nothing. A struct too wide for the mask is
+        // refused at the derive, so the width needs no check here.
         let mut seen: i64 = 0;
         let mut sd = d.begin_struct(&ReflectStruct::<T>::type_name(), slots.len())?;
         while let Some(index) = sd.next_field::<T>()? {

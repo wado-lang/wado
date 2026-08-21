@@ -990,6 +990,47 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .map(|_| base.to_string())
     }
 
+    /// Widest struct the derived serde bodies can carry: the duplicate-field
+    /// bitmask in `core:serde` is one `i64`, one bit per field.
+    const SERDE_MAX_FIELDS: usize = 64;
+
+    /// Refuse a serde derive on a struct too wide for the duplicate-field
+    /// bitmask. Caught here rather than by the `assert` in the derived body,
+    /// so a too-wide struct fails to build instead of panicking on its first
+    /// deserialize.
+    fn check_serde_derive_width(
+        &mut self,
+        trait_name: &str,
+        target_type_id: TypeId,
+        target_type_name: &str,
+        span: crate::token::Span,
+    ) {
+        let is_serde = matches!(
+            self.tysys
+                .classify_on_bound_trait(&self.type_lookup(), trait_name),
+            Some(trait_query::OnBoundTrait::Serialize | trait_query::OnBoundTrait::Deserialize)
+        );
+        if !is_serde {
+            return;
+        }
+        let Some(count) = self
+            .struct_fields_of_type(target_type_id)
+            .map(|info| info.fields.len())
+        else {
+            return;
+        };
+        if count <= Self::SERDE_MAX_FIELDS {
+            return;
+        }
+        let _ = self.logger.error(types::TypeError::SerdeStructTooWide {
+            trait_name: trait_name.to_string(),
+            type_name: target_type_name.to_string(),
+            field_count: count,
+            max_fields: Self::SERDE_MAX_FIELDS,
+            span,
+        });
+    }
+
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
@@ -998,6 +1039,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         target_type_name: &str,
         span: crate::token::Span,
     ) {
+        self.check_serde_derive_width(trait_name, target_type_id, target_type_name, span);
         if target_type_id == tir::TypeTable::ERROR {
             return;
         }
