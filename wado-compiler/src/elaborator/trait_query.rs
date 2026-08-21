@@ -1945,23 +1945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
-        // Slot 0 is `Self`. The trait's own parameters follow, and a bound
-        // names none of them positionally (`T: Add<Output = T>`), so they take
-        // their declared defaults — `trait Add<Rhs = Self>` makes `add`'s
-        // parameter `&Self`, not a rigid `&Rhs` no argument could satisfy.
-        let mut slots = IndexMap::from_iter([(0, self_type_id)]);
-        if let Some(trait_params) = self.trait_decl_type_params_of(&decl) {
-            let defaults: Vec<(u32, ast::Type)> = trait_params
-                .iter()
-                .filter(|p| p.is_real_type_param())
-                .enumerate()
-                .filter_map(|(i, p)| p.default.clone().map(|d| (1 + i as u32, d)))
-                .collect();
-            for (slot, default_ty) in defaults {
-                let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&default_ty));
-                slots.insert(slot, resolved);
-            }
-        }
+        let slots = self.bare_bound_slots(decl, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2219,6 +2203,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// What a bare bound binds `decl`'s slots to. Slot 0 is `Self`; the
+    /// trait's own parameters follow, and a bound names none of them
+    /// positionally (`T: Add<Output = T>` binds an associated type, not an
+    /// argument), so they take their declared defaults — `trait Add<Rhs = Self>`
+    /// makes `add`'s parameter `&Self`, not a rigid `&Rhs` nothing satisfies.
+    pub(super) fn bare_bound_slots(
+        &mut self,
+        decl: crate::defs::DefId,
+        self_type_id: TypeId,
+    ) -> IndexMap<u32, TypeId> {
+        let mut slots = IndexMap::from_iter([(0, self_type_id)]);
+        let Some(trait_params) = self.trait_decl_type_params_of(&decl) else {
+            return slots;
+        };
+        let defaults: Vec<(u32, ast::Type)> = trait_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .enumerate()
+            .filter_map(|(i, p)| p.default.clone().map(|d| (1 + i as u32, d)))
+            .collect();
+        for (slot, default_ty) in defaults {
+            let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&default_ty));
+            slots.insert(slot, resolved);
+        }
+        slots
     }
 
     /// Check a bound's associated-type constraints (`T: Collect<Item = i32>`)

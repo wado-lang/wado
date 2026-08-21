@@ -518,11 +518,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let sig = &self.trait_sig_of(&decl)?.method(method_name)?.sig;
             sig.decl.param_types.get(sig.first_value_param()).copied()
         })?;
-        // Slot 0 is the trait's `Self`, so `rhs: &Self` reads as the parameter.
-        let substituted = self.tysys.type_table.borrow_mut().substitute_type_params(
-            declared,
-            &crate::hashmap::IndexMap::from_iter([(0, self_type_id)]),
-        );
+        // The same slots the dispatch binds, so the hint and the call agree on
+        // what a bare bound means.
+        let slots = self.bare_bound_slots(trait_, self_type_id);
+        let substituted = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(declared, &slots);
         let peeled = match self.tysys.type_table.borrow().get(substituted) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => substituted,

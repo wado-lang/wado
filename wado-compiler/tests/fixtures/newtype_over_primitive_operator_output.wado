@@ -1,0 +1,25 @@
+// A newtype over a primitive inherits its arithmetic, so `T::Output` under a
+// bare `T: Add` is the newtype. Only the primitive itself answered, so the
+// projection stayed unresolved and reached WIR build.
+use { println } from "core:cli";
+
+type Cm = i32;
+
+type Flag = bool;
+
+fn add2<T: Add>(a: T, b: T) -> T::Output {
+    return a + b;
+}
+
+fn flip<T: BitNot<Output = T>>(v: T) -> T {
+    return ~v;
+}
+
+export fn run() with Stdout {
+    let sum: Cm = add2(3 as Cm, 4 as Cm);
+    let f = builtin::black_box(true) as Flag;
+    println(`${sum == 7 as Cm} ${~f} ${flip(f)}`);
+}
+
+__DATA__
+{"stdout": "true false false\n"}

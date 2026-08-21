@@ -3073,9 +3073,14 @@ impl TypeTable {
                         return resolved;
                     }
                     // A primitive's arithmetic is compiler-supplied, so nothing
-                    // registered its `Output`. It is the primitive itself.
+                    // registered its `Output`. It is the receiver itself — a
+                    // newtype over one inherits the arithmetic and stays the
+                    // newtype, so the base only decides whether this applies.
                     if assoc_name == "Output"
-                        && matches!(self.get(concrete), ResolvedType::Primitive(_))
+                        && matches!(
+                            self.get(self.get_ultimate_base_type(concrete)),
+                            ResolvedType::Primitive(_)
+                        )
                     {
                         return concrete;
                     }
