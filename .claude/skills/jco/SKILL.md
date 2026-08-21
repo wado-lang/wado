@@ -110,7 +110,8 @@ jco's built-in shim (`transpile-released.mjs` wires these automatically):
 - `cli.js` — stdout/stderr via `globalThis._jcoStreamWriteHook` (bypasses the
   rendezvous). `writeViaStream` returns a `Promise` because `write-via-stream`
   is async — jco lowers its result as a future and expects a Promise/Thenable.
-- `clocks.js` — `wasi:clocks` via `process.hrtime` / `Date.now`.
+- `clocks.js` — `wasi:clocks` via `process.hrtime` / `performance.timeOrigin`
+  (the wall clock keeps sub-millisecond precision).
 - `random.js` — `wasi:random` via Node crypto.
 
 ### `@bytecodealliance/preview3-shim`

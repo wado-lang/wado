@@ -8,23 +8,22 @@ UUID generation and parsing (RFC 9562).
 Only the two versions in common use today are provided:
 
 - `Uuid::v4()` — random UUID. The default for "just give me a unique id".
-- `Uuid::v7()` — time-ordered UUID. A 48-bit Unix-millisecond timestamp in
-  the high bytes makes values sortable by creation time, which is ideal for
-  database keys and log correlation.
-
-A `Uuid` is a single 128-bit value (stored as a `u8x16` SIMD register, one
-lane per byte). Construction, formatting, and parsing are all byte-oriented,
-which maps directly onto the lane layout. Equality and ordering compare the
-16 bytes in big-endian order, so `v7` values sort by timestamp.
+- `Uuid::v7()` — time-ordered UUID, ideal for database keys and log
+  correlation.
 
 `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-`parse` accepts both the hyphenated form and the 32-digit hyphenless
-"simple" form, matching Rust's `uuid` and Go's `google/uuid`.
+`parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
+and `Inspect` render the canonical hyphenated form, as does `Serialize` for
+text formats; binary ones get CBOR tag 37 and the 16 bytes.
+
+`v7` sorts by creation time under RFC 9562 method 3: the timestamp leads the
+bytes, `rand_a` holding its sub-millisecond fraction, one tick per 244 ns.
+Values within a tick, or across a backwards clock step, are unordered.
 
 ## Synopsis
 
 ```wado
-assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Some(id) && id.version() == 4
+assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
     && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 ```
 
@@ -32,11 +31,8 @@ assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Some(id) &
 
 ### `pub struct Uuid`
 
-A 128-bit universally unique identifier.
-
-The bytes are held big-endian: byte 0 is the most significant. This is the
-order RFC 9562 lays out the fields in, so the natural byte order is also the
-canonical string order and (for `v7`) the timestamp order.
+A 128-bit universally unique identifier, held big-endian as RFC 9562 lays
+the fields out.
 
 _Fields are private._
 
@@ -44,33 +40,34 @@ _Fields are private._
 
 The nil UUID — all 128 bits zero (`00000000-0000-0000-0000-000000000000`).
 
+#### `pub fn max() -> Uuid`
+
+The max UUID — all 128 bits one (`ffffffff-ffff-ffff-ffff-ffffffffffff`).
+
 #### `pub fn v4() -> Uuid with Random`
 
-Generate a version-4 (random) UUID.
-
-All 122 free bits come from the cryptographically-secure `Random`
-effect; the version (`0100`) and variant (`10`) bits are then forced
-into place per RFC 9562.
+Generate a version-4 (random) UUID: 122 bits from `Random`, with the
+RFC 9562 version and variant bits forced into place.
 
 #### `pub fn v7() -> Uuid with (Random, SystemClock)`
 
-Generate a version-7 (time-ordered) UUID.
+Generate a version-7 (time-ordered) UUID: a 48-bit millisecond timestamp
+and a 12-bit sub-millisecond fraction from `SystemClock`, then 62
+random bits.
 
-The high 48 bits are the Unix timestamp in milliseconds, read from the
-`SystemClock` effect; the remaining bits are random. Because the
-timestamp occupies the most significant bytes, lexicographic / numeric
-ordering of `v7` values matches creation-time ordering.
+#### `pub fn parse(s: &String) -> Result<Uuid, ParseError>`
 
-#### `pub fn parse(s: &String) -> Option<Uuid>`
+Parse a UUID string (case-insensitive), accepting every form Go's
+`uuid` and Rust's `uuid` do: `8-4-4-4-12`, 32 bare hex digits,
+`{8-4-4-4-12}`, and `urn:uuid:8-4-4-4-12`.
 
-Parse a UUID string (case-insensitive), like Rust's `uuid` and Go's
-`google/uuid`:
+#### `pub fn from_bytes(bytes: &ByteList) -> Option<Uuid>`
 
-- the canonical hyphenated form `8-4-4-4-12` (36 chars), with hyphens
-  required at exactly the field boundaries, or
-- the simple form: 32 hex digits with no hyphens.
+Build a UUID from its 16 big-endian bytes. `null` for any other length.
 
-Returns `null` for anything else.
+#### `pub fn as_bytes(&self) -> ByteList`
+
+The 16 bytes, most significant first.
 
 #### `pub fn version(&self) -> i32`
 
@@ -84,6 +81,22 @@ The canonical hyphenated lowercase string form.
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 
+#### `impl Inspect for Uuid`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl InspectAlt for Uuid`
+
+##### `pub fn inspect_alt(&self, f: &mut Formatter)`
+
+#### `impl Serialize for Uuid`
+
+##### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
+
+#### `impl Deserialize for Uuid`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uuid, DeserializeError>`
+
 #### `impl Eq for Uuid`
 
 ##### `fn eq(&self, other: &Uuid) -> bool`
@@ -95,3 +108,19 @@ The canonical hyphenated lowercase string form.
 #### `impl Default for Uuid`
 
 ##### `fn default() -> Uuid`
+
+## Variants
+
+### `pub variant ParseError`
+
+Why a string was not a UUID.
+
+#### `InvalidLength`
+
+Not 32, 36, 38 (braced) or 45 (URN) characters long.
+
+#### `InvalidGroups`
+
+Hyphens, braces or the `urn:uuid:` prefix are not where they belong.
+
+#### `InvalidCharacter`

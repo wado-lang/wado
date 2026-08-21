@@ -614,8 +614,10 @@ impl Deserializer for ArgvDeserializer {
         return Result::Ok(ArgvVariantAccess { de: self, tag });
     }
 
+    /// An argv token is always text, so a dynamic `Deserialize` gets it raw.
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
-        return Result::Err(unsupported("dynamic deserialization"));
+        let text = self.take_value()?;
+        return visitor.visit_string(text);
     }
 }
 
