@@ -749,14 +749,6 @@ fn build_propagation_closure_sem(
     direct
 }
 
-/// Canonicalise an effect by name through the declaration index. The raw
-/// `EffectRef::Concrete.module_source` recorded in `function_effects` reflects
-/// the recording module's import perspective, so two references to the same
-/// effect can carry different module sources (user entry vs `wasi:cli`). The
-/// declaration index (built from the propagation-closure keys) holds one
-/// canonical `EffectRef` per name; mapping through it makes cross-module
-/// effect comparison and closure lookups consistent. Effect parameters and
-/// names without a declaration are returned unchanged.
 /// The effect a name written in `module` refers to: the module's own declaration
 /// first, else whatever that spelling reaches. A name is all an attribute
 /// argument or a `with` clause type carries, so the module breaks the tie.
@@ -776,14 +768,15 @@ fn effect_named_in(
     effect_by_name.get(name).cloned()
 }
 
+/// The declaration an effect reference names. A reference the closure knows is
+/// already one. A spelling it does not — the recording module's import
+/// perspective on a re-export — resolves through the by-name index, which holds
+/// one entry per name. Effect parameters are returned unchanged.
 fn canonicalize_effect(
     effect: &EffectRef,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: &IndexMap<String, EffectRef>,
 ) -> EffectRef {
-    // A ref that already names a declaration is canonical, module and all.
-    // Only a spelling the closure does not know — a re-export path — has to be
-    // looked up, and there a name is all there is to go on.
     if closure.contains_key(effect) {
         return effect.clone();
     }
