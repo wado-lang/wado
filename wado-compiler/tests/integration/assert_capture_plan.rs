@@ -134,12 +134,19 @@ fn plan_of<'a>(plan: &'a str, condition: &str) -> &'a str {
     &rest[..end]
 }
 
-/// The plan line for one operand label, which ends the line.
-fn plan_line<'a>(block: &'a str, label: &str) -> &'a str {
-    block
+/// Whether some plan line for `label` carries `column`. One label can have
+/// several lines — `a < b && b < 3` captures `b` twice, and only the second is
+/// conditional.
+fn some_plan_line_has(block: &str, label: &str, column: &str) -> bool {
+    let mut lines = block
         .lines()
-        .find(|line| line.ends_with(&format!("  {label}")))
-        .unwrap_or_else(|| panic!("no plan line for `{label}` in:\n{block}"))
+        .filter(|line| line.ends_with(&format!("  {label}")))
+        .peekable();
+    assert!(
+        lines.peek().is_some(),
+        "no plan line for `{label}` in:\n{block}"
+    );
+    lines.any(|line| line.contains(column))
 }
 
 #[test]
@@ -166,7 +173,7 @@ fn a_short_circuited_operand_is_marked_conditional() {
         let block = plan_of(&plan, condition);
         for label in *labels {
             assert!(
-                plan_line(block, label).contains("conditional"),
+                some_plan_line_has(block, label, "conditional"),
                 "`{condition}` should mark `{label}` conditional, got:\n{block}"
             );
         }
@@ -203,7 +210,7 @@ fn a_capture_binds_ahead_only_while_order_allows() {
         let block = plan_of(&plan, condition);
         for (label, binding) in *bindings {
             assert!(
-                plan_line(block, label).contains(binding),
+                some_plan_line_has(block, label, binding),
                 "`{condition}` should take `{label}` {binding}, got:\n{block}"
             );
         }
