@@ -1315,11 +1315,9 @@ impl TypeSystem {
             )
     }
 
-    /// Whether the header implements its trait at the declared defaults. A
-    /// bound is a bare name — the parser reads `<...>` after one as
-    /// associated-type bindings — so that is the only instantiation a bound
-    /// asks for, and `impl Mul<Inch> for Cm` is not it.
-    fn header_is_defaulted_instantiation(&self, header: &super::trait_env::ImplHeader) -> bool {
+    /// Whether a bare bound on the header's trait selects it — see
+    /// [`super::trait_env::header_answers_bare_bound`].
+    fn header_answers_bare_bound(&self, header: &super::trait_env::ImplHeader) -> bool {
         let (Some(trait_type), Some(decl)) = (header.trait_type.as_ref(), header.trait_ref) else {
             return true;
         };
@@ -1331,8 +1329,12 @@ impl TypeSystem {
         else {
             return true;
         };
-        super::trait_env::non_default_arg_count(trait_type, &header.ty, &params, &self.resolutions)
-            == 0
+        super::trait_env::header_answers_bare_bound(
+            trait_type,
+            &header.ty,
+            &params,
+            &self.resolutions,
+        )
     }
 
     /// The name a trait declaration writes, for the layers still keyed on one.
@@ -1365,7 +1367,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_ref == Some(trait_)
-                    && self.header_is_defaulted_instantiation(header)
+                    && self.header_answers_bare_bound(header)
                     && self.inherent_impl_type_args_match(&header.ty, type_args)
                     && self.check_impl_block_bounds(
                         ctx,
@@ -1420,7 +1422,7 @@ impl TypeSystem {
         let Some(prelude) = tt.compiler_items().trait_module(CompilerItem::Ord) else {
             return false;
         };
-        decl.is_none_or(|def| self.resolutions.defs().module(def) == prelude)
+        decl.is_some_and(|def| self.resolutions.defs().module(def) == prelude)
     }
 
     fn blanket_trait_impl_applies(
@@ -2108,6 +2110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if !self.check_and_register_bound(type_arg, trait_) {
             if !self.reported_bound_failures.insert((
+                self.current_module_source.clone(),
                 type_arg,
                 trait_,
                 param_name.to_string(),
@@ -2613,14 +2616,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// spelled `prim_name`. `v128` is excluded with the non-numeric ones: its
 /// arithmetic is lane-wise, and only the lane type's own impl knows the width.
 fn primitive_name_has_arithmetic(prim_name: &str, trait_name: &str) -> bool {
+    let is_int = matches!(prim_name.as_bytes().first(), Some(b'i' | b'u'));
     match trait_name {
-        "Add" | "Sub" | "Mul" | "Div" | "Rem" | "Neg" => {
-            !matches!(prim_name, "bool" | "char" | "v128")
-        }
-        // Bit patterns, so the floats are out and `bool` is in.
-        "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "Shl" | "Shr" => {
-            !matches!(prim_name, "f32" | "f64" | "char" | "v128")
-        }
+        "Add" | "Sub" | "Mul" | "Div" | "Neg" => is_int || matches!(prim_name, "f32" | "f64"),
+        // `%` has no float lowering.
+        "Rem" => is_int,
+        // Bit patterns. `bool` takes the binary three, as `b & c` does, but
+        // neither `~b` nor `b << 1` is a Wado expression.
+        "BitAnd" | "BitOr" | "BitXor" => is_int || prim_name == "bool",
+        "BitNot" | "Shl" | "Shr" => is_int,
         _ => false,
     }
 }

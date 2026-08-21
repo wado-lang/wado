@@ -2533,6 +2533,47 @@ fn args_without_declared_defaults(
     kept
 }
 
+/// Whether a bare bound on the trait selects this header. A bound cannot write
+/// trait arguments — the parser reads `<...>` after one as associated-type
+/// bindings — so it asks for the declared defaults where a position has one
+/// (`T: Mul` is `Mul<Self>`) and says nothing about a position that has none
+/// (`T: Pick` is every `impl Pick<K>`).
+pub(super) fn header_answers_bare_bound(
+    trait_type: &ast::Type,
+    target: &ast::Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+) -> bool {
+    let ast_args: &[ast::Type] = match trait_type {
+        ast::Type::Generic(generic) => &generic.args,
+        ast::Type::NamespacedGeneric(ns) => &ns.args,
+        _ => return true,
+    };
+    ast_args.iter().enumerate().all(|(i, arg)| {
+        params
+            .get(i)
+            .and_then(|p| p.default.as_ref())
+            .is_none_or(|default| restates_default(arg, default, target, resolutions))
+    })
+}
+
+/// Whether a written trait argument says exactly what the declared default
+/// does, `Self` meaning the impl's target.
+fn restates_default(
+    arg: &ast::Type,
+    default: &ast::Type,
+    target: &ast::Type,
+    resolutions: &crate::resolve::Resolutions,
+) -> bool {
+    match default {
+        ast::Type::Named(named) if named.name == "Self" => {
+            matches!(arg, ast::Type::Named(a) if a.name == "Self")
+                || written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
+        }
+        _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
+    }
+}
+
 /// How many of `trait_type`'s written arguments say something its declared
 /// defaults do not. One rule behind both an impl's name and the identity its
 /// associated types register under, so the two cannot disagree.
@@ -2555,14 +2596,7 @@ pub(super) fn non_default_arg_count(
         let Some(default) = param.default.as_ref() else {
             break;
         };
-        let restates_default = match default {
-            ast::Type::Named(named) if named.name == "Self" => {
-                matches!(arg, ast::Type::Named(a) if a.name == "Self")
-                    || written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
-            }
-            _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
-        };
-        if !restates_default {
+        if !restates_default(arg, default, target, resolutions) {
             break;
         }
         kept = last;

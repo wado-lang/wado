@@ -2377,7 +2377,12 @@ impl Monomorphizer {
                     let base_name = trait_name_before
                         .as_ref()
                         .map(crate::name::FqTraitName::base_name);
-                    if type_table.is_scalar_primitive_like(recv_inner)
+                    let trait_decl = trait_name_before
+                        .as_ref()
+                        .and_then(crate::name::FqTraitName::canonical);
+                    let lowers_to_scalar =
+                        type_table.operator_lowers_to_scalar(recv_inner, trait_decl);
+                    if lowers_to_scalar
                         && let Some(unary_op) =
                             trait_method_to_unary_op(base_name, &method_name_before)
                     {
@@ -2387,7 +2392,7 @@ impl Monomorphizer {
                             op: unary_op,
                             expr: Box::new(operand),
                         };
-                    } else if type_table.is_scalar_primitive_like(recv_inner)
+                    } else if lowers_to_scalar
                         && let Some(binary_op) =
                             trait_method_to_binary_op(base_name, &method_name_before)
                     {

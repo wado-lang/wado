@@ -3352,6 +3352,18 @@ lists (see [One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
 `Neg` and `BitNot` are unary and take no argument; `Shl` / `Shr` declare
 `rhs: u32`.
 
+An operator yields `Output`, which a widening impl may make another type, so a
+generic body folding back into its own parameter pins it:
+
+```wado
+fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
+fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
+```
+
+A bound cannot write a trait argument — the parser reads `<...>` after one as
+associated-type bindings — so `T: Add` names the defaulted `Add<Self>`, and
+`T::Output` under two bounds that both declare `Output` is ambiguous.
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:

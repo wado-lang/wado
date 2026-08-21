@@ -1,0 +1,38 @@
+// A bound cannot write trait arguments, so it constrains only the positions
+// that declare a default. `trait Pick<K>` declares none, and `impl Pick<i32>`
+// answers `T: Pick`; requiring the defaulted form rejected every such impl,
+// `From` and `IndexValue` included.
+use { println } from "core:cli";
+
+struct Cm {
+    v: i32,
+}
+
+impl From<i32> for Cm {
+    fn from(v: i32) -> Cm {
+        return Cm { v: v };
+    }
+}
+
+struct Bag {
+    xs: List<i32>,
+}
+
+impl IndexValue<i32> for Bag {
+    type Output = i32;
+
+    fn index_value(&self, i: i32) -> i32 {
+        return self.xs[i];
+    }
+}
+
+export fn run() with Stdout {
+    let c: Cm = Cm::from(7);
+    let b = Bag { xs: [1, 2, 3] };
+    assert c.v == 7;
+    assert b[1] == 2;
+    println(`${c.v} ${b[1]}`);
+}
+
+__DATA__
+{"stdout": "7 2\n"}

@@ -2187,6 +2187,26 @@ impl TypeTable {
         matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
     }
 
+    /// Whether an operator on `id` lowers to a scalar instruction rather than
+    /// the trait call monomorphization produced. A newtype is its own type: it
+    /// lowers that way only where it carries no operator impl of its own,
+    /// which every operator trait spells by declaring `Output`.
+    pub fn operator_lowers_to_scalar(
+        &self,
+        id: TypeId,
+        trait_decl: Option<crate::defs::DefId>,
+    ) -> bool {
+        if matches!(self.get(id), ResolvedType::Newtype { .. })
+            && trait_decl.is_some_and(|trait_| {
+                self.resolve_assoc_type_of_trait(id, &trait_, "Output")
+                    .is_some()
+            })
+        {
+            return false;
+        }
+        self.is_scalar_primitive_like(id)
+    }
+
     /// Peel through Ref/MutRef wrappers to get the underlying type.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {

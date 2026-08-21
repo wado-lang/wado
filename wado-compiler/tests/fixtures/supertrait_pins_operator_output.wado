@@ -1,0 +1,34 @@
+// A supertrait pins `Output` too: `trait Scalar: Mul<Output = Self>` answers
+// `T::Output` for `T: Scalar`. Reading only the frame's direct bounds left the
+// projection abstract, so `a * b` no longer typed as `T`.
+use { println } from "core:cli";
+
+struct Cm {
+    v: i32,
+}
+
+impl Mul for Cm {
+    type Output = Cm;
+
+    fn mul(&self, rhs: &Cm) -> Cm {
+        return Cm { v: self.v * rhs.v };
+    }
+}
+
+trait Scalar: Mul<Output = Self> {
+}
+
+impl Scalar for Cm {
+}
+
+fn sq<T: Scalar>(a: T, b: T) -> T {
+    return a * b;
+}
+
+export fn run() with Stdout {
+    assert sq(Cm { v: 3 }, Cm { v: 4 }).v == 12;
+    println(`${sq(Cm { v: 3 }, Cm { v: 4 }).v}`);
+}
+
+__DATA__
+{"stdout": "12\n"}

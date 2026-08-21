@@ -470,20 +470,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         };
         if let Some(param_name) = param_name {
-            let bounds = self
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .get(&param_name)?
-                .clone();
-            let (_, info) =
-                self.find_method_in_trait_bounds(&bounds, method_name, self_type_id, span, None)?;
-            let first = *info.param_types.first()?;
-            let peeled = match self.tysys.type_table.borrow().get(first) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => first,
-            };
-            return Some(peeled);
+            return self.bound_declared_rhs_type(&param_name, method_name, self_type_id);
         }
         let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
         let admitted = self.find_arithmetic_trait_impls(
@@ -505,6 +492,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => t,
             }
         })
+    }
+
+    /// The right-hand type a type parameter's bounds declare for `method_name`,
+    /// read off the trait declaration rather than the dispatch — this is a hint
+    /// for typing a literal, and reporting an ambiguity from it would print the
+    /// dispatch's own diagnostic a second time, anchored at the literal.
+    fn bound_declared_rhs_type(
+        &mut self,
+        param_name: &str,
+        method_name: &str,
+        self_type_id: TypeId,
+    ) -> Option<TypeId> {
+        let bounds = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)?
+            .clone();
+        let declared = bounds.iter().find_map(|bound| {
+            let decl = self.trait_decl_at(bound.id, &bound.name)?;
+            let sig = &self.trait_sig_of(&decl)?.method(method_name)?.sig;
+            sig.decl.param_types.get(sig.first_value_param()).copied()
+        })?;
+        // Slot 0 is the trait's `Self`, so `rhs: &Self` reads as the parameter.
+        let substituted = self.tysys.type_table.borrow_mut().substitute_type_params(
+            declared,
+            &crate::hashmap::IndexMap::from_iter([(0, self_type_id)]),
+        );
+        let peeled = match self.tysys.type_table.borrow().get(substituted) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => substituted,
+        };
+        Some(peeled)
     }
 
     /// An operator whose receiver implements its trait at several right-hand

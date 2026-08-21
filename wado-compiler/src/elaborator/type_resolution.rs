@@ -873,13 +873,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_param_bounds
             .get(base_name)?
             .clone();
-        let written = bounds.iter().find_map(|bound| {
-            let fq = self.fq_trait_name_at(bound.id, &bound.name);
-            (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
-                .then(|| bound.assoc_types.iter().find(|b| b.name == assoc))
-                .flatten()
-        })?;
-        Some(self.resolve_type(&written.ty.clone()))
+        // A supertrait pins it too: `trait Scalar: Mul<Output = Self>` answers
+        // `T::Output` for `T: Scalar`, and only the closure carries that bound.
+        let inherited: Vec<crate::ast::TraitBound> = bounds
+            .iter()
+            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+            .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
+            .map(|i| i.bound)
+            .collect();
+        let written = bounds
+            .iter()
+            .chain(inherited.iter())
+            .find_map(|bound| {
+                let fq = self.fq_trait_name_at(bound.id, &bound.name);
+                (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
+                    .then(|| bound.assoc_types.iter().find(|b| b.name == assoc))
+                    .flatten()
+            })?
+            .ty
+            .clone();
+        // `Self` in a supertrait's binding is the bounded type, which this
+        // frame files under `base_name`.
+        let self_type = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(base_name)
+            .map(|&(_, id)| id);
+        Some(match self_type {
+            Some(id) => self.with_self_type(id, |s| s.resolve_type(&written)),
+            None => self.resolve_type(&written),
+        })
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this

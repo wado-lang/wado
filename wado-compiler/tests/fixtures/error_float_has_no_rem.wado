@@ -1,0 +1,13 @@
+// `%` has no float lowering, and the concrete form is rejected, so `T: Rem`
+// must not hold for `f64` either — it did, and monomorphizing to `f64` panicked
+// the WIR builder.
+fn modulo<T: Rem<Output = T>>(a: T, b: T) -> T {
+    return a % b;
+}
+
+export fn run() {
+    assert modulo(7.5, 2.0) == 1.5;
+}
+
+__DATA__
+{ "compile_error": "type 'f64' does not implement trait 'Rem'" }
