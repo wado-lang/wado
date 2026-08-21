@@ -17,8 +17,8 @@ doc covers what works today, the workarounds, and what is still blocked.
 - Compile Wado with **`-f no-wide-arithmetic`** — V8 has no wide-arithmetic
   proposal, and float formatting / `i128` emit it.
 - Run on **Node 26+** — stable JSPI, no flag.
-- **Compute programs work** (including float formatting). **Filesystem programs
-  hang** on a jco read-stream gap (diagnosed below) — deferred.
+- **Compute programs work** (including float formatting). Filesystem programs
+  run to completion; reading through a preopen is unverified (see below).
 - Quick check: `mise run jco-hello-released`. Benchmark:
   `mise run jco-bench <program.wado>`.
 
@@ -56,16 +56,16 @@ mise run jco-hello-released             # compile + transpile + run hello on Nod
 mise run jco-bench <program.wado> [runs] # compile -f no-wide-arithmetic, transpile, self-time
 ```
 
-### Released jco status (verified at 1.24.3)
+### Released jco status (verified at 1.30.0)
 
 | Capability                   | Status                                                                                                                                               |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Transpile (GC component)     | ✅ works, `wasi:http/service` included                                                                                                               |
 | JSPI                         | ✅ native (Node 26 no flag; Node 24 needs the flag)                                                                                                  |
 | Wide-arithmetic component    | ❌ `transpile` rejects it (`wide arithmetic support is not enabled`); even if forced, V8 rejects the opcode at runtime → use `-f no-wide-arithmetic` |
-| Future-end intrinsic classes | ❌ not emitted on the future-drop path → inject (post-process)                                                                                       |
-| Stdout via stream            | ❌ needs the write hook + `cli.js` (post-process + shim)                                                                                             |
-| Filesystem read stream       | ❌ deadlocks (jco async gap, see Known blockers)                                                                                                     |
+| Future-end intrinsic classes | ✅ emitted; the post-process injection finds them present and skips                                                                                  |
+| Stdout via stream            | ✅ jco's own shim delivers it; the write hook + `cli.js` are what this repo still wires                                                              |
+| Filesystem read stream       | ⚠️ no longer deadlocks; reading through a preopen is unverified                                                                                      |
 
 ### The post-process transforms
 
@@ -115,14 +115,10 @@ jco's built-in shim (`transpile-released.mjs` wires these automatically):
 
 ### `@bytecodealliance/preview3-shim`
 
-BA ships a `preview3-shim` that implements P3 `cli` / `clocks` / `filesystem` —
-but it does not currently substitute for the shims above:
-
-- Its `cli` stdout does **not** deliver output standalone with released jco (same
-  rendezvous gap the write hook works around). Keep `cli.js`.
-- Its `filesystem` read goes through a worker + `TransformStream` whose
-  `StreamReader` jco does not recognise as a lowerable stream — and even a
-  correct shim deadlocks (see Known blockers).
+BA ships a `preview3-shim` implementing P3 `cli` / `clocks` / `filesystem` /
+`http`, with a browser build beside the Node one. A plain `jco transpile` wires
+it and prints stdout with no post-process, so the shims above and the write hook
+are a layer this repo can likely drop — measure before removing it.
 
 ## Benchmarking on Node
 
@@ -148,11 +144,10 @@ mise run jco-bench benchmark/count_prime/count_prime.wado
 Compute throughput on V8 lands within ~5–10% of wasmtime (sieve is much faster
 on V8). Numbers are indicative on a noisy cloud VM; keep best-of-3.
 
-**Blocked** (the other benchmarks — `Preopens` / `wasi:filesystem`): zlib,
+**Unported** (the other benchmarks — `Preopens` / `wasi:filesystem`): zlib,
 json-{twitter,canada,catalog}, sqlite-parse, syntax-highlight, cbor. They read
-input data from preopened files and hang on the jco read-stream gap below. The
-data load sits **outside** the timed loop, so once jco's filesystem read works
-(or the data is embedded at compile time — deferred) these run unchanged.
+input data from preopened files, which the pipeline does not set. The data load
+sits **outside** the timed loop, so wiring preopens runs these unchanged.
 
 ## Known blockers (jco / V8 gaps)
 
@@ -160,23 +155,12 @@ data load sits **outside** the timed loop, so once jco's filesystem read works
 
 Not jco. Handled by `-f no-wide-arithmetic`.
 
-### Filesystem read-stream deadlock (jco)
+### Filesystem reads (jco)
 
-`open_at` → `read_via_stream` → `stream.read` hangs. Diagnosed precisely:
-
-- A correct shim returning `read-via-stream` as an async-iterable **is**
-  recognised — jco's binding generates `readFn` from the iterator and calls
-  `readEnd.setHostInjectFn(...)` (the `hostInjectFn: undefined` seen at
-  `StreamReadableEnd` construction is normal; it is set right after).
-- But when the guest calls `stream.read`, the task **suspends and the
-  `hostInjectFn` is never driven** — the host read fn is never invoked (verified
-  with a marker), so the read blocks forever.
-
-So the gap is jco's **async stream-read rendezvous** (delivering a host
-injection to a suspended read task), not the shim or a missing hook. Fixing it
-needs fork-level work on jco's async task/waitable machinery — bigger than the
-stdout write hook. The data-embedding workaround for benchmarks is deferred until
-jco's filesystem path works.
+A file-reading program no longer hangs — `example/cat.wado` runs to completion
+against `preview3-shim`. What it reads is unconfirmed: the shim needs its
+preopens set (`_setPreopens` in `filesystem/descriptor.js`), and the
+benchmarks that load data from a preopen are still unported.
 
 ## The fork path (`vendor/jco`)
 
