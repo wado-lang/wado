@@ -1,9 +1,6 @@
-// Browser WASI P3 CLI shim: each `write-via-stream` is drained to
-// `globalThis._wadoWrite(kind, text)`.
-//
-// The stream is the call's own, so stdout and stderr cannot cross and each
-// carries its own `TextDecoder` — a multi-byte glyph split across chunks
-// still decodes whole.
+// Browser WASI P3 CLI shim: each `write-via-stream` drains to
+// `globalThis._wadoWrite(kind, text)`. The stream and its decoder are the
+// call's own, so stdout and stderr cross neither channels nor glyphs.
 
 async function drain(kind, streamReader) {
   const decoder = new TextDecoder();

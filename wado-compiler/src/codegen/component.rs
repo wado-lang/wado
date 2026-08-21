@@ -4303,9 +4303,7 @@ fn append_interface_instance_exports(
     use crate::wir_build::component_plan::CmExportType;
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 
-    // Collect the named CM types a boundary type references, as
-    // `(owning-interface, cm_name, type-index)` items in signature order,
-    // deduped by name.
+    // The named CM types a boundary type references, in signature order.
     fn collect_type_items(
         ty: &CmExportType,
         ctx: &ComponentModelContext,
@@ -4368,10 +4366,8 @@ fn append_interface_instance_exports(
             // by `emit_world_exports` and recorded on the context.
             type_items.extend(ctx.lib_export_types().iter().cloned());
         } else {
-            // An interface exports the types it defines. One it `use`s from
-            // another interface stays that interface's, and re-exporting it
-            // here would register the same type under two owners — which a
-            // WIT decode of the component rejects.
+            // An interface exports the types it defines; one it `use`s stays
+            // its owner's, and re-exporting it here fails a WIT decode.
             let mut named: Vec<(String, String, u32)> = Vec::new();
             for export in group {
                 for (_, cm_ty) in &export.cm_params {

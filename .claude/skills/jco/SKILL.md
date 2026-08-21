@@ -126,6 +126,12 @@ against `preview3-shim`. What it reads is unconfirmed: the shim needs its
 preopens set (`_setPreopens` in `filesystem/descriptor.js`), and the
 benchmarks that load data from a preopen are still unported.
 
+### Reusing an instance (jco)
+
+An instance serves a couple of calls, then the next suspends on a stream read
+whose host injection is never driven (`JCO_DEBUG=1` ends at
+`[StreamEnd#copy()] blocked`). `cloudflare-worker/` builds one per request.
+
 ## Debugging jco runtime errors
 
 Transpiled output is one large JS file. Useful canonical-builtin → JS mappings:

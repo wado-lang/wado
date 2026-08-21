@@ -24,23 +24,19 @@ curl -X POST -d '{"a":1}' localhost:8787/post
 
 ## What the platform requires
 
-Four constraints shape this directory, each of which fails loudly if dropped.
+Each of these fails loudly if dropped.
 
 - **`--instantiation async`.** jco's default output initializes under a
-  top-level await and fetches its core modules by URL; a Worker rejects both
-  (`Top-level await in module is unsettled`, `Invalid URL string`). The
-  instantiation form hands the core modules in, and `wrangler.toml`'s
-  `CompiledWasm` rule turns them into `WebAssembly.Module` imports.
-- **One instance per request.** workerd gives each request its own I/O context
-  while jco keeps async task state on the module, so a shared instance answers
-  the first request and then stops settling.
+  top-level await and fetches its core modules by URL; a Worker rejects both.
+- **One instance per request.** A shared one answers a couple, then `handle`
+  suspends on a stream read jco never drives (`JCO_DEBUG=1` shows
+  `[StreamEnd#copy()] blocked`). Fixing that is jco's rendezvous, not this host.
 - **`shims/http.js` reaches into `preview3-shim` by path.** Its `exports` map
   serves a Worker the browser build, whose every method throws `Todo`.
-- **`ctx.waitUntil`.** A guest goes on running after `task return` — `http_bin`
-  logs its access line there. Without the extension the Worker returns and that
-  work is never pumped, so the line is lost.
+- **`ctx.waitUntil`.** A guest goes on writing after `task return` — `http_bin`
+  logs its access line there — and returning ends that work unpumped.
 - **`-f no-wide-arithmetic`.** No V8 implements the proposal that Wado's float
   formatting emits.
 
-`shims/clocks.js` reads `Date.now()`, which a Worker advances only on I/O — a
-duration measured across pure computation reads as zero.
+`shims/clocks.js` reads `Date.now()`, which a Worker advances only on I/O, and
+its waits return at once.

@@ -1,9 +1,6 @@
 // wasi:http/types for a Worker, from `preview3-shim`'s Node implementation.
-//
-// Reached by path rather than by package name: the package's `exports` map
-// serves a Worker its browser build, and every method of that build throws
-// `Todo`. Naming the three modules also leaves out `client.js` and `server.js`,
-// which import `node:worker_threads`.
+// By path, because the package's `exports` map serves a Worker its browser
+// build, whose every method throws `Todo`. See README.
 
 import { Fields } from "../node_modules/@bytecodealliance/preview3-shim/dist/nodejs/http/fields.js";
 import {

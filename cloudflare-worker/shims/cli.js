@@ -1,8 +1,6 @@
 // wasi:cli for a Worker: each `write-via-stream` drains to `console`.
-//
-// A program writing after `task return` — an access log, say — reaches here
-// only while the request's context is alive, which `worker.mjs` extends with
-// `waitUntil`. `settled()` is what it waits on.
+// A write issued after `task return` lands only while `worker.mjs` holds the
+// request open, which it does by waiting on `settled()`.
 
 const inFlight = new Set();
 
