@@ -308,23 +308,24 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, index, out);
+                    check_function_effects_sem(sem, src, func, index, None, out);
                 }
                 Item::Impl(impl_block) => {
+                    let handled = handled_effect(impl_block, index);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, handled.as_ref(), out);
                     }
                 }
                 Item::Trait(trait_decl) => {
                     for method in &trait_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
                 // performs is checked like any other function's.
                 Item::Interface(interface_decl) => {
                     for method in &interface_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, out);
+                        check_function_effects_sem(sem, src, method, index, None, out);
                     }
                 }
                 _ => {}
@@ -535,11 +536,21 @@ struct EffectIndex<'a> {
     provided_import_fqs: &'a IndexSet<String>,
 }
 
+/// The effect an `impl E for T` block handles, when `E` is one.
+fn handled_effect(impl_block: &crate::ast::ImplBlock, index: &EffectIndex) -> Option<EffectRef> {
+    match impl_block.trait_type.as_ref()? {
+        crate::ast::Type::Named(named) => index.effect_by_name.get(&named.name).cloned(),
+        _ => None,
+    }
+}
+
+/// `handled` is the effect a method of `impl E for T` handles.
 fn check_function_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
+    handled: Option<&EffectRef>,
     out: &mut Vec<EffectError>,
 ) {
     let Some(body) = &func.body else {
@@ -579,6 +590,12 @@ fn check_function_effects_sem(
             index.variant_payloads,
             &mut current,
         );
+    }
+    // A handler method holds the effect it handles: its body runs in the outer
+    // dispatch chain, so `E::op()` from inside `impl E for T` is delegation to
+    // the outer handler, the shape `..forward` desugars to.
+    if let Some(effect) = handled {
+        current.insert(effect.clone());
     }
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
     for name in benign_effect_names(&func.attrs) {
