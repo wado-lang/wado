@@ -73,7 +73,17 @@ async function collect(stream) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env, ctx) {
+    // The guest keeps running after `task return` — writing an access log, say.
+    // The response is already on its way by then, so holding the context open
+    // costs the client nothing; it is the billed lifetime that stretches.
+    ctx?.waitUntil?.(
+      (async () => {
+        // A turn for the guest to reach its writes, then the writes themselves.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await cli.settled();
+      })(),
+    );
     const handler = await guest();
     const url = new URL(request.url);
     const [headers] = toWasiRequest(request, url);

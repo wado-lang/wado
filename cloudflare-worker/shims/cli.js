@@ -1,8 +1,10 @@
 // wasi:cli for a Worker: each `write-via-stream` drains to `console`.
 //
-// A program that writes after `task return` — an access log, say — does not
-// reach here: once `handle` resolves the Worker returns, and the guest's
-// remaining work is never pumped.
+// A program writing after `task return` — an access log, say — reaches here
+// only while the request's context is alive, which `worker.mjs` extends with
+// `waitUntil`. `settled()` is what it waits on.
+
+const inFlight = new Set();
 
 async function drain(kind, streamReader) {
   const decoder = new TextDecoder();
@@ -18,10 +20,21 @@ async function drain(kind, streamReader) {
   }
 }
 
+function track(kind, stream) {
+  const done = drain(kind, stream);
+  inFlight.add(done);
+  return done.finally(() => inFlight.delete(done));
+}
+
+/// Every write that has started, once each has landed.
+export function settled() {
+  return Promise.allSettled([...inFlight]);
+}
+
 export const types = { OutputStream: class OutputStream {} };
 
-export const stdout = { writeViaStream: (stream) => drain("stdout", stream) };
+export const stdout = { writeViaStream: (stream) => track("stdout", stream) };
 stdout.writeViaStream._isHostProvided = true;
 
-export const stderr = { writeViaStream: (stream) => drain("stderr", stream) };
+export const stderr = { writeViaStream: (stream) => track("stderr", stream) };
 stderr.writeViaStream._isHostProvided = true;

@@ -36,13 +36,11 @@ Four constraints shape this directory, each of which fails loudly if dropped.
   the first request and then stops settling.
 - **`shims/http.js` reaches into `preview3-shim` by path.** Its `exports` map
   serves a Worker the browser build, whose every method throws `Todo`.
+- **`ctx.waitUntil`.** A guest goes on running after `task return` — `http_bin`
+  logs its access line there. Without the extension the Worker returns and that
+  work is never pumped, so the line is lost.
 - **`-f no-wide-arithmetic`.** No V8 implements the proposal that Wado's float
   formatting emits.
 
 `shims/clocks.js` reads `Date.now()`, which a Worker advances only on I/O — a
 duration measured across pure computation reads as zero.
-
-`shims/cli.js` sends the guest's stdout and stderr to `console`, but a write
-issued **after** `task return` never arrives: the Worker returns as soon as
-`handle` resolves, and the guest's remaining work goes unpumped. `http_bin`
-logs its access line that way, so nothing of it reaches `wrangler tail`.
