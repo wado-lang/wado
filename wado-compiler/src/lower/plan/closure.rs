@@ -1421,6 +1421,18 @@ impl TirRefVisitor for LocalCollector<'_> {
         }
         self.walk_pattern(pattern);
     }
+
+    /// A slot a producer preallocates and assigns — a power-assert capture, a
+    /// pass minting a temporary — is declared by that assignment and by nothing
+    /// else, so it is a declaration site for the same reason a binding is.
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Assign { target, value } = &expr.kind
+            && let TirExprKind::Local { index, .. } = &target.kind
+        {
+            self.locals.push((*index, value.type_id));
+        }
+        self.walk_expr(expr);
+    }
 }
 
 /// Phase 2 visitor deciding which closures are safe to specialise: those whose
