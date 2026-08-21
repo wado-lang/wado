@@ -16,9 +16,10 @@ const { Fields, Request, Response: WasiResponse } = types;
 // Statuses that refuse a body, empty included.
 const NULL_BODY = new Set([101, 204, 205, 304]);
 
-// One instance per request: workerd gives each request its own I/O context, and
-// jco holds its async task state on the module, so a shared instance stops
-// settling after the first.
+// One instance per request. A shared one answers a couple and then stops: the
+// next `handle` suspends on a stream read whose host injection is never driven
+// (`[StreamEnd#copy()] blocked` under `JCO_DEBUG=1`), which is jco's rendezvous
+// rather than anything this host can settle.
 function guest() {
   return instantiate((name) => {
     const core = CORES[name];
