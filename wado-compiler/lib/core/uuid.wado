@@ -4,22 +4,29 @@
 //! Only the two versions in common use today are provided:
 //!
 //! - `Uuid::v4()` — random UUID. The default for "just give me a unique id".
-//! - `Uuid::v7()` — time-ordered UUID. A 48-bit Unix-millisecond timestamp in
-//!   the high bytes makes values sortable by creation time, which is ideal for
-//!   database keys and log correlation.
+//! - `Uuid::v7()` — time-ordered UUID, ideal for database keys and log
+//!   correlation.
 //!
 //! A `Uuid` is a single 128-bit value (stored as a `u8x16` SIMD register, one
 //! lane per byte). Construction, formatting, and parsing are all byte-oriented,
 //! which maps directly onto the lane layout. Equality and ordering compare the
-//! 16 bytes in big-endian order, so `v7` values sort by timestamp.
+//! 16 bytes in big-endian order.
 //!
 //! `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
 //! `parse` accepts both the hyphenated form and the 32-digit hyphenless
 //! "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
+//!
+//! `v7` sorts by creation time under RFC 9562 method 3: the timestamp and, in
+//! `rand_a`, its sub-millisecond fraction lead the bytes, one tick per 244 ns,
+//! needing no generator state. Values within a tick, across a backwards clock
+//! step, or from a coarser clock are unordered.
 
 use { u8x16 } from "core:simd";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
+
+/// `rand_a` resolution: one tick per 1 ms / 4096 = 244 ns.
+global SUB_MS_TICKS: i64 = 4096;
 
 #[synopsis]
 test {
@@ -49,19 +56,18 @@ impl Uuid {
     /// into place per RFC 9562.
     pub fn v4() -> Uuid with Random {
         let mut b = fill_random(16);
-        set_version_and_variant(&mut b, 0x40);
+        b[6] = (b[6] as i32 & 0x0F | 0x40) as u8;
+        set_variant(&mut b);
         return from_byte_list(&b);
     }
 
-    /// Generate a version-7 (time-ordered) UUID.
-    ///
-    /// The high 48 bits are the Unix timestamp in milliseconds, read from the
-    /// `SystemClock` effect; the remaining bits are random. Because the
-    /// timestamp occupies the most significant bytes, lexicographic / numeric
-    /// ordering of `v7` values matches creation-time ordering.
+    /// Generate a version-7 (time-ordered) UUID: a 48-bit millisecond timestamp
+    /// and a 12-bit sub-millisecond fraction from `SystemClock`, then 62
+    /// random bits.
     pub fn v7() -> Uuid with (Random, SystemClock) {
         let now = SystemClock::now();
-        let ms = now.seconds as i64 * 1000 + now.nanoseconds as i64 / 1_000_000;
+        let ms = now.seconds * 1000 + now.nanoseconds as i64 / 1_000_000;
+        let sub_ms = now.nanoseconds as i64 % 1_000_000 * SUB_MS_TICKS / 1_000_000;
         let mut b = fill_random(16);
         b[0] = (ms >> 40 & 0xFF) as u8;
         b[1] = (ms >> 32 & 0xFF) as u8;
@@ -69,7 +75,9 @@ impl Uuid {
         b[3] = (ms >> 16 & 0xFF) as u8;
         b[4] = (ms >> 8 & 0xFF) as u8;
         b[5] = (ms & 0xFF) as u8;
-        set_version_and_variant(&mut b, 0x70);
+        b[6] = (0x70 | sub_ms >> 8 & 0x0F) as u8;
+        b[7] = (sub_ms & 0xFF) as u8;
+        set_variant(&mut b);
         return from_byte_list(&b);
     }
 
@@ -167,11 +175,8 @@ impl Default for Uuid {
     }
 }
 
-/// Force the RFC 9562 version (high nibble of byte 6) and variant (top two bits
-/// of byte 8) into a 16-byte buffer. `version_byte` is the version nibble
-/// already shifted into the high position (`0x40` for v4, `0x70` for v7).
-fn set_version_and_variant(b: &mut ByteList, version_byte: u8) {
-    b[6] = (b[6] as i32 & 0x0F | version_byte as i32) as u8;
+/// Force the RFC 9562 variant (top two bits of byte 8) into a 16-byte buffer.
+fn set_variant(b: &mut ByteList) {
     b[8] = (b[8] as i32 & 0x3F | 0x80) as u8;
 }
 

@@ -79,10 +79,13 @@ export fn run() with Stdout {
     println(`v7 @ 1000ms: ${a}`);
     println(`v7 @ 2000ms: ${b}`);
 
-    // The timestamp lives in the most significant bytes, so a later instant
-    // always sorts after an earlier one — the defining property of v7.
+    // The timestamp and its sub-millisecond fraction lead the bytes, so a later
+    // instant sorts after an earlier one — down to 244 ns, not just the ms.
     assert a < b, "v7 values must sort by timestamp";
     assert a.version() == 7;
+
+    let fine = gen_v7(1, 250_000, repeat(0xAB, 16));
+    assert a < fine, "v7 values must sort within a millisecond too";
 
     // Determinism: the same handlers reproduce the same UUID byte for byte.
     assert gen_v7(1, 0, repeat(0xAB, 16)) == a;
@@ -90,10 +93,10 @@ export fn run() with Stdout {
 }
 
 test "v7 is fully determined by the installed handlers" {
-    // seconds = 1, nanoseconds = 0 -> 1000 ms = 0x0000_0000_03E8.
-    // Entropy is all 0xFF, so byte 6 -> 0x7F (version) and byte 8 -> 0xBF.
+    // 1000 ms = 0x0000_0000_03E8, fraction 0 -> bytes 6..=7 = 0x70, 0x00.
+    // Entropy is all 0xFF, so byte 8 -> 0xBF.
     let id = gen_v7(1, 0, repeat(0xFF, 16));
-    assert id.to_string() == "00000000-03e8-7fff-bfff-ffffffffffff";
+    assert id.to_string() == "00000000-03e8-7000-bfff-ffffffffffff";
     assert id.version() == 7;
 }
 

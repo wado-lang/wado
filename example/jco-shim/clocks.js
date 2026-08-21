@@ -19,16 +19,16 @@ export const monotonicClock = {
 
 export const wallClock = {
   now() {
-    const ms = Date.now();
-    return {
-      seconds: BigInt(Math.floor(ms / 1000)),
-      nanoseconds: (ms % 1000) * 1000000,
-    };
+    // Keeps the sub-millisecond fraction `Date.now()` truncates; UUID v7 needs it.
+    const ms = performance.timeOrigin + performance.now();
+    const seconds = Math.floor(ms / 1000);
+    const nanoseconds = Math.min(999999999, Math.floor((ms - seconds * 1000) * 1000000));
+    return { seconds: BigInt(seconds), nanoseconds };
   },
   resolution() {
     return {
       seconds: 0n,
-      nanoseconds: 1000000, // 1ms
+      nanoseconds: 1000, // ~1us; browsers clamp this far coarser
     };
   },
 };

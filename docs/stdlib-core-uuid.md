@@ -8,18 +8,22 @@ UUID generation and parsing (RFC 9562).
 Only the two versions in common use today are provided:
 
 - `Uuid::v4()` — random UUID. The default for "just give me a unique id".
-- `Uuid::v7()` — time-ordered UUID. A 48-bit Unix-millisecond timestamp in
-  the high bytes makes values sortable by creation time, which is ideal for
-  database keys and log correlation.
+- `Uuid::v7()` — time-ordered UUID, ideal for database keys and log
+  correlation.
 
 A `Uuid` is a single 128-bit value (stored as a `u8x16` SIMD register, one
 lane per byte). Construction, formatting, and parsing are all byte-oriented,
 which maps directly onto the lane layout. Equality and ordering compare the
-16 bytes in big-endian order, so `v7` values sort by timestamp.
+16 bytes in big-endian order.
 
 `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
 `parse` accepts both the hyphenated form and the 32-digit hyphenless
 "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
+
+`v7` sorts by creation time under RFC 9562 method 3: the timestamp and, in
+`rand_a`, its sub-millisecond fraction lead the bytes, one tick per 244 ns,
+needing no generator state. Values within a tick, across a backwards clock
+step, or from a coarser clock are unordered.
 
 ## Synopsis
 
@@ -54,12 +58,9 @@ into place per RFC 9562.
 
 #### `pub fn v7() -> Uuid with (Random, SystemClock)`
 
-Generate a version-7 (time-ordered) UUID.
-
-The high 48 bits are the Unix timestamp in milliseconds, read from the
-`SystemClock` effect; the remaining bits are random. Because the
-timestamp occupies the most significant bytes, lexicographic / numeric
-ordering of `v7` values matches creation-time ordering.
+Generate a version-7 (time-ordered) UUID: a 48-bit millisecond timestamp
+and a 12-bit sub-millisecond fraction from `SystemClock`, then 62
+random bits.
 
 #### `pub fn parse(s: &String) -> Option<Uuid>`
 

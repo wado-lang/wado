@@ -76,16 +76,46 @@ test "v4 always sets version 4 and the RFC variant" {
 }
 
 test "v7 embeds the millisecond timestamp big-endian" {
-    // seconds = 1, nanoseconds = 0  ->  1000 ms = 0x0000_0000_03E8
+    // seconds = 1, nanoseconds = 0  ->  1000 ms = 0x0000_0000_03E8, rand_a = 0
     let mut rng = MockRandom { data: repeated(0xFF, 16), pos: 0 };
     let clock = MockClock {
         instant: Instant { seconds: 1, nanoseconds: 0 },
     };
     with Random => &mut rng, SystemClock => &clock do {
         let id = Uuid::v7();
-        assert id.to_string() == "00000000-03e8-7fff-bfff-ffffffffffff";
+        assert id.to_string() == "00000000-03e8-7000-bfff-ffffffffffff";
         assert id.version() == 7;
     };
+}
+
+test "v7 encodes the sub-millisecond fraction in rand_a" {
+    // 500_000 ns into the millisecond -> 500_000 * 4096 / 1_000_000 = 2048 = 0x800.
+    let mut rng = MockRandom { data: repeated(0xFF, 16), pos: 0 };
+    let clock = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 500_000 },
+    };
+    with Random => &mut rng, SystemClock => &clock do {
+        let id = Uuid::v7();
+        assert id.to_string() == "00000000-03e8-7800-bfff-ffffffffffff";
+    };
+}
+
+test "v7 sorts by sub-millisecond time within one millisecond" {
+    // Same millisecond, same entropy: only rand_a can order these.
+    let mut rng = MockRandom { data: repeated(0x00, 32), pos: 0 };
+    let early = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 100_000 },
+    };
+    let late = MockClock {
+        instant: Instant { seconds: 1, nanoseconds: 900_000 },
+    };
+    let a = with Random => &mut rng, SystemClock => &early do {
+        Uuid::v7();
+    };
+    let b = with Random => &mut rng, SystemClock => &late do {
+        Uuid::v7();
+    };
+    assert a < b;
 }
 
 test "v7 values sort by timestamp" {
