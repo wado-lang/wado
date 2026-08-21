@@ -440,11 +440,11 @@ impl OwnedEffectData {
             }
         }
 
-        // `effect_by_cm_fq` maps a CM FQ back to the effect it declares,
-        // restricted to closure keys so a host-leaf import resolves to an effect
-        // while a type-only interface (`wasi:cli/types`) resolves to nothing.
         let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
             IndexMap::default();
+        // Restricted to closure keys, so a host-leaf import resolves to an
+        // effect while a type-only interface (`wasi:cli/types`) resolves to
+        // nothing.
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
