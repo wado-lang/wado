@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787349330860,
+  "lastUpdate": 1787353344891,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50041,6 +50041,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/73858f96327cafe99585287513fecbba32a2e44f"
         },
         "date": 1787349330341,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47bfd89ad24457fdfdf9b8f3ec70a1dd69354a6e",
+          "message": "Merge pull request #1872 from wado-lang/gale-superclass-emit-hook\n\nfeat(gale): add the superClass emit lifecycle hook",
+          "timestamp": "2026-08-22T07:49:05+09:00",
+          "tree_id": "a8e7f75aa81ac61afeba7e07644d6b5fe3d66483",
+          "url": "https://github.com/wado-lang/wado/commit/47bfd89ad24457fdfdf9b8f3ec70a1dd69354a6e"
+        },
+        "date": 1787353344356,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
