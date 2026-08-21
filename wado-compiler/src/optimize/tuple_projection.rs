@@ -40,9 +40,10 @@ impl Rule for TupleProjectionRule {
         };
         let elements = elements.clone();
         let types = e.value_graph_type_table();
-        let droppable = elements.iter().enumerate().all(|(i, &op)| {
-            i == index || is_pure_nontrapping_operand_typed(&e.body, op, types)
-        });
+        let droppable = elements
+            .iter()
+            .enumerate()
+            .all(|(i, &op)| i == index || is_pure_nontrapping_operand_typed(e.body, op, types));
         droppable && e.redirect_expr(id, selected)
     }
 }

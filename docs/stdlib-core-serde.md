@@ -98,7 +98,7 @@ which is unrecoverable unlike an error.
 ### `pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError>`
 
 Applies `policy` to a key the wire already wrote. Detecting the repeat is
-the caller's job: a struct tests a bit, a map asks `try_insert`.
+the caller's job: a struct sees a filled slot, a map asks `try_insert`.
 
 ### `pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, DeserializeError>`
 
