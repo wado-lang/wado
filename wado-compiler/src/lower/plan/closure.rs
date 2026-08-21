@@ -1423,8 +1423,7 @@ impl TirRefVisitor for LocalCollector<'_> {
     }
 
     /// A slot a producer preallocates and assigns — a power-assert capture, a
-    /// pass minting a temporary — is declared by that assignment and by nothing
-    /// else, so it is a declaration site for the same reason a binding is.
+    /// minted temporary — is declared by that assignment and nothing else.
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind

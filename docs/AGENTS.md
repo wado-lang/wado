@@ -29,13 +29,10 @@ A WEP is a living standard: it states the design as it stands now, and a changed
 design means rewriting the affected sections — no update log, no superseded
 alternatives, no checklist of what landed. Git history is the SSoT.
 
-No "out of scope" or "non-goals" section, under any spelling. Such a list reads
-as a boundary of the design when it is almost always an unfinished mechanism,
-inviting reasoning from what the implementation does back to what the language
-means. A shortfall belongs under "Known gaps" as something to close: what is
-missing, what closing it takes, and a red test where it is a defect rather than
-an open question. A decision not to have something is neither, and goes in
-Decision with its reasoning.
+No "out of scope" or "non-goals" section, under any spelling — such a list reads
+as a design boundary when it is almost always an unfinished mechanism. A
+shortfall is a "Known gap": what is missing, what closing it takes, and a red
+test where it is a defect. A decision not to have something goes in Decision.
 
 ### Index of WEPs
 

@@ -229,9 +229,8 @@ fn is_place_expr(expr: &Expr) -> bool {
     matches!(expr, Expr::Ident(_))
 }
 
-/// Whether `expr` computes nothing an operand could observe and renders back
-/// what the source already shows. Such a fragment neither earns a slot nor
-/// keeps a later operand from being bound ahead of the condition.
+/// Whether `expr` computes nothing an operand could observe. Such a fragment
+/// neither earns a slot nor keeps a later operand from being bound ahead.
 fn is_inert(expr: &Expr) -> bool {
     match expr {
         Expr::Literal(_) => true,
@@ -241,15 +240,15 @@ fn is_inert(expr: &Expr) -> bool {
     }
 }
 
-/// What the walk knows about an operand when it reaches it, snapshotted before
-/// the node's own children can change any of it.
+/// What the walk knows about an operand on reaching it, before its own children
+/// can change any of it.
 struct Position {
     /// The condition itself, which `__cond` already holds.
     is_root: bool,
     /// A short-circuit lies above, so the operand may go unevaluated.
     conditional: bool,
-    /// Everything the condition evaluated before this operand is bound ahead of
-    /// it, so this one may be bound ahead too.
+    /// Everything evaluated before this operand is bound ahead of it, so this
+    /// one may be too.
     bindable: bool,
 }
 
@@ -290,9 +289,9 @@ struct CaptureScanner {
     is_root: bool,
     /// A short-circuit lies above, so the capture may go unevaluated.
     conditional: bool,
-    /// Everything the condition has evaluated so far is bound ahead of it, so
-    /// the next operand may be bound too. Cleared by the first fragment left
-    /// in place, since binding anything after it would run the pair backwards.
+    /// Everything evaluated so far is bound ahead, so the next operand may be
+    /// too. Cleared by the first fragment left in place — binding after it would
+    /// run the pair backwards.
     frontier_ok: bool,
 }
 
@@ -316,8 +315,7 @@ impl CaptureScanner {
         let idx = self.slots.len();
         let name = format!("__v{idx}");
         let conditional = self.conditional;
-        // A conditional slot may never run and a place is re-read rather than
-        // bound, so neither is bound ahead of the condition.
+        // A conditional slot may never run, and a place is re-read, not bound.
         let hoisted = bindable && !conditional && !is_place;
         self.slots.push(Capture {
             name,
@@ -327,10 +325,9 @@ impl CaptureScanner {
             hoisted,
         });
         self.ast_id_to_slot.insert(ast_id, idx);
-        // A place is neither bound nor moved, and the design already reads it
-        // again from the failure branch — so it is order-insensitive and passes
-        // the fact through. Passes through, never restores: a receiver that
-        // cleared the fact still forbids binding what follows it.
+        // A place is neither bound nor moved, so it passes the fact through —
+        // never restores it: a receiver that cleared it still forbids binding
+        // what follows.
         self.frontier_ok = hoisted || (is_place && !conditional && bindable);
     }
 
@@ -346,20 +343,15 @@ impl CaptureScanner {
 
         self.scan_node(expr, ast_id, &pos);
 
-        // A fragment the condition evaluates and leaves in place stays behind,
-        // so nothing after it may be bound ahead of the condition.
+        // A fragment left in place forbids binding anything after it.
         if !self.ast_id_to_slot.contains_key(&ast_id) && !is_inert(expr) {
             self.frontier_ok = false;
         }
     }
 
-    /// A receiver runs before everything nested under it and is never bound —
-    /// binding would copy, and value semantics would then hide the call's own
-    /// mutation. Only a place the failure branch can re-read earns a slot here,
-    /// which is why a short-circuit above rules one out: a conditional slot is
-    /// bound, so it would copy. Either way nothing after the receiver may be
-    /// bound ahead of the condition, since the receiver itself stays where it
-    /// is.
+    /// A receiver is never bound — binding copies, and value semantics would
+    /// hide the call's own mutation. Only a place the failure branch can re-read
+    /// earns a slot, and nothing after the receiver may be bound ahead.
     fn scan_receiver(&mut self, expr: &Expr) {
         if is_place_expr(expr) && !self.conditional {
             self.scan(expr);
@@ -402,10 +394,9 @@ impl CaptureScanner {
                     return;
                 }
                 self.scan(&u.expr);
-                // `&fn_name` is the function-reference coercion, and a binding
-                // for the `&` node would lose it — the scan cannot tell it from
-                // `&value`. The operand under it is a place, so it renders on
-                // its own without a binding either way.
+                // A binding for the `&` node would lose the function-reference
+                // coercion, which the scan cannot tell from `&value`. The place
+                // under it renders without one anyway.
                 if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
                     return;
                 }
@@ -608,9 +599,8 @@ impl CaptureScanner {
                     );
                 }
             }
-            // A closure renders its signature, which is all `Inspect` has for
-            // one. Its body is not walked: a sub-expression there has no value
-            // at the moment the condition failed.
+            // Renders its signature, all `Inspect` has for one. The body is not
+            // walked: nothing there has a value when the condition failed.
             Expr::Closure(_) => {
                 self.add(
                     unparse_expr_source(expr),
