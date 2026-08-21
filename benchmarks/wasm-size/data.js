@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787346292500,
+  "lastUpdate": 1787349330860,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49997,6 +49997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/973789d3fd5c8faf36545ef22b03d5ea06b60edb"
         },
         "date": 1787346291724,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "73858f96327cafe99585287513fecbba32a2e44f",
+          "message": "Merge pull request #1871 from wado-lang/claude/go-1-27-uuid-evaluation-887rvz\n\nfix(compiler): identify an effect by its declaration, and add core:random",
+          "timestamp": "2026-08-22T06:42:08+09:00",
+          "tree_id": "3d0e493c5d18131e95ab0746fbcbc308a5818f23",
+          "url": "https://github.com/wado-lang/wado/commit/73858f96327cafe99585287513fecbba32a2e44f"
+        },
+        "date": 1787349330341,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
