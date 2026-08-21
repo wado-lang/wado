@@ -1105,8 +1105,8 @@ pub global TK_ERROR: i32 = 4;
 pub interface SlBase {
     fn enabled(view: LexerView) -> bool;
     /// Called with the span, type and channel of each token the lexer
-    /// commits, as ANTLR calls `emit()` — so not for a skipped or `more`d
-    /// match, nor for EOF. Returns the type to emit.
+    /// commits — not a skipped or `more`d match, and not the EOF
+    /// sentinel. Returns the type to emit.
     fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
         return ty;
     }
