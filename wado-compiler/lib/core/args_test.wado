@@ -6,6 +6,8 @@
 
 use { Deserialize } from "core:serde";
 use { parse, ArgsError, ArgsErrorKind } from "core:args";
+use { Uuid } from "core:uuid";
+use { Instant } from "core:temporal";
 
 struct Cli {
     #[wire(positional)]
@@ -28,6 +30,30 @@ fn cli(r: Result<Cli, ArgsError>) -> Cli {
         panic(`parse failed: ${e.message}`);
     }
     unreachable();
+}
+
+struct RunCli {
+    #[wire(positional)]
+    job: Uuid,
+    tenant: Uuid,
+    since: Instant,
+    trace: Option<Uuid> = null,
+}
+impl Deserialize for RunCli;
+
+test "a field type that asks for any" {
+    let r = parse::<RunCli>([
+        "00010203-0405-4607-8809-0a0b0c0d0e0f", "--tenant", "550e8400-e29b-41d4-a716-446655440000", "--since",
+        "2026-08-21T00:00:00Z", "--trace", "ffffffff-ffff-4fff-bfff-ffffffffffff",
+    ]);
+    assert r matches { Ok(_) };
+    if let Ok(c) = r {
+        assert c.job.to_string() == "00010203-0405-4607-8809-0a0b0c0d0e0f";
+        assert c.tenant.to_string() == "550e8400-e29b-41d4-a716-446655440000";
+        assert c.since.seconds == 1787270400;
+        assert c.trace matches { Some(t) && t.to_string() == "ffffffff-ffff-4fff-bfff-ffffffffffff" };
+    }
+    assert parse::<RunCli>(["nope", "--tenant", "also-nope", "--since", "now"]) matches { Err(_) };
 }
 
 test "positionals and options mixed" {

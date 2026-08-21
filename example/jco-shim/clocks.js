@@ -17,15 +17,25 @@ export const monotonicClock = {
   },
 };
 
+// The high-resolution clock has the sub-millisecond precision UUID v7 orders
+// by but runs from process start, so anchor it to `Date.now()` and re-anchor
+// once the two disagree by more than the millisecond `Date.now()` truncates.
+let anchor = null;
+
 export const wallClock = {
   now() {
-    // `Date.now()` fixes the millisecond, so the clock still follows system
-    // time; the high-resolution clock only fills in the fraction it truncates.
-    const ms = Date.now();
-    const fraction = (performance.timeOrigin + performance.now()) % 1;
+    const elapsed = performance.timeOrigin + performance.now();
+    const system = Date.now();
+    let ms = anchor === null ? system : anchor.system + (elapsed - anchor.elapsed);
+    if (ms < system || ms >= system + 2) {
+      anchor = { elapsed, system };
+      ms = system;
+    }
     const seconds = Math.floor(ms / 1000);
-    const nanoseconds = (ms % 1000) * 1000000 + Math.floor(fraction * 1000000);
-    return { seconds: BigInt(seconds), nanoseconds };
+    return {
+      seconds: BigInt(seconds),
+      nanoseconds: Math.floor((ms - seconds * 1000) * 1000000),
+    };
   },
   resolution() {
     return {
