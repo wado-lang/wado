@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787307242254,
+  "lastUpdate": 1787311394780,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -49865,6 +49865,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/85d0138b25a822e7ce0ce5da9dc9e2bf43716334"
         },
         "date": 1787307241599,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c023e87e5e36daf57328abb786e4417f7d67b28",
+          "message": "Merge pull request #1868 from wado-lang/jco-released-path\n\nfeat(cloudflare): run a Wado service on Workers, on the released jco",
+          "timestamp": "2026-08-21T20:10:29+09:00",
+          "tree_id": "e798b7cdb425b1518fe617ed0fa9d0432d6ccff5",
+          "url": "https://github.com/wado-lang/wado/commit/1c023e87e5e36daf57328abb786e4417f7d67b28"
+        },
+        "date": 1787311394300,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
