@@ -1,9 +1,5 @@
-// Test: WIR-level verification that a field read of a tuple built in place is
-// that element.
-//
-// A tuple literal has no identity, so `[a, b, c].1` is `b` — provided the
-// unselected elements can be dropped, which needs them pure. An element that
-// prints is not, so that tuple stands and its side effect still happens.
+// `[a, b, c].1` is `b` when the unselected elements are deletable. An element
+// that prints is not, so that tuple stands and its side effect still happens.
 
 use { println, Stdout } from "core:cli";
 

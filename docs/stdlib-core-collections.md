@@ -53,7 +53,6 @@ Returns true if the map contains no elements.
 
 Inserts only if `key` is absent, and reports whether it was inserted.
 The losing insert keeps the existing value, unlike `map[key] = value`.
-Mirrors `TreeSet::insert`.
 
 #### `pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value]`
 

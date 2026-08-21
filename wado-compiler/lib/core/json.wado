@@ -1732,15 +1732,9 @@ impl JsonDeserializer {
 
 // --- Sub-deserializer implementations ---
 
-// Sub-deserializers hold `&mut JsonDeserializer` so position advances
-// inside the sub-access flow back to the outer `JsonDeserializer` the
-// caller still owns. A value-typed `JsonDeserializer` field would
-// deep-copy on construction (per Wado value semantics), and the
-// caller's `pos` would never see the bytes the sub-access consumed —
-// `from_string`'s post-deserialize "trailing data after value" check
-// would fire on every map / struct / seq.
-// Each access carries its container's level and re-asserts it before
-// descending, so a sibling never inherits what a previous one left behind.
+// Sub-deserializers hold `&mut JsonDeserializer`, not a value field: a value
+// would deep-copy, so the caller's `pos` would never see what the sub-access
+// consumed. Each carries its container's level, re-asserted before descending.
 
 struct JsonSeqAccess {
     de: &mut JsonDeserializer,
@@ -2537,14 +2531,8 @@ pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_D
 }
 
 /// Deserializes a value from UTF-8 JSON bytes — the primary entry point.
-///
-/// Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
-/// `ByteSlice`, or a `String` (its UTF-8 bytes). The deserializer scans the
-/// input bytes in place; every string token is validated as UTF-8 (RFC 8259
-/// §8.1) — skipped and key tokens included — reporting invalid bytes as
-/// `MalformedInput`.
-///
-/// `max_depth` bounds nesting; raise it only for a trusted source.
+/// Accepts any `AsByteSlice` source, scanned in place; every string token is
+/// validated as UTF-8 (RFC 8259 §8.1). `max_depth` bounds nesting.
 pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     input: S,
     max_depth: i32 = DEFAULT_MAX_DEPTH,

@@ -60,17 +60,9 @@ integers, lengths, and map order, but may differ on float-bearing values.
 
 ### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
-Deserialize a value from CBOR — the primary entry point.
-
-Accepts any byte source via `AsByteSlice` (`ByteList`, `ByteArray`,
-`ByteSlice`, or a `String`'s bytes), scanned directly with no copy. Decoding
-is variation-tolerant (RFC 8949 §4.1): any well-formed encoding is accepted.
-
-`strict` (default `true`) rejects items the target cannot represent; set
-`strict = false` only when deserializing into `core:value`'s `Value`, where
-unrepresentable items fall to `Value::Unknown` instead of erroring.
-
-`max_depth` bounds nesting; raise it only for a trusted source.
+Deserialize a value from CBOR — the primary entry point. Accepts any
+`AsByteSlice` source with no copy. `strict` rejects items the target cannot
+represent; `max_depth` bounds nesting, raised only for a trusted source.
 
 ## Structs
 
@@ -197,11 +189,8 @@ _Fields are private._
 ##### `fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool, i32], DeserializeError>`
 
 Open a container of the expected major type, unwrapping any
-self-described prefix. `remaining` is `-1` when indefinite.
-
-`expected` is the type-mismatch diagnostic, passed by reference (a
-module-global constant) so the common success path allocates nothing;
-the message is only copied on the cold error path.
+self-described prefix. `remaining` is `-1` when indefinite; `expected`
+is the type-mismatch diagnostic, by reference so success allocates none.
 
 ##### `fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self]`
 

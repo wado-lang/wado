@@ -30,9 +30,8 @@ use super::tysys::TypeSystem;
 
 use super::util::placeholder;
 
-/// How the diagnostics name a place whose `&mut` would be a boxed copy. Shared
-/// so the explicit `&mut x.f` and the implicit `&mut self` borrow say the same
-/// thing about the same refusal.
+/// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say
+/// the same thing about the same refusal.
 pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replace-on-assign type (primitive, enum, flags, fn); \
      use the containing value's reference directly";
 
@@ -1217,9 +1216,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `&mut` of a replace-on-assign place borrows a boxed copy, so the
-        // mutation would be silently dropped. `operators.rs` refuses the
-        // explicit `&mut x.f`; the implicit receiver borrow must match it.
+        // `operators.rs` refuses the explicit `&mut x.f`; the implicit receiver
+        // borrow must match it.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
             && self.is_replace_on_assign_place_type(receiver.type_id)
@@ -1234,15 +1232,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
-    /// fn, or a newtype over one. `&mut` of such a place is a boxed copy rather
-    /// than a projection, so every write through it is lost.
-    /// `lower::plan::boxing` decides the boxing itself.
-    ///
-    /// A `variant` is boxed the same way but excluded: its payload is a shared
-    /// GC struct, so mutation *through* the payload lands, and `&mut xs[i]` is
-    /// the sanctioned stand-in for the `&mut` iteration a variant list cannot
-    /// have. Only replacing the whole value is lost, which takes a narrower
-    /// check than a question about the type alone.
+    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
+    /// shared GC struct, so mutation through the payload lands.
     pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
         let table = self.tysys.type_table.borrow();
         let replaces_on_assign = |ty: &ResolvedType| {
@@ -1260,12 +1251,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         replaces_on_assign(table.get(base))
     }
 
-    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and any
-    /// nesting of those. A reference step ends the walk — `&mut T` makes the
-    /// place writable however the binding holding it was declared, and `&T` is
-    /// [`Self::place_roots_at_immutable_ref`]'s to report. A root the frame
-    /// cannot see (a capture, a temporary) reports nothing, so this only ever
-    /// speaks where the binding is provably immutable.
+    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
+    /// any nesting of those. A reference step ends the walk; `&T` is
+    /// [`Self::place_roots_at_immutable_ref`]'s to report.
     pub(super) fn place_roots_at_immutable_binding(
         &self,
         expr: &ast::Expr,

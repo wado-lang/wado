@@ -68,14 +68,8 @@ Deserializes a value from a JSON string. Convenience wrapper over
 ### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from UTF-8 JSON bytes — the primary entry point.
-
-Accepts any byte source via `AsByteSlice`: a `ByteList`, `ByteArray`,
-`ByteSlice`, or a `String` (its UTF-8 bytes). The deserializer scans the
-input bytes in place; every string token is validated as UTF-8 (RFC 8259
-§8.1) — skipped and key tokens included — reporting invalid bytes as
-`MalformedInput`.
-
-`max_depth` bounds nesting; raise it only for a trusted source.
+Accepts any `AsByteSlice` source, scanned in place; every string token is
+validated as UTF-8 (RFC 8259 §8.1). `max_depth` bounds nesting.
 
 ### `pub fn to_bytes_canonical<T: Serialize>(value: &T, trailing_char: Option<char> = null) -> Result<ByteSlice, SerializeError>`
 

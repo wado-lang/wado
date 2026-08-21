@@ -1,14 +1,6 @@
-//! Tuple projection: `[a, b, c].1` → `b`.
-//!
-//! A tuple literal has no identity — it is a value aggregate with no address
-//! and no mutation path — so a field read of one built in place is that
-//! element. The unselected elements are dropped, which requires them pure and
-//! non-trapping.
-//!
-//! Synthesis emits this shape wherever a reflected method returns a field pack
-//! and one field is wanted (`ReflectStruct::defaults()`, inlined at its call
-//! site), and inlining plants it wherever a multi-value return meets its
-//! destructuring.
+//! Tuple projection: `[a, b, c].1` → `b`. A tuple literal has no identity, so
+//! a field read of one built in place is that element; the unselected elements
+//! are dropped, so each must be deletable.
 
 use crate::nir_arena::{ExprId, ExprKind};
 use crate::nir_engine::{Engine, Rule};

@@ -3146,7 +3146,7 @@ for let mut i = 0; i < arr.len(); i += 1 {
 
 Where nothing survives the copy — `primitive`, `enum`, `flags`, `fn` — taking `&mut` of a field or element is a compile error outright, whether written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A _local_ is fine: its box is the variable's own storage.
 
-A `variant` place admits `&mut`, because its payload is a shared GC struct: mutation _through_ the payload lands. Replacing the whole value does not.
+A `variant` place admits `&mut`: its payload is a shared GC struct, so mutation _through_ it lands, though replacing the whole value does not.
 
 #### Custom Iterables
 

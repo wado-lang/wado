@@ -1112,10 +1112,8 @@ fn generate_struct_defaults_fn(
         span,
     );
 
-    // The body is one tuple literal, so the cost heuristic reads it as large.
-    // It is not: a caller indexes one slot, and SROA plus DCE drop the rest —
-    // but only once the call is inlined. Default expressions are effect-free
-    // by construction, so dropping the unread ones is sound.
+    // One tuple literal reads as large to the cost heuristic, but a caller
+    // indexes one slot and the rest fold away — only once the call is inlined.
     let mut function = make_synthetic_method(
         qualified_name,
         method_info,
