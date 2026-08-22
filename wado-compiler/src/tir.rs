@@ -1427,17 +1427,69 @@ impl TypeTable {
             }
             queue.push(id);
         }
-        // A surviving struct spells itself with its instantiation arguments,
-        // so those must resolve too. The reachability walk reaches a type
-        // through its erased view and never through the pre-erasure arguments
-        // a monomorphized struct records, so nothing else keeps them alive.
+        // A surviving type spells itself with the ids it is built from, and the
+        // reachability walk reaches it through its erased view alone. Whatever
+        // reads one back — `contains_type_param` over a `Function`'s params,
+        // `peel_refs_and_box` over a `Box` wrapper — needs them to resolve.
         while let Some(id) = queue.pop() {
-            let Some(ResolvedType::Struct { type_args, .. }) = self.types.get(id) else {
-                continue;
-            };
-            for arg in type_args.clone() {
-                keep_id(&mut effective_keep, &mut queue, arg);
-                if let Some(&target) = self.redirects.get(arg) {
+            let mut components: Vec<TypeId> = Vec::new();
+            if let Some(&payload) = self.box_payload_types.get(id) {
+                components.push(payload);
+            }
+            if let Some(ty) = self.types.get(id) {
+                match ty {
+                    ResolvedType::Struct { type_args, .. }
+                    | ResolvedType::GenericInstance { type_args, .. }
+                    | ResolvedType::GenericResource { type_args, .. } => {
+                        components.extend(type_args.iter().copied());
+                    }
+                    ResolvedType::Newtype {
+                        type_args,
+                        base_type,
+                        ..
+                    } => {
+                        components.extend(type_args.iter().copied());
+                        components.push(*base_type);
+                    }
+                    ResolvedType::Ref(inner)
+                    | ResolvedType::MutRef(inner)
+                    | ResolvedType::Reactive(inner)
+                    | ResolvedType::BuiltinArray(inner) => components.push(*inner),
+                    ResolvedType::Function {
+                        params,
+                        return_type,
+                        ..
+                    } => {
+                        components.extend(params.iter().copied());
+                        components.push(*return_type);
+                    }
+                    ResolvedType::TypePack { mapped_elem, .. } => {
+                        components.extend(mapped_elem.iter().copied());
+                    }
+                    ResolvedType::AssocTypeProjection {
+                        param_id,
+                        assoc_type_bindings,
+                        ..
+                    } => {
+                        components.push(*param_id);
+                        components.extend(assoc_type_bindings.iter().map(|(_, t)| *t));
+                    }
+                    ResolvedType::Primitive(_)
+                    | ResolvedType::Unit
+                    | ResolvedType::Never
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Resource { .. }
+                    | ResolvedType::Variant { .. }
+                    | ResolvedType::Flags { .. }
+                    | ResolvedType::TypeParam { .. }
+                    | ResolvedType::InferVar(_)
+                    | ResolvedType::Unknown
+                    | ResolvedType::Error => {}
+                }
+            }
+            for component in components {
+                keep_id(&mut effective_keep, &mut queue, component);
+                if let Some(&target) = self.redirects.get(component) {
                     keep_id(&mut effective_keep, &mut queue, target);
                 }
             }
@@ -1449,6 +1501,9 @@ impl TypeTable {
         // A redirect entry is meaningful only when both endpoints survive.
         self.redirects
             .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
+        self.box_payload_types.retain(|id, &payload| {
+            effective_keep.contains(&id) && effective_keep.contains(&payload)
+        });
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
