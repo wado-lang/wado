@@ -701,7 +701,18 @@ impl ElementClean<'_, '_> {
                         // Receiver is the handle itself: `x.method()`.
                         let safe = match self.analyzer.callee_mutates_self(callee) {
                             Some(false) => true, // &self
-                            Some(true) => self.analyzer.is_method_element_immutable(callee),
+                            // A method handing back a mutable borrow lets the
+                            // caller write an element whatever its own body
+                            // writes, so what it returns decides too.
+                            Some(true) => {
+                                !matches!(
+                                    self.analyzer
+                                        .type_table
+                                        .borrow()
+                                        .get(body.exprs[id].type_id),
+                                    ResolvedType::MutRef(_)
+                                ) && self.analyzer.is_method_element_immutable(callee)
+                            }
                             None => false,
                         };
                         if !safe {
@@ -1237,15 +1248,22 @@ fn is_self_derived(
             is_self_derived_op(body, *inner, tainted, tt, descriptors)
         }
         ExprKind::Call { func_id, args, .. } => {
-            // An element accessor yields an element of the spine; other array
-            // builtins (`array_clone`, `array_new`) produce fresh storage and
-            // are not self-derived.
-            super::dce::callee_descriptor(descriptors, *func_id)
-                .array_element_access()
-                .is_some()
+            // An element accessor yields an element of the spine, and any
+            // callee returning a borrow hands back one into what it was given
+            // — how a container's `index_ref_mut` reaches an element before
+            // `container_sroa` rewrites it to the builtin. Other array
+            // builtins (`array_clone`, `array_new`) and every by-value return
+            // (`$value_copy$T`) produce fresh storage.
+            let callee = super::dce::callee_descriptor(descriptors, *func_id);
+            let hands_back_borrow = callee.array_element_access().is_some()
+                || matches!(
+                    tt.borrow().get(body.exprs[id].type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                );
+            hands_back_borrow
                 && args
-                    .first()
-                    .is_some_and(|a| is_self_derived_op(body, a.expr, tainted, tt, descriptors))
+                    .iter()
+                    .any(|a| is_self_derived_op(body, a.expr, tainted, tt, descriptors))
         }
         // An aggregate / closure that embeds a self-derived value carries
         // that aliasing storage. Tainting it lets the mutation checks below
