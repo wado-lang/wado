@@ -297,9 +297,11 @@ eight return `Option` — Wado has no `Zero`, and `Default` would be a lie for
 `min`. The `min` three keep the first of equal elements and the `max` three the
 last, as Rust's do, so the two ends stay complementary.
 
-A `Ref` chain reaches none of them: `&T` is not `Ord`, and it inherits a
+A `Ref` chain reaches none of the four: `&T` is not `Ord`, and it inherits a
 receiverless method only by forwarding, which `sum_iter(…) -> Option<Self>`
-does not. `iter_value()` names the step back.
+does not. `min_by` / `max_by` want a `fn mut(&&T, &&T)` comparator, which has
+no spelling; only `min_by_key` / `max_by_key` carry over. `iter_value()` names
+the step back.
 
 ### 8. Iterator Combinator Methods
 
