@@ -78,6 +78,23 @@ impl FunctionRef {
         }
     }
 
+    /// Whether this builtin hands back a handle into its array argument. All
+    /// three element accessors do; which one a subscript picks is the access
+    /// mode's answer, not evidence about aliasing.
+    pub fn reads_array_element(&self) -> bool {
+        matches!(
+            self.builtin_name()
+                .or_else(|| self.monomorphized_builtin_name())
+                .as_deref(),
+            Some(
+                "builtin::array_get_value"
+                    | "builtin::array_get_value_u8"
+                    | "builtin::array_get_ref"
+                    | "builtin::array_get_ref_mut"
+            )
+        )
+    }
+
     /// Get the monomorphized builtin name if this is a monomorphized builtin function.
     pub fn monomorphized_builtin_name(&self) -> Option<String> {
         let generic_name = self

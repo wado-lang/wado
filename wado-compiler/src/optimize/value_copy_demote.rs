@@ -1237,11 +1237,10 @@ fn is_self_derived(
             is_self_derived_op(body, *inner, tainted, tt, descriptors)
         }
         ExprKind::Call { func_id, args, .. } => {
-            // `array_get_value(spine, _)` yields an element of the spine; other
-            // array builtins (`array_clone`, `array_new`) produce fresh
-            // storage and are not self-derived.
-            builtin_gname(super::dce::callee_descriptor(descriptors, *func_id)).as_deref()
-                == Some("builtin::array_get_value")
+            // An element accessor yields an element of the spine; other array
+            // builtins (`array_clone`, `array_new`) produce fresh storage and
+            // are not self-derived.
+            super::dce::callee_descriptor(descriptors, *func_id).reads_array_element()
                 && args
                     .first()
                     .is_some_and(|a| is_self_derived_op(body, a.expr, tainted, tt, descriptors))
