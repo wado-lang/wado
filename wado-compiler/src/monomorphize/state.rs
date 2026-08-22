@@ -656,12 +656,29 @@ impl Monomorphizer {
         c
     }
 
-    /// Get the base struct name and type args from a `type_id`, unwrapping references if needed
-    /// Returns (`base_name`, `type_args`) for `GenericInstance`, (name, []) for Struct
-    pub fn get_struct_info_from_type(
+    /// The base struct name and type args a method dispatch is named after,
+    /// unwrapping references. A generic newtype answers under its own head for
+    /// what its own impl declares, under its base for what it inherits.
+    pub fn struct_info_for_method(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
+        method_name: &str,
+        trait_name: Option<&crate::name::FqTraitName>,
+    ) -> Option<(String, Vec<TypeId>)> {
+        let own = self
+            .newtype_own_struct_name_with_impl(type_id, type_table, method_name, trait_name)
+            .is_some();
+        self.struct_info(type_id, type_table, own)
+    }
+
+    /// `own_newtype` says whether a generic newtype answers under its own head;
+    /// without it every newtype level is transparent.
+    fn struct_info(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        own_newtype: bool,
     ) -> Option<(String, Vec<TypeId>)> {
         // Generic containers share their dispatch name with the call sites.
         if let Some(info) = type_table.generic_dispatch_components(type_id) {
@@ -671,17 +688,17 @@ impl Monomorphizer {
             ResolvedType::Struct { def, type_args } => {
                 Some((type_table.struct_head_name(*def), type_args.clone()))
             }
-            // A generic newtype declares its own methods; only what it
-            // inherits comes from the base arm below.
-            ResolvedType::Newtype { def, type_args, .. } if !type_args.is_empty() => {
+            ResolvedType::Newtype { def, type_args, .. }
+                if own_newtype && !type_args.is_empty() =>
+            {
                 Some((type_table.decl_render_name(*def), type_args.clone()))
             }
             // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
-                self.get_struct_info_from_type(*base_type, type_table)
+                self.struct_info(*base_type, type_table, own_newtype)
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.get_struct_info_from_type(*inner, type_table)
+                self.struct_info(*inner, type_table, own_newtype)
             }
             _ => None,
         }

@@ -1,0 +1,21 @@
+// A generic newtype answers under its own head for the methods it declares, and
+// under its base for the trait impls it inherits: `Inspect` is named after
+// `List`, `first_label` after `MyArray`. Inheriting the impl whole is what
+// drops the ` as Name` tag a non-generic newtype's own `Inspect` adds.
+
+type MyArray<T> = List<T>;
+
+impl<T: Display> MyArray<T> {
+    fn first_label(&self) -> String {
+        return `${self[0]}`;
+    }
+}
+
+test "a generic newtype inherits its base's Inspect" {
+    let a: MyArray<i32> = [1, 2];
+    assert `${a:?}` == "[1, 2]";
+    assert a.first_label() == "1";
+}
+
+__DATA__
+{"test": {}}

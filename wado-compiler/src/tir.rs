@@ -818,7 +818,7 @@ impl TypeTable {
     /// or the raw GC array `Array<T>`, whose methods live in `impl Array<T>`)
     /// dispatches under. A trait-method call site
     /// (`synthesis::template::method_name_for_type`) and the monomorphizer's
-    /// `get_struct_info_from_type` must agree on this, or a call mangles to a
+    /// `struct_info_for_method` must agree on this, or a call mangles to a
     /// name no impl was registered under. `None` for every other type (their
     /// dispatch name is derived differently).
     pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
