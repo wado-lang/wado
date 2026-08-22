@@ -64,17 +64,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(25)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -90,8 +88,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:trait_bound_7.wado::__modules_initialized: bool = 0;
-global global:trait_bound_7.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 };
-global global:core:prelude/primitive.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "trait_bound_7.wado/trait_bound_ref_type"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
@@ -133,13 +130,11 @@ fn "trait_bound_7.wado/trait_bound_result_eq"() with Stdout {
     handle_28 = "trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
     "core:cli/write_to_stream"(tx_32, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok != Err"), used: 9 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_28);
-    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:trait_bound_7.wado::__const_obj_1, global:trait_bound_7.wado::__const_obj_1) {
-        rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
-        tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
-        handle_43 = "trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(rx_46);
-        "core:cli/write_to_stream"(tx_47, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err == Err"), used: 10 }, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_43);
-    }
+    rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
+    tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
+    handle_43 = "trait_bound_7.wado/__cm_binding__Stdout_write_via_stream"(rx_46);
+    "core:cli/write_to_stream"(tx_47, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err == Err"), used: 10 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_43);
 }
 
 fn "trait_bound_7.wado/trait_bound_struct_field_bounded"() with Stdout {
@@ -230,13 +225,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b3: block {
-            l4: loop {
-                break_if b3 temp <= 0_i64;
+        b2: block {
+            l3: loop {
+                break_if b2 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l4;
+                continue l3;
             };
         };
     }
@@ -245,12 +240,12 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b5: block {
-        l6: loop {
-            break_if b5 i >= len;
+    b4: block {
+        l5: loop {
+            break_if b4 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l6;
+            continue l5;
         };
     };
 }
@@ -274,16 +269,16 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b7: block {
-        l8: loop {
-            break_if b7 offset >= count;
+    b6: block {
+        l7: loop {
+            break_if b6 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b7 select i32((result >> 4) == 0, 1, (result & 15) != 0);
-            continue l8;
+            break_if b6 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l7;
         };
     };
 }
@@ -326,33 +321,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
     builtin::array_copy<u8>(self.repr, start_8, other.repr, 0, other_len);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
-    let len: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
-    len = self.used;
-    if len != other.used {
-        return 0;
-    }
-    return __inline_bytes_match_at_2: block -> bool {
-        haystack = self.repr;
-        needle = other.repr;
-        j = 0;
-        b14: block {
-            l15: loop {
-                break_if b14 j >= len;
-                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                    break __inline_bytes_match_at_2: 0;
-                }
-                j = j + 1;
-                continue l15;
-            };
-        };
-        break __inline_bytes_match_at_2: 1;
-    };
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -369,17 +337,17 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b18: block {
-            l19: loop {
-                break_if b18 t <= 0_i64;
+        b13: block {
+            l14: loop {
+                break_if b13 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l19;
+                continue l14;
             };
         };
         break __inline_count_digits_i64_0: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_18, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_16, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 

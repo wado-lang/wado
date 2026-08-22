@@ -66,15 +66,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//orphan_rule_allowed_local_trait.wado/i32^orphan_rule_allowed_local_trait.wado/Describable::describe" = fn(ref "core:prelude/types.wado//Box<i32>") -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(25)
+type "functype//orphan_rule_allowed_local_trait.wado/core:prelude/string.wado/String^orphan_rule_allowed_local_trait.wado/Describable::describe" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(26)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(26)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -90,8 +92,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:orphan_rule_allowed_local_trait.wado::__modules_initialized: bool = 0;
-global global:orphan_rule_allowed_local_trait.wado::__const_obj_1: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
-global global:core:prelude/primitive.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:orphan_rule_allowed_local_trait.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 };
+global global:orphan_rule_allowed_local_trait.wado::__const_obj_2: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
+global global:core:prelude/primitive.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "orphan_rule_allowed_local_trait.wado/run"() with Stdout {
     let message_2: ref "core:prelude/string.wado//String";
@@ -99,6 +102,7 @@ fn "orphan_rule_allowed_local_trait.wado/run"() with Stdout {
     let packed_7: i64;
     let rx_8: i32;
     let tx_9: i32;
+    let message_11: ref "core:prelude/string.wado//String";
     let handle_14: i32;
     let packed_16: i64;
     let rx_17: i32;
@@ -109,16 +113,17 @@ fn "orphan_rule_allowed_local_trait.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:orphan_rule_allowed_local_trait.wado::__modules_initialized = 1;
     };
-    message_2 = "orphan_rule_allowed_local_trait.wado/i32^orphan_rule_allowed_local_trait.wado/Describable::describe"(global:orphan_rule_allowed_local_trait.wado::__const_obj_1);
+    message_2 = "orphan_rule_allowed_local_trait.wado/i32^orphan_rule_allowed_local_trait.wado/Describable::describe"(global:orphan_rule_allowed_local_trait.wado::__const_obj_2);
     rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
     handle_5 = "orphan_rule_allowed_local_trait.wado/__cm_binding__Stdout_write_via_stream"(rx_8);
     "core:cli/write_to_stream"(tx_9, message_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_5);
+    message_11 = "orphan_rule_allowed_local_trait.wado/core:prelude/string.wado/String^orphan_rule_allowed_local_trait.wado/Describable::describe"(global:orphan_rule_allowed_local_trait.wado::__const_obj_1);
     rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed_16 >> 32_i64);
     handle_14 = "orphan_rule_allowed_local_trait.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
-    "core:cli/write_to_stream"(tx_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("string: hello"), used: 13 }, 1);
+    "core:cli/write_to_stream"(tx_18, message_11, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_14);
 }
 
@@ -326,6 +331,51 @@ fn "orphan_rule_allowed_local_trait.wado/i32^orphan_rule_allowed_local_trait.wad
     }, start_108 = __local_1.used, __local_1.used = new_used_107, builtin::array_set_u8(__local_1.repr, start_108, 32), __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }, "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self.value, __local_2), __local_1;
 }
 
+fn "orphan_rule_allowed_local_trait.wado/core:prelude/string.wado/String^orphan_rule_allowed_local_trait.wado/Describable::describe"(self) {
+    let __local_1: ref "core:prelude/string.wado//String";
+    let new_used_8: i32;
+    let start_9: i32;
+    let new_used_22: i32;
+    let start_23: i32;
+    let new_used_36: i32;
+    let start_37: i32;
+    let new_used_50: i32;
+    let start_51: i32;
+    let new_used_64: i32;
+    let start_65: i32;
+    let new_used_78: i32;
+    let start_79: i32;
+    let new_used_92: i32;
+    let start_93: i32;
+    let new_used_106: i32;
+    let start_107: i32;
+    return __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, new_used_8 = 0 + 1, if @unlikely(new_used_8 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_8);
+    }, start_9 = __local_1.used, __local_1.used = new_used_8, builtin::array_set_u8(__local_1.repr, start_9, 115), new_used_22 = __local_1.used + 1, if @unlikely(new_used_22 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_22);
+    }, start_23 = __local_1.used, __local_1.used = new_used_22, builtin::array_set_u8(__local_1.repr, start_23, 116), new_used_36 = __local_1.used + 1, if @unlikely(new_used_36 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_36);
+    }, start_37 = __local_1.used, __local_1.used = new_used_36, builtin::array_set_u8(__local_1.repr, start_37, 114), new_used_50 = __local_1.used + 1, if @unlikely(new_used_50 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_50);
+    }, start_51 = __local_1.used, __local_1.used = new_used_50, builtin::array_set_u8(__local_1.repr, start_51, 105), new_used_64 = __local_1.used + 1, if @unlikely(new_used_64 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_64);
+    }, start_65 = __local_1.used, __local_1.used = new_used_64, builtin::array_set_u8(__local_1.repr, start_65, 110), new_used_78 = __local_1.used + 1, if @unlikely(new_used_78 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_78);
+    }, start_79 = __local_1.used, __local_1.used = new_used_78, builtin::array_set_u8(__local_1.repr, start_79, 103), new_used_92 = __local_1.used + 1, if @unlikely(new_used_92 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_92);
+    }, start_93 = __local_1.used, __local_1.used = new_used_92, builtin::array_set_u8(__local_1.repr, start_93, 58), new_used_106 = __local_1.used + 1, if @unlikely(new_used_106 > builtin::array_len(__local_1.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1, new_used_106);
+    }, start_107 = __local_1.used, __local_1.used = new_used_106, builtin::array_set_u8(__local_1.repr, start_107, 32), "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_1, self), __local_1;
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     let is_negative: bool;
     let abs_val: i64;
@@ -342,17 +392,17 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b21: block {
-            l22: loop {
-                break_if b21 t <= 0_i64;
+        b29: block {
+            l30: loop {
+                break_if b29 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l22;
+                continue l30;
             };
         };
         break __inline_count_digits_i64_0: n;
     };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_2, digit_count);
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_3, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
