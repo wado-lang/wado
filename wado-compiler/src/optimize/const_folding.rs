@@ -1033,7 +1033,60 @@ impl ConstFoldVisitor<'_> {
         // This also clears stale field entries from a same-index reuse
         // before we record new ones below.
         self.interpreter.invalidate_local(local_index);
+        self.interpreter
+            .record_ref_root(local_index, Self::borrowed_root(body, value));
         self.interpreter.bind_local(local_index, lat);
+    }
+
+    /// The local a `let r = &place` borrows into: `None` when the binding is not
+    /// a borrow, `Some(None)` when it is one the walk cannot root.
+    fn borrowed_root(body: &Body, op: Operand) -> Option<Option<u32>> {
+        let e = op.as_expr()?;
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &body.exprs[e].kind
+        else {
+            return None;
+        };
+        Some(Self::borrowed_root_impl(body, *inner))
+    }
+
+    /// The local a `let r = &place` borrows into, for a borrow whose referent
+    /// the frame cannot spell as a field path — `&mut xs[i]` reduces to a borrow
+    /// of an accessor result, whose arguments still name `xs`.
+    fn borrowed_root_impl(body: &Body, op: Operand) -> Option<u32> {
+        let e = op.as_expr()?;
+        match &body.exprs[e].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                expr: inner,
+            }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::VariantPayload { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. } => Self::borrowed_root_impl(body, *inner),
+            ExprKind::Local { index, .. } => Some(*index),
+            ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                let last = *body.blocks[*block].stmts.last()?;
+                let StmtKind::Expr(value) = &body.stmts[last].kind else {
+                    return None;
+                };
+                Self::borrowed_root_impl(body, *value)
+            }
+            ExprKind::Call { args, .. } => {
+                let mut found = None;
+                for arg in args {
+                    match Self::borrowed_root_impl(body, arg.expr) {
+                        Some(r) if found.is_none_or(|f| f == r) => found = Some(r),
+                        Some(_) => return None,
+                        None => {}
+                    }
+                }
+                found
+            }
+            _ => None,
+        }
     }
 
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
