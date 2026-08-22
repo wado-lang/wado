@@ -122,6 +122,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         instruction_leaf: &instruction_leaf,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
+        param_writes_through: RefCell::new(IndexMap::default()),
         ref_param_leaks: RefCell::new(IndexMap::default()),
         string_inline_max_bytes: project.string_inline_max_bytes,
     };
@@ -354,11 +355,10 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                     // mutability, which `is_readonly_body` judges; only escape
                     // is left to ask. A handle reached by projection or accessor
                     // carries none, so the callee must also be proven not to
-                    // write through it — unless it is an instruction that cannot
-                    // hold the handle at all, which neither escapes nor writes.
+                    // write through it.
                     Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
                     Some(BorrowShape::Derived) => {
-                        !gate.is_instruction_leaf(*func_id)
+                        !gate.instruction_passes_through(*func_id, pos)
                             && (gate.callee_ref_param_leaks(*func_id, pos)
                                 || gate.callee_param_writes_through(*func_id, pos))
                     }
@@ -1174,6 +1174,9 @@ struct Gate<'a> {
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
     param_readonly: RefCell<IndexMap<(usize, usize), bool>>,
+    /// Memoized [`Self::callee_param_writes_through`], keyed like
+    /// `param_readonly`: its by-value arm walks the callee body.
+    param_writes_through: RefCell<IndexMap<(usize, usize), bool>>,
     /// Memoized [`Self::callee_ref_param_leaks`], keyed like `param_readonly`:
     /// the walk behind it is a fixpoint over the callee body, and every `&`
     /// argument at every call site in every optimizer iteration asks again.
@@ -1299,25 +1302,56 @@ impl Gate<'_> {
         })
     }
 
-    /// Whether `func_id` is a plain Wasm instruction rather than a real callee.
-    /// Such a leaf cannot hold a handle past the call, so what becomes of its
-    /// result is what decides the handle's fate — and that is another call this
-    /// same walk sees.
-    fn is_instruction_leaf(&self, func_id: crate::nir::FuncId) -> bool {
+    /// Whether a handle handed to `func_id`'s parameter `param_pos` merely
+    /// passes through a plain Wasm instruction.
+    ///
+    /// Such a leaf has nowhere to keep the handle: what it returns flows on to
+    /// another call or an assignment, both of which this walk and
+    /// [`is_readonly_body`] already see. The exception is an instruction that
+    /// takes the parameter mutably (`array.set`, `array.copy`), which writes
+    /// the caller's storage itself.
+    fn instruction_passes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
-        self.instruction_leaf
+        if !self
+            .instruction_leaf
             .get(func_id.index())
             .copied()
             .unwrap_or(false)
+        {
+            return false;
+        }
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return false;
+        };
+        let f = f.borrow();
+        // A builtin records no parameters, so absence is not evidence of a
+        // mutable borrow — only a declared one is.
+        f.params
+            .get(param_pos)
+            .is_none_or(|p| !self.param_borrows_mutably(p))
     }
 
     /// Whether the callee may write through parameter `param_pos`.
     ///
-    /// [`Self::callee_param_readonly`] answers a by-value question and rejects
-    /// every reference outright; a derived handle needs this one. A shared `&T`
-    /// cannot be written through at all, so it answers `false` where that one
-    /// answers "not readonly".
+    /// Asks the body rather than the passing mode: boxing erases `&` / `&mut`
+    /// from the parameter type, so only [`Self::param_borrows_mutably`] reads
+    /// it reliably, and a shared borrow is judged by what the callee does with
+    /// it rather than by the guarantee its type appears to carry.
     fn callee_param_writes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let key = (func_id.index(), param_pos);
+        if let Some(&cached) = self.param_writes_through.borrow().get(&key) {
+            return cached;
+        }
+        // A cycle answers the conservative way while the real verdict is in
+        // flight, as `callee_ref_param_leaks` does.
+        self.param_writes_through.borrow_mut().insert(key, true);
+        let verdict = self.compute_param_writes_through(func_id, param_pos);
+        self.param_writes_through.borrow_mut().insert(key, verdict);
+        verdict
+    }
+
+    fn compute_param_writes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return true;
@@ -1326,16 +1360,8 @@ impl Gate<'_> {
         let Some(param) = f.params.get(param_pos) else {
             return true;
         };
-        let by_ref = {
-            let tt = self.type_table.borrow();
-            match tt.get(param.type_id) {
-                ResolvedType::Ref(_) => Some(false),
-                ResolvedType::MutRef(_) => Some(true),
-                _ => None,
-            }
-        };
-        if let Some(writes) = by_ref {
-            return writes;
+        if self.param_borrows_mutably(param) {
+            return true;
         }
         f.body
             .as_ref()
