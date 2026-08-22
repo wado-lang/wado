@@ -456,8 +456,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
         span: Span,
     ) -> Option<TypeId> {
-        let (_, method_name) = self.tysys.operator_trait_method(op)?;
-        let trait_ = self.operator_trait_decl(op)?;
+        let (item, method_name) = super::tysys::operator_trait_method(op)?;
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         // A type parameter has no impl block to read the rhs off; its bounds
         // say it, and `Shl::shl(&self, rhs: u32)` is why a literal needs to be
         // told. A bound cannot vary the declared rhs, so no selection arises.
@@ -582,8 +582,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
-        let (_, method_name) = self.tysys.operator_trait_method(op)?;
-        let trait_ = self.operator_trait_decl(op)?;
+        let (item, method_name) = super::tysys::operator_trait_method(op)?;
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         // `1 + m` reads the impl on the right operand's type and gives the
         // literal that same type, so the impl must be the one whose right-hand
         // type is it — an `Add<Feet>` on `Meters` does not answer for `1 + m`.

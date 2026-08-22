@@ -4663,11 +4663,6 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
     expr
 }
 
-/// Convert a trait method name to a TIR binary operator, if applicable.
-/// Used when a type-param-receiver method call is monomorphized to a primitive type.
-/// The native instruction a unary operator trait's method is, for a receiver
-/// monomorphization turned into a scalar primitive. Primitives carry no impl
-/// for these, so the call has to become the operator again.
 /// The instruction a monomorphized operator call lowers to, named by the
 /// compiler item its trait is. A user trait spelled `Neg` is a different
 /// declaration and supplies none.

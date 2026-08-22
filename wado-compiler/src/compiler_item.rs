@@ -1822,15 +1822,7 @@ impl CompilerItems {
     /// prelude's when a scope shadows it.
     #[must_use]
     pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
-        self.items
-            .iter()
-            .zip(CompilerItem::ALL)
-            .find_map(|(resolved, item)| match resolved {
-                Some(Resolved::Trait {
-                    decl: registered, ..
-                }) if *registered == decl => Some(*item),
-                _ => None,
-            })
+        self.trait_by_decl.get(&decl).copied()
     }
 
     /// The declaring node of a [`CompilerItemKind::Variant`] item.

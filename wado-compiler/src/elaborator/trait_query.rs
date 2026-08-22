@@ -216,7 +216,7 @@ pub(crate) fn trait_sig_of_with<'a>(
 
 /// The structural-conformance rule's answer for one type: whether every member
 /// satisfies the trait, and which one decided when they do not.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 enum StructuralConformance {
     /// Not a shape the rule applies to.
     NotApplicable,
@@ -1428,18 +1428,13 @@ impl TypeSystem {
         let (Some(trait_type), Some(decl)) = (header.trait_type.as_ref(), header.trait_ref) else {
             return true;
         };
-        let Some(params) = self
-            .trait_env
-            .trait_decl_headers
-            .get(&decl)
-            .map(|h| h.type_params.clone())
-        else {
+        let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
             return true;
         };
         super::trait_env::header_answers_bare_bound(
             trait_type,
             &header.ty,
-            &params,
+            &decl_header.type_params,
             &self.resolutions,
         )
     }

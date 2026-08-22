@@ -667,11 +667,6 @@ impl TraitRef {
     pub fn new(decl: crate::defs::DefId, args: Vec<TypeId>) -> Self {
         Self { decl, args }
     }
-
-    #[must_use]
-    pub fn is_bare(&self) -> bool {
-        self.args.is_empty()
-    }
 }
 
 /// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather

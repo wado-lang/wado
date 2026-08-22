@@ -599,16 +599,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(trait_) = self.operator_trait_decl(&op) else {
                     return TypeTable::ERROR;
                 };
-                let method_name = match op {
-                    BinaryOp::Add => "add",
-                    BinaryOp::Sub => "sub",
-                    BinaryOp::Mul => "mul",
-                    BinaryOp::Div => "div",
-                    BinaryOp::Mod => "rem",
-                    BinaryOp::BitAnd => "bitand",
-                    BinaryOp::BitOr => "bitor",
-                    BinaryOp::BitXor => "bitxor",
-                    _ => unreachable!(),
+                let Some((_, method_name)) = super::tysys::operator_trait_method(&op) else {
+                    return TypeTable::ERROR;
                 };
 
                 // For newtypes, resolve base type for trait impl fallback
@@ -680,20 +672,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            let arithmetic = match op {
-                BinaryOp::Add => Some((CompilerItem::Add, "add", "Add")),
-                BinaryOp::Sub => Some((CompilerItem::Sub, "sub", "Sub")),
-                BinaryOp::Mul => Some((CompilerItem::Mul, "mul", "Mul")),
-                BinaryOp::Div => Some((CompilerItem::Div, "div", "Div")),
-                BinaryOp::Mod => Some((CompilerItem::Rem, "rem", "Rem")),
-                BinaryOp::BitAnd => Some((CompilerItem::BitAnd, "bitand", "BitAnd")),
-                BinaryOp::BitOr => Some((CompilerItem::BitOr, "bitor", "BitOr")),
-                BinaryOp::BitXor => Some((CompilerItem::BitXor, "bitxor", "BitXor")),
-                _ => None,
-            };
+            let arithmetic = matches!(
+                op,
+                BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Mod
+                    | BinaryOp::BitAnd
+                    | BinaryOp::BitOr
+                    | BinaryOp::BitXor
+            )
+            .then(|| super::tysys::operator_trait_method(&op))
+            .flatten();
             if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some((item, method_name, trait_name)) = arithmetic
+                && let Some((item, method_name)) = arithmetic
             {
+                let trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_name(item)
+                    .to_string();
                 let bounds = self
                     .annotate_ctx
                     .trait_ctx
@@ -736,7 +736,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // below answers for it — say so here rather than at WIR build.
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),
-                    trait_name: trait_name.to_string(),
+                    trait_name,
                     param_name: name.clone(),
                     reason: Vec::new(),
                     span,
@@ -750,16 +750,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
 
         if is_shift {
-            let (shift_trait, shift_method) = match op {
-                BinaryOp::Shl => ("Shl", "shl"),
-                BinaryOp::Shr => ("Shr", "shr"),
-                _ => unreachable!(),
+            let Some((shift_item, shift_method)) = super::tysys::operator_trait_method(&op) else {
+                return TypeTable::ERROR;
             };
-            let shift_item = match op {
-                BinaryOp::Shl => CompilerItem::Shl,
-                BinaryOp::Shr => CompilerItem::Shr,
-                _ => unreachable!(),
-            };
+            let shift_trait = self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_trait_name(shift_item)
+                .to_string();
             // A type parameter dispatches through its bounds, as the arithmetic
             // operators do; the name-keyed lookup below reaches no impl for one.
             if let ResolvedType::TypeParam { name, .. } = &left_type
@@ -802,7 +801,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let ResolvedType::TypeParam { name, .. } = &left_type {
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),
-                    trait_name: shift_trait.to_string(),
+                    trait_name: shift_trait,
                     param_name: name.clone(),
                     reason: Vec::new(),
                     span,
@@ -1821,13 +1820,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// must match. An operator picks its trait by construction, so a user trait
     /// declaring a method of the same name does not answer for it.
     fn required_operator_trait(&self, item: CompilerItem) -> Option<super::types::RequiredTrait> {
-        let decl = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_decl(item)?;
-        let def = self.tysys.resolutions.defs().of_ast_id(decl)?;
+        let def = self.tysys.compiler_trait_def(item)?;
         Some(super::types::RequiredTrait {
             decl: crate::resolve::Resolution::Def(def),
             args: None,
