@@ -3352,6 +3352,11 @@ lists (see [One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
 `Neg` and `BitNot` are unary and take no argument; `Shl` / `Shr` declare
 `rhs: u32`.
 
+The compiler supplies these impls for the integers, and for `f32` / `f64`
+except `Rem`. `bool` holds one bit, so it gets the bit operators and no shift;
+`v128` gets none, its arithmetic being lane-wise and known only to the lane
+type's own impl.
+
 An operator yields `Output`, which a widening impl may make another type, so a
 generic body folding back into its own parameter pins it:
 
