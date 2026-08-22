@@ -350,8 +350,8 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                 match operand_borrows_local(body, arg.expr, idx, gate) {
                     None => false,
                     Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
-                    Some(BorrowShape::Derived) => {
-                        !gate.instruction_passes_through(*func_id, pos)
+                    Some(BorrowShape::Derived(arg_ty)) => {
+                        !gate.instruction_passes_through(*func_id, pos, arg_ty)
                             && (gate.callee_ref_param_leaks(*func_id, pos)
                                 || gate.callee_param_writes_through(*func_id, pos))
                     }
@@ -375,10 +375,10 @@ enum BorrowShape {
     /// The local itself, or an explicit `&` / `&mut` / `*` of it. A write
     /// through one is spelled in the caller, so [`is_readonly_body`] sees it.
     Direct,
-    /// A handle reached by projection or accessor. Nothing in the caller marks
-    /// it mutable — `&mut xs[i]` reduces to the accessor result — so only the
-    /// callee says whether it writes.
-    Derived,
+    /// A handle reached by projection or accessor, carrying its own type.
+    /// Nothing in the caller marks it mutable — `&mut xs[i]` reduces to the
+    /// accessor result — so only the callee says whether it writes.
+    Derived(TypeId),
 }
 
 /// [`borrows_local`] over an operand. A promoted argument is still an argument.
@@ -415,7 +415,7 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
                 .as_expr()
                 .and_then(|e| borrows_local(body, e, idx, gate))
                 .is_some())
-        .then_some(BorrowShape::Derived),
+        .then_some(BorrowShape::Derived(body.exprs[expr].type_id)),
         // `xs[i]` reaches this pass as a receiverless `array_get_value(&xs.repr,
         // i)` once `container_sroa` has run, so the receiver is not the only
         // argument that can carry the handle out. Which of them does is the
@@ -429,7 +429,7 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
                     .is_some()
                     && gate.callee_ref_param_leaks(*func_id, pos)
             }))
-        .then_some(BorrowShape::Derived),
+        .then_some(BorrowShape::Derived(body.exprs[expr].type_id)),
         _ => None,
     }
 }
@@ -1294,24 +1294,25 @@ impl Gate<'_> {
     /// Whether a handle handed to `func_id`'s parameter `param_pos` merely
     /// passes through a plain Wasm instruction, which has nowhere to keep it.
     /// One taking the parameter mutably writes the caller's storage itself.
-    fn instruction_passes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    ///
+    /// A builtin declares no parameters, so `arg_ty` — the type of what the
+    /// call site hands over — is what names the operand.
+    fn instruction_passes_through(
+        &self,
+        func_id: crate::nir::FuncId,
+        param_pos: usize,
+        arg_ty: TypeId,
+    ) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return false;
         };
-        // Without a declared parameter there is no type to judge, and a builtin
-        // that records none is not thereby proven harmless.
-        let Some(param_ty) = ({
-            let f = f.borrow();
-            match f.params.get(param_pos) {
-                Some(p) if self.param_borrows_mutably(p) => None,
-                Some(p) => Some(p.type_id),
-                None => None,
-            }
-        }) else {
-            return false;
-        };
-        !self.instruction_arg_captures(func_id, param_ty)
+        let declared_mut = f
+            .borrow()
+            .params
+            .get(param_pos)
+            .is_some_and(|p| self.param_borrows_mutably(p));
+        !declared_mut && !self.instruction_arg_captures(func_id, arg_ty)
     }
 
     /// Whether the callee may write through parameter `param_pos`. Boxing
