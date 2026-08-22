@@ -414,7 +414,6 @@ impl CaptureScanner {
         self.frontier_ok = false;
     }
 
-    /// Record that evaluating the current operand may write through `expr`.
     /// A `&mut` borrow and a `&mut self` receiver are the only channels into a
     /// local the rest of the condition also reads.
     fn record_write(&mut self, expr: &Expr) {

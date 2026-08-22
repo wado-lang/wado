@@ -656,9 +656,8 @@ impl Monomorphizer {
         c
     }
 
-    /// The base struct name and type args a method dispatch is named after,
-    /// unwrapping references. A generic newtype answers under its own head for
-    /// what its own impl declares, under its base for what it inherits.
+    /// A generic newtype answers under its own head for what its own impl
+    /// declares, under its base for what it inherits.
     pub fn struct_info_for_method(
         &self,
         type_id: TypeId,
@@ -672,8 +671,7 @@ impl Monomorphizer {
         self.struct_info(type_id, type_table, own)
     }
 
-    /// `own_newtype` says whether a generic newtype answers under its own head;
-    /// without it every newtype level is transparent.
+    /// Without `own_newtype` every newtype level is transparent.
     fn struct_info(
         &self,
         type_id: TypeId,
@@ -693,7 +691,6 @@ impl Monomorphizer {
             {
                 Some((type_table.decl_render_name(*def), type_args.clone()))
             }
-            // Newtypes are transparent — unwrap to base type for struct info lookup
             ResolvedType::Newtype { base_type, .. } => {
                 self.struct_info(*base_type, type_table, own_newtype)
             }
