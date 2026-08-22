@@ -882,6 +882,9 @@ fn gen_scan_lr_call_with_prec(
     w.end();
 }
 
+/// The scan-side local holding the token one past the suffix's first.
+global SECOND_KIND_LOCAL: String = "second_kind";
+
 fn gen_lr_overlap_dispatch(
     w: &mut CodeWriter,
     fn_name: &String,
@@ -952,22 +955,41 @@ fn gen_lr_overlap_dispatch(
         } else {
             w.else_begin(&`else if suffix_kind == ${*shared_tk}`);
         }
-        w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
-        let second_accessor = "second_kind";
-        let mut sub_first = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
             if suffix_first_sets[group[k]].contains(shared_tk) {
                 last_k = k;
             }
         }
+        // Compute the sub-conditions before emitting: the `second_kind` local
+        // is only declared when one of them reads it.
+        let mut conds: List<[i32, String]> = [];
+        for let mut k = 0; k < group.len(); k += 1 {
+            if k == last_k || !suffix_first_sets[group[k]].contains(shared_tk) {
+                continue;
+            }
+            let lr_idx = valid_lr_indices[group[k]];
+            let scan_call = `${*fn_name}_lr_${lr_idx}(tokens, pos${follow_sep(ctx.emit_follow())})`;
+            conds.push([
+                k, lr_second_token_cond(
+                    shared_tk,
+                    &rule.alternatives[lr_idx].elements,
+                    &scan_call,
+                    &SECOND_KIND_LOCAL,
+                    ctx,
+                ),
+            ]);
+        }
+        if conds.iter_ref().any(|c: &[i32, String]| c.1.contains(SECOND_KIND_LOCAL)) {
+            w.line(&`let ${SECOND_KIND_LOCAL} = if pos + 1 < tokens.len() \{ tokens[pos + 1] \} else \{ TK_EOF \};`);
+        }
+        let mut sub_first = true;
         for let mut k = 0; k < group.len(); k += 1 {
             if !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
             let lr_idx = valid_lr_indices[group[k]];
             let prec = lr_precs[group[k]];
-            let alt = &rule.alternatives[lr_idx];
             if k == last_k {
                 if sub_first {
                     gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
@@ -977,8 +999,7 @@ fn gen_lr_overlap_dispatch(
                     w.end();
                 }
             } else {
-                let second = compute_lr_second_token(shared_tk, &alt.elements, ctx);
-                let sub_cond = ctx.kind_check_str(&second, &second_accessor);
+                let sub_cond = conds.iter_ref().find(|c: &[i32, String]| c.0 == k).unwrap().1;
                 if sub_first {
                     w.begin(&`if ${sub_cond}`);
                     sub_first = false;
@@ -3542,8 +3563,8 @@ fn emit_lr_overlap(
                 }
             } else {
                 let elements = &rule.alternatives[lr.alt_index].elements;
-                let second = compute_lr_second_token(shared_tk, elements, ctx);
-                let sub_cond = ctx.kind_check_str(&second, &"p.peek_at(1)");
+                let scan_call = `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())})`;
+                let sub_cond = lr_second_token_cond(shared_tk, elements, &scan_call, &"p.peek_at(1)", ctx);
                 if sub_first {
                     w.begin(&`if ${sub_cond}`);
                     sub_first = false;
@@ -6154,52 +6175,108 @@ fn gen_general_group_scan_dispatch(
     w.end();
 }
 
+/// The token kinds that can stand one position after `shared_token` when this
+/// LR alternative's suffix starts with it — the discriminator an overlap
+/// group's sub-dispatch branches on. Empty when the walk cannot name them,
+/// which the caller must read as "no discriminator", never as "anything".
+///
+/// The element carrying the shared token decides how far offset 1 is: reading
+/// the *next* element is right only when that one matches exactly one token.
+/// Rust's `expression (shl | shr) expression` puts a two-token rule inside the
+/// group (`shr : GT GT`), so the answer there is `GT`, not the operand's FIRST
+/// — which every comparison operand matches.
 fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
-    // Find what token follows the shared_token in this alternative's suffix.
-    // Walk suffix elements (starting at index 1) to find the shared token,
-    // then return the first set of the next element.
     for let mut i = 1; i < elements.len(); i += 1 {
         let elem = &elements[i];
-        // Check if this element contains the shared token
         let mut visiting: List<String> = [];
-        let elem_first = ctx.first_of_element(elem, &mut visiting);
-        if !first_contains(&elem_first, shared_token) {
+        if !first_contains(&ctx.first_of_element(elem, &mut visiting), shared_token) {
             continue;
         }
-
-        // This element matches the shared token. Check if it's an Optional that wraps it.
-        if is_nullable(elem) {
-            // The shared token is inside an optional (e.g. K_NOT?).
-            // The "second token" is the next element after the optional.
-            if i + 1 < elements.len() {
-                return ctx.first_of_elements_from(elements, i + 1);
-            }
-        }
-
-        // The shared token is inside a Group (e.g. (K_ISNULL | K_NOTNULL | K_NOT K_NULL)).
-        // Find the alternative within the group that starts with shared_token,
-        // and return the first set of its second element.
-        if let Group(g) = elem {
-            let alts = &g.alternatives;
-            for let mut a = 0; a < alts.len(); a += 1 {
-                let alt = &alts[a];
-                if alt.elements.len() < 1 {
-                    continue;
-                }
-                let mut v2: List<String> = [];
-                let alt_first = ctx.first_of_element(&alt.elements[0], &mut v2);
-                if first_contains(&alt_first, shared_token) && alt.elements.len() >= 2 {
-                    return ctx.first_of_elements_from(&alt.elements, 1);
-                }
-            }
-        }
-
-        // Fallback: return next element's first set
-        if i + 1 < elements.len() {
+        // The shared token sits inside an optional (`K_NOT?`), so whatever
+        // follows the optional stands at offset 1.
+        if is_nullable(elem) && i + 1 < elements.len() {
             return ctx.first_of_elements_from(elements, i + 1);
         }
+        if let Group(g) = elem {
+            return group_second_token(&g.alternatives, shared_token, elements, i, ctx);
+        }
+        return suffix_second_token(elements, i, ctx);
     }
     return [];
+}
+
+/// `compute_lr_second_token` for a group: the union over the alternatives that
+/// can start with `shared_token`. One exactly a token long hands offset 1 to
+/// whatever follows the group; one the walk cannot measure leaves the whole
+/// answer unknown, since a partial union would exclude what it did not see.
+fn group_second_token(
+    alts: &List<Alternative>,
+    shared_token: &String,
+    elements: &List<Element>,
+    group_index: i32,
+    ctx: &mut GenContext,
+) -> List<String> {
+    let mut out: List<String> = [];
+    for let alt of alts {
+        if alt.elements.is_empty() {
+            continue;
+        }
+        let mut visiting: List<String> = [];
+        if !first_contains(&ctx.first_of_element(&alt.elements[0], &mut visiting), shared_token) {
+            continue;
+        }
+        let inner = suffix_second_token(&alt.elements, 0, ctx);
+        if !inner.is_empty() {
+            dedup_append_arr(&mut out, &inner);
+            continue;
+        }
+        let mut single: List<String> = [];
+        if alt.elements.len() == 1 && ctx.element_is_single_token(&alt.elements[0], &mut single) {
+            dedup_append_arr(&mut out, &ctx.first_of_elements_from(elements, group_index + 1));
+            continue;
+        }
+        return [];
+    }
+    return out;
+}
+
+/// The offset-1 set of `elements[start..]`, or empty when neither K-prefix walk
+/// reaches that depth. Both are sound and they halt at different shapes — the
+/// deep one sees through a single-alternative rule (`shr : GT GT`) but stops at
+/// a multi-alternative one, the shallow one reads that rule's FIRST but stops
+/// at any element wider than a token — so a shape only one can measure is still
+/// measured.
+fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContext) -> List<String> {
+    let mut visiting: List<String> = [];
+    let [deep, _] = ctx.deep_position_first_sets_from(elements, start, 2, &mut visiting);
+    if deep.len() >= 2 {
+        return deep[1];
+    }
+    let shallow = ctx.position_first_sets_from(elements, start, 2);
+    if shallow.len() >= 2 {
+        return shallow[1];
+    }
+    return [];
+}
+
+/// The sub-dispatch condition separating one candidate of a shared-first-token
+/// group from the rest. A second-token check when the walk names one, else the
+/// candidate's own suffix scan — which decides the same way the non-LR overlap
+/// tournament does, and unlike a vacuous condition lets the next candidate try
+/// instead of breaking the loop. The branch re-runs that scan for its own
+/// guard; both calls are pure in `(kinds, pos, follow)`.
+fn lr_second_token_cond(
+    shared_token: &String,
+    elements: &List<Element>,
+    scan_call: &String,
+    accessor: &String,
+    ctx: &mut GenContext,
+) -> String {
+    let second = compute_lr_second_token(shared_token, elements, ctx);
+    if second.is_empty() {
+        return `${*scan_call} >= 0`;
+    }
+    return ctx.kind_check_str(&second, accessor);
 }
 
 

@@ -10661,7 +10661,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 }
             } else if suffix_kind == TK_LT {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-                if _kind_set_50(second_kind) {
+                if second_kind == TK_LT {
                     if 11 >= min_prec {
                         let lr_saved_pos = pos;
                         pos = scan_expression_lr_16(tokens, pos, follow);
@@ -10680,7 +10680,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 }
             } else if suffix_kind == TK_GT {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-                if _kind_set_50(second_kind) {
+                if second_kind == TK_GT {
                     if 11 >= min_prec {
                         let lr_saved_pos = pos;
                         pos = scan_expression_lr_16(tokens, pos, follow);
@@ -19592,7 +19592,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     break;
                 }
             } else if _sk == TK_LT {
-                if _kind_set_50(p.peek_at(1)) {
+                if p.peek_at(1) == TK_LT {
                     if 11 >= min_prec {
                         if scan_expression_lr_16(&p.kinds, p.pos, follow) < 0 {
                             break;
@@ -19627,7 +19627,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     }
                 }
             } else if _sk == TK_GT {
-                if _kind_set_50(p.peek_at(1)) {
+                if p.peek_at(1) == TK_GT {
                     if 11 >= min_prec {
                         if scan_expression_lr_16(&p.kinds, p.pos, follow) < 0 {
                             break;

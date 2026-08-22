@@ -748,7 +748,23 @@ test "tree: nested generics" {
 
 // `shl` / `shr` are the parser reassembling a shift from the single-character
 // `<` / `>` the lexer emits, and only the base can tell `a >> b` from
-// `a > > b`. Not asserted end to end here: no Rust expression reaches either
-// rule yet — a bare `<` / `>` comparison does not parse (see TODO.md), which
-// `shl` / `shr` sit behind. `driver_action_prs_super_test` covers the
-// mechanism.
+// `a > > b`.
+test "shift: an adjacent pair is one operator" {
+    let r = rlex_prs(&"const X: i32 = 1 >> 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "shift: a separated pair is not a shift" {
+    let r = rlex_prs(&"const X: i32 = 1 > > 2;");
+    assert !r.ok(), "a gap between the two `>` fails the base predicate";
+}
+
+test "comparison: a bare > is not a shift" {
+    let r = rlex_prs(&"const X: bool = 1 > 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "comparison: a bare < is not a shift" {
+    let r = rlex_prs(&"const X: bool = 1 < 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
