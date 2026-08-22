@@ -46,7 +46,11 @@ use super::util::placeholder;
 /// on the signature, while every other position reads it shared.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum IndexAccess {
+    /// `xs[i]` — value semantics hand back a copy, through `IndexValue`.
+    Value,
+    /// `&xs[i]` — `IndexRef` aliases the element in place.
     Shared,
+    /// `&mut xs[i]` — `IndexRefMut` carries the mutability in its signature.
     Mutable,
 }
 
@@ -281,7 +285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_static_method_call(static_call, ctx)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
-            Expr::Index(index) => self.resolve_index(index, ctx, IndexAccess::Shared),
+            Expr::Index(index) => self.resolve_index(index, ctx, IndexAccess::Value),
             Expr::Block(block) => {
                 // Walk the block for its facts; reify rebuilds the `Block`
                 // node. Read the overall type from `expression_types` (AST
@@ -1498,6 +1502,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an index expression
+    /// `IndexRefMut`'s `Output: RefMut` bound, asked of the container's concrete
+    /// element type. The impl's own `Output` is still the unsubstituted `T` here,
+    /// so the container is what can answer for a replace-on-assign element.
+    fn element_is_ref_mut(&self, container_type: TypeId) -> bool {
+        let Some(elem) = self.tysys.type_table.borrow().as_list(container_type) else {
+            return false;
+        };
+        let resolved = self.tysys.type_table.borrow().get(elem).clone();
+        self.tysys
+            .is_ref_mut_identity(&self.type_lookup(), &resolved)
+    }
+
     pub(super) fn resolve_index(
         &mut self,
         index: &ast::IndexExpr,
@@ -1618,18 +1634,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
                     )
+                    .filter(|_| self.element_is_ref_mut(base_type_id))
                     .map(|found| (found, "index_ref_mut"))
                 })
                 .flatten()
                 .or_else(|| {
-                    self.index_lookup_or_newtype_base(
-                        &struct_name,
-                        base_type_id,
-                        &lookup_name,
-                        lookup_type_id,
-                        |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
-                    )
-                    .map(|found| (found, "index_ref"))
+                    // A value read prefers the copy `IndexValue` gives it, so a
+                    // container offering both keeps its by-value shape; one that
+                    // only aliases is still read through `IndexRef` plus a deref.
+                    let aliases_only = access != IndexAccess::Value
+                        || self
+                            .index_lookup_or_newtype_base(
+                                &struct_name,
+                                base_type_id,
+                                &lookup_name,
+                                lookup_type_id,
+                                |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
+                            )
+                            .is_none();
+                    aliases_only
+                        .then(|| {
+                            self.index_lookup_or_newtype_base(
+                                &struct_name,
+                                base_type_id,
+                                &lookup_name,
+                                lookup_type_id,
+                                |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
+                            )
+                            .map(|found| (found, "index_ref"))
+                        })
+                        .flatten()
                 });
             if let Some(((trait_info, matched_type_id), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
@@ -1638,12 +1672,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mangled_method_name =
                     MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
 
-                // The method returns &Output, so the type is Ref(output_type)
-                let ref_output_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_ref(trait_info.output_type);
+                // `index_ref` returns `&Output`; `index_ref_mut` returns `&mut Output`.
+                let ref_output_type = {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    if index_method == "index_ref_mut" {
+                        tt.make_mut_ref(trait_info.output_type)
+                    } else {
+                        tt.make_ref(trait_info.output_type)
+                    }
+                };
 
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),

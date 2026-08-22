@@ -986,6 +986,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (UnaryOp::MutRef, ast::Expr::Index(index)) => {
                 self.resolve_index(index, ctx, super::expr::IndexAccess::Mutable)
             }
+            (UnaryOp::Ref, ast::Expr::Index(index)) => {
+                self.resolve_index(index, ctx, super::expr::IndexAccess::Shared)
+            }
             _ => self.resolve_expr(&unary.expr, ctx, inner_expected),
         };
 

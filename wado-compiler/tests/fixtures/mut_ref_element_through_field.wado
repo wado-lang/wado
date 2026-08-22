@@ -1,0 +1,56 @@
+// A mutable element borrow taken inside a loop, over a list reached through a
+// `&mut` parameter's field. LICM hoists the backing array into a local, so the
+// element accessor takes its `&mut` of that local rather than of the field.
+
+use { println, Stdout } from "core:cli";
+
+struct Item {
+    name: String,
+}
+
+struct Outer {
+    items: List<Item>,
+}
+
+fn rename(item: &mut Item) {
+    let mut acc: String = ``;
+    for let mut k = 0; k < 8; k += 1 {
+        acc.push_str(&`r`);
+        if k % 2 == 0 {
+            acc.push_str(&`e`);
+        } else {
+            acc.push_str(&`n`);
+        }
+        if acc.len() > 64 {
+            acc = ``;
+        }
+    }
+    if acc.is_empty() {
+        item.name = `empty`;
+    } else {
+        item.name = `renamed`;
+    }
+}
+
+fn normalize(outer: &mut Outer) {
+    for let mut i = 0; i < outer.items.len(); i += 1 {
+        let item = &mut outer.items[i];
+        if item.name.is_empty() {
+            item.name = `filled`;
+        }
+        rename(&mut outer.items[i]);
+    }
+}
+
+export fn run() with Stdout {
+    let mut outer: Outer = builtin::black_box(Outer {
+        items: [Item { name: `` }, Item { name: `x` }],
+    });
+    normalize(&mut outer);
+    assert outer.items[0].name == `renamed`;
+    assert outer.items[1].name == `renamed`;
+    println(`ok`);
+}
+
+__DATA__
+{"stdout": "ok\n"}
