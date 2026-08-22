@@ -1650,8 +1650,8 @@ impl Monomorphizer {
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
     /// call. A `newtype` inherits its base's trait impl and a reference
     /// forwards to its pointee's — a receiverless method has no receiver to
-    /// deref — so peel to that impl unless the receiver has one of its own, or
-    /// a value blanket it is not disqualified from: a blanket is not
+    /// deref — so peel to the link that wrote that impl, or to the base when no
+    /// link did, unless a value blanket serves the receiver: a blanket is not
     /// inherited, and only the reflection bounds are decidable here.
     fn type_param_dispatch_tid(
         &self,
@@ -1670,13 +1670,13 @@ impl Monomorphizer {
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        if self
-            .functions
-            .trait_env
-            .trait_def_of_fq(trait_name)
-            .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_))
-        {
-            return tid;
+        if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
+            if self.has_own_trait_impl(type_table, tid, decl) {
+                return tid;
+            }
+            if let Some(link) = self.newtype_link_with_trait_impl(tid, type_table, decl) {
+                return link;
+            }
         }
         if trait_name
             .canonical()
@@ -1705,10 +1705,14 @@ impl Monomorphizer {
         let Some(trait_) = trait_decl else {
             return true;
         };
-        // The receiver only: keeping the call for an impl a link *below* it
-        // wrote leaves the dispatch asking the erased base, which carries no
-        // user impl. `newtype_link_impl_unreached.wado` pins the cost.
+        // The receiver, then the chain: `enum` and `flags` erase to a scalar
+        // without being a newtype link, and an impl a link below the receiver
+        // wrote is still the one the call inherits. Relowering over either
+        // silently takes the primitive's instruction instead.
         !self.has_own_trait_impl(type_table, id, trait_)
+            && self
+                .newtype_link_with_trait_impl(id, type_table, trait_)
+                .is_none()
     }
 
     fn value_blanket_serves(
@@ -3185,6 +3189,13 @@ impl Monomorphizer {
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
                 candidate
+            } else if let Some(link) = info
+                .trait_name
+                .as_ref()
+                .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
+                .and_then(|trait_| self.newtype_link_with_trait_impl(inner, type_table, trait_))
+            {
+                info.with_substituted_struct_name(&type_table.fq_type_name(link))
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.

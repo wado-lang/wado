@@ -509,7 +509,7 @@ impl Monomorphizer {
         method_name: &str,
         trait_name: Option<&crate::name::FqTraitName>,
     ) -> Option<FqTypeName> {
-        self.newtype_own_name(type_id, type_table, |_, tid| match trait_name {
+        self.newtype_own_link(type_id, type_table, |_, tid| match trait_name {
             Some(trait_name) => self
                 .functions
                 .trait_env
@@ -520,6 +520,7 @@ impl Monomorphizer {
                 .trait_env
                 .has_inherent_method_by_receiver(&type_table.impl_receiver_key(tid), method_name),
         })
+        .map(|(name, _)| name)
     }
 
     /// Whether the declaration `tid` names carries its own `impl <trait> for`
@@ -537,18 +538,33 @@ impl Monomorphizer {
             .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_)
     }
 
+    /// The first newtype link at or below `type_id` writing its own impl of
+    /// `trait_`. A link's impl serves every level above it, so the chain — not
+    /// the receiver alone — says which type a call dispatches to.
+    pub(super) fn newtype_link_with_trait_impl(
+        &self,
+        type_id: TypeId,
+        type_table: &TypeTable,
+        trait_: crate::defs::DefId,
+    ) -> Option<TypeId> {
+        self.newtype_own_link(type_id, type_table, |_, tid| {
+            self.has_own_trait_impl(type_table, tid, trait_)
+        })
+        .map(|(_, tid)| tid)
+    }
+
     /// Peel refs/newtypes to the first newtype level satisfying `has_own_impl`
-    /// (evaluated on that level's name and its `TypeId`), returning that name.
+    /// (evaluated on that level's name and its `TypeId`), returning both.
     ///
     /// Reads the unerased view: erasure redirects a newtype id to its base
     /// before monomorphize, so the erased view never reports a `Newtype` level
     /// at all and every newtype would look like one without its own impl.
-    fn newtype_own_name(
+    fn newtype_own_link(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
         has_own_impl: impl Fn(&FqTypeName, TypeId) -> bool,
-    ) -> Option<FqTypeName> {
+    ) -> Option<(FqTypeName, TypeId)> {
         let mut tid = type_id;
         loop {
             match type_table.get_unerased(tid) {
@@ -559,7 +575,7 @@ impl Monomorphizer {
                     // any arguments left beside it rather than fused in.
                     let own = FqTypeName::declared(type_table.defs(), *def);
                     if has_own_impl(&own, tid) {
-                        return Some(own);
+                        return Some((own, tid));
                     }
                     tid = base;
                 }

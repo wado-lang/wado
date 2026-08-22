@@ -1,0 +1,44 @@
+// An impl on an *intermediate* newtype link serves every level above it: the
+// direct call, the operator behind a bound, and the receiverless static.
+use { println } from "core:cli";
+
+type Inner = i32;
+
+type Outer = Inner;
+
+impl Add for Inner {
+    type Output = Inner;
+
+    fn add(&self, rhs: &Inner) -> Inner {
+        return 99 as Inner;
+    }
+}
+
+trait Tagged {
+    fn tag() -> String;
+}
+
+impl Tagged for Inner {
+    fn tag() -> String {
+        return "I";
+    }
+}
+
+fn plus<T: Add>(a: T, b: T) -> T::Output {
+    return a + b;
+}
+
+fn tag_of<T: Tagged>(t: T) -> String {
+    return T::tag();
+}
+
+export fn run() with Stdout {
+    let i = builtin::black_box(1) as Inner;
+    let j = builtin::black_box(2) as Inner;
+    let x = builtin::black_box(1) as Outer;
+    let y = builtin::black_box(2) as Outer;
+    println(`${(i + j) as i32} ${(x + y) as i32} ${plus(i, j) as i32} ${plus(x, y) as i32} ${tag_of(i)} ${tag_of(x)}`);
+}
+
+__DATA__
+{"stdout": "99 99 99 99 I I\n"}
