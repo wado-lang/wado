@@ -1,18 +1,7 @@
 #!/usr/bin/env bash
-# PreToolUse hook for the Bash tool: spend rebuildable build output to keep the
-# session's disk allowance from running out. Nothing else bounds target/ --
-# rustc prunes only within one crate's incremental directory, and cargo's
-# `-Z gc` is nightly and collects the registry, not target/.
-#
-# Two sources, spent in order of what they cost to rebuild: incremental state
-# first, then the stale test binaries in deps/. A test target statically links
-# the compiler and wasmtime, so each is 150-230 MB, and every rebuild leaves the
-# previous hash behind -- the dominant growth in a long session.
-#
-# Free space is the trigger rather than any directory's own size: a size cap
-# discards state while the disk is still half empty, and says nothing about what
-# else filled it. Running before the command hands the headroom to the build
-# about to start, and evicting least-recently-used entries spares what is in use.
+# PreToolUse hook for the Bash tool: nothing else bounds target/, so once free
+# space falls below the floor, spend rebuildable output least-recently-used
+# first -- incremental state, then the stale test binaries in deps/.
 
 set -euo pipefail
 
@@ -55,15 +44,9 @@ if [ -d "$INCREMENTAL" ]; then
     done < <(find "$INCREMENTAL" -mindepth 1 -maxdepth 1 -type d -printf '%T@\t%p\n' | sort -n)
 fi
 
-# Extensionless executables only: the test and binary targets. Leaving the
-# .rlib / .rmeta alone keeps the eviction to a relink rather than a recompile of
-# every dependent crate.
-#
-# The fingerprint goes with the binary. Cargo reads freshness from there, not
-# from the artifact, so a binary deleted on its own is one cargo reports as up
-# to date and then fails to execute. Both names carry the same trailing hash --
-# `deps/wado_manifest-HASH` against `.fingerprint/wado-manifest-HASH` -- which is
-# what pairs them, the crate name being spelled differently in each.
+# Extensionless executables only: leaving the .rlib / .rmeta keeps the eviction
+# to a relink. The fingerprint goes with the binary -- cargo reads freshness
+# there -- paired by the trailing hash, the crate name being spelled differently.
 evicted_bins=0
 if [ "$(avail)" -lt "$goal" ] && [ -d "$DEPS" ]; then
     while IFS=$'\t' read -r _ bin; do

@@ -338,10 +338,8 @@ fn collect_candidates(
 }
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
-/// referent's storage back out, or that writes through it. A shared global must
-/// survive both.
-///
-/// [`is_readonly_body`] only sees the caller, where `__b."…build"()` reads.
+/// referent's storage back out, or writes through it. [`is_readonly_body`] only
+/// sees the caller, where `__b."…build"()` reads.
 fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     reachable_nodes(body).into_iter().any(|node| {
         let NodeRef::Expr(e) = node else {
@@ -351,11 +349,6 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
             ExprKind::Call { func_id, args, .. } => args.iter().enumerate().any(|(pos, arg)| {
                 match operand_borrows_local(body, arg.expr, idx, gate) {
                     None => false,
-                    // A borrow spelled in the caller (`x`, `&x`) carries its own
-                    // mutability, which `is_readonly_body` judges; only escape
-                    // is left to ask. A handle reached by projection or accessor
-                    // carries none, so the callee must also be proven not to
-                    // write through it.
                     Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
                     Some(BorrowShape::Derived) => {
                         !gate.instruction_passes_through(*func_id, pos)
@@ -403,13 +396,9 @@ fn operand_borrows_local(
     }
 }
 
-/// Whether `expr` hands over a handle into local `idx` — the local, a borrow of
-/// it, or a reference-typed projection or accessor result that aliases its
-/// storage.
-///
-/// A step is followed only while the value stays reference-typed: `xs[0]` on a
-/// list of structs yields the element's handle, while `xs.len()` computes a
-/// scalar from it and hands over nothing.
+/// Whether `expr` hands over a handle into local `idx`. A step is followed only
+/// while the value stays reference-typed: `xs[0]` on a list of structs yields
+/// the element's handle, while `xs.len()` computes a scalar and hands over none.
 fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<BorrowShape> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => (*index == idx).then_some(BorrowShape::Direct),
@@ -419,9 +408,6 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
         } => inner
             .as_expr()
             .and_then(|e| borrows_local(body, e, idx, gate)),
-        // `xs[i]` lowers to `IndexValue::index_value`, which is what a
-        // replace-on-assign element type has instead of `&mut` iteration, so
-        // the element's handle leaves with nothing marking it mutable.
         ExprKind::FieldAccess { expr: base, .. }
         | ExprKind::Index { expr: base, .. }
         | ExprKind::Cast { expr: base, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
@@ -1303,13 +1289,8 @@ impl Gate<'_> {
     }
 
     /// Whether a handle handed to `func_id`'s parameter `param_pos` merely
-    /// passes through a plain Wasm instruction.
-    ///
-    /// Such a leaf has nowhere to keep the handle: what it returns flows on to
-    /// another call or an assignment, both of which this walk and
-    /// [`is_readonly_body`] already see. The exception is an instruction that
-    /// takes the parameter mutably (`array.set`, `array.copy`), which writes
-    /// the caller's storage itself.
+    /// passes through a plain Wasm instruction, which has nowhere to keep it.
+    /// One taking the parameter mutably writes the caller's storage itself.
     fn instruction_passes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         if !self
@@ -1331,12 +1312,9 @@ impl Gate<'_> {
             .is_none_or(|p| !self.param_borrows_mutably(p))
     }
 
-    /// Whether the callee may write through parameter `param_pos`.
-    ///
-    /// Asks the body rather than the passing mode: boxing erases `&` / `&mut`
-    /// from the parameter type, so only [`Self::param_borrows_mutably`] reads
-    /// it reliably, and a shared borrow is judged by what the callee does with
-    /// it rather than by the guarantee its type appears to carry.
+    /// Whether the callee may write through parameter `param_pos`. Boxing
+    /// erases `&` / `&mut` from the parameter type, so the body — not the
+    /// passing mode — is what answers.
     fn callee_param_writes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);

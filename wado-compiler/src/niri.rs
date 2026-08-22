@@ -264,11 +264,9 @@ struct FrameState {
     /// land in it, which is what keeps a borrow from copying its referent.
     /// Populated only during frame execution; empty everywhere else.
     place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
-    /// Locals this frame saw a `let` bind to a borrow, mapped to the local the
-    /// referent lives in — `&mut xs[i]` reduces to a borrow of an accessor
-    /// result, which still names `xs` — or `None` where the borrow resolved to
-    /// nothing nameable. An absent local is a reference from outside the frame,
-    /// a parameter above all, whose referent no tracked local holds.
+    /// Locals this frame bound to a borrow, mapped to the local the referent
+    /// lives in — `&mut xs[i]` reduces to a borrow of an accessor result, which
+    /// still names `xs` — or `None` where it resolved to nothing nameable.
     ref_roots: IndexMap<u32, Option<u32>>,
     /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
     /// aggregate constant. An unpopulated set refuses every aggregate binding.
@@ -615,17 +613,9 @@ impl<'a> Interpreter<'a> {
             self.invalidate_every_local();
             return;
         };
-        // A write through a reference lands in its referent, so dropping the
-        // reference alone would leave the referent's stale value foldable.
-        // `frame_place_of` re-roots to that referent for a borrow taken over a
-        // place the frame can name; one taken over anything else — an accessor
-        // result, as `&mut xs[i]` reduces to — comes back still rooted at the
-        // reference, and where it points is unknown.
-        // A write through a reference lands in its referent, so dropping the
-        // reference alone would leave the referent's stale value foldable.
-        // `frame_place_of` re-roots to that referent for a borrow taken over a
-        // place the frame can spell; `ref_roots` names the local for one taken
-        // over an accessor result; anything else points somewhere unknown.
+        // A write through a reference lands in its referent. `frame_place_of`
+        // re-roots a borrow taken over a place the frame can spell; `ref_roots`
+        // names the local for one taken over an accessor result.
         if place::place_of(body, place).is_some_and(|(raw, _)| raw == root)
             && place_roots_at_reference(body, place, self.type_table)
         {
@@ -652,8 +642,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Record that `index` borrows into `target`'s storage at a path the frame
-    /// cannot spell. Cleared by a rebind of `index`.
+    /// Record what `index` borrows into, clearing the entry where the binding
+    /// is not a borrow.
     pub fn record_ref_root(&mut self, index: u32, borrow: Option<Option<u32>>) {
         match borrow {
             Some(target) => self.frame.ref_roots.insert(index, target),

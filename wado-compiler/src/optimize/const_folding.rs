@@ -1052,9 +1052,8 @@ impl ConstFoldVisitor<'_> {
         Some(Self::borrowed_root_impl(body, *inner))
     }
 
-    /// The local a `let r = &place` borrows into, for a borrow whose referent
-    /// the frame cannot spell as a field path — `&mut xs[i]` reduces to a borrow
-    /// of an accessor result, whose arguments still name `xs`.
+    /// The local a borrow bottoms out at, following the accessor calls that
+    /// `&mut xs[i]` reduces to.
     fn borrowed_root_impl(body: &Body, op: Operand) -> Option<u32> {
         let e = op.as_expr()?;
         match &body.exprs[e].kind {
