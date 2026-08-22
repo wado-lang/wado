@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787383247567,
+  "lastUpdate": 1787414205735,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50173,6 +50173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e40a0fd07784abf3d2e3094caf30ff9e07ebb3a8"
         },
         "date": 1787383246758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9c76dde8815ac4beb6ca653b8e9f82505b7fc7e",
+          "message": "Merge pull request #1877 from wado-lang/claude/sequence-family-wep-gaps-1owi0w\n\nfeat(compiler): identify a trait by its declaration and its instantiation",
+          "timestamp": "2026-08-23T00:40:30+09:00",
+          "tree_id": "434534b98895bf06ae595228e458fae47096de22",
+          "url": "https://github.com/wado-lang/wado/commit/d9c76dde8815ac4beb6ca653b8e9f82505b7fc7e"
+        },
+        "date": 1787414204860,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
