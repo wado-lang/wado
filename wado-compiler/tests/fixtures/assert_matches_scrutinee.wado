@@ -1,0 +1,18 @@
+// A failed pattern test renders the value that failed it, the scrutinee being
+// a place the failure branch re-reads.
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+export fn run() {
+    let s = Shape::Circle(3.0);
+    assert s matches { Point };
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["s: Shape::Circle"]
+}

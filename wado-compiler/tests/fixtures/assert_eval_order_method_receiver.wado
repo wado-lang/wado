@@ -1,0 +1,33 @@
+// A method call evaluates its receiver before its arguments, and `assert` may
+// not change that: WEP rule 1 makes the condition run as `if !cond` would.
+
+use { println, Stdout } from "core:cli";
+
+struct Adder {
+    base: i32,
+}
+
+impl Adder {
+    fn plus(&self, x: i32) -> i32 {
+        return self.base + x;
+    }
+}
+
+fn recv() -> Adder with Stdout {
+    println("recv");
+    return Adder { base: 10 };
+}
+
+fn arg() -> i32 with Stdout {
+    println("arg");
+    return 5;
+}
+
+export fn run() with Stdout {
+    assert recv().plus(arg()) == 15;
+}
+
+__DATA__
+{
+    "stdout": "recv\narg\n"
+}
