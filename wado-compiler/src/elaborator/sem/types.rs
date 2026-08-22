@@ -708,9 +708,9 @@ pub(crate) struct AssertSlot {
     /// A binding the failure branch can re-read, so the slot needs none of its
     /// own — straight-line code makes the read exact.
     pub(crate) is_place: bool,
-    /// Bound ahead of the condition rather than where the operand sits, which
-    /// only preserves evaluation order while everything before it is bound
-    /// too. The binding's scope then covers the failure branch as well.
+    /// Bound ahead of the condition rather than where the operand sits — sound
+    /// only while all that precedes it is bound too. Its scope then covers the
+    /// failure branch as well.
     pub(crate) hoisted: bool,
 }
 

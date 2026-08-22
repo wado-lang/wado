@@ -624,10 +624,9 @@ impl Interpreter<'_> {
         }
     }
 
-    /// The value bound to a by-value or shared-reference parameter.
-    ///
-    /// A shared reference cannot write, so the referent's own constant stands.
-    /// One retained past the callee's return is refused by `stores`.
+    /// The value bound to a by-value or shared-reference parameter. A shared
+    /// reference cannot write, so the referent's own constant stands; one
+    /// retained past the callee's return is refused by `stores`.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
         if let Some(e) = arg.as_expr()
             && let ExprKind::Unary {

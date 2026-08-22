@@ -25,14 +25,12 @@ what is still open as a gap; never write a decision of your own into a WEP.
 
 It may include TODOs on WIP.
 
-A WEP is a living standard: it states the design as it stands now, and a changed
-design means rewriting the affected sections — no update log, no superseded
-alternatives, no checklist of what landed. Git history is the SSoT.
+A WEP states the design as it stands now; a change rewrites the affected
+sections. No update log, superseded alternatives, or landed-checklist — git
+history is the SSoT.
 
-No "out of scope" or "non-goals" section, under any spelling — such a list reads
-as a design boundary when it is almost always an unfinished mechanism. A
-shortfall is a "Known gap": what is missing, what closing it takes, and a red
-test where it is a defect. A decision not to have something goes in Decision.
+No "out of scope" section: an unfinished mechanism is a "Known gap" — what is
+missing and what closing it takes. A deliberate omission goes in Decision.
 
 ### Index of WEPs
 

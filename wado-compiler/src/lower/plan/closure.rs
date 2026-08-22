@@ -1398,9 +1398,8 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
 /// statement in the closure body, including those nested in inner blocks.
 struct LocalCollector<'a> {
     locals: &'a mut Vec<(u32, TypeId)>,
-    /// Assignment targets, kept apart from the declarations: a slot a producer
-    /// preallocates and assigns is declared by that assignment, but one a `Let`
-    /// or pattern already declares takes its type from there.
+    /// Assignment targets, kept apart: a slot a `Let` or pattern declares takes
+    /// its type from there, not from an assignment to it.
     assigned: &'a mut Vec<(u32, TypeId)>,
 }
 

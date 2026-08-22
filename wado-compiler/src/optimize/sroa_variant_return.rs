@@ -2310,9 +2310,8 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     rewrite_match_on_temp(body, e, local, &layout, arms, cx);
                 }
             }
-            // The destructure itself. Leaving it alone keeps a rebuild from
-            // nesting under the field reads it planted; the type cannot tell
-            // them apart, `retype_let` having retyped every read before this.
+            // The destructure itself: leaving it alone keeps a rebuild from
+            // nesting under the field reads it planted, which it cannot tell apart.
             ExprKind::FieldAccess { expr, .. } if temp_local(body, expr, cx.bound).is_some() => {
                 return;
             }
