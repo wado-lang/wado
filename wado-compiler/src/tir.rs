@@ -2161,8 +2161,7 @@ impl TypeTable {
     }
 
     /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
-    /// a reference to unit — `&x` is transparent at the WIR level. A signature
-    /// and its body must agree, or one returns nothing where the other promised.
+    /// a reference to unit — `&x` is transparent at the WIR level.
     pub fn is_stackless(&self, type_id: TypeId) -> bool {
         self.peel_refs(type_id) == TypeTable::UNIT
     }

@@ -240,9 +240,8 @@ fn is_inert(expr: &Expr) -> bool {
     }
 }
 
-/// The local an lvalue chain roots at, for the operand of a `&mut` or the
-/// receiver of a method call. `None` where the chain roots in an rvalue, which
-/// names no local the condition could also read.
+/// The local an lvalue chain roots at. `None` where it roots in an rvalue,
+/// which names no local the condition could also read.
 fn place_root_name(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Ident(ident) => Some(ident.name.clone()),
@@ -256,9 +255,7 @@ fn place_root_name(expr: &Expr) -> Option<String> {
 /// What the walk knows about an operand on reaching it, before its own children
 /// can change any of it.
 struct Position {
-    /// The condition itself, which `__cond` already holds.
     is_root: bool,
-    /// A short-circuit lies above, so the operand may go unevaluated.
     conditional: bool,
     /// Everything evaluated before this operand is bound ahead of it, so this
     /// one may be too.
@@ -299,8 +296,7 @@ impl AssertCaptureContext {
 
 /// Decides which sub-expressions of an assert condition become capture slots.
 /// No source-text dedup: `f() == f()` gets a slot per occurrence, so each
-/// evaluates as the source wrote it. Receivers and `matches` scrutinees are
-/// never scanned — see the WEP's *Known gaps*.
+/// evaluates as the source wrote it.
 struct CaptureScanner {
     slots: Vec<Capture>,
     ast_id_to_slot: IndexMap<AstId, usize>,
@@ -309,16 +305,14 @@ struct CaptureScanner {
     /// A short-circuit lies above, so the capture may go unevaluated.
     conditional: bool,
     /// Everything evaluated so far is bound ahead, so the next operand may be
-    /// too. Cleared by the first fragment left in place — binding after it would
-    /// run the pair backwards.
+    /// too. Cleared by the first fragment left in place.
     frontier_ok: bool,
-    /// Places read where they sit, in scan order. A place is neither bound nor
-    /// moved, so the read stays in the condition and a later operand bound
-    /// ahead of it runs first.
+    /// Places read where they sit, in scan order: the read stays in the
+    /// condition, so a later operand bound ahead of it runs first.
     places_behind: Vec<String>,
-    /// Writes the walk has passed, in scan order: the local a `&mut` borrow or
-    /// a method receiver names, or `None` where a subtree the walk does not
-    /// enter could write anything. The only channels into a caller's local.
+    /// Writes the walk has passed, in scan order: the local a `&mut` borrow or a
+    /// method receiver names, or `None` where an unentered subtree could write
+    /// anything.
     writes: Vec<Option<String>>,
 }
 
@@ -345,9 +339,6 @@ impl CaptureScanner {
         if is_place {
             self.places_behind.push(source.clone());
         }
-        // A conditional slot may never run, a place is re-read rather than
-        // bound, and binding ahead is off once this operand may write through a
-        // place the condition already read where it sits.
         let hoisted = pos.bindable && !conditional && !is_place && !self.disturbs_behind(pos);
         let idx = if let Some(idx) = self.place_slot(&source, is_place, conditional) {
             idx
@@ -363,16 +354,14 @@ impl CaptureScanner {
             idx
         };
         self.ast_id_to_slot.insert(ast_id, idx);
-        // A place is neither bound nor moved, so it passes the fact through —
-        // never restores it: a receiver that cleared it still forbids binding
-        // what follows. `disturbs_behind` is what keeps the pass-through sound.
+        // A place passes the fact through, never restores it: a receiver that
+        // cleared it still forbids binding what follows.
         self.frontier_ok = hoisted || (is_place && !conditional && pos.bindable);
     }
 
-    /// Whether this operand's own subtree writes through a place the condition
-    /// already read where it sits. Binding it ahead would put the write before
-    /// that read. A place first read inside this subtree does not count: binding
-    /// the node moves the whole group, and so moves nothing within it.
+    /// Whether binding this operand ahead would put a write it performs before
+    /// a read the condition left behind. A place first read inside the subtree
+    /// does not count: binding the node moves the whole group.
     fn disturbs_behind(&self, pos: &Position) -> bool {
         let behind = &self.places_behind[..pos.places_len];
         if behind.is_empty() {
@@ -383,10 +372,9 @@ impl CaptureScanner {
             .any(|write| write.as_ref().is_none_or(|name| behind.contains(name)))
     }
 
-    /// The slot an earlier occurrence of this place already earned. A place is
-    /// re-read in the failure branch, so every occurrence renders the same line
-    /// — one slot serves them all. Two that may each go unread stay apart,
-    /// since one flag cannot say which of them ran.
+    /// The slot an earlier occurrence of this place already earned: it is
+    /// re-read in the failure branch, so one slot serves them all. Two that may
+    /// each go unread stay apart, since one flag cannot say which ran.
     fn place_slot(&self, source: &str, is_place: bool, conditional: bool) -> Option<usize> {
         if !is_place || conditional {
             return None;
@@ -428,8 +416,7 @@ impl CaptureScanner {
 
     /// Record that evaluating the current operand may write through `expr`.
     /// A `&mut` borrow and a `&mut self` receiver are the only channels into a
-    /// local the rest of the condition also reads; one rooted in an rvalue
-    /// names no such local.
+    /// local the rest of the condition also reads.
     fn record_write(&mut self, expr: &Expr) {
         if let Some(name) = place_root_name(expr) {
             self.writes.push(Some(name));
@@ -468,8 +455,7 @@ impl CaptureScanner {
                 }
                 self.scan(&u.expr);
                 // A binding for the `&` node would lose the function-reference
-                // coercion, which the scan cannot tell from `&value`. The place
-                // under it renders without one anyway.
+                // coercion; the place under it renders without one anyway.
                 if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
                     return;
                 }

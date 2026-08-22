@@ -190,12 +190,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an expression standing in condition position, which must be
-    /// `bool`. Nothing coerces to it, so a non-`bool` condition is a type error
-    /// rather than a value to test for truthiness.
-    ///
-    /// `bool` is checked, never passed down as an expected type: an expectation
-    /// reaches the operands of the condition, where it is wrong — the operands
-    /// of `a > b` are not `bool`.
+    /// `bool`: nothing coerces to it. `bool` is checked, never passed down as an
+    /// expected type — an expectation reaches the operands, where it is wrong.
     pub(super) fn resolve_condition_expr(
         &mut self,
         expr: &Expr,

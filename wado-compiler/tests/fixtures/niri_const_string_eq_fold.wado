@@ -1,9 +1,6 @@
 // A comparison between two compile-time constant strings is decided at compile
 // time, so neither the comparison nor the list it read from reaches the WIR.
-//
-// `String::eq` walks bytes through `&Array<u8>` parameters, and the index it
-// reads at needs a temporary — a region the frame has to run, not a value the
-// lattice can read off.
+// `String::eq` reaches it through `&Array<u8>` parameters and a temporary index.
 
 use { println, Stdout } from "core:cli";
 

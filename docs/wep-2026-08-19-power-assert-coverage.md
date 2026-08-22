@@ -22,12 +22,11 @@ statement, testable per condition form.
 
 `assert e` evaluates `e` exactly as `if !e` written by hand would: the same
 sub-expressions, on the same objects, in the same order, no more and no fewer.
-This is the whole of the rule. It admits no exception, and it outranks every
-rendering concern below — an operand that cannot be captured without breaking it
-is not thereby out of scope, it is an operand whose capture is not yet
+It admits no exception and outranks every rendering concern below: an operand
+that cannot be captured without breaking it is one whose capture is not yet
 implemented.
 
-Two corollaries the mechanism keeps getting wrong, so both are stated:
+Two corollaries:
 
 A capture may not reorder. Binding an operand ahead of the condition moves it
 ahead of everything the instrumentation left in place — a method call's receiver
@@ -36,35 +35,29 @@ so hoisting either sibling inverts that pair. An operand may be bound ahead of
 the condition only when nothing evaluated before it stays behind; otherwise the
 capture is taken where the operand sits.
 
-The scanner walks the condition in evaluation order and carries one fact: is
-everything evaluated so far bound ahead of the condition. While it holds, the
-next slot is bound ahead too, as `let __vK = …;` before the condition — a scope
-the failure branch reaches, so the operand is read rather than recomputed there,
-and the optimizer sees an ordinary binding. The first fragment left behind
-clears it, and every slot after that is captured where it sits. A receiver and a
-callee clear it for the operands nested under them, since both run first and
-stay where they are; the node containing them may still be bound ahead, because
-binding it moves the whole group and so moves nothing within it. A place is
-neither bound nor moved — the failure branch re-reads it — so it passes the fact
-through, save against an operand that may write through it. A `&mut` borrow of
-that place, a method call on it (`&mut self` is not knowable this early), and a
-subtree the scan does not enter each count as such a write; binding one ahead
-would put the write before the read the condition left behind.
+The scanner walks the condition in evaluation order carrying one fact: whether
+everything so far is bound ahead of the condition. While it holds, the next slot
+binds ahead too, as `let __vK = …;` — a scope the failure branch reaches, and an
+ordinary binding to the optimizer. The first fragment left behind clears it, and
+every later slot is captured where it sits; a receiver and a callee clear it for
+the operands under them, though the node containing them may still bind ahead,
+since that moves the whole group and nothing within it. A place passes the fact
+through — the failure branch re-reads it — save against an operand that may
+write through it: a `&mut` borrow, a method call (`&mut self` is not knowable
+this early), or a subtree the scan does not enter.
 
-That is also what lets a receiver render at all. Binding one would copy it, and
-value semantics would leave the call's own mutation on the copy; re-reading a
-place copies nothing, so a receiver that is a place is captured exactly as any
-other place is. The same holds for an argument: a bare identifier in
-call-argument position is a function-reference coercion site the scan cannot
-recognise, and a binding would lose it — but a place leaves the argument exactly
-as written, so nothing is there to lose. Only `&<ident>` keeps the `&` itself
-unbound for that reason, the place under it rendering instead.
+That is also what lets a receiver render. Binding one copies, and value
+semantics would leave the call's own mutation on the copy; re-reading a place
+copies nothing, so a place receiver is captured as any other place. An argument
+is the same: a bare identifier there is a function-reference coercion site the
+scan cannot recognise and a binding would lose, while a place leaves it as
+written. Only `&<ident>` keeps the `&` itself unbound, the place under it
+rendering instead.
 
 A capture may not copy. Value semantics deep-copy on binding, so a captured
-receiver would take the copy's mutation and leave the original untouched. The
-answer is to capture without copying — in place, or by re-reading a binding the
-failure branch can reach — never to drop the operand and call the gap a
-deliberate exclusion.
+receiver would take the copy's mutation and leave the original untouched; the
+answer is to capture in place, or by re-reading a binding the failure branch
+reaches.
 
 Short-circuits are the same corollary seen from the other side. A capture is
 **unconditional** when no short-circuit lies between it and the condition root. A
@@ -86,18 +79,14 @@ nothing for it.
 
 ### 3. No silent degradation
 
-Every operand position in a condition is captured, save what _Known gaps_
-lists as not yet reached. A literal is the one position needing no slot of its
-own: its value is its source text, which the `condition:` line already shows.
-A cast or a negation of one renders the same text back, so neither earns a slot
-either. `&<ident>` earns none for the `&` itself: the scan cannot tell it from
-`&fn_name`, whose coercion a binding would lose — the place under it renders
-instead, which needs no binding and so loses nothing.
-There is no second outcome to report for a
-type: `Inspect` is total (WEP-2026-06-25), so a `T: Inspect` obligation always
-holds and every operand has a rendering. An operand the compiler declines to
-inspect is a bug in `Inspect` derivation, at the priority every compiler bug
-carries — never a power-assert degradation to document.
+Every operand position is captured, save what _Known gaps_ lists as not yet
+reached. A literal needs no slot: its value is its source text, which the
+`condition:` line already shows, and a cast or negation of one renders that text
+back. `&<ident>` earns none for the `&` itself, the place under it rendering
+instead. Nor is there a second outcome to report for a type: `Inspect` is total
+(WEP-2026-06-25), so every operand has a rendering, and one the compiler
+declines to inspect is a bug in `Inspect` derivation — never a power-assert
+degradation to document.
 
 So one failure mode remains: the scanner does not descend into a shape. Two
 things keep it from recurring silently. The scanner's match is exhaustive over
@@ -131,53 +120,45 @@ operand — both spellings parse to the same tree, so no fidelity is lost.
 
 ## Known gaps
 
-Nothing here is settled by design. Each entry is the mechanism failing rule 1,
-or an operand position rule 3 does not yet reach — a defect or an open question,
-never a boundary.
+Each entry is the mechanism failing rule 1, or an operand position rule 3 does
+not yet reach — a defect or an open question, never a boundary.
 
 ### Rule 1: the mechanism changes evaluation
 
 - [ ] **Capture a receiver that is not a place.** A place receiver renders
-      today: the failure branch re-reads it, which copies nothing, so the `&mut
-      self` mutation the copy would have hidden is never hidden and the scan
-      needs no `self` kind it cannot have. Every other receiver — `f().m()`,
-      `(a..<b).contains(&a)` — still renders nothing, and it needs the value
-      kept without a copy: binding it would take the copy's mutation and leave
-      the original untouched. Unpinned, since the fixtures that pinned it now
-      pin the place half: `assert_method_receiver`,
-      `assert_subscript_receiver`, `assert_matches_scrutinee`.
+      today, the failure branch re-reading it. Every other receiver — `f().m()`,
+      `(a..<b).contains(&a)` — renders nothing, and needs the value kept without
+      a copy. Unpinned; the fixtures that pinned it now pin the place half:
+      `assert_method_receiver`, `assert_subscript_receiver`,
+      `assert_matches_scrutinee`.
 
 ### Rule 3: operand positions that render nothing
 
 - [ ] **Render a `WithHandler` or `Resume` operand.** A closure renders its
-      signature now (`assert_closure_operand`); these two still render nothing.
-      Their _children_ stay unwalked for a separate reason that does hold, and
-      holds for a closure too: a sub-expression of a closure body has no value
-      at the moment the condition failed. Unpinned.
+      signature now (`assert_closure_operand`); these two render nothing. Their
+      _children_ stay unwalked for a reason that does hold: a sub-expression of
+      a body has no value at the moment the condition failed. Unpinned.
 
 - [ ] **Capture the operands inside the branch a run took.** The scan stops at
-      an `If` / `Match` branch body and at a block's statements, on the argument
-      that the enclosing node's own capture already renders what the run
-      produced. That holds only when the body is a single leaf. Measured:
-      `assert (if c { f() + g() } else { 0 }) == 99` renders `c` and the `if`'s
-      value `5`, and nothing for `f()`, `g()` or `f() + g()`. What a compound
-      body should show — every operand, or only the sub-expression that is the
-      body's value — is undecided, so this stays unpinned.
+      an `If` / `Match` branch body and at a block's statements, since the
+      enclosing node's capture already renders what the run produced — which
+      holds only for a single-leaf body. Measured: `assert (if c { f() + g() }
+      else { 0 }) == 99` renders `c` and the `if`'s value `5`, nothing for
+      `f()`, `g()` or `f() + g()`. What a compound body should show is
+      undecided, so this stays unpinned.
 
       A `Spread` needs nothing: it only ever sits inside a literal the scan
       already walks.
 
 ## Consequences
 
-A slot whose operand is a plain binding gets no binding of its own: the failure
-branch re-reads it, which straight-line code makes exact. A conditional slot
-costs one `bool` flag, cleared ahead of the condition and set at the capture
-site; the failure branch reads its value local under that flag, so nothing has
-to synthesize a zero value for an arbitrary `T`. A slot captured where it sits
-writes a function-scoped slot, which the optimizer cannot fold through, so a
-condition built from such slots survives to run time even when its value is a
-constant; a slot bound ahead of the condition is an ordinary binding and folds.
-`-Os` still drops the whole expansion through `bare-asserts`.
+A slot whose operand is a plain binding gets none of its own: the failure branch
+re-reads it. A conditional slot costs one `bool` flag, cleared ahead of the
+condition and set at the capture site, so nothing has to synthesize a zero value
+for an arbitrary `T`. A slot captured where it sits writes a function-scoped
+slot the optimizer cannot fold through, so such a condition survives to run time
+even when its value is constant; one bound ahead folds. `-Os` still drops the
+whole expansion through `bare-asserts`.
 
 Rule 2 adds one `String` binding per conditional slot to the cold branch. Rule 3
 costs a dump surface and its tests, and returns a compile error or a test

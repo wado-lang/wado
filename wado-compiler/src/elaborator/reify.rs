@@ -3134,9 +3134,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cap_span,
         );
 
-        // A hoisted slot binds ahead of the condition, where its scope reaches
-        // the failure branch too — sound because the scan hoists only while
-        // everything evaluated before the operand is bound as well.
+        // A hoisted slot binds ahead of the condition, its scope reaching the
+        // failure branch too — sound because all that precedes it is bound too.
         if hoisted {
             assert!(
                 seen_local_index.is_none(),

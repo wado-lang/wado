@@ -1,7 +1,6 @@
 //! What each condition shape contributes to a power-assert failure, read back
-//! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what
-//! renders nothing today; `docs/wep-2026-08-19-power-assert-coverage.md` lists
-//! each one as a gap, so an entry here is a gap that has not closed yet.
+//! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what renders
+//! nothing today, one WEP *Known gaps* entry each.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -160,8 +159,7 @@ fn some_plan_line_has(block: &str, label: &str, column: &str) -> bool {
     lines.any(|line| line.contains(column))
 }
 
-/// A place is re-read in the failure branch, so every occurrence of one renders
-/// the same line. One slot serves them all, however often the condition names it.
+/// A place is re-read in the failure branch, so one slot serves every mention.
 #[test]
 fn a_place_named_twice_is_captured_once() {
     let plan = entry_plan();
@@ -208,10 +206,9 @@ fn a_short_circuited_operand_is_marked_conditional() {
     }
 }
 
-/// Where each operand's capture is taken. `hoisted` binds ahead of the
-/// condition, `re-read` takes no binding at all, and `in-place` writes a slot
-/// where the operand sits — which WEP rule 1 requires as soon as anything
-/// evaluated earlier stays behind.
+/// Where each operand's capture is taken: `hoisted` binds ahead of the
+/// condition, `re-read` takes no binding, and `in-place` writes a slot where the
+/// operand sits — what WEP rule 1 requires once anything earlier stays behind.
 const EXPECTED_BINDING: &[(&str, &[(&str, &str)])] = &[
     // A place passes the fact through, so the operand after it still binds.
     ("a < b", &[("a", "re-read"), ("b", "re-read")]),
@@ -252,7 +249,6 @@ fn a_capture_binds_ahead_only_while_order_allows() {
     }
 }
 
-/// The shapes that render nothing today, each one a WEP *Known gaps* entry.
 const EXPECTED_EMPTY: &[&str] = &[];
 
 #[test]
