@@ -22,9 +22,9 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::niri::{BorrowRoot, 
-    CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
-    Interpreter, Lattice, is_ctfe_runnable,
+use crate::niri::{
+    BorrowRoot, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
+    GlobalKey, Interpreter, Lattice, is_ctfe_runnable,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -1057,14 +1057,14 @@ impl ConstFoldVisitor<'_> {
                     };
                 }
                 ExprKind::Cast { expr: inner, .. } => inner.as_expr(),
-                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => body.blocks
-                    [*block]
-                    .stmts
-                    .last()
-                    .and_then(|last| match &body.stmts[*last].kind {
-                        StmtKind::Expr(value) => value.as_expr(),
-                        _ => None,
-                    }),
+                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                    body.blocks[*block].stmts.last().and_then(|last| {
+                        match &body.stmts[*last].kind {
+                            StmtKind::Expr(value) => value.as_expr(),
+                            _ => None,
+                        }
+                    })
+                }
                 _ => None,
             };
             match next {
