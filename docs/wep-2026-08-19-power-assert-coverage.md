@@ -45,8 +45,11 @@ clears it, and every slot after that is captured where it sits. A receiver and a
 callee clear it for the operands nested under them, since both run first and
 stay where they are; the node containing them may still be bound ahead, because
 binding it moves the whole group and so moves nothing within it. A place is
-neither bound nor moved — the failure branch re-reads it, which is the same
-assumption seen from the other side — so it passes the fact through.
+neither bound nor moved — the failure branch re-reads it — so it passes the fact
+through, save against an operand that may write through it. A `&mut` borrow of
+that place, a method call on it (`&mut self` is not knowable this early), and a
+subtree the scan does not enter each count as such a write; binding one ahead
+would put the write before the read the condition left behind.
 
 That is also what lets a receiver render at all. Binding one would copy it, and
 value semantics would leave the call's own mutation on the copy; re-reading a
@@ -106,10 +109,12 @@ short-circuit can skip each one:
 ```
 6: assert i < list.len() && list[i] == 1
   __v0  always       re-read   i
-  __v1  always       hoisted   list.len()
-  __v2  always       hoisted   i < list.len()
-  __v3  conditional  in-place  list[i]
-  __v4  conditional  in-place  list[i] == 1
+  __v1  always       re-read   list
+  __v2  always       hoisted   list.len()
+  __v3  always       hoisted   i < list.len()
+  __v4  conditional  in-place  i
+  __v5  conditional  in-place  list[i]
+  __v6  conditional  in-place  list[i] == 1
 ```
 
 `tests/integration/assert_capture_plan.rs` reads that back for one `assert` per

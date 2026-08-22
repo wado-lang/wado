@@ -171,7 +171,10 @@ fn a_place_named_twice_is_captured_once() {
         .lines()
         .filter(|line| line.ends_with("  list"))
         .count();
-    assert_eq!(occurrences, 1, "`list` should be captured once, got:\n{block}");
+    assert_eq!(
+        occurrences, 1,
+        "`list` should be captured once, got:\n{block}"
+    );
 }
 
 #[test]

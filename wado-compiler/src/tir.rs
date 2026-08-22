@@ -2160,7 +2160,6 @@ impl TypeTable {
         matches!(self.get(base), ResolvedType::Primitive(_))
     }
 
-    /// Peel through Ref/MutRef wrappers to get the underlying type.
     /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
     /// a reference to unit — `&x` is transparent at the WIR level. A signature
     /// and its body must agree, or one returns nothing where the other promised.
@@ -2168,6 +2167,7 @@ impl TypeTable {
         self.peel_refs(type_id) == TypeTable::UNIT
     }
 
+    /// Peel through Ref/MutRef wrappers to get the underlying type.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {
             match self.get(type_id) {

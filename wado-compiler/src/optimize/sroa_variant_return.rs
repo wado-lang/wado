@@ -612,12 +612,11 @@ fn rebuild_variant(
         TypeTable::I32,
         span,
     );
-    let match_expr = body.exprs.push(ExprNode {
+    body.exprs.push(ExprNode {
         kind: ExprKind::Match { expr: tag, arms },
         type_id: variant_type,
         span,
-    });
-    match_expr
+    })
 }
 
 /// `t.<field>` on a named local.
