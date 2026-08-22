@@ -2958,6 +2958,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Reify an expression in condition position, the walk
+    /// `resolve_condition_expr` made: a `Bool` expectation would reach the
+    /// operands and propagate into `If`/`Match` branches, where it is wrong.
+    fn reify_condition_expr(&mut self, expr: &ast::Expr, ctx: &mut FunctionContext) -> TirExpr {
+        use crate::tir::TypeTable;
+
+        let cond = self.reify_expr(expr, ctx, None);
+        match cond.type_id {
+            TypeTable::BOOL | TypeTable::UNKNOWN | TypeTable::ERROR => cond,
+            type_id => unreachable!(
+                "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {type_id}"
+            ),
+        }
+    }
+
     /// Reify a `while cond { body }` statement. Mirrors
     /// `Elaborator::resolve_while`'s `Condition::Expr` arm
     /// the loop lowers into
@@ -2974,7 +2989,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let stmts = match &w.condition {
             ast::Condition::Expr(cond_expr) => {
                 let cond_span = cond_expr.span();
-                let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let cond_tir = self.reify_condition_expr(cond_expr, ctx);
                 let neg_cond = TirExpr::new(
                     TirExprKind::Unary {
                         op: TirUnaryOp::Not,
@@ -3364,10 +3379,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             emitted_lets: Vec::new(),
         });
 
-        // `expected_type = None`: a `Bool` expectation propagates into
-        // `If`/`Match` branches inside the condition and rejects
-        // non-bool arm bodies.
-        let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, None);
+        let cond_tir = self.reify_condition_expr(&assert_stmt.condition, ctx);
 
         let actx = ctx
             .reify_assert_capture_ctx
@@ -4668,7 +4680,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 stmts
             }
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_branch = self.reify_block_with_position(
                     &if_stmt.then_block,
                     ctx,
@@ -4709,7 +4721,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::TirStmtKind;
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
                 let else_block = if_stmt
                     .else_block
@@ -4801,7 +4813,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
             }
         };
-        let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+        let condition = self.reify_condition_expr(cond_expr, ctx);
         let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
         let else_branch = if_expr
             .else_block
