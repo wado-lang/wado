@@ -144,9 +144,8 @@ global global:reflect_struct_field_get_generic.wado::__const_obj_7: ref null "co
 global mut global:reflect_struct_field_get_generic.wado::__const_obj_8: ref null "core:prelude/string.wado//String" = ref.null none;
 global global:reflect_struct_field_get_generic.wado::__const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
 global global:reflect_struct_field_get_generic.wado::__const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-global global:reflect_struct_field_get_generic.wado::__const_obj_12: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-global global:core:prelude/array.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46, 46), used: 5 };
-global global:core:prelude/array.wado::__const_obj_15: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
+global global:core:prelude/array.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46, 46), used: 5 };
+global global:core:prelude/array.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
 
 fn "reflect_struct_field_get_generic.wado/__test_0_members___get___reads_a_generic_instance_field_value_at_runtime"() {
     let out: ref "core:prelude/string.wado//String";
@@ -165,6 +164,8 @@ fn "reflect_struct_field_get_generic.wado/__test_0_members___get___reads_a_gener
     let start_67: i32;
     let new_used_83: i32;
     let start_84: i32;
+    let __sroa_b_items: ref "core:prelude//List<i32>";
+    __sroa_b_items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_8, out);
@@ -182,7 +183,7 @@ fn "reflect_struct_field_get_generic.wado/__test_0_members___get___reads_a_gener
     __local_8.used = new_used_30;
     builtin::array_set_u8(__local_8.repr, start_31, 61);
     __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(global:reflect_struct_field_get_generic.wado::__const_obj_12.repr, 0, 3, __local_9, 1, 256);
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(__sroa_b_items.repr, 0, 3, __local_9, 1, 256);
     new_used_50 = __local_8.used + 1;
     if @unlikely(new_used_50 > builtin::array_len(__local_8.repr)) {
         cold_path;
@@ -473,7 +474,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(repr
                 break b30;
             }
             if shown > 0 {
-                s_12 = global:core:prelude/array.wado::__const_obj_15;
+                s_12 = global:core:prelude/array.wado::__const_obj_14;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_12);
             }
             "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_17(builtin::array_get_value<i32>(repr, i)), f);
@@ -484,7 +485,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>"(repr
     };
     if select i32(marker, truncated, 0) {
         if shown > 0 {
-            s_20 = global:core:prelude/array.wado::__const_obj_14;
+            s_20 = global:core:prelude/array.wado::__const_obj_13;
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_20);
         } else {
             s_22 = global:core:prelude/format.wado::__const_obj_1;
