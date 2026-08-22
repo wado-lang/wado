@@ -50,6 +50,7 @@ internal trait Ord: Eq {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
+
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
@@ -576,6 +577,7 @@ internal trait RefMut {
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
+#[compiler_item("index_ref")]
 internal trait IndexRef<IndexType> {
     type Output: Ref;
 
@@ -586,6 +588,7 @@ internal trait IndexRef<IndexType> {
 /// Mutable reference indexing: `container[i].mutating_method()`.
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
+#[compiler_item("index_ref_mut")]
 internal trait IndexRefMut<IndexType> {
     type Output: RefMut;
 
@@ -596,6 +599,7 @@ internal trait IndexRefMut<IndexType> {
 /// Value-assignment indexing: `container[i] = value`.
 /// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
+#[compiler_item("index_assign")]
 internal trait IndexAssign<IndexType> {
     type Output;
 
@@ -616,6 +620,7 @@ internal trait IndexValue<IndexType> {
 
 /// Trait for the `+` operator.
 /// Types implementing this trait can use the `+` operator for addition.
+#[compiler_item("add")]
 internal trait Add<Rhs = Self> {
     type Output;
 
@@ -625,6 +630,7 @@ internal trait Add<Rhs = Self> {
 
 /// Trait for the `-` operator (binary subtraction).
 /// Types implementing this trait can use the `-` operator for subtraction.
+#[compiler_item("sub")]
 internal trait Sub<Rhs = Self> {
     type Output;
 
@@ -634,6 +640,7 @@ internal trait Sub<Rhs = Self> {
 
 /// Trait for the `*` operator.
 /// Types implementing this trait can use the `*` operator for multiplication.
+#[compiler_item("mul")]
 internal trait Mul<Rhs = Self> {
     type Output;
 
@@ -643,6 +650,7 @@ internal trait Mul<Rhs = Self> {
 
 /// Trait for the `/` operator.
 /// Types implementing this trait can use the `/` operator for division.
+#[compiler_item("div")]
 internal trait Div<Rhs = Self> {
     type Output;
 
@@ -652,6 +660,7 @@ internal trait Div<Rhs = Self> {
 
 /// Trait for the `%` operator.
 /// Types implementing this trait can use the `%` operator for remainder.
+#[compiler_item("rem")]
 internal trait Rem<Rhs = Self> {
     type Output;
 
@@ -661,6 +670,7 @@ internal trait Rem<Rhs = Self> {
 
 /// Trait for the unary `-` operator (negation).
 /// Types implementing this trait can use the `-` prefix operator.
+#[compiler_item("neg")]
 internal trait Neg {
     type Output;
 
@@ -668,6 +678,7 @@ internal trait Neg {
     fn neg(&self) -> Self::Output;
 }
 /// Trait for the `&` operator (bitwise AND).
+#[compiler_item("bit_and")]
 internal trait BitAnd<Rhs = Self> {
     type Output;
 
@@ -676,6 +687,7 @@ internal trait BitAnd<Rhs = Self> {
 }
 
 /// Trait for the `|` operator (bitwise OR).
+#[compiler_item("bit_or")]
 internal trait BitOr<Rhs = Self> {
     type Output;
 
@@ -684,6 +696,7 @@ internal trait BitOr<Rhs = Self> {
 }
 
 /// Trait for the `^` operator (bitwise XOR).
+#[compiler_item("bit_xor")]
 internal trait BitXor<Rhs = Self> {
     type Output;
 
@@ -692,6 +705,7 @@ internal trait BitXor<Rhs = Self> {
 }
 
 /// Trait for the `~` operator (bitwise NOT).
+#[compiler_item("bit_not")]
 internal trait BitNot {
     type Output;
 
@@ -700,6 +714,7 @@ internal trait BitNot {
 }
 
 /// Trait for the `<<` operator (left shift).
+#[compiler_item("shl")]
 internal trait Shl {
     type Output;
 
@@ -708,6 +723,7 @@ internal trait Shl {
 }
 
 /// Trait for the `>>` operator (right shift).
+#[compiler_item("shr")]
 internal trait Shr {
     type Output;
 
@@ -1076,6 +1092,88 @@ internal trait Iterator {
     fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> {
         return IterZip { first: *self, second: other };
     }
+
+    /// Adds the remaining elements. None for an empty iterator.
+    fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S> {
+        return S::sum_iter(self);
+    }
+
+    /// Multiplies the remaining elements. None for an empty iterator.
+    fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P> {
+        return P::product_iter(self);
+    }
+
+    /// The smallest remaining element, the first on ties. None for an empty iterator.
+    fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E> {
+        return E::min_iter(self);
+    }
+
+    /// The largest remaining element, the last on ties. None for an empty iterator.
+    fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E> {
+        return E::max_iter(self);
+    }
+
+    /// The smallest remaining element under `cmp`, the first on ties.
+    fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            while let Some(item) = self.next() {
+                if let Less = cmp(&item, &best) {
+                    best = item;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The largest remaining element under `cmp`, the last on ties.
+    fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            while let Some(item) = self.next() {
+                if cmp(&best, &item) != Ordering::Greater {
+                    best = item;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The remaining element with the smallest `key`, the first on ties.
+    fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            let mut best_key = key(first);
+            while let Some(item) = self.next() {
+                let item_key = key(item);
+                if let Less = item_key.cmp(&best_key) {
+                    best = item;
+                    best_key = item_key;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
+
+    /// The remaining element with the largest `key`, the last on ties.
+    fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item> {
+        if let Some(first) = self.next() {
+            let mut best = first;
+            let mut best_key = key(first);
+            while let Some(item) = self.next() {
+                let item_key = key(item);
+                if best_key.cmp(&item_key) != Ordering::Greater {
+                    best = item;
+                    best_key = item_key;
+                }
+            }
+            return Option::Some(best);
+        }
+        return null;
+    }
 }
 
 /// Generic map iterator adapter that wraps any Iterator.
@@ -1337,6 +1435,56 @@ impl ConvertError {
 }
 
 
+/// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
+/// bound. Implemented for every `Add<Output = Self>`.
+internal trait Sum {
+    type Elem;
+    fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+}
+
+impl<T: Add<Output = T>> Sum for T {
+    type Elem = T;
+
+    fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.reduce(|a: T, b: T| a + b);
+    }
+}
+
+/// Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
+/// element bound. Implemented for every `Mul<Output = Self>`.
+internal trait Product {
+    type Elem;
+    fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+}
+
+impl<T: Mul<Output = T>> Product for T {
+    type Elem = T;
+
+    fn product_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.reduce(|a: T, b: T| a * b);
+    }
+}
+
+/// Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
+/// `max`'s element bound. Implemented for every `Ord`.
+internal trait Extremum {
+    type Elem;
+    fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+    fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+}
+
+impl<T: Ord> Extremum for T {
+    type Elem = T;
+
+    fn min_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.min_by(|a: &T, b: &T| a.cmp(b));
+    }
+
+    fn max_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+        return iter.max_by(|a: &T, b: &T| a.cmp(b));
+    }
+}
+
 /// Trait for creating a collection from any iterator of `Elem`.
 internal trait FromIterator {
     type Elem;
@@ -1347,6 +1495,7 @@ internal trait FromIterator {
 /// Implement this to make a type constructible from `{ key: value, ... }` literals.
 /// Keys are always String (from field names); `Value` is the element type.
 /// `Output` is the finished value (often `Self` for mutable types).
+#[compiler_item("key_value_literal_builder")]
 internal trait KeyValueLiteralBuilder {
     type Value;
     type Output;
@@ -1380,6 +1529,7 @@ impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
 /// Builder trait for constructing a value from a sequence literal `[e0, e1, ...]`.
 /// Implement this to make a type constructible from sequence literals.
 /// `Element` is the element type; `Output` is the finished value.
+#[compiler_item("sequence_literal_builder")]
 internal trait SequenceLiteralBuilder {
     type Element;
     type Output;
@@ -1395,6 +1545,7 @@ internal trait SequenceLiteralBuilder {
 /// Implemented automatically for any `T: SequenceLiteralBuilder<Output = T>`.
 /// For immutable output types, implement this explicitly and set `type Builder`
 /// to the mutable builder struct that builds this type.
+#[compiler_item("sequence_literal")]
 internal trait SequenceLiteral {
     type Element;
     type Builder;

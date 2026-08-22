@@ -11,7 +11,6 @@ use {
     IndexRef,
     Iterator,
     IntoIterator,
-    Add,
     Eq,
     Ord,
     Ordering,
@@ -353,42 +352,6 @@ impl SliceValueIter<T> {
         }
         self.index = self.end;
         return List::internal_from_raw(repr, remaining);
-    }
-}
-
-impl<T: Add> SliceValueIter<T> {
-    pub fn sum(&mut self) -> Option<T> {
-        return self.reduce(|a: T, b: T| a + b);
-    }
-}
-
-impl<T: Ord> SliceValueIter<T> {
-    pub fn min(&mut self) -> Option<T> {
-        if let Some(first) = self.next() {
-            let mut result = first;
-            for let item of self {
-                if let Less = item.cmp(&result) {
-                    result = item;
-                }
-            }
-            return Option::Some(result);
-        } else {
-            return null;
-        }
-    }
-
-    pub fn max(&mut self) -> Option<T> {
-        if let Some(first) = self.next() {
-            let mut result = first;
-            for let item of self {
-                if let Greater = item.cmp(&result) {
-                    result = item;
-                }
-            }
-            return Option::Some(result);
-        } else {
-            return null;
-        }
     }
 }
 

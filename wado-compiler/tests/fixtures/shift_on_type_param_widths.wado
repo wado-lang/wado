@@ -1,0 +1,23 @@
+// `Shl` / `Shr` declare `rhs: u32` whatever the receiver is, and the native
+// instruction takes both operands at one width. Relowering a 64-bit shift fed
+// `i64.shl` an `i32` and produced an invalid module.
+use { println } from "core:cli";
+
+fn shl_by<T: Shl<Output = T>>(x: T) -> T {
+    return x << 3;
+}
+
+fn shr_by<T: Shr<Output = T>>(x: T) -> T {
+    return x >> 1;
+}
+
+export fn run() with Stdout {
+    let a = builtin::black_box(4 as i64);
+    let b = builtin::black_box(8 as u64);
+    let c = builtin::black_box(4 as i32);
+    let d = builtin::black_box(4 as u8);
+    println(`${shl_by(a)} ${shr_by(b)} ${shl_by(c)} ${shl_by(d)}`);
+}
+
+__DATA__
+{"stdout": "32 4 32 32\n"}

@@ -224,42 +224,34 @@ impl TypeSystem {
             | Expr::Error(_) => false,
         }
     }
+}
 
-    /// Map a binary operator to its `(trait_name, method_name)` pair, or `None`
-    /// for the short-circuit operators, which dispatch through no trait. A trait
-    /// with a [`CompilerItem`] anchor (`Eq`) resolves through the registry, so a
-    /// stdlib rename stays transparent; the rest are literals. `And` / `Or` are
-    /// explicit arms, so a new [`BinaryOp`] variant fails the build here.
-    pub(crate) fn operator_trait_method(&self, op: &BinaryOp) -> Option<(String, &'static str)> {
-        match op {
-            BinaryOp::Add => Some(("Add".to_string(), "add")),
-            BinaryOp::Sub => Some(("Sub".to_string(), "sub")),
-            BinaryOp::Mul => Some(("Mul".to_string(), "mul")),
-            BinaryOp::Div => Some(("Div".to_string(), "div")),
-            BinaryOp::Mod => Some(("Rem".to_string(), "rem")),
-            BinaryOp::BitAnd => Some(("BitAnd".to_string(), "bitand")),
-            BinaryOp::BitOr => Some(("BitOr".to_string(), "bitor")),
-            BinaryOp::BitXor => Some(("BitXor".to_string(), "bitxor")),
-            BinaryOp::Shl => Some(("Shl".to_string(), "shl")),
-            BinaryOp::Shr => Some(("Shr".to_string(), "shr")),
-            BinaryOp::Eq | BinaryOp::NotEq => Some((
-                self.type_table
-                    .borrow()
-                    .compiler_trait_name(CompilerItem::Eq)
-                    .to_string(),
-                "eq",
-            )),
-            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some((
-                self.type_table
-                    .borrow()
-                    .compiler_trait_name(CompilerItem::Ord)
-                    .to_string(),
-                "cmp",
-            )),
-            // Logical `&&` / `||` short-circuit on `bool`; no trait dispatch.
-            BinaryOp::And | BinaryOp::Or => None,
+/// The trait `op` dispatches through and the method it calls, or `None` for
+/// the short-circuit operators, which dispatch through no trait. `And` / `Or`
+/// are explicit arms, so a new [`BinaryOp`] variant fails the build here.
+pub(crate) fn operator_trait_method(op: &BinaryOp) -> Option<(CompilerItem, &'static str)> {
+    match op {
+        BinaryOp::Add => Some((CompilerItem::Add, "add")),
+        BinaryOp::Sub => Some((CompilerItem::Sub, "sub")),
+        BinaryOp::Mul => Some((CompilerItem::Mul, "mul")),
+        BinaryOp::Div => Some((CompilerItem::Div, "div")),
+        BinaryOp::Mod => Some((CompilerItem::Rem, "rem")),
+        BinaryOp::BitAnd => Some((CompilerItem::BitAnd, "bitand")),
+        BinaryOp::BitOr => Some((CompilerItem::BitOr, "bitor")),
+        BinaryOp::BitXor => Some((CompilerItem::BitXor, "bitxor")),
+        BinaryOp::Shl => Some((CompilerItem::Shl, "shl")),
+        BinaryOp::Shr => Some((CompilerItem::Shr, "shr")),
+        BinaryOp::Eq | BinaryOp::NotEq => Some((CompilerItem::Eq, "eq")),
+        BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
+            Some((CompilerItem::Ord, "cmp"))
         }
+        BinaryOp::And | BinaryOp::Or => None,
     }
+}
+
+/// The compiler item `op` dispatches through.
+pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
+    operator_trait_method(op).map(|(item, _)| item)
 }
 
 /// Pure type-shape helpers answerable from the type table alone (peel

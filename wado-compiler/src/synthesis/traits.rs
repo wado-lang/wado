@@ -761,14 +761,14 @@ fn register_reflect_assoc_types(
             let Some(base_decl) = base_decl else { continue };
             tt.register_generic_assoc_type_def(
                 base_decl,
-                trait_key,
+                crate::tir::TraitRef::bare(trait_key),
                 (*assoc_name).to_string(),
                 *resolved,
             );
         } else {
             tt.register_assoc_type_resolution(
                 self_type,
-                trait_key,
+                crate::tir::TraitRef::bare(trait_key),
                 (*assoc_name).to_string(),
                 *resolved,
             );
@@ -2326,7 +2326,7 @@ fn generate_enum_reflect_methods(
             .expect(KEYED);
         tt.register_assoc_type_resolution(
             enum_type,
-            reflect_enum,
+            crate::tir::TraitRef::bare(reflect_enum),
             REFLECT_MEMBERS_ASSOC.to_string(),
             members_tuple_type,
         );
@@ -2693,7 +2693,7 @@ fn generate_flags_reflect_methods(
             .expect(KEYED);
         tt.register_assoc_type_resolution(
             target.flags_type,
-            reflect_flags,
+            crate::tir::TraitRef::bare(reflect_flags),
             REFLECT_MEMBERS_ASSOC.to_string(),
             members_tuple_type,
         );

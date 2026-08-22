@@ -514,6 +514,16 @@ and the derivation filters it by a frame of the walk's own. That is why it canno
 be mistaken for a scope, and why it is sanctioned rather than scheduled for
 removal.
 
+### A bound means what its writer wrote
+
+Syntax means what the frame that wrote it says. A supertrait bound reached
+through `T: Derived` was written in `Derived`'s frame, so `Item = A` there is
+`Derived`'s `A`. An inherited bound carries its writer, and a right-hand side
+naming the writer's own parameters stays abstract rather than binding to a name
+the asking frame happens to share.
+
+Fixture: `supertrait_binding_keeps_writer_frame.wado`.
+
 ### What a derivation may not be
 
 A derivation reaches a module's own scope and no further. Three shapes look like
@@ -536,6 +546,51 @@ spelling no query can mistake for an identity.
 
 A rendering is never read back into a declaration, and a name-keyed map is the
 same defect waiting for a reader.
+
+## Trait arguments
+
+An identity is a declaration plus the arguments it was instantiated at, and an
+associated type belongs to that: `<Cm as Combine>::Out` and
+`<Cm as Combine<Inch>>::Out` are two answers. Keying them by the declaration
+alone let one impl overwrite the other's.
+
+A bound is a bare name — the parser reads `<...>` after one as associated-type
+bindings — so a bound always means the trait at its declared defaults. The
+arguments an identity carries are therefore only the ones an impl writes beyond
+those defaults, `Self` meaning the impl's target: `impl Add<Cm> for Cm` and
+`impl Add for Cm` are one identity, `impl Add<Inch> for Cm` another. One
+predicate decides it for both the impl's minted name and the key its associated
+types register under, so §8's rendering and the registry cannot disagree.
+
+A bound therefore selects only an impl at that instantiation, and the
+associated type it pins is read from whichever registry the serving impl wrote
+to — a concrete impl records a resolution, a generic one a definition to
+substitute. Reading one of the two is what let a widening
+`impl<T> Mul for W<T>` satisfy `Mul<Output = T>`.
+
+Fixtures: `assoc_type_per_trait_args.wado`,
+`impl_writes_default_trait_arg.wado`,
+`error_bound_needs_default_instantiation.wado`,
+`error_blanket_pinned_assoc_generic_impl.wado`.
+
+## Compiler items
+
+A trait the compiler supplies behaviour for — an operator, indexing, a literal
+builder, `Eq` / `Ord`, a reflection kind — is recognised by a
+`DefId → CompilerItem` map, never by a spelling in the asking scope, which
+answers for a user trait sharing the name and declines where a module shadows
+the prelude's. Every site deciding an operator asks it: which impls a bound
+admits, which primitives supply arithmetic, which instruction a call lowers back
+to, which right-hand type a literal takes.
+
+A type that merely erases to a scalar — a newtype, `flags`, an `enum` — is its
+own declaration, so an impl it writes outranks the erased form's instruction.
+Only a primitive _is_ the instruction.
+
+Fixtures: `error_user_trait_does_not_capture_add.wado`,
+`error_user_trait_does_not_capture_index.wado`,
+`user_trait_method_survives_relowering.wado`,
+`eq_ord_manual_impl_wins.wado`.
 
 ## Impl target arguments
 

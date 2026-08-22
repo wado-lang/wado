@@ -278,7 +278,32 @@ scope: {
 2. Check if result has `next()` method returning `Option<T>`
 3. Infer `Item` type from `Option<T>`
 
-### 7. Iterator Combinator Methods
+### 7. Bounded Terminals
+
+`sum`, `product`, `min`, `max` need `Item: Add<Output = Item>`,
+`Mul<Output = Item>` or `Ord`, which an associated type cannot carry. They take the shape `collect` already uses — a
+method type parameter with a default — routing the bound through an `internal`
+carrier trait keyed on `Elem`:
+
+```wado
+impl<T: Add<Output = T>> Sum for T { type Elem = T; … }
+
+fn sum<S: Sum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<S>
+```
+
+`Product` is the same over `Mul`, `Extremum` over `Ord`; `min_by` / `max_by` /
+`min_by_key` / `max_by_key` need no element bound and are plain defaults. All
+eight return `Option` — Wado has no `Zero`, and `Default` would be a lie for
+`min`. The `min` three keep the first of equal elements and the `max` three the
+last, as Rust's do, so the two ends stay complementary.
+
+A `Ref` chain reaches none of the four: `&T` is not `Ord`, and it inherits a
+receiverless method only by forwarding, which `sum_iter(…) -> Option<Self>`
+does not. `min_by` / `max_by` want a `fn mut(&&T, &&T)` comparator, which has
+no spelling; only `min_by_key` / `max_by_key` carry over. `iter_value()` names
+the step back.
+
+### 8. Iterator Combinator Methods
 
 Iterator combinators are defined as methods on `Iterator`. Initially, implement as standalone functions, then migrate to default trait methods when supported.
 
@@ -351,7 +376,7 @@ trait Iterator {
 }
 ```
 
-### 8. Combinator Iterator Types
+### 9. Combinator Iterator Types
 
 ```wado
 /// Map iterator - transforms elements
@@ -394,7 +419,7 @@ impl Iterator for FilterIter<I, P> {
 }
 ```
 
-### 9. Tuple IntoIterator (Homogeneous Only)
+### 10. Tuple IntoIterator (Homogeneous Only)
 
 Homogeneous tuples implement `IntoIterator`:
 
@@ -442,7 +467,7 @@ impl IntoIterator for [T, T, T] {
 // ... up to reasonable tuple size (e.g., 12)
 ```
 
-### 10. Range Iterator
+### 11. Range Iterator
 
 See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
 
@@ -492,7 +517,7 @@ for let i of 0..<10 {
 let sum = (1..<101).fold(0, |acc: i32, x: i32| acc + x);  // 5050
 ```
 
-### 11. String Iterator
+### 12. String Iterator
 
 ```wado
 /// Iterator over string characters (Unicode code points)
@@ -522,7 +547,7 @@ impl Iterator for Chars {
 }
 ```
 
-### 12. Empty and Once Iterators
+### 13. Empty and Once Iterators
 
 ```wado
 /// An iterator that yields nothing
@@ -562,7 +587,7 @@ pub fn once<T>(item: T) -> Once<T> {
 }
 ```
 
-### 13. Enumerate Iterator
+### 14. Enumerate Iterator
 
 ```wado
 /// Iterator that yields (index, element) pairs
@@ -590,7 +615,7 @@ for let [i, x] of arr.iter().enumerate() {
 }
 ```
 
-### 14. Implementation Phases
+### 15. Implementation Phases
 
 #### Phase 1: Minimal Core (No Compiler Changes)
 
@@ -635,7 +660,7 @@ Add combinator types and methods:
 - `collect()` method on Iterator
 - End-to-end: `[1,2,3].iter().filter(...).map(...).collect()`
 
-### 15. Known Compiler Limitations
+### 16. Known Compiler Limitations
 
 #### Parser: `self` by Value Not Supported
 

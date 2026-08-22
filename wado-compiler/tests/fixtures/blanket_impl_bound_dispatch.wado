@@ -1,0 +1,26 @@
+// A blanket impl's method called through a generic bound. Its template is keyed
+// by the blanket's receiver param (`T`), not the call site's (`M`).
+use { println } from "core:cli";
+
+trait Marker {
+    fn mark(&self) -> String;
+}
+
+impl<T: Ord> Marker for T {
+    pub fn mark(&self) -> String {
+        return "marked";
+    }
+}
+
+fn marked<M: Marker>(x: M) -> String {
+    return x.mark();
+}
+
+export fn run() with Stdout {
+    assert marked(21) == "marked";
+    assert marked("s") == "marked";
+    println(marked(21));
+}
+
+__DATA__
+{"stdout": "marked\n"}

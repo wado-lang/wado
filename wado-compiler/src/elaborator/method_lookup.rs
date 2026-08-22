@@ -8,6 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
 use crate::tir::{
@@ -39,12 +40,6 @@ pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replac
 /// item_id)` and resolves to the block's digested [`ImplHeader`] via
 /// [`impl_header`]. Dispatch cannot reach the impl AST at all.
 struct ImplBlockRef(ModuleSource, AstId);
-
-/// A trait spelling's head: `Add<Feet>` is an `Add` impl. Trait arguments are
-/// selected on separately, so a lookup by operator name compares heads.
-fn trait_head(spelling: &str) -> &str {
-    spelling.split('<').next().unwrap_or(spelling)
-}
 
 /// The digested header of the impl block `r` points at. Borrowed from the
 /// caller's `TraitEnv` handle rather than from `&self`, so the header stays
@@ -104,8 +99,9 @@ pub(super) struct MethodInferenceInput<'a> {
     pub expected_return_type: Option<TypeId>,
     /// The dispatch-resolved trait, when this is a trait method. Disambiguates
     /// the method lookup for same-named methods on different traits (e.g.
-    /// `payload` on Serialize vs Deserialize).
-    pub trait_name: Option<&'a str>,
+    /// `payload` on Serialize vs Deserialize). A declaration, not a spelling:
+    /// two modules' same-named traits are two traits.
+    pub trait_decl: Option<crate::defs::DefId>,
     /// Module declaring the method. See
     /// [`Elaborator::fill_defaulted_method_type_args`].
     pub declaring_module: Option<ModuleSource>,
@@ -394,7 +390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str) -> bool,
+        trait_matches: impl Fn(&str, Option<crate::defs::DefId>) -> bool,
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
@@ -408,7 +404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
             let trait_name = self.get_type_name(header.trait_type.as_ref().unwrap());
-            if !trait_matches(&trait_name) {
+            if !trait_matches(&trait_name, header.trait_ref) {
                 continue;
             }
             let impl_sig = signatures
@@ -432,7 +428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str) -> bool,
+        trait_matches: impl Fn(&str, Option<crate::defs::DefId>) -> bool,
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
@@ -466,15 +462,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
         span: Span,
     ) -> Option<TypeId> {
+        let (item, method_name) = super::tysys::operator_trait_method(op)?;
+        let trait_ = self.tysys.compiler_trait_def(item)?;
+        // A type parameter has no impl block to read the rhs off; its bounds
+        // say it, and `Shl::shl(&self, rhs: u32)` is why a literal needs to be
+        // told. A bound cannot vary the declared rhs, so no selection arises.
+        let param_name = match self.tysys.type_table.borrow().get(self_type_id) {
+            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
+            _ => None,
+        };
+        if let Some(param_name) = param_name {
+            return self.bound_declared_rhs_type(&param_name, trait_, method_name, self_type_id);
+        }
         let struct_name = self.tysys.struct_name_for_type(self_type_id)?;
-        let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
-        let admitted = self.find_arithmetic_trait_impls(
-            &struct_name,
-            self_type_id,
-            &trait_name,
-            method_name,
-            rhs,
-        );
+        let admitted =
+            self.find_arithmetic_trait_impls(&struct_name, self_type_id, trait_, method_name, rhs);
         self.report_ambiguous_operator_rhs(&admitted, self_type_id, *op, span);
         let [trait_info] = admitted.as_slice() else {
             return None;
@@ -487,6 +489,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => t,
             }
         })
+    }
+
+    /// The declaration an operator dispatches through, as a compiler item
+    /// names it.
+    pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<crate::defs::DefId> {
+        self.tysys
+            .compiler_trait_def(super::tysys::operator_compiler_item(op)?)
+    }
+
+    /// The right-hand type `trait_`'s declaration gives `method_name`, read off
+    /// whichever bound names that trait — a hint for typing a literal, so it
+    /// reports no ambiguity of its own; the dispatch already does.
+    fn bound_declared_rhs_type(
+        &mut self,
+        param_name: &str,
+        trait_: crate::defs::DefId,
+        method_name: &str,
+        self_type_id: TypeId,
+    ) -> Option<TypeId> {
+        let bounds = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)?
+            .clone();
+        let declared = bounds.iter().find_map(|bound| {
+            let decl = self.trait_decl_at(bound.id, &bound.name)?;
+            if decl != trait_ {
+                return None;
+            }
+            let sig = &self.trait_sig_of(&decl)?.method(method_name)?.sig;
+            sig.decl.param_types.get(sig.first_value_param()).copied()
+        })?;
+        // The same slots the dispatch binds, so the hint and the call agree on
+        // what a bare bound means.
+        let slots = self.bare_bound_slots(trait_, self_type_id);
+        let substituted = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(declared, &slots);
+        Some(self.tysys.type_table.borrow().peel_refs(substituted))
     }
 
     /// An operator whose receiver implements its trait at several right-hand
@@ -538,7 +582,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
-        let (trait_name, method_name) = self.tysys.operator_trait_method(op)?;
+        let (item, method_name) = super::tysys::operator_trait_method(op)?;
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         // `1 + m` reads the impl on the right operand's type and gives the
         // literal that same type, so the impl must be the one whose right-hand
         // type is it — an `Add<Feet>` on `Meters` does not answer for `1 + m`.
@@ -546,7 +591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_arithmetic_trait_impl(
             &struct_name,
             rhs_type_id,
-            &trait_name,
+            trait_,
             method_name,
             Some(&rhs),
         )?;
@@ -1047,7 +1092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
-        trait_name: Option<&str>,
+        trait_decl: Option<crate::defs::DefId>,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         inferred: &mut [TypeId],
@@ -1063,8 +1108,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !has_fillable {
             return;
         }
-        if let Some(trait_name) = trait_name {
-            self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_name);
+        if let Some(trait_) = trait_decl {
+            self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
         }
         // Re-registering the parameters gives a default like `= T` a scope to
         // resolve against. Number them from the index the declaration gave the
@@ -1116,7 +1161,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             raw_args,
             decl_return_type,
             expected_return_type,
-            trait_name,
+            trait_decl,
             declaring_module,
             span,
         } = input;
@@ -1163,7 +1208,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.fill_defaulted_method_type_args(
             &method_type_params,
             receiver_type,
-            trait_name,
+            trait_decl,
             slots,
             declaring_module,
             &mut inferred,
@@ -1565,15 +1610,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return true;
                 }
                 names_to_check.iter().any(|target| {
-                    self.tysys.find_trait_impl_for_type(
+                    self.tysys.find_trait_impl_for_subject(
                         &self.annotate_ctx,
                         &type_lookup,
+                        receiver_type_id,
                         &target.receiver(self.tysys.resolutions.defs()),
                         bound_def,
                     )
                 })
             });
-            if bounds_satisfied {
+            // The bound holding is not the whole condition: a blanket pinning
+            // an associated type to its receiver (`T: Mul<Output = T>`) does
+            // not apply to one that widens.
+            if bounds_satisfied
+                && self
+                    .tysys
+                    .blanket_assoc_constraints_hold(receiver_type_id, bounds)
+            {
                 impl_refs.push(ImplBlockRef(module.clone(), *ast_id));
             }
         }
@@ -2102,6 +2155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (sig, m.type_params.clone())
             });
         let trait_type_for_name = header.trait_type.as_ref().unwrap().clone();
+        let target_for_name = header.ty.clone();
         // The trait's identity, resolved in the impl's own frame: the decl key
         // from the impl module's imports (so an alias resolves to the declaring
         // module), the arguments with the impl's bound type params substituted
@@ -2213,11 +2267,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
             found_traits.push(TraitMethodMatch {
-                trait_name: crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
-                    super::trait_env::written_type_args(
-                        &trait_type_for_name,
-                        &scope.tysys.resolutions,
+                trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
+                    crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
+                        super::trait_env::written_type_args(
+                            &trait_type_for_name,
+                            &scope.tysys.resolutions,
+                        ),
                     ),
+                    &trait_type_for_name,
+                    &target_for_name,
+                    &scope.tysys.resolutions,
                 ),
                 trait_decl,
                 trait_args: trait_args.clone(),
@@ -2269,11 +2328,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
-                        super::trait_env::written_type_args(
-                            &trait_type_for_name,
-                            &scope.tysys.resolutions,
+                    trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
+                        crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
+                            super::trait_env::written_type_args(
+                                &trait_type_for_name,
+                                &scope.tysys.resolutions,
+                            ),
                         ),
+                        &trait_type_for_name,
+                        &target_for_name,
+                        &scope.tysys.resolutions,
                     ),
                     trait_decl,
                     trait_args: trait_args.clone(),
@@ -2631,7 +2695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexRef",
+            CompilerItem::IndexRef,
             "index_ref",
             "Output",
             expected_index_type,
@@ -2661,7 +2725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "KeyValueLiteralBuilder",
+            CompilerItem::KeyValueLiteralBuilder,
             "insert_literal",
             "Value",
             None,
@@ -2671,7 +2735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find_assoc_type_in_trait_impl(
                     struct_name,
                     base_type_id,
-                    "KeyValueLiteralBuilder",
+                    CompilerItem::KeyValueLiteralBuilder,
                     "Output",
                 )
                 .unwrap_or(TypeTable::UNKNOWN);
@@ -2691,14 +2755,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let builder_type = self.find_assoc_type_in_trait_impl(
             struct_name,
             base_type_id,
-            "KeyValueLiteral",
+            CompilerItem::KeyValueLiteral,
             "Builder",
         )?;
         let builder_name = self.tysys.struct_name_for_type(builder_type)?;
         if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
             &builder_name,
             builder_type,
-            "KeyValueLiteralBuilder",
+            CompilerItem::KeyValueLiteralBuilder,
             "insert_literal",
             "Value",
             None,
@@ -2719,7 +2783,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_base_name: &str,
+        item: CompilerItem,
         assoc_name: &str,
     ) -> Option<TypeId> {
         let concrete_type_args = self
@@ -2729,10 +2793,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
 
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |trait_name| trait_name.starts_with(trait_base_name),
+            |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
@@ -2764,7 +2829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_indexing_trait_impl(
                 struct_name,
                 base_type_id,
-                "SequenceLiteralBuilder",
+                CompilerItem::SequenceLiteralBuilder,
                 "push_literal",
                 "Element",
                 None,
@@ -2774,7 +2839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find_assoc_type_in_trait_impl(
                     struct_name,
                     base_type_id,
-                    "SequenceLiteralBuilder",
+                    CompilerItem::SequenceLiteralBuilder,
                     "Output",
                 )
                 .unwrap_or(base_type_id);
@@ -2792,7 +2857,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let builder_type = self.find_assoc_type_in_trait_impl(
             struct_name,
             base_type_id,
-            "SequenceLiteral",
+            CompilerItem::SequenceLiteral,
             "Builder",
         )?;
         let builder_name = self.tysys.struct_name_for_type(builder_type)?;
@@ -2800,7 +2865,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_indexing_trait_impl(
                 &builder_name,
                 builder_type,
-                "SequenceLiteralBuilder",
+                CompilerItem::SequenceLiteralBuilder,
                 "push_literal",
                 "Element",
                 None,
@@ -2810,7 +2875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find_assoc_type_in_trait_impl(
                     &builder_name,
                     builder_type,
-                    "SequenceLiteralBuilder",
+                    CompilerItem::SequenceLiteralBuilder,
                     "Output",
                 )
                 .unwrap_or(base_type_id);
@@ -2835,7 +2900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexAssign",
+            CompilerItem::IndexAssign,
             "index_assign",
             "Output",
             None,
@@ -2861,7 +2926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexRefMut",
+            CompilerItem::IndexRefMut,
             "index_ref_mut",
             "Output",
             None,
@@ -2890,7 +2955,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexValue",
+            CompilerItem::IndexValue,
             "index_value",
             "Output",
             expected_index_type,
@@ -2913,12 +2978,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
         match self
-            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_name, method_name, rhs)
+            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs)
             .as_slice()
         {
             [only] => Some(only.clone()),
@@ -2937,7 +3002,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_name: &str,
+        trait_: crate::defs::DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
@@ -2954,10 +3019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.collect_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            // The operator traits carry a right-hand type argument now, so a
-            // candidate renders as `Add<Feet>`; the head is what names the
-            // operator.
-            |found_trait_name| trait_head(found_trait_name) == trait_name,
+            |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
@@ -3017,7 +3079,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
                     // path records `IndexValue<i32>`.
-                    trait_name: header.fq_trait(&s.tysys.resolutions)?,
+                    trait_name: s
+                        .tysys
+                        .trait_env
+                        .fq_trait_of_impl(header, &s.tysys.resolutions)?,
                     rhs_type,
                 })
             },
@@ -3070,7 +3135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_base_name: &str,
+        item: CompilerItem,
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
@@ -3088,10 +3153,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
 
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |trait_base| trait_base.starts_with(trait_base_name),
+            |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
                 // The trait's index-type argument (`List<i32>` in `impl
                 // Index<List<i32>>`), returned for subscript coercion and used
@@ -3128,7 +3194,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return None;
                 }
 
-                let trait_name = header.fq_trait(&s.tysys.resolutions)?;
+                let trait_name = s
+                    .tysys
+                    .trait_env
+                    .fq_trait_of_impl(header, &s.tysys.resolutions)?;
                 // Find the method. Only its receiver shape is needed here —
                 // the indexing types come from the impl's associated-type
                 // bindings.

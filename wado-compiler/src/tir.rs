@@ -644,6 +644,93 @@ impl TypeSet {
     }
 }
 
+/// A trait at the arguments it was instantiated at (WEP 2026-08-12): `Combine`
+/// and `Combine<Inch>` are two. `args` holds only what an impl wrote beyond the
+/// declared defaults, so a bound — writing none — is always [`TraitRef::bare`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TraitRef {
+    pub decl: crate::defs::DefId,
+    pub args: Vec<TypeId>,
+}
+
+impl TraitRef {
+    #[must_use]
+    pub fn bare(decl: crate::defs::DefId) -> Self {
+        Self {
+            decl,
+            args: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn new(decl: crate::defs::DefId, args: Vec<TypeId>) -> Self {
+        Self { decl, args }
+    }
+}
+
+/// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
+/// than an instantiated type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct GenericAssocTypeKey {
+    target_decl: crate::ast::AstId,
+    trait_decl: crate::defs::DefId,
+    assoc_name: String,
+}
+
+/// What an associated type belongs to. The trait's arguments are not part of
+/// it: a bound writes none, so every lookup names them all and
+/// [`AssocAnswers`] picks between them.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AssocTypeKey {
+    receiver: TypeId,
+    trait_decl: crate::defs::DefId,
+    assoc_name: String,
+}
+
+/// The answers registered under one key, by the arguments the impl wrote
+/// beyond the declared defaults: `impl Add for Cm` and `impl Add<Inch> for Cm`
+/// both give `Output`.
+#[derive(Debug, Clone, Default)]
+struct AssocAnswers(Vec<(Vec<TypeId>, TypeId)>);
+
+impl AssocAnswers {
+    fn insert(&mut self, args: Vec<TypeId>, answer: TypeId) {
+        match self.0.iter_mut().find(|(written, _)| *written == args) {
+            Some(slot) => slot.1 = answer,
+            None => self.0.push((args, answer)),
+        }
+    }
+
+    /// The one answer a bound names: the bare instantiation where one is
+    /// registered, else whatever the arguments-writing impls agree on. A bound
+    /// writes no arguments, so it cannot pick between impls that disagree.
+    fn bare(&self) -> Option<TypeId> {
+        one_assoc_answer(self.tagged())
+    }
+
+    /// Each answer paired with whether a bare bound names it, for a caller
+    /// weighing answers from several traits at once.
+    fn tagged(&self) -> impl Iterator<Item = (bool, TypeId)> + Clone {
+        self.0
+            .iter()
+            .map(|(args, answer)| (args.is_empty(), *answer))
+    }
+}
+
+/// The one answer among `candidates`, preferring those a bare bound names when
+/// any is registered: a bound writes no trait arguments, so an impl that does
+/// is consulted only when nothing else answers. `None` when they disagree.
+fn one_assoc_answer<T: Copy + PartialEq>(
+    candidates: impl Iterator<Item = (bool, T)> + Clone,
+) -> Option<T> {
+    let bare = candidates.clone().any(|(bare, _)| bare);
+    let mut answers = candidates
+        .filter(|(is_bare, _)| *is_bare || !bare)
+        .map(|(_, answer)| answer);
+    let first = answers.next()?;
+    answers.all(|answer| answer == first).then_some(first)
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -661,14 +748,20 @@ pub struct TypeTable {
     ///
     /// Keyed by trait because one type may implement several declaring the
     /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
-    assoc_type_resolutions: IndexMap<(TypeId, crate::defs::DefId, String), TypeId>,
+    /// `<type as trait[args]>::name` → the type it resolves to, the arguments
+    /// being what the impl wrote beyond the declared defaults — so a bare bound
+    /// and `impl Add<Cm> for Cm` meet at the empty list.
+    assoc_type_resolutions: IndexMap<AssocTypeKey, AssocAnswers>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
     /// The `TypeId` is typically a `TypeParam` that can be substituted using the
     /// `GenericInstance`'s `type_args`. Populated when processing generic impl blocks
     /// (e.g., `impl Iterator for ListIter<T> { type Item = T; }`).
     /// Used by the monomorphizer to resolve associated types for `GenericInstance` types.
-    generic_assoc_type_defs: IndexMap<(crate::ast::AstId, crate::defs::DefId, String), TypeId>,
+    /// A generic impl's `type X = …` before substitution, keyed like
+    /// [`Self::assoc_type_resolutions`] but by the target's declaration: two
+    /// generic impls of one trait at different instantiations are two answers.
+    generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -2215,6 +2308,14 @@ impl TypeTable {
         matches!(self.get(base), ResolvedType::Primitive(_))
     }
 
+    /// Whether `id` bottoms out in a primitive Wasm *scalar* — every primitive
+    /// but `v128`, whose arithmetic is lane-wise and known only to the lane
+    /// type's own impl.
+    pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
+        let base = self.get_ultimate_base_type(id);
+        matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
+    }
+
     /// Whether a value of this type leaves nothing on the Wasm stack: unit, or
     /// a reference to unit — `&x` is transparent at the WIR level.
     pub fn is_stackless(&self, type_id: TypeId) -> bool {
@@ -2404,22 +2505,29 @@ impl TypeTable {
         })
     }
 
-    /// Register an associated type resolution: for concrete type `concrete_id` (e.g., `JsonSerializer`),
-    /// the associated type `assoc_name` (e.g., `"StructSerializer"`) resolves to `resolved_id`
-    /// (e.g., `JsonStructSerializer`).
+    /// Register `<concrete_id as trait_ref>::assoc_name` → `resolved_id`: for
+    /// `impl Serializer for JsonSerializer`, `"StructSerializer"` →
+    /// `JsonStructSerializer`.
     pub fn register_assoc_type_resolution(
         &mut self,
         concrete_id: TypeId,
-        trait_key: crate::defs::DefId,
+        trait_ref: TraitRef,
         assoc_name: String,
         resolved_id: TypeId,
     ) {
         self.assoc_type_resolutions
-            .insert((concrete_id, trait_key, assoc_name), resolved_id);
+            .entry(AssocTypeKey {
+                receiver: concrete_id,
+                trait_decl: trait_ref.decl,
+                assoc_name,
+            })
+            .or_default()
+            .insert(trait_ref.args, resolved_id);
     }
 
-    /// Resolve `<concrete_id as trait_name>::assoc_name` — the exact form,
-    /// for callers that know which trait the projection came from.
+    /// Resolve `<concrete_id as trait_key>::assoc_name` for a caller that knows
+    /// which trait the projection came from. Writing no trait arguments, it
+    /// names the defaulted instantiation, else what the rest agree on.
     pub fn resolve_assoc_type_of_trait(
         &self,
         concrete_id: TypeId,
@@ -2427,8 +2535,12 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.assoc_type_resolutions
-            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
-            .copied()
+            .get(&AssocTypeKey {
+                receiver: concrete_id,
+                trait_decl: *trait_key,
+                assoc_name: assoc_name.to_string(),
+            })?
+            .bare()
     }
 
     /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`
@@ -2458,17 +2570,12 @@ impl TypeTable {
     /// two make it a coin flip, so the caller must qualify with
     /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
-        let mut found = None;
-        for ((type_id, _, name), &resolved) in &self.assoc_type_resolutions {
-            if *type_id != concrete_id || name != assoc_name {
-                continue;
-            }
-            if found.is_some_and(|prior| prior != resolved) {
-                return None;
-            }
-            found = Some(resolved);
-        }
-        found
+        one_assoc_answer(
+            self.assoc_type_resolutions
+                .iter()
+                .filter(move |(key, _)| key.receiver == concrete_id && key.assoc_name == assoc_name)
+                .flat_map(|(_, answers)| answers.tagged()),
+        )
     }
 
     /// Register a generic associated type definition.
@@ -2481,12 +2588,18 @@ impl TypeTable {
     pub fn register_generic_assoc_type_def(
         &mut self,
         base_decl: crate::ast::AstId,
-        trait_key: crate::defs::DefId,
+        trait_ref: TraitRef,
         assoc_name: String,
         type_param_id: TypeId,
     ) {
         self.generic_assoc_type_defs
-            .insert((base_decl, trait_key, assoc_name), type_param_id);
+            .entry(GenericAssocTypeKey {
+                target_decl: base_decl,
+                trait_decl: trait_ref.decl,
+                assoc_name,
+            })
+            .or_default()
+            .insert(trait_ref.args, type_param_id);
     }
 
     /// The generic definition of `assoc_name` on `base_decl`, together with
@@ -2498,17 +2611,43 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         assoc_name: &str,
     ) -> Option<(crate::defs::DefId, TypeId)> {
-        let mut found: Option<(crate::defs::DefId, TypeId)> = None;
-        for ((decl, trait_key, name), &def_id) in &self.generic_assoc_type_defs {
-            if *decl != base_decl || name != assoc_name {
-                continue;
-            }
-            if found.as_ref().is_some_and(|(_, prior)| *prior != def_id) {
-                return None;
-            }
-            found = Some((*trait_key, def_id));
+        let mut candidates: Vec<(bool, crate::defs::DefId, TypeId)> = self
+            .generic_assoc_type_defs
+            .iter()
+            .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
+            .flat_map(|(key, answers)| {
+                answers
+                    .tagged()
+                    .map(move |(bare, def_id)| (bare, key.trait_decl, def_id))
+            })
+            .collect();
+        if candidates.iter().any(|(bare, ..)| *bare) {
+            candidates.retain(|(bare, ..)| *bare);
         }
-        found
+        // Several traits may declare one name over a single definition —
+        // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
+        // so the definitions decide agreement.
+        let (_, trait_decl, def_id) = *candidates.last()?;
+        candidates
+            .iter()
+            .all(|(_, _, def)| *def == def_id)
+            .then_some((trait_decl, def_id))
+    }
+
+    /// [`Self::generic_assoc_type_def`] for a caller that knows the trait.
+    fn generic_assoc_type_def_of_trait(
+        &self,
+        base_decl: crate::ast::AstId,
+        trait_key: &crate::defs::DefId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        self.generic_assoc_type_defs
+            .get(&GenericAssocTypeKey {
+                target_decl: base_decl,
+                trait_decl: *trait_key,
+                assoc_name: assoc_name.to_string(),
+            })?
+            .bare()
     }
 
     /// Register associated-type resolutions for a freshly monomorphized struct.
@@ -2522,16 +2661,24 @@ impl TypeTable {
         base_decl: crate::ast::AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
-        let defs: Vec<(crate::defs::DefId, String, TypeId)> = self
+        let defs: Vec<(TraitRef, String, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
-            .filter(|((decl, _, _), _)| *decl == base_decl)
-            .map(|((_, trait_key, assoc_name), &def_id)| (*trait_key, assoc_name.clone(), def_id))
+            .filter(|(key, _)| key.target_decl == base_decl)
+            .flat_map(|(key, answers)| {
+                answers.0.iter().map(move |(args, def_id)| {
+                    (
+                        TraitRef::new(key.trait_decl, args.clone()),
+                        key.assoc_name.clone(),
+                        *def_id,
+                    )
+                })
+            })
             .collect();
-        for (trait_key, assoc_name, def_id) in defs {
+        for (trait_ref, assoc_name, def_id) in defs {
             let resolved = self.substitute_type_params(def_id, substitution);
             if !self.contains_type_param(resolved) {
-                self.register_assoc_type_resolution(concrete_id, trait_key, assoc_name, resolved);
+                self.register_assoc_type_resolution(concrete_id, trait_ref, assoc_name, resolved);
             }
         }
     }
@@ -2672,22 +2819,6 @@ impl TypeTable {
         self.resolve_generic_assoc_type_mono(concrete_id, assoc_name)
     }
 
-    /// The registered resolution of `trait_name::assoc_name` on `concrete_id`.
-    /// Unlike [`Self::resolve_assoc_type`] this cannot be confused by a name
-    /// several traits share; unlike
-    /// [`Self::resolve_trait_assoc_type_of_instance`] it does not substitute a
-    /// generic definition, so it needs no interning.
-    pub fn resolve_trait_assoc_type(
-        &self,
-        concrete_id: TypeId,
-        trait_key: &crate::defs::DefId,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        self.assoc_type_resolutions
-            .get(&(concrete_id, *trait_key, assoc_name.to_string()))
-            .copied()
-    }
-
     /// [`Self::resolve_assoc_type_of_instance`] for a caller that knows which
     /// trait declares the associated type. The untyped form scans every trait
     /// and gives up when two disagree, so a name several traits share — the
@@ -2699,17 +2830,13 @@ impl TypeTable {
         trait_key: &crate::defs::DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let key = (concrete_id, *trait_key, assoc_name.to_string());
-        if let Some(&resolved) = self.assoc_type_resolutions.get(&key) {
+        if let Some(resolved) = self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
+        {
             return Some(resolved);
         }
         let type_args = self.nominal_type_args(concrete_id)?;
-        let def_key = (
-            self.decl_of_type(concrete_id)?,
-            *trait_key,
-            assoc_name.to_string(),
-        );
-        let def_type_id = *self.generic_assoc_type_defs.get(&def_key)?;
+        let decl = self.decl_of_type(concrete_id)?;
+        let def_type_id = self.generic_assoc_type_def_of_trait(decl, trait_key, assoc_name)?;
         let subst: IndexMap<u32, TypeId> = type_args
             .iter()
             .enumerate()
@@ -2940,6 +3067,18 @@ impl TypeTable {
                 // Substitute the parameter first; only attempt projection
                 // resolution once the underlying type is fully concrete.
                 let substituted_base = self.subst_rec(param_id, substitution, vars, projections);
+                // A projection over a projection is answered by what the base
+                // carries: `IntoIterator::Iter: Iterator<Item = Self::Item>`
+                // makes `C::Iter::Item` the `C::Item` the frame already named.
+                if let ResolvedType::AssocTypeProjection {
+                    assoc_type_bindings: base_bindings,
+                    ..
+                } = self.get(substituted_base)
+                    && let Some((_, answer)) =
+                        base_bindings.iter().find(|(name, _)| *name == assoc_name)
+                {
+                    return *answer;
+                }
                 if !self.contains_type_param(substituted_base) {
                     // Associated types are inherited through references (mirrors
                     // method-call auto-deref), so peel `&`/`&mut` before
@@ -2969,6 +3108,13 @@ impl TypeTable {
                         self.resolve_generic_assoc_type_mono(concrete, &assoc_name)
                     {
                         return resolved;
+                    }
+                    // A scalar primitive's arithmetic is compiler-supplied, so
+                    // nothing registered its `Output`: it is the receiver
+                    // itself, a newtype over one included. `v128` is not one —
+                    // only a lane type's own impl names its output.
+                    if assoc_name == "Output" && self.is_scalar_primitive_like(concrete) {
+                        return concrete;
                     }
                 }
                 // Bindings are resolved in the same frame as the rest of the
@@ -3172,20 +3318,17 @@ impl TypeTable {
     }
 
     /// Whether `id` (recursively) mentions anything a type check cannot decide
-    /// yet: an inference variable awaiting its solver, a type pack awaiting
-    /// expansion, an associated-type projection awaiting its impl, or an
-    /// unresolved / error type.
-    ///
-    /// Deliberately *not* the same question as [`Self::contains_type_param`].
-    /// A rigid type parameter is decided — it is opaque, and stands only for
-    /// itself — so it does not belong here.
+    /// yet: an inference variable, a type pack, or an unresolved / error type.
+    /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
-            | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                !self.projects_from_param(*param_id)
+            }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
@@ -3206,6 +3349,18 @@ impl TypeTable {
         }
     }
 
+    /// Whether a projection over `base` bottoms out at a rigid type parameter,
+    /// chaining through nested projections (`I::Iter::Item`).
+    fn projects_from_param(&self, base: TypeId) -> bool {
+        match self.get(base) {
+            ResolvedType::TypeParam { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.projects_from_param(*param_id)
+            }
+            _ => false,
+        }
+    }
+
     /// Whether `id` (recursively) mentions a *rigid* type parameter — a slot
     /// of some declaration's own frame, as opposed to an inference variable a
     /// solver still owns.
@@ -3216,6 +3371,9 @@ impl TypeTable {
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Reactive(inner) => self.contains_rigid_param(*inner),
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.contains_rigid_param(*param_id)
+            }
             ResolvedType::Function {
                 params,
                 return_type,
@@ -3298,10 +3456,9 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` (recursively) mentions a `TypeParam` / `TypePack` whose
-    /// `index` equals `index`. Used to tell whether a method type parameter is
-    /// inferable from an argument position (it appears in a value-parameter's
-    /// type) versus only from the return type.
+    /// Whether `id` (recursively) mentions the frame slot `index`, projections
+    /// included; slot 0 of a trait's frame is `Self`. Tells whether a method
+    /// type parameter is inferable from an argument or only from the return.
     pub fn contains_type_param_index(&self, id: TypeId, index: u32) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {

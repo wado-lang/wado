@@ -911,6 +911,10 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 ### Prelude Traits
 
 ```wado
+// For arithmetic operators; `a + b` is `T::Output`, so a generic body
+// folding back into its own parameter writes `T: Add<Output = T>`
+trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
+
 // For == and != operators
 trait Eq { fn eq(&self, other: &Self) -> bool; }
 
@@ -1062,7 +1066,11 @@ let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a n
 // Combinators
 let doubled = arr.into_iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
 let evens = arr.into_iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
-let sum = arr.into_iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
+let acc = arr.into_iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
+
+// sum/product/min/max and the _by/_by_key variants work on any iterator
+let sum = arr.into_iter().sum();                                   // Some(15)
+let hi = arr.into_iter().map(|x: i32| x * 2).max();                // Some(10)
 
 // Chaining
 let result = arr.into_iter()

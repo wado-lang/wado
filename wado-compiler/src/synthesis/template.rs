@@ -21,7 +21,7 @@ use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::elaborator::trait_env::{BlanketBound, BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal,
     TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
@@ -760,13 +760,13 @@ fn peel_transparent_newtype(
         let base = {
             let tt = ctx.tt.borrow();
             match tt.get(tid) {
-                ResolvedType::Newtype { def, base_type, .. }
+                ResolvedType::Newtype { base_type, .. }
                     if ctx
                         .trait_env
                         .trait_def_of_fq(trait_name)
                         .is_none_or(|trait_| {
                             !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                                &Receiver::Type(FqTypeName::of_head(tt.defs(), *def)),
+                                &tt.impl_receiver_key(tid),
                                 trait_,
                             )
                         }) =>
@@ -973,11 +973,11 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
 
 /// Whether `type_id` satisfies a blanket impl's receiver-param `bounds`. A
 /// `Reflect*` bound holds exactly when the receiver is that kind; any other
-/// bound is treated as satisfiable, preserving existing blanket dispatch
-/// (e.g. `IntoIterator`).
+/// bound is treated as satisfiable — deciding one needs the elaborator's
+/// trait query, which monomorphization has no access to.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
-    bounds: Vec<BlanketBound>,
+    bounds: &[BlanketBound],
     tt: &TypeTable,
 ) -> bool {
     if bounds.is_empty() {
@@ -996,10 +996,12 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
         CompilerItem::ReflectFlags,
     ];
     bounds.iter().all(|bound| {
-        match reflect_bounds
-            .into_iter()
-            .find(|item| bound.name == items.trait_name(*item))
-        {
+        let declared = bound.decl_ref.map(|decl| tt.defs().ast_id(decl));
+        match declared.and_then(|decl| {
+            reflect_bounds
+                .into_iter()
+                .find(|item| items.trait_decl(*item) == Some(decl))
+        }) {
             Some(required) => kind == Some(required),
             None => true,
         }
@@ -1036,9 +1038,9 @@ pub(crate) fn blanket_dispatch_for(
     // Param and pack projections must come from the same blanket, or the
     // template name would name one kind and the args another.
     let blanket = trait_env.value_blanket_for_receiver(
-        trait_name.base_name(),
+        trait_name.canonical()?,
         type_module.as_ref(),
-        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt),
+        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt),
     )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
@@ -1063,7 +1065,12 @@ pub(crate) fn blanket_dispatch_for(
                 // Substituting a pack needs interning, so a mutable table.
                 // Record it here, the one place that has one; later readers
                 // hold a shared borrow.
-                tt.register_assoc_type_resolution(type_id, bound_trait, assoc, projected);
+                tt.register_assoc_type_resolution(
+                    type_id,
+                    crate::tir::TraitRef::bare(bound_trait),
+                    assoc,
+                    projected,
+                );
                 impl_type_args.push(projected);
             }
         }

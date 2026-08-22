@@ -219,10 +219,30 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexRefMut`.
     RefMut,
-    /// `IndexValue<I>` — the value-copy indexing trait the CM list adapters
-    /// call through. Registered so a synthesis site names the declaration
-    /// rather than spelling `IndexValue`, which a user trait may share.
+    /// The indexing and literal-builder traits `a[i]`, `a[i] = v`, `&mut a[i]`
+    /// and a literal dispatch to.
     IndexValue,
+    IndexRef,
+    IndexRefMut,
+    IndexAssign,
+    SequenceLiteralBuilder,
+    KeyValueLiteralBuilder,
+    SequenceLiteral,
+    /// The traits an operator dispatches to. The compiler picks each by
+    /// construction, so they are items and not spellings a user trait of
+    /// the same name could answer for.
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Neg,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
+    Shl,
+    Shr,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
     /// (struct, variant, generic instance) implements `Eq`.
@@ -588,6 +608,24 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::IndexValue,
+        Self::IndexRef,
+        Self::IndexRefMut,
+        Self::IndexAssign,
+        Self::SequenceLiteralBuilder,
+        Self::KeyValueLiteralBuilder,
+        Self::SequenceLiteral,
+        Self::Add,
+        Self::Sub,
+        Self::Mul,
+        Self::Div,
+        Self::Rem,
+        Self::Neg,
+        Self::BitAnd,
+        Self::BitOr,
+        Self::BitXor,
+        Self::BitNot,
+        Self::Shl,
+        Self::Shr,
         Self::Eq,
         Self::Ord,
         Self::From,
@@ -753,6 +791,24 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::IndexValue => "index_value",
+            Self::IndexRef => "index_ref",
+            Self::IndexRefMut => "index_ref_mut",
+            Self::IndexAssign => "index_assign",
+            Self::SequenceLiteralBuilder => "sequence_literal_builder",
+            Self::KeyValueLiteralBuilder => "key_value_literal_builder",
+            Self::SequenceLiteral => "sequence_literal",
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Rem => "rem",
+            Self::Neg => "neg",
+            Self::BitAnd => "bit_and",
+            Self::BitOr => "bit_or",
+            Self::BitXor => "bit_xor",
+            Self::BitNot => "bit_not",
+            Self::Shl => "shl",
+            Self::Shr => "shr",
             Self::Eq => "eq",
             Self::Ord => "ord",
             Self::From => "from",
@@ -890,7 +946,19 @@ impl CompilerItem {
     pub fn is_required(self, world: &str) -> bool {
         match self {
             // Always loaded — `core:prelude` is auto-imported.
-            Self::List
+            Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Rem
+            | Self::Neg
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::BitNot
+            | Self::Shl
+            | Self::Shr
+            | Self::List
             | Self::Box
             | Self::I128
             | Self::U128
@@ -922,6 +990,12 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::IndexValue
+            | Self::IndexRef
+            | Self::IndexRefMut
+            | Self::IndexAssign
+            | Self::SequenceLiteralBuilder
+            | Self::KeyValueLiteralBuilder
+            | Self::SequenceLiteral
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1094,6 +1168,12 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::IndexValue
+            | Self::IndexRef
+            | Self::IndexRefMut
+            | Self::IndexAssign
+            | Self::SequenceLiteralBuilder
+            | Self::KeyValueLiteralBuilder
+            | Self::SequenceLiteral
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1124,6 +1204,18 @@ impl CompilerItem {
             | Self::UpperHex
             | Self::UpperHexAlt
             | Self::LowerExp
+            | Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Rem
+            | Self::Neg
+            | Self::BitAnd
+            | Self::BitOr
+            | Self::BitXor
+            | Self::BitNot
+            | Self::Shl
+            | Self::Shr
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
@@ -1471,6 +1563,10 @@ impl Resolved {
 #[derive(Clone, Debug)]
 pub struct CompilerItems {
     items: Vec<Option<Resolved>>,
+    /// The inverse of [`CompilerItems::trait_decl`], maintained by `register`.
+    /// Recognising a compiler item is on the hot trait-query path, so it is a
+    /// lookup rather than a scan.
+    trait_by_decl: crate::hashmap::IndexMap<crate::ast::AstId, CompilerItem>,
 }
 
 impl Default for CompilerItems {
@@ -1483,20 +1579,36 @@ impl Default for CompilerItems {
     }
 }
 
+/// Discriminant → slot in [`CompilerItems::items`]. `ALL` groups the variants
+/// by kind, not by discriminant, so the registry cannot index by `item as
+/// usize`; a variant missing from `ALL` fails the assertion below at compile.
+const SLOT_OF_ITEM: [usize; CompilerItem::COUNT] = {
+    let mut table = [usize::MAX; CompilerItem::COUNT];
+    let mut i = 0;
+    while i < CompilerItem::COUNT {
+        table[CompilerItem::ALL[i] as usize] = i;
+        i += 1;
+    }
+    let mut i = 0;
+    while i < CompilerItem::COUNT {
+        assert!(table[i] != usize::MAX, "every CompilerItem must be in ALL");
+        i += 1;
+    }
+    table
+};
+
 impl CompilerItems {
     pub fn new() -> Self {
         Self {
             items: vec![None; CompilerItem::COUNT],
+            trait_by_decl: crate::hashmap::IndexMap::default(),
         }
     }
 
     /// Internal: convert a [`CompilerItem`] to its dense index.
     /// `CompilerItem::ALL` is the source of truth for the ordering.
     fn index_of(item: CompilerItem) -> usize {
-        CompilerItem::ALL
-            .iter()
-            .position(|i| *i == item)
-            .expect("CompilerItem must appear in CompilerItem::ALL")
+        SLOT_OF_ITEM[item as usize]
     }
 
     /// Get the resolved data for `item`, or `None` if the stdlib has
@@ -1551,6 +1663,9 @@ impl CompilerItems {
                 new_module: resolved.module_source().clone(),
             }),
             None => {
+                if let Resolved::Trait { decl, .. } = &resolved {
+                    self.trait_by_decl.insert(*decl, item);
+                }
                 self.items[idx] = Some(resolved);
                 Ok(())
             }
@@ -1699,6 +1814,13 @@ impl CompilerItems {
             Resolved::Trait { decl, .. } => Some(*decl),
             _ => None,
         }
+    }
+
+    /// Which compiler item `decl` is the trait of. The inverse of
+    /// [`Self::trait_decl`].
+    #[must_use]
+    pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
+        self.trait_by_decl.get(&decl).copied()
     }
 
     /// The declaring node of a [`CompilerItemKind::Variant`] item.

@@ -1,0 +1,39 @@
+// `a * b` on a type parameter yields `T::Output`, not `T`. A widening operator
+// impl (`Cm * Cm -> Area`) is legal, and a generic over it returns the
+// projection; pinning `Output = T` is how a caller asks for the narrow case.
+use { println } from "core:cli";
+
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+impl Mul for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Cm) -> Area {
+        return Area { v: self.v * rhs.v };
+    }
+}
+
+fn scale<T: Mul>(a: T, b: T) -> T::Output {
+    return a * b;
+}
+
+fn squared<T: Mul<Output = T>>(a: T) -> T {
+    return a * a;
+}
+
+export fn run() with Stdout {
+    let area: Area = Cm { v: 2 } * Cm { v: 3 };
+    assert area.v == 6;
+    assert scale(Cm { v: 2 }, Cm { v: 4 }).v == 8;
+    assert squared(5) == 25;
+    println(`${scale(Cm { v: 2 }, Cm { v: 4 }).v} ${squared(5)}`);
+}
+
+__DATA__
+{"stdout": "8 25\n"}

@@ -1,0 +1,50 @@
+// A projection over a rigid type parameter is a type the frame can name:
+// `-> T::Out` returns it, and `T: Widen<Out = T>` pins it back to `T`.
+use { println } from "core:cli";
+
+trait Widen {
+    type Out;
+
+    fn widen(&self) -> Self::Out;
+}
+
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+impl Widen for Cm {
+    type Out = Area;
+
+    fn widen(&self) -> Area {
+        return Area { v: self.v * self.v };
+    }
+}
+
+impl Widen for i32 {
+    type Out = i32;
+
+    fn widen(&self) -> i32 {
+        return *self * 2;
+    }
+}
+
+fn grow<T: Widen>(a: T) -> T::Out {
+    return a.widen();
+}
+
+fn grow_in_place<T: Widen<Out = T>>(a: T) -> T {
+    return a.widen();
+}
+
+export fn run() with Stdout {
+    assert grow(Cm { v: 3 }).v == 9;
+    assert grow_in_place(21) == 42;
+    println(`${grow(Cm { v: 3 }).v} ${grow_in_place(21)}`);
+}
+
+__DATA__
+{"stdout": "9 42\n"}

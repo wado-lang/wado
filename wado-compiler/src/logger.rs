@@ -44,6 +44,10 @@ pub struct Logger<'a, H: CompilerHost> {
     /// Nesting depth of [`Logger::quiet`] scopes. While non-zero, an error is
     /// dropped instead of emitted and does not count.
     quiet_depth: Cell<usize>,
+    /// Error diagnostics already emitted. A signature is walked by more than
+    /// one phase, and the same message at the same place is the same fault —
+    /// saying it twice gives the reader nothing to act on.
+    reported: std::cell::RefCell<crate::hashmap::IndexSet<String>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -65,6 +69,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             level,
             error_count: Cell::new(0),
             quiet_depth: Cell::new(0),
+            reported: std::cell::RefCell::default(),
         }
     }
 
@@ -98,6 +103,11 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         if self.quiet_depth.get() > 0 {
             return Ok(());
         }
+        if let Some(identity) = Self::identity(&diag)
+            && !self.reported.borrow_mut().insert(identity)
+        {
+            return Ok(());
+        }
         let count = self.error_count.get() + 1;
         self.error_count.set(count);
         self.host.emit_diagnostic(diag);
@@ -106,6 +116,17 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         } else {
             Ok(())
         }
+    }
+
+    /// What makes two diagnostics the same fault: one place, one severity, one
+    /// message. `None` where the span names no file — an offset alone is not a
+    /// place.
+    fn identity(diag: &Diagnostic) -> Option<String> {
+        let span = diag.span.as_ref().filter(|span| !span.file.is_empty())?;
+        Some(format!(
+            "{}:{}:{}\u{1}{:?}\u{1}{:?}\u{1}{}",
+            span.file, span.line, span.column, diag.severity, diag.code, diag.message
+        ))
     }
 
     /// Stamp `file` onto a diagnostic's span when the span carries no file of

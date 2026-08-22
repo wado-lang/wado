@@ -1,0 +1,45 @@
+// `impl Combine<Cm> for Cm` writes what `Rhs = Self` already says, so it names
+// the same trait as `impl Combine for Cm`. That written form was reachable only
+// by a direct call, and a bound dispatch found no body.
+use { println } from "core:cli";
+
+trait Combine<Rhs = Self> {
+    type Out;
+
+    fn combine(&self, rhs: &Rhs) -> Self::Out;
+}
+
+struct Cm {
+    v: i32,
+}
+
+impl Combine<Cm> for Cm {
+    type Out = Cm;
+
+    fn combine(&self, rhs: &Cm) -> Cm {
+        return Cm { v: self.v + rhs.v };
+    }
+}
+
+impl Add<Cm> for Cm {
+    type Output = Cm;
+
+    fn add(&self, rhs: &Cm) -> Cm {
+        return Cm { v: self.v + rhs.v };
+    }
+}
+
+fn join<T: Combine>(a: T, b: T) -> T::Out {
+    return a.combine(&b);
+}
+
+export fn run() with Stdout {
+    assert join(Cm { v: 2 }, Cm { v: 3 }).v == 5;
+    assert Cm { v: 2 }.combine(&Cm { v: 4 }).v == 6;
+    let xs: List<Cm> = [Cm { v: 2 }, Cm { v: 3 }];
+    assert xs.iter_value().sum() matches { Some(t) && t.v == 5 };
+    println(`${join(Cm { v: 2 }, Cm { v: 3 }).v} ${Cm { v: 2 }.combine(&Cm { v: 4 }).v}`);
+}
+
+__DATA__
+{"stdout": "5 6\n"}

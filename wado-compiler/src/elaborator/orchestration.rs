@@ -1251,6 +1251,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             interner: Rc::clone(&state.interner),
             suppress_reference_recording: false,
             infer_holes: super::infer_hole::InferHoleTable::default(),
+            assoc_binding_stack: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -3519,7 +3520,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            trait_key,
+                            crate::tir::TraitRef::bare(trait_key),
                             binding.name.clone(),
                             type_param_id,
                         );

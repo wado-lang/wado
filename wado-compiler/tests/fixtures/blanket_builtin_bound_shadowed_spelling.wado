@@ -1,0 +1,22 @@
+// A user trait shadows an operator trait's spelling here, where the prelude's
+// `impl<T: Add<Output = T>> Sum for T` is consumed but not written. Its bound
+// resolved at the blanket, so the shadowing does not reach it.
+use { println } from "core:cli";
+
+trait Add {
+    fn plus_one(&self) -> i32;
+}
+
+trait Mul {
+    fn twice(&self) -> i32;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3];
+    assert xs.iter_value().sum() matches { Some(v) && v == 6 };
+    assert xs.iter_value().product() matches { Some(v) && v == 6 };
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

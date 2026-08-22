@@ -1,0 +1,35 @@
+// A blanket pinning `Mul<Output = T>` does not apply to a widening impl, and a
+// direct call must decide that the same way a bound does. Gating only the bound
+// path let `Cm{}.squared()` bind and reach codegen as invalid Wasm.
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+trait Squarer {
+    fn squared(&self) -> Self;
+}
+
+impl<T: Mul<Output = T>> Squarer for T {
+    pub fn squared(&self) -> T {
+        return *self * *self;
+    }
+}
+
+impl Mul for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Cm) -> Area {
+        return Area { v: self.v * rhs.v };
+    }
+}
+
+export fn run() {
+    assert Cm { v: 3 }.squared().v == 9;
+}
+
+__DATA__
+{ "compile_error": "no method 'squared' found on type 'Cm'" }

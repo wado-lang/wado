@@ -1,0 +1,22 @@
+// A generic impl records its associated type as a definition to substitute,
+// not as a resolution, so reading only the resolutions saw no answer and let
+// the widening impl satisfy `Mul<Output = T>`.
+struct W<T> {
+    v: T,
+}
+
+impl<T> Mul for W<T> {
+    type Output = i32;
+
+    fn mul(&self, rhs: &W<T>) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let xs: List<W<i32>> = [W { v: 2 }, W { v: 3 }];
+    assert xs.iter_value().product() matches { Some(_) };
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Product'" }

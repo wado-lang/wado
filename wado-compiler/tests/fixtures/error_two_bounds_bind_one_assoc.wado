@@ -1,0 +1,38 @@
+// Two bounds *binding* an associated type is the same coin toss as two
+// declaring it. The binding lookup answered with the first and returned before
+// the ambiguity check ran.
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+    extra: i32,
+}
+
+impl Add for Cm {
+    type Output = Cm;
+
+    fn add(&self, rhs: &Cm) -> Cm {
+        return Cm { v: 1 };
+    }
+}
+
+impl Mul for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Cm) -> Area {
+        return Area { v: 2, extra: 3 };
+    }
+}
+
+fn scale<T: Add<Output = Cm> + Mul<Output = Area>>(a: T, b: T) -> T::Output {
+    return a * b;
+}
+
+export fn run() {
+    assert scale(Cm { v: 2 }, Cm { v: 3 }).extra == 3;
+}
+
+__DATA__
+{ "compile_error": "ambiguous associated type 'T::Output'" }

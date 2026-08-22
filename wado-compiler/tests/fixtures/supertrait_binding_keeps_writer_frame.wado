@@ -1,0 +1,47 @@
+// A supertrait's binding means what the trait that wrote it says: `Chain`'s
+// `Item = A` is `Chain`'s own parameter. Resolving the right-hand side in the
+// asking frame bound it to the `A` declared here instead.
+use { println } from "core:cli";
+
+trait Hold {
+    type Item;
+
+    fn get(&self) -> Self::Item;
+}
+
+trait Chain<A>: Hold<Item = A> {
+    fn tag(&self) -> i32;
+}
+
+struct A {
+    z: i32,
+}
+
+struct Bin {
+    v: i32,
+}
+
+impl Hold for Bin {
+    type Item = i32;
+
+    fn get(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Chain<i32> for Bin {
+    fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+fn read<T: Chain>(x: &T) -> T::Item {
+    return x.get();
+}
+
+export fn run() with Stdout {
+    println(`${read(&Bin { v: 5 })} ${A { z: 1 }.z}`);
+}
+
+__DATA__
+{"stdout": "5 1\n"}

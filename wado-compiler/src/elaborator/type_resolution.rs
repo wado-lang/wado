@@ -10,6 +10,10 @@ use super::Elaborator;
 use super::types::TypeError;
 use crate::symbol::SymbolKind;
 
+/// A bound reachable from a frame, paired with the trait that wrote it —
+/// `None` for one the frame wrote itself.
+type FrameBound = (crate::ast::TraitBound, Option<crate::defs::DefId>);
+
 /// Substitute named type parameters in an AST type.
 /// `params[i]` is replaced by `args[i]` throughout the type.
 pub(super) fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
@@ -165,6 +169,92 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
+    /// The identity an impl header names: the trait, plus the arguments it
+    /// writes beyond the declared defaults — `impl Add<Cm> for Cm` is the bare
+    /// instantiation a bound reaches, `impl Add<Inch> for Cm` keys its own.
+    pub(super) fn impl_trait_ref(
+        &mut self,
+        trait_type: &crate::ast::Type,
+        target: &crate::ast::Type,
+        trait_decl: crate::defs::DefId,
+    ) -> crate::tir::TraitRef {
+        let Some(params) = self
+            .tysys
+            .trait_env
+            .trait_decl_headers
+            .get(&trait_decl)
+            .map(|header| header.type_params.clone())
+        else {
+            return crate::tir::TraitRef::bare(trait_decl);
+        };
+        let kept = super::trait_env::non_default_arg_count(
+            trait_type,
+            target,
+            &params,
+            &self.tysys.resolutions,
+        );
+        let args = super::trait_env::written_arg_nodes(trait_type)
+            .iter()
+            .take(kept)
+            .map(|arg| self.resolve_type(arg))
+            .collect();
+        crate::tir::TraitRef::new(trait_decl, args)
+    }
+
+    /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
+    /// whether it did — answering with the first is a coin toss the writer
+    /// never made. Supertraits do not count: a direct bound wins there.
+    fn report_ambiguous_assoc_type(&self, param_name: &str, assoc_name: &str, span: Span) -> bool {
+        let Some(bounds) = self
+            .annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .get(param_name)
+        else {
+            return false;
+        };
+        // One bound cannot be a coin toss, and the walk below asks the scope
+        // for every bound's header.
+        if bounds.len() < 2 {
+            return false;
+        }
+        let declaring: Vec<&crate::ast::TraitBound> = bounds
+            .iter()
+            .filter(|bound| {
+                self.trait_assoc_type_decl(&bound.name, assoc_name)
+                    .is_some()
+            })
+            .collect();
+        if declaring.len() < 2 {
+            return false;
+        }
+        // Bounds that all pin the name to one type name one answer between
+        // them: `T: Add<Output = T> + Mul<Output = T>` is not a coin toss,
+        // where `Add<Output = Cm> + Mul<Output = Area>` is.
+        let pins: Vec<Option<crate::name::FqTypeName>> = declaring
+            .iter()
+            .map(|bound| {
+                bound
+                    .assoc_types
+                    .iter()
+                    .find(|constraint| constraint.name == assoc_name)
+                    .map(|constraint| {
+                        super::trait_env::written_type_arg(&constraint.ty, &self.tysys.resolutions)
+                    })
+            })
+            .collect();
+        if pins.iter().all(|pin| pin.is_some() && *pin == pins[0]) {
+            return false;
+        }
+        let _ = self.emit(TypeError::AmbiguousAssocType {
+            assoc: assoc_name.to_string(),
+            param: param_name.to_string(),
+            traits: declaring.iter().map(|bound| bound.name.clone()).collect(),
+            span,
+        });
+        true
+    }
+
     /// Which trait declares `assoc_name` for the `impl` block being elaborated:
     /// the trait it names, or the supertrait the name is inherited from.
     fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<crate::defs::DefId> {
@@ -263,25 +353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::TypeParam { .. }
                 )
             {
-                let assoc_bounds = self.find_assoc_type_bounds(self_type, &namespaced.name);
-                let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
-                    .iter()
-                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
-                    .collect();
-                let assoc_type_bindings =
-                    self.frame_assoc_bindings(self_type, "Self", &assoc_bounds);
-                let owning_trait = self.bound_declaring_assoc_type("Self", &namespaced.name);
-                return self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_assoc_type_projection_of_trait(
-                        self_type,
-                        owning_trait,
-                        namespaced.name.clone(),
-                        bound_names,
-                        assoc_type_bindings,
-                    );
+                return self.make_frame_projection(self_type, "Self", &namespaced.name);
             }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
@@ -333,44 +405,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // First, check if the current bounds directly specify this assoc type.
-            // e.g., I: IntoIterator<Item = u8> → I::Item resolves directly to u8.
+            let base_name = namespaced.namespace.clone();
+            if self.report_ambiguous_assoc_type(&base_name, &namespaced.name, namespaced.span) {
+                return TypeTable::ERROR;
+            }
+            // What the frame's bounds bind it to, where they say: `I:
+            // IntoIterator<Item = u8>` answers `I::Item` directly.
             if let Some(direct_type) =
-                self.frame_projection(param_type_id, &namespaced.namespace, &namespaced.name)
+                self.frame_projection(param_type_id, &base_name, &namespaced.name)
             {
                 return direct_type;
             }
-
-            // Look up trait bounds on the associated type from the trait declaration.
-            let assoc_bounds = self.find_assoc_type_bounds(param_type_id, &namespaced.name);
-            let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
-                .iter()
-                .map(|b| self.fq_trait_name_at(b.id, &b.name))
-                .collect();
-
-            // Compute assoc_type_bindings by resolving Self::X in the assoc type's bounds.
-            // e.g., IntoIterator::Iter has bound Iterator<Item = Self::Item>.
-            // With I: IntoIterator<Item = u8>, Self::Item = I::Item = u8,
-            // so I::Iter.assoc_type_bindings = [("Item", u8_typeid)].
-            let assoc_type_bindings = self.frame_assoc_bindings(
-                param_type_id,
-                &namespaced.namespace.clone(),
-                &assoc_bounds,
-            );
-
-            let owning_trait =
-                self.bound_declaring_assoc_type(&namespaced.namespace, &namespaced.name);
-            return self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_assoc_type_projection_of_trait(
-                    param_type_id,
-                    owning_trait,
-                    namespaced.name.clone(),
-                    bound_names,
-                    assoc_type_bindings,
-                );
+            return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
         }
 
         if self
@@ -775,17 +821,151 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if carried.is_some() {
             return carried;
         }
+        let resolved: Vec<TypeId> = self
+            .frame_assoc_bindings_of(base_name, assoc)
+            .into_iter()
+            .map(|ty| self.resolve_bound_binding(base_name, &ty))
+            .collect();
+        // Two bounds binding it differently is the coin toss the caller's
+        // ambiguity check reports; answering with the first would hide it.
+        let first = *resolved.first()?;
+        resolved.iter().all(|t| *t == first).then_some(first)
+    }
+
+    /// A bound's right-hand side, resolved in this frame. `Self` inside one is
+    /// the bounded type, which the frame files under `base_name`.
+    fn resolve_bound_binding(&mut self, base_name: &str, ty: &crate::ast::Type) -> TypeId {
+        match self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(base_name)
+            .map(|&(_, id)| id)
+        {
+            Some(id) => self.with_self_type(id, |s| s.resolve_type(ty)),
+            None => self.resolve_type(ty),
+        }
+    }
+
+    /// Every bound on `base_name` a projection may be answered from, each
+    /// paired with the trait that wrote it (`None` for the frame's own). A
+    /// supertrait binds an assoc type too, so one walk serves every lookup.
+    fn bound_closure_of(&mut self, base_name: &str) -> Option<Vec<FrameBound>> {
         let bounds = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(base_name)?
             .clone();
-        bounds
+        let inherited: Vec<FrameBound> = bounds
             .iter()
-            .flat_map(|bound| &bound.assoc_types)
-            .find(|binding| binding.name == assoc)
-            .map(|binding| self.resolve_type(&binding.ty.clone()))
+            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+            .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
+            .map(|i| (i.bound, Some(i.writer)))
+            .collect();
+        Some(
+            bounds
+                .into_iter()
+                .map(|bound| (bound, None))
+                .chain(inherited)
+                .collect(),
+        )
+    }
+
+    /// Whether the asking frame can answer `ty` at all: an inherited bound may
+    /// name its writer's own type parameters, which a bound cannot supply. Only
+    /// `Self` crosses, being the bounded type here.
+    fn frame_can_answer(&self, writer: Option<crate::defs::DefId>, ty: &crate::ast::Type) -> bool {
+        let Some(header) = writer.and_then(|w| self.tysys.trait_env.trait_decl_headers.get(&w))
+        else {
+            return true;
+        };
+        let mut mentioned = Vec::new();
+        ty.mentioned_names(&mut mentioned);
+        !header
+            .type_params
+            .iter()
+            .any(|param| mentioned.contains(&param.name))
+    }
+
+    /// What every bound in the closure binds `assoc` to. A binding the asking
+    /// frame cannot answer is dropped.
+    fn frame_assoc_bindings_of(&mut self, base_name: &str, assoc: &str) -> Vec<crate::ast::Type> {
+        self.bound_closure_of(base_name)
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|(bound, writer)| {
+                bound
+                    .assoc_types
+                    .iter()
+                    .filter(|b| b.name == assoc && self.frame_can_answer(*writer, &b.ty))
+                    .map(|b| b.ty.clone())
+            })
+            .collect()
+    }
+
+    /// The projection `base::assoc` as this frame builds it. The single
+    /// builder, so one written in a signature and one synthesized for an
+    /// expression intern to the same type.
+    pub(super) fn make_frame_projection(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        assoc: &str,
+    ) -> TypeId {
+        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc);
+        self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc)
+    }
+
+    /// [`Self::make_frame_projection`] for a caller that already knows which
+    /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
+    /// the site that dispatched can say which one `a * b` yields.
+    pub(super) fn make_frame_projection_of_trait(
+        &mut self,
+        base: TypeId,
+        base_name: &str,
+        owning_trait: Option<crate::defs::DefId>,
+        assoc: &str,
+    ) -> TypeId {
+        let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
+        let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
+            .iter()
+            .map(|b| self.fq_trait_name_at(b.id, &b.name))
+            .collect();
+        let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .make_assoc_type_projection_of_trait(
+                base,
+                owning_trait,
+                assoc.to_string(),
+                bound_names,
+                assoc_type_bindings,
+            )
+    }
+
+    /// [`Self::frame_projection`] scoped to one trait, so a second bound
+    /// declaring the same name never answers for it: `T: Mul<Output = T>`
+    /// answers `T::Output` where a bare `T: Mul` leaves it abstract.
+    pub(super) fn frame_projection_of_trait(
+        &mut self,
+        base_name: &str,
+        trait_: crate::defs::DefId,
+        assoc: &str,
+    ) -> Option<TypeId> {
+        let bounds = self.bound_closure_of(base_name)?;
+        let written = bounds
+            .into_iter()
+            .find_map(|(bound, writer)| {
+                let fq = self.fq_trait_name_at(bound.id, &bound.name);
+                (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
+                    .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
+                    .flatten()
+                    .filter(|b| self.frame_can_answer(writer, &b.ty))
+            })?
+            .ty;
+        Some(self.resolve_bound_binding(base_name, &written))
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this
@@ -813,7 +993,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         projections
             .into_iter()
             .filter_map(|(name, assoc)| {
-                Some((name, self.frame_projection(base, base_name, &assoc)?))
+                // A frame that binds `Self::X` answers with the binding, one
+                // that does not with the projection — which is built from
+                // `assoc`'s own bounds, so a pair already on the walk recurses.
+                let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
+                    let key = (base, assoc.clone());
+                    if !self.assoc_binding_stack.insert(key.clone()) {
+                        return None;
+                    }
+                    let built = self.make_frame_projection(base, base_name, &assoc);
+                    self.assoc_binding_stack.shift_remove(&key);
+                    Some(built)
+                })?;
+                Some((name, answer))
             })
             .collect()
     }

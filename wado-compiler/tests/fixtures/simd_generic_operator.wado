@@ -1,0 +1,40 @@
+// A generic `T: Add` body instantiated with a SIMD type. `i32x4` is a newtype
+// over `v128`, and only its own impl knows the lane width — so the operator
+// dispatches there, and a blanket bounded by `Add` binds it rather than peeling.
+use { println } from "core:cli";
+use { i32x4, f32x4 } from "core:simd";
+
+type Meters = i32;
+
+fn combine<T: Add<Output = T>>(a: T, b: T) -> T {
+    return a + b;
+}
+
+fn scaled<T: Mul<Output = T>>(a: T, b: T) -> T {
+    return a * b;
+}
+
+export fn run() with Stdout {
+    let lanes = combine(i32x4::splat(1), i32x4::splat(2));
+    assert lanes.extract_lane(0) == 3;
+    assert lanes.extract_lane(3) == 3;
+
+    let floats = scaled(f32x4::splat(1.5), f32x4::splat(2.0));
+    assert floats.extract_lane(0) == 3.0;
+
+    assert combine(20, 22) == 42;
+
+    // `Sum` / `Product` reach both newtypes through their blanket impls.
+    let vs: List<i32x4> = [i32x4::splat(1), i32x4::splat(2)];
+    assert vs.iter_value().sum() matches { Some(v) && v.extract_lane(0) == 3 };
+
+    let ms: List<Meters> = [1, 2, 3];
+    assert ms.iter_value().sum() matches { Some(v) && v == 6 };
+    assert ms.iter_value().product() matches { Some(v) && v == 6 };
+    assert ms.iter_value().max() matches { Some(v) && v == 3 };
+
+    println(`${lanes.extract_lane(0)} ${combine(20, 22)}`);
+}
+
+__DATA__
+{"stdout": "3 42\n"}
