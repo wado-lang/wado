@@ -1502,18 +1502,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an index expression
-    /// `IndexRefMut`'s `Output: RefMut` bound, asked of the container's concrete
-    /// element type. The impl's own `Output` is still the unsubstituted `T` here,
-    /// so the container is what can answer for a replace-on-assign element.
-    fn element_is_ref_mut(&self, container_type: TypeId) -> bool {
-        let Some(elem) = self.tysys.type_table.borrow().as_list(container_type) else {
-            return false;
-        };
-        let resolved = self.tysys.type_table.borrow().get(elem).clone();
-        self.tysys
-            .is_ref_mut_identity(&self.type_lookup(), &resolved)
-    }
-
     pub(super) fn resolve_index(
         &mut self,
         index: &ast::IndexExpr,
@@ -1634,7 +1622,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
                     )
-                    .filter(|_| self.element_is_ref_mut(base_type_id))
                     .map(|found| (found, "index_ref_mut"))
                 })
                 .flatten()
