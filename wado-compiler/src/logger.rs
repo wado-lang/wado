@@ -118,13 +118,14 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
-    /// What makes two diagnostics the same fault: one place, one message.
-    /// `None` where the span names no file — an offset alone is not a place.
+    /// What makes two diagnostics the same fault: one place, one severity, one
+    /// message. `None` where the span names no file — an offset alone is not a
+    /// place.
     fn identity(diag: &Diagnostic) -> Option<String> {
         let span = diag.span.as_ref().filter(|span| !span.file.is_empty())?;
         Some(format!(
-            "{}:{}:{}\u{1}{:?}\u{1}{}",
-            span.file, span.line, span.column, diag.code, diag.message
+            "{}:{}:{}\u{1}{:?}\u{1}{:?}\u{1}{}",
+            span.file, span.line, span.column, diag.severity, diag.code, diag.message
         ))
     }
 
