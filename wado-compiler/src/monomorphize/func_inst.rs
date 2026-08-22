@@ -1647,9 +1647,9 @@ impl Monomorphizer {
             .map(|(_, &tid)| tid)
     }
 
-    /// Resolve a `T^Trait::method` static call's dispatch receiver: peel a
-    /// newtype or a reference to the link that wrote the impl it inherits,
-    /// unless the receiver has its own, or a value blanket — never inherited.
+    /// Resolve a `T^Trait::method` static call's dispatch receiver, in order:
+    /// the receiver's own impl, the newtype or reference link it inherits one
+    /// from, a value blanket serving it — never inherited — then the base.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
@@ -1682,6 +1682,26 @@ impl Monomorphizer {
             return tid;
         }
         base
+    }
+
+    /// Where the impl serving `tid` lives. A newtype that wrote its own homes
+    /// it in its own module; only an inherited impl lives with the base, which
+    /// is the convention [`module_source_for_trait_impl`] peels to.
+    fn impl_module_of_receiver(
+        &self,
+        type_table: &TypeTable,
+        tid: TypeId,
+        info: &LocalMethodName,
+    ) -> Option<ModuleSource> {
+        let link = info
+            .trait_name
+            .as_ref()
+            .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
+            .and_then(|trait_| self.newtype_link_with_trait_impl(tid, type_table, trait_));
+        match link {
+            Some(link) => type_table.nominal_head(link).map(|(_, m)| m),
+            None => module_source_for_trait_impl(type_table, tid),
+        }
     }
 
     /// Whether an operator on `id` lowers to a scalar instruction rather than
@@ -2225,8 +2245,11 @@ impl Monomorphizer {
                         if receiver_is_concrete {
                             let concrete_type_id = receiver_tid
                                 .expect("receiver_is_concrete implies a resolved receiver");
-                            let receiver_module =
-                                module_source_for_trait_impl(type_table, concrete_type_id);
+                            let receiver_module = self.impl_module_of_receiver(
+                                type_table,
+                                concrete_type_id,
+                                &new_info,
+                            );
                             // Consult `concrete_impl_module_for` only: letting a
                             // generic `impl<T> Trait for Foo<T>` in would route
                             // `&List<i32>^Inspect` to List's impl instead of the
@@ -2276,8 +2299,21 @@ impl Monomorphizer {
                             } else {
                                 Vec::new()
                             };
+                            // A generic newtype dispatching to its *own* impl
+                            // keeps its own head, so the impl instantiation is
+                            // keyed on the arguments it carries — which
+                            // `generic_type_args` reports only for the shapes
+                            // that cannot inherit.
                             let impl_type_arg_tids: Vec<TypeId> = type_table
                                 .generic_type_args(concrete_type_id)
+                                .or_else(|| match type_table.get(concrete_type_id) {
+                                    ResolvedType::Newtype { type_args, .. }
+                                        if !type_args.is_empty() =>
+                                    {
+                                        Some(type_args.clone())
+                                    }
+                                    _ => None,
+                                })
                                 .unwrap_or_default();
                             // A generic-instance receiver
                             // (`List<i32>^Default::default`) must queue its impl
@@ -3302,7 +3338,7 @@ impl Monomorphizer {
         } = call;
         let receiver_module = {
             let inner = type_table.peel_refs(receiver_type_id);
-            module_source_for_trait_impl(type_table, inner)
+            self.impl_module_of_receiver(type_table, inner, &new_info)
         };
         // Consult `concrete_impl_module_for` only: a broader `impl_module_for`
         // would route `&List<i32>^Inspect` to List's generic impl instead of the
