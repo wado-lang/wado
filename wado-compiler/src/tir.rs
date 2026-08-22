@@ -2565,8 +2565,7 @@ impl TypeTable {
         }
         // Several traits may declare one name over a single definition —
         // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
-        // so the definitions decide agreement and the last impl registered
-        // names the trait.
+        // so the definitions decide agreement.
         let (_, trait_decl, def_id) = *candidates.last()?;
         candidates
             .iter()
@@ -3050,9 +3049,8 @@ impl TypeTable {
                         return resolved;
                     }
                     // A primitive's arithmetic is compiler-supplied, so nothing
-                    // registered its `Output`. It is the receiver itself — a
-                    // newtype over one inherits the arithmetic and stays the
-                    // newtype, so the base only decides whether this applies.
+                    // registered its `Output`: it is the receiver itself, a
+                    // newtype over one included.
                     if assoc_name == "Output"
                         && matches!(
                             self.get(self.get_ultimate_base_type(concrete)),
@@ -3263,14 +3261,8 @@ impl TypeTable {
     }
 
     /// Whether `id` (recursively) mentions anything a type check cannot decide
-    /// yet: an inference variable awaiting its solver, a type pack awaiting
-    /// expansion, or an unresolved / error type.
-    ///
-    /// Deliberately *not* the same question as [`Self::contains_type_param`].
-    /// A rigid type parameter is decided — it is opaque, and stands only for
-    /// itself — and so is a projection over one: no impl is in reach to look
-    /// through, so `T::Out` is its own answer. A projection over anything else
-    /// (`Array<T>::Elem`) still owes one.
+    /// yet: an inference variable, a type pack, or an unresolved / error type.
+    /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_)

@@ -486,9 +486,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// The declaration an operator dispatches through, as a compiler item names
-    /// it. The spelling answers nothing: a bound on a user trait that declares
-    /// a method of the same name is not the operator's.
+    /// The declaration an operator dispatches through, as a compiler item
+    /// names it.
     pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<crate::defs::DefId> {
         self.tysys
             .compiler_trait_def(super::tysys::operator_compiler_item(op)?)
@@ -1586,8 +1585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // The bound holding is not the whole condition: a blanket pinning
             // an associated type to its receiver (`T: Mul<Output = T>`) does
-            // not apply to one that widens. The bound path decides the same
-            // way, and a direct call must not disagree with it.
+            // not apply to one that widens.
             if bounds_satisfied
                 && self
                     .tysys
@@ -2985,8 +2983,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.collect_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            // The operator names a declaration: an impl of a user trait
-            // spelled `Add` is not an impl of the one `+` dispatches to.
             |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, _declared| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
@@ -3121,9 +3117,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
 
-        // The indexing traits name declarations, as the operators do: a
-        // prefix match let a user trait answer, and `IndexRef` accept an
-        // `IndexRefMut` impl.
         let trait_ = self.tysys.compiler_trait_def(item)?;
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),

@@ -1,7 +1,6 @@
 // `Add<Rhs = Self>` means a bare `T: Add` adds a `T`, so a literal right
-// operand is an error and the message says `T`. The hint that types the
-// literal bound only `Self`, leaving the trait's own `Rhs` slot rigid, so it
-// disagreed with the dispatch about what the bound declares.
+// operand is an error and the message says `T`. The hint that types the literal
+// bound only `Self`, so it disagreed with the dispatch.
 fn bump<T: Add<Output = T>>(a: T) -> T {
     return a + 1;
 }

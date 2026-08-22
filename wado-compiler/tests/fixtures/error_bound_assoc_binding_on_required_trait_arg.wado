@@ -1,8 +1,6 @@
 // A trait argument at a position with no declared default is not part of what
-// a bound names, so `T: IndexValue` reaches `impl IndexValue<i32> for Bag` and
-// the bound's `Output` constraint is checked against that impl's answer. The
-// impl registered `Output` under its own argument while the check queried the
-// bare one, and the mismatch went unreported.
+// a bound names, so `T: IndexValue` reaches `impl IndexValue<i32> for Bag`. The
+// impl registered `Output` under that argument, the check queried the bare one.
 struct Bag {
     xs: List<i32>,
 }

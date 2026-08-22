@@ -1689,8 +1689,7 @@ impl Monomorphizer {
         };
         // The receiver only: keeping the call for an impl a link *below* it
         // wrote leaves the dispatch asking the erased base, which carries no
-        // user impl at all. `newtype_link_impl_unreached.wado` pins what that
-        // costs.
+        // user impl. `newtype_link_impl_unreached.wado` pins the cost.
         !self.has_own_trait_impl(type_table, id, trait_)
     }
 
@@ -2409,9 +2408,7 @@ impl Monomorphizer {
                         .as_ref()
                         .and_then(crate::name::FqTraitName::canonical);
                     // Which operator this is, by declaration: a user trait
-                    // spelled `Neg` supplies no instruction, and relowering its
-                    // call would run the primitive's arithmetic instead of the
-                    // body the program wrote.
+                    // spelled `Neg` supplies no instruction of its own.
                     let item = trait_decl.and_then(|decl| {
                         type_table
                             .compiler_items()
@@ -2442,10 +2439,8 @@ impl Monomorphizer {
                         };
                         let mut right = unref_operand(&arg.expr, type_table);
                         // `Shl` / `Shr` declare `rhs: u32` whatever the
-                        // receiver is, and the native instruction takes both
-                        // operands at one width — so a 64-bit receiver needs
-                        // the amount widened rather than an `i64.shl` fed an
-                        // `i32`.
+                        // receiver is; the native instruction takes both
+                        // operands at one width.
                         if matches!(binary_op, TirBinaryOp::Shl | TirBinaryOp::Shr)
                             && right.type_id != left.type_id
                         {
@@ -4700,8 +4695,7 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
 }
 
 /// The instruction a monomorphized operator call lowers to, named by the
-/// compiler item its trait is. A user trait spelled `Neg` is a different
-/// declaration and supplies none.
+/// compiler item its trait is.
 fn trait_method_to_unary_op(item: Option<CompilerItem>, method_name: &str) -> Option<TirUnaryOp> {
     match (item?, method_name) {
         (CompilerItem::Neg, "neg") => Some(TirUnaryOp::Neg),

@@ -220,8 +220,7 @@ pub enum CompilerItem {
     /// bound gates `IndexRefMut`.
     RefMut,
     /// The indexing and literal-builder traits `a[i]`, `a[i] = v`, `&mut a[i]`
-    /// and a literal dispatch to. Registered for the same reason the operator
-    /// traits are: a user trait of the same name is a different declaration.
+    /// and a literal dispatch to.
     IndexValue,
     IndexRef,
     IndexRefMut,
@@ -1812,8 +1811,7 @@ impl CompilerItems {
     }
 
     /// Which compiler item `decl` is the trait of. The inverse of
-    /// [`Self::trait_decl`] and the only way to recognise one: the spelling
-    /// answers for a user trait sharing the name.
+    /// [`Self::trait_decl`].
     #[must_use]
     pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
         self.trait_by_decl.get(&decl).copied()

@@ -119,8 +119,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// What makes two diagnostics the same fault: one place, one message.
-    /// `None` where the span names no file — an offset alone is not a place,
-    /// and two modules share plenty of them.
+    /// `None` where the span names no file — an offset alone is not a place.
     fn identity(diag: &Diagnostic) -> Option<String> {
         let span = diag.span.as_ref().filter(|span| !span.file.is_empty())?;
         Some(format!(

@@ -996,8 +996,6 @@ pub(crate) fn receiver_satisfies_blanket_bounds(
         CompilerItem::ReflectFlags,
     ];
     bounds.iter().all(|bound| {
-        // The bound names a declaration, not a spelling: a user trait called
-        // `ReflectStruct` is not the compiler's and claims no kind.
         let declared = bound.decl_ref.map(|decl| tt.defs().ast_id(decl));
         match declared.and_then(|decl| {
             reflect_bounds

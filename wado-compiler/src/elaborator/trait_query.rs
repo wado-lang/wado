@@ -750,9 +750,7 @@ impl TypeSystem {
             .and_then(|t| t.canonical())
     }
 
-    /// Which compiler item `trait_` is, by identity. A trait is a declaration,
-    /// so this is a lookup and not a comparison: a user trait sharing a prelude
-    /// name is not that trait.
+    /// Which [`OnBoundTrait`] `trait_` is, by identity.
     pub(super) fn on_bound_of(&self, trait_: DefId) -> Option<OnBoundTrait> {
         OnBoundTrait::of_compiler_item(self.compiler_item_of_trait(trait_)?)
     }
@@ -764,8 +762,7 @@ impl TypeSystem {
     }
 
     /// [`Self::on_bound_of`] for a caller holding a spelling with no reference
-    /// site — a `#[derive(...)]` prefix. Kept distinct from the identity form
-    /// so the two questions cannot be mistaken for one.
+    /// site — a `#[derive(...)]` prefix.
     pub(super) fn classify_on_bound_trait(
         &self,
         scope: &TypeLookup,
@@ -848,8 +845,7 @@ impl TypeSystem {
     }
 
     /// Whether holding the bound spelled `bound_name` in `scope` also gives
-    /// `trait_` — the same declaration, or one of its supertraits. Compares the
-    /// bound's declaration against an identity, not two spellings.
+    /// `trait_` — the same declaration, or one of its supertraits.
     pub(super) fn bound_decl_implies(
         &self,
         scope: &TypeLookup,
@@ -1151,8 +1147,7 @@ impl TypeSystem {
                 return true;
             }
             // Numeric primitives implement the operator traits the compiler
-            // supplies. Which operator is an item, not a spelling, so a user
-            // `trait Rem` is a different declaration and gets none of it.
+            // supplies — the items, so a user `trait Rem` gets none of it.
             if self
                 .compiler_item_of_trait(trait_)
                 .is_some_and(|op| primitive_has_operator(prim.as_str(), op))

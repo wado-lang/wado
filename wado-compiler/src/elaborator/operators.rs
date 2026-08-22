@@ -397,8 +397,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                // For newtypes, use the base type ID for trait lookup — unless
-                // the newtype itself wrote the impl.
                 let lookup_type_id = if own_comparison_impl {
                     left.type_id
                 } else {
@@ -1843,8 +1841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The operator trait a dispatch means, as a requirement the bound search
-    /// must match. An operator picks its trait by construction, so a user trait
-    /// declaring a method of the same name does not answer for it.
+    /// must match.
     fn required_operator_trait(&self, item: CompilerItem) -> Option<super::types::RequiredTrait> {
         let def = self.tysys.compiler_trait_def(item)?;
         Some(super::types::RequiredTrait {

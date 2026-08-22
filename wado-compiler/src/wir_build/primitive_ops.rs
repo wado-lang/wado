@@ -335,8 +335,8 @@ impl FunctionTranslator<'_, '_> {
             // `!` is logical negation on `bool`, which is already i32-shaped.
             NirUnaryOp::Not => WirInstr::I32Eqz(operand),
             // A `bool` holds one bit, so its complement is `i32.eqz`; the
-            // integer `xor -1` would leave `-1` / `-2`, both of which read
-            // back as `true`. A newtype over `bool` is still one bit.
+            // integer `xor -1` would leave `-1` / `-2`, both reading back as
+            // `true`.
             NirUnaryOp::BitNot
                 if self.type_table.get_ultimate_base_type(operand_type_id) == TypeTable::BOOL =>
             {

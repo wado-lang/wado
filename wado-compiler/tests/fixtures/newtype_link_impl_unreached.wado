@@ -2,9 +2,8 @@
 // call through a bound, which relowers because the receiver wrote no impl.
 //
 // The relowering guard cannot close it: asking about every link keeps the call,
-// and the dispatch then asks the erased base, which carries no user impl — so a
-// valid program stops compiling. The fix belongs in how a kept call resolves an
-// inherited impl. 99 means the impl answered, 3 the base instruction.
+// and the dispatch then asks the erased base, which carries no user impl. The
+// fix belongs in how a kept call resolves an inherited impl — 99 is the impl.
 use { println } from "core:cli";
 
 type Inner = i32;

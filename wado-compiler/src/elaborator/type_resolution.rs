@@ -994,10 +994,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter_map(|(name, assoc)| {
                 // A frame that binds `Self::X` answers with the binding, one
-                // that does not with the projection. Building that reads
-                // `assoc`'s own bounds, which may name this pair again — two
-                // assoc types bounded through each other have no fixpoint, so
-                // the one already on the walk stays abstract.
+                // that does not with the projection — which is built from
+                // `assoc`'s own bounds, so a pair already on the walk recurses.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
                     let key = (base, assoc.clone());
                     if !self.assoc_binding_stack.insert(key.clone()) {
