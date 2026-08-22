@@ -768,12 +768,7 @@ impl TypeSystem {
     /// Whether `trait_` is the prelude's `Display`. Not an [`OnBoundTrait`] —
     /// it is never auto-derived except for a plain enum.
     pub(super) fn is_display_trait_of(&self, trait_: DefId) -> bool {
-        let decl = self.resolutions.defs().ast_id(trait_);
-        self.type_table
-            .borrow()
-            .compiler_items()
-            .trait_item_of_decl(decl)
-            == Some(CompilerItem::Display)
+        self.compiler_trait_def(CompilerItem::Display) == Some(trait_)
     }
 
     /// [`Self::on_bound_of`] for a caller holding a spelling with no reference
@@ -864,7 +859,7 @@ impl TypeSystem {
     /// Whether holding the bound spelled `bound_name` in `scope` also gives
     /// `trait_` — the same declaration, or one of its supertraits.
     ///
-    /// [`Self::bound_implies`] compares two spellings; this compares the
+    /// [`Self::bound_decl_implies`] compares two spellings; this compares the
     /// bound's declaration against an identity the caller already holds, which
     /// is what a satisfaction check has.
     pub(super) fn bound_decl_implies(
@@ -1517,28 +1512,18 @@ impl TypeSystem {
     /// `None` for a trait it supplies none for. An identity lookup: a user
     /// trait spelled `Rem` is a different declaration and gets nothing.
     fn compiler_operator_of(&self, trait_: DefId) -> Option<CompilerItem> {
+        self.compiler_item_of_trait(trait_)
+    }
+
+    /// Which compiler item `trait_` is, or `None` for a trait the compiler does
+    /// not know. The one reverse lookup: the spelling answers for a user trait
+    /// that shares the name.
+    pub(super) fn compiler_item_of_trait(&self, trait_: DefId) -> Option<CompilerItem> {
         let decl = self.resolutions.defs().ast_id(trait_);
-        let item = self
-            .type_table
+        self.type_table
             .borrow()
             .compiler_items()
-            .trait_item_of_decl(decl)?;
-        matches!(
-            item,
-            CompilerItem::Add
-                | CompilerItem::Sub
-                | CompilerItem::Mul
-                | CompilerItem::Div
-                | CompilerItem::Rem
-                | CompilerItem::Neg
-                | CompilerItem::BitAnd
-                | CompilerItem::BitOr
-                | CompilerItem::BitXor
-                | CompilerItem::BitNot
-                | CompilerItem::Shl
-                | CompilerItem::Shr
-        )
-        .then_some(item)
+            .trait_item_of_decl(decl)
     }
 
     fn blanket_trait_impl_applies(

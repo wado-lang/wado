@@ -194,16 +194,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &params,
             &self.tysys.resolutions,
         );
-        let written: Vec<crate::ast::Type> = match trait_type {
-            Type::Generic(generic) => generic.args.clone(),
-            Type::NamespacedGeneric(ns) => ns.args.clone(),
-            _ => Vec::new(),
-        };
-        let args = written
+        let written: Vec<crate::ast::Type> = super::trait_env::written_arg_nodes(trait_type)
             .iter()
             .take(kept)
-            .map(|arg| self.resolve_type(arg))
+            .cloned()
             .collect();
+        let args = written.iter().map(|arg| self.resolve_type(arg)).collect();
         crate::tir::TraitRef::new(trait_decl, args)
     }
 
@@ -220,6 +216,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
+        // One bound cannot be a coin toss, and the walk below asks the scope
+        // for every bound's header.
+        if bounds.len() < 2 {
+            return false;
+        }
         let declaring: Vec<&crate::ast::TraitBound> = bounds
             .iter()
             .filter(|bound| {
@@ -826,7 +827,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved: Vec<TypeId> = self
             .frame_assoc_bindings_of(base_name, assoc)
             .into_iter()
-            .map(|(_, ty)| self.resolve_bound_binding(base_name, &ty))
+            .map(|ty| self.resolve_bound_binding(base_name, &ty))
             .collect();
         // Two bounds binding it differently is the coin toss the caller's
         // ambiguity check reports; answering with the first would hide it.
@@ -892,13 +893,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(|param| mentioned.contains(&param.name))
     }
 
-    /// What every bound in the closure binds `assoc` to, paired with the
-    /// bound's spelling. A binding the asking frame cannot answer is dropped.
-    fn frame_assoc_bindings_of(
-        &mut self,
-        base_name: &str,
-        assoc: &str,
-    ) -> Vec<(String, crate::ast::Type)> {
+    /// What every bound in the closure binds `assoc` to. A binding the asking
+    /// frame cannot answer is dropped.
+    fn frame_assoc_bindings_of(&mut self, base_name: &str, assoc: &str) -> Vec<crate::ast::Type> {
         self.bound_closure_of(base_name)
             .unwrap_or_default()
             .iter()
@@ -907,7 +904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .assoc_types
                     .iter()
                     .filter(|b| b.name == assoc && self.frame_can_answer(*writer, &b.ty))
-                    .map(|b| (bound.name.clone(), b.ty.clone()))
+                    .map(|b| b.ty.clone())
             })
             .collect()
     }
@@ -1014,9 +1011,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the walk stays abstract.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
                     let key = (base, assoc.clone());
-                    if !self.assoc_binding_stack.insert(key.clone()) {
+                    if self.assoc_binding_stack.contains(&key) {
                         return None;
                     }
+                    self.assoc_binding_stack.insert(key.clone());
                     let built = self.make_frame_projection(base, base_name, &assoc);
                     self.assoc_binding_stack.shift_remove(&key);
                     Some(built)

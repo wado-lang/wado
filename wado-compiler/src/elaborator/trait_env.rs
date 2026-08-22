@@ -2500,6 +2500,16 @@ fn index_decls_by_name(
 /// The type arguments a written trait position supplies, structured — read off the
 /// nodes that wrote them, so each argument's own reference site says which
 /// declaration it names and an alias or namespace prefix reaches the same head.
+/// The argument nodes a written trait reference carries, empty for a bare
+/// name. `ns::Trait<T>` supplies them the same as `Trait<T>` does.
+pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
+    match ty {
+        ast::Type::Generic(generic) => &generic.args,
+        ast::Type::NamespacedGeneric(ns) => &ns.args,
+        _ => &[],
+    }
+}
+
 pub(super) fn written_type_args(
     ty: &ast::Type,
     resolutions: &crate::resolve::Resolutions,
@@ -2557,11 +2567,7 @@ pub(super) fn header_answers_bare_bound(
     params: &[ast::GenericParam],
     resolutions: &crate::resolve::Resolutions,
 ) -> bool {
-    let ast_args: &[ast::Type] = match trait_type {
-        ast::Type::Generic(generic) => &generic.args,
-        ast::Type::NamespacedGeneric(ns) => &ns.args,
-        _ => return true,
-    };
+    let ast_args = written_arg_nodes(trait_type);
     ast_args.iter().enumerate().all(|(i, arg)| {
         params
             .get(i)
@@ -2596,11 +2602,7 @@ pub(super) fn non_default_arg_count(
     params: &[ast::GenericParam],
     resolutions: &crate::resolve::Resolutions,
 ) -> usize {
-    let ast_args: &[ast::Type] = match trait_type {
-        ast::Type::Generic(generic) => &generic.args,
-        ast::Type::NamespacedGeneric(ns) => &ns.args,
-        _ => return 0,
-    };
+    let ast_args = written_arg_nodes(trait_type);
     let mut kept = ast_args.len();
     while let Some(last) = kept.checked_sub(1) {
         let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {

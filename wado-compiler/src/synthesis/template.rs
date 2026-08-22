@@ -977,7 +977,7 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
 /// trait query, which monomorphization has no access to.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
-    bounds: Vec<BlanketBound>,
+    bounds: &[BlanketBound],
     tt: &TypeTable,
 ) -> bool {
     if bounds.is_empty() {
@@ -1042,7 +1042,7 @@ pub(crate) fn blanket_dispatch_for(
     let blanket = trait_env.value_blanket_for_receiver(
         trait_name.canonical()?,
         type_module.as_ref(),
-        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds.to_vec(), tt),
+        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt),
     )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(

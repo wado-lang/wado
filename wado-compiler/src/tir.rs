@@ -706,7 +706,14 @@ impl AssocAnswers {
     /// registered, else whatever the arguments-writing impls agree on. A bound
     /// writes no arguments, so it cannot pick between impls that disagree.
     fn bare(&self) -> Option<TypeId> {
-        one_assoc_answer(&self.tagged())
+        let has_bare = self.0.iter().any(|(args, _)| args.is_empty());
+        let mut answers = self
+            .0
+            .iter()
+            .filter(|(args, _)| args.is_empty() || !has_bare)
+            .map(|(_, answer)| *answer);
+        let first = answers.next()?;
+        answers.all(|answer| answer == first).then_some(first)
     }
 
     /// Each answer paired with whether a bare bound names it, for a caller
@@ -2261,26 +2268,6 @@ impl TypeTable {
     pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
         let base = self.get_ultimate_base_type(id);
         matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
-    }
-
-    /// Whether an operator on `id` lowers to a scalar instruction rather than
-    /// the trait call monomorphization produced. A newtype is its own type: it
-    /// lowers that way only where it carries no operator impl of its own,
-    /// which every operator trait spells by declaring `Output`.
-    pub fn operator_lowers_to_scalar(
-        &self,
-        id: TypeId,
-        trait_decl: Option<crate::defs::DefId>,
-    ) -> bool {
-        if matches!(self.get(id), ResolvedType::Newtype { .. })
-            && trait_decl.is_some_and(|trait_| {
-                self.resolve_assoc_type_of_trait(id, &trait_, "Output")
-                    .is_some()
-            })
-        {
-            return false;
-        }
-        self.is_scalar_primitive_like(id)
     }
 
     /// Peel through Ref/MutRef wrappers to get the underlying type.

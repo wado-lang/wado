@@ -158,9 +158,7 @@ pub(super) fn blanket_pack_dispatch_args(
     let blanket =
         trait_env.value_blanket_for_receiver(trait_, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                receiver,
-                bounds.to_vec(),
-                type_table,
+                receiver, bounds, type_table,
             )
         })?;
     // Declaration order, not "receiver then projections": a blanket may write
@@ -217,9 +215,7 @@ fn blanket_receiver_satisfies(
     trait_env
         .value_blanket_for_receiver(trait_, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                type_id,
-                bounds.to_vec(),
-                type_table,
+                type_id, bounds, type_table,
             )
         })
         .is_some()
@@ -1674,6 +1670,29 @@ impl Monomorphizer {
         base
     }
 
+    /// Whether an operator on `id` lowers to a scalar instruction rather than
+    /// the trait call monomorphization produced. A newtype is its own type, so
+    /// one writing an impl of `trait_` keeps the call — the question is which
+    /// declaration wrote a body, which the impl index answers and an
+    /// associated type does not (`Eq` declares none).
+    fn operator_lowers_to_scalar(
+        &self,
+        type_table: &TypeTable,
+        id: TypeId,
+        trait_decl: Option<crate::defs::DefId>,
+    ) -> bool {
+        if !type_table.is_scalar_primitive_like(id) {
+            return false;
+        }
+        let Some(trait_) = trait_decl else {
+            return true;
+        };
+        !self
+            .functions
+            .trait_env
+            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(id), trait_)
+    }
+
     fn value_blanket_serves(
         &self,
         tid: TypeId,
@@ -1687,9 +1706,7 @@ impl Monomorphizer {
                 module_source_for_trait_impl(type_table, tid).as_ref(),
                 &|bounds| {
                     crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                        tid,
-                        bounds.to_vec(),
-                        type_table,
+                        tid, bounds, type_table,
                     )
                 },
             )
@@ -2213,7 +2230,7 @@ impl Monomorphizer {
                                             &|bounds| {
                                                 crate::synthesis::template::receiver_satisfies_blanket_bounds(
                                                     concrete_type_id,
-                                                    bounds.to_vec(),
+                                                    bounds,
                                                     type_table,
                                                 )
                                             },
@@ -2400,7 +2417,7 @@ impl Monomorphizer {
                             .trait_item_of_decl(type_table.defs().ast_id(decl))
                     });
                     let lowers_to_scalar =
-                        type_table.operator_lowers_to_scalar(recv_inner, trait_decl);
+                        self.operator_lowers_to_scalar(type_table, recv_inner, trait_decl);
                     if lowers_to_scalar
                         && let Some(unary_op) = trait_method_to_unary_op(item, &method_name_before)
                     {
@@ -3213,9 +3230,7 @@ impl Monomorphizer {
             .trait_env
             .value_blanket_for_receiver(trait_name, receiver_module.as_ref(), &|bounds| {
                 crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                    receiver,
-                    bounds.to_vec(),
-                    type_table,
+                    receiver, bounds, type_table,
                 )
             })
             .is_some()
@@ -3264,9 +3279,7 @@ impl Monomorphizer {
                     .trait_env
                     .value_blanket_for_receiver(tn, receiver_module.as_ref(), &|bounds| {
                         crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                            recv_inner,
-                            bounds.to_vec(),
-                            type_table,
+                            recv_inner, bounds, type_table,
                         )
                     })
                     .map(|b| {

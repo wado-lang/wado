@@ -526,11 +526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .substitute_type_params(declared, &slots);
-        let peeled = match self.tysys.type_table.borrow().get(substituted) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => substituted,
-        };
-        Some(peeled)
+        Some(self.tysys.type_table.borrow().peel_refs(substituted))
     }
 
     /// An operator whose receiver implements its trait at several right-hand
