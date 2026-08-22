@@ -41,6 +41,7 @@ use {
     check_left_recursion,
     synthesize_implicit_tokens,
     merge_grammars,
+    superclass_bases,
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
@@ -352,6 +353,7 @@ impl G4Parser {
         let kind = self.kind;
         let source_files: List<String> = [];
         let action_language = action_language_from_options(&options);
+        let [lexer_superclass, parser_superclass] = superclass_bases(&kind, &options);
         return Result::<Grammar, ParseError>::Ok(
             Grammar {
                 name,
@@ -365,6 +367,8 @@ impl G4Parser {
                 action_language,
                 pending_refs,
                 source_files,
+                lexer_superclass,
+                parser_superclass,
             },
         );
     }

@@ -201,7 +201,7 @@ pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
 /// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
 /// carved out of the Java emit-actions rollout. See `action.md`.
 pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
-    return grammar.options.iter_ref().any(|o| o.name == "superClass");
+    return !grammar.lexer_superclass.is_empty() || !grammar.parser_superclass.is_empty();
 }
 
 /// Whether java2wado can emit the grammar's non-superClass action bodies:

@@ -1,0 +1,67 @@
+//! SuperClass as an effect interface (parser). A `{this.next_gt()}?` predicate
+//! in a parser rule lowers to the ambient op `PsBase::next_gt(p)`; the base
+//! reads the recognizer through the same action-context API a translated action
+//! uses, and every parse entry carries `with PsBase`, so omitting the handler is
+//! a compile error rather than a silently predicate-free parser.
+
+use prs from "./grammars/wado_prs_super.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/action_prs_super" },
+    };
+use { PsBase, Parser } from "./grammars/wado_prs_super.g4";
+
+// `>>` is one shift only when the two `>` are adjacent in the source — a fact
+// the token stream carries and the grammar cannot state. Stateless, like the
+// real `RustParserBase.NextGT`.
+struct GapBase {
+    first: bool,
+    gate_calls: i32 = 0,
+}
+
+impl PsBase for GapBase {
+    fn next_gt(&self, p: &Parser) -> bool {
+        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
+    }
+
+    fn first_wins(&mut self, p: &Parser) -> bool {
+        self.gate_calls += 1;
+        resume self.first;
+    }
+}
+
+fn parse(input: &String) -> prs::ParseResult {
+    let mut base = GapBase { first: true };
+    with PsBase => &mut base do {
+        return prs::parse(input);
+    };
+}
+
+/// `[parsed, times the gate was consulted]`.
+fn pick(input: &String, first: bool) -> [bool, i32] {
+    let mut base = GapBase { first };
+    let mut ok = false;
+    with PsBase => &mut base do {
+        ok = prs::parse_pick(input).ok();
+    };
+    return [ok, base.gate_calls];
+}
+
+test "adjacent > > is a shift" {
+    let r = parse(&">>");
+    assert r.ok(), `expected a parse, got ${prs::to_string_tree(&r)}`;
+}
+
+test "a gap between the two > fails the predicate" {
+    let r = parse(&"> >");
+    assert !r.ok(), "a separated pair is not a shift";
+}
+
+// The other emit path: two interchangeable alternatives, so the predicate
+// selects at the dispatch instead of guarding inside one. Both alts match the
+// same `ID`, so the tree cannot say which was taken — what it pins is that the
+// gate is reached (the effect threads through the dispatch) and that either
+// polarity still parses.
+test "an alt-initial predicate gates the dispatch" {
+    assert pick(&"a", true) == [true, 1], `${pick(&"a", true):?}`;
+    assert pick(&"a", false) == [true, 1], `${pick(&"a", false):?}`;
+}

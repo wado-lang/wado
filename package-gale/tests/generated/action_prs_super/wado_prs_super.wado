@@ -1,7 +1,7 @@
-#![generated(by = "gale", sources = ["tests/grammars/wado_lex_super_frag.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/wado_prs_super.g4"])]
 
 // Grammar metadata from source .g4 prequels:
-//   option superClass = SlBase (lexer)
+//   option superClass = PsBase (parser)
 //   option language = Wado
 
 pub struct Span {
@@ -1046,71 +1046,19 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-pub struct LexerView {
-    chars: &List<char>,
-    start: i32,
-    pos: i32,
-}
-
-impl LexerView {
-    pub fn la(&self, k: i32) -> i32 {
-        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
-        if i < 0 || i >= self.chars.len() {
-            return -1;
-        }
-        return self.chars[i] as i32;
-    }
-
-    pub fn text(&self) -> String {
-        let mut s = String::with_capacity(if self.pos > self.start { self.pos - self.start } else { 0 });
-        for let mut i = self.start; i < self.pos; i += 1 {
-            s.push(self.chars[i]);
-        }
-        return s;
-    }
-
-    pub fn start(&self) -> i32 {
-        return self.start;
-    }
-
-    pub fn pos(&self) -> i32 {
-        return self.pos;
-    }
-
-    pub fn char_at(&self, i: i32) -> i32 {
-        if i < 0 || i >= self.chars.len() {
-            return -1;
-        }
-        return self.chars[i] as i32;
-    }
-
-    pub fn input_len(&self) -> i32 {
-        return self.chars.len();
-    }
-}
 pub enum TokenKind {
-    KW,
+    GT,
     ID,
     WS,
     Eof,
     Error,
 }
 
-pub global TK_KW: i32 = 0;
+pub global TK_GT: i32 = 0;
 pub global TK_ID: i32 = 1;
 pub global TK_WS: i32 = 2;
 pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
-
-pub interface SlBase {
-    fn enabled(view: LexerView) -> bool;
-    /// Called with the span, type and channel of each token the lexer
-    /// commits — not a skipped or `more`d match, and not the EOF
-    /// sentinel. Returns the type to emit.
-    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
-        return ty;
-    }
-}
 
 struct Lexer {
     chars: List<char>,
@@ -1131,9 +1079,15 @@ impl Lexer {
     }
 }
 
-fn try_KW(chars: &List<char>, start: i32) -> i32 with (SlBase, stores[chars]) {
+fn try_GT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if !( SlBase::enabled(LexerView { chars, start, pos }) ) { return -1; }
+    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'a'..='z' })) { return -1; }
     pos += 1;
@@ -1151,16 +1105,16 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 with (SlBase, stores[chars]) {
     return pos;
 }
 
-fn try_ID(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'a'..='z' })) { return -1; }
+    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !((chars[pos] matches { 'a'..='z' })) { break rep_1; }
+            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_1; }
             pos += 1;
             continue;
         }
@@ -1170,26 +1124,7 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_WS(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
-    pos += 1;
-    loop {
-        let rep_saved_2 = pos;
-        rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_2; }
-            pos += 1;
-            continue;
-        }
-        pos = rep_saved_2;
-        break;
-    }
-    return pos;
-}
-
-pub fn tokenize(input: &String) -> TokenStream with SlBase {
+pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
@@ -1202,14 +1137,13 @@ pub fn tokenize(input: &String) -> TokenStream with SlBase {
         if first_char matches { '\t' | '\n' | '\r' | ' ' } {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
+        } else if first_char matches { '>' } {
+            end = try_GT(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_GT; }
         } else if first_char matches { 'a'..='z' } {
-            end = try_KW(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
-            end = try_KW(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_KW; }
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         }
@@ -1220,9 +1154,6 @@ pub fn tokenize(input: &String) -> TokenStream with SlBase {
         } else {
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
-            if !is_skip {
-                best_kind = SlBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, 0);
-            }
             if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else {
@@ -1238,7 +1169,7 @@ pub fn tokenize(input: &String) -> TokenStream with SlBase {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_KW => "KW",
+        TK_GT => "GT",
         TK_ID => "ID",
         TK_WS => "WS",
         TK_EOF => "Eof",
@@ -1247,8 +1178,11 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
+pub global RK_PROG: NodeKind = 0;
+pub global RK_SHR: NodeKind = 1;
+pub global RK_PICK: NodeKind = 2;
 
-global RULE_NAMES: List<String> = [];
+global RULE_NAMES: List<String> = ["prog", "shr", "pick"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1267,7 +1201,12 @@ impl Inspect for NodeKind {
     }
 }
 
-struct Parser {
+pub interface PsBase {
+    fn next_gt(p: &Parser) -> bool;
+    fn first_wins(p: &Parser) -> bool;
+}
+
+pub struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,
     pos: i32,
@@ -1295,19 +1234,19 @@ impl Parser {
         return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], output: "" };
     }
 
-    fn emit(&mut self, s: String) {
+    pub fn emit(&mut self, s: String) {
         self.output.push_str(&s);
     }
 
-    fn token_text(&self, i: i32) -> String {
+    pub fn token_text(&self, i: i32) -> String {
         return self.tokens.token_text(i);
     }
 
-    fn token_kind(&self, i: i32) -> i32 {
+    pub fn token_kind(&self, i: i32) -> i32 {
         return self.tokens.kind_at(i);
     }
 
-    fn token_int(&self, i: i32) -> i32 {
+    pub fn token_int(&self, i: i32) -> i32 {
         let sp = self.tokens.span_at(i);
         let mut acc: i32 = 0;
         let mut neg = false;
@@ -1326,30 +1265,30 @@ impl Parser {
         return if neg { -acc } else { acc };
     }
 
-    fn token_line(&self, i: i32) -> i32 {
+    pub fn token_line(&self, i: i32) -> i32 {
         return line_col(self.tokens.chars, self.tokens.span_at(i).start).0;
     }
 
-    fn token_col(&self, i: i32) -> i32 {
+    pub fn token_col(&self, i: i32) -> i32 {
         return line_col(self.tokens.chars, self.tokens.span_at(i).start).1;
     }
 
-    fn token_start(&self, i: i32) -> i32 {
+    pub fn token_start(&self, i: i32) -> i32 {
         return self.tokens.starts[i];
     }
 
-    fn la(&self, k: i32) -> i32 {
+    pub fn la(&self, k: i32) -> i32 {
         return self.peek_at(k - 1);
     }
 
-    fn lt(&self, k: i32) -> i32 {
+    pub fn lt(&self, k: i32) -> i32 {
         let idx = self.pos + k - 1;
         if idx >= self.kinds.len() { return self.kinds.len() - 1; }
         if idx < 0 { return 0; }
         return idx;
     }
 
-    fn text_span(&self, start: i32, end: i32) -> String {
+    pub fn text_span(&self, start: i32, end: i32) -> String {
         let mut out = String::new();
         let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
         for let mut i = start; i < hi; i += 1 {
@@ -1358,23 +1297,23 @@ impl Parser {
         return out;
     }
 
-    fn text_between(&self, lo: i32, hi: i32) -> String {
+    pub fn text_between(&self, lo: i32, hi: i32) -> String {
         return self.tokens.rule_text(lo, hi);
     }
 
-    fn rule_text(&self, start_tok: i32) -> String {
+    pub fn rule_text(&self, start_tok: i32) -> String {
         return self.tokens.rule_text(start_tok, self.pos - 1);
     }
 
-    fn input_text(&self) -> String {
+    pub fn input_text(&self) -> String {
         return self.text_span(0, self.tokens.chars.len());
     }
 
-    fn rule_string_tree(&self) -> String {
+    pub fn rule_string_tree(&self) -> String {
         return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
-    fn rule_string_tree_final(&self) -> String {
+    pub fn rule_string_tree_final(&self) -> String {
         return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
     }
 
@@ -1579,6 +1518,147 @@ impl Parser {
     }
 }
 
+fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_shr(tokens, pos);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_shr(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
+    pos += 1;
+    if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_pick(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos < tokens.len() && tokens[pos] == TK_ID {
+        return pos + 1;
+    }
+    return -1;
+}
+
+fn _parse_prog__inner(p: &mut Parser) -> () with PsBase {
+    let shr = _parse_shr(p);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_prog(p: &mut Parser) -> () with PsBase {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_PROG, _start);
+    _parse_prog__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("prog");
+    }
+}
+
+fn _parse_shr__inner(p: &mut Parser) -> () with PsBase {
+    let gt = p.expect(TK_GT, &SYNC_0);
+    if !p.speculating {
+        if !( PsBase::next_gt(p) ) {
+            p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
+            return;
+        }
+    }
+    let gt_2 = p.expect(TK_GT, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_shr(p: &mut Parser) -> () with PsBase {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_SHR, _start);
+    _parse_shr__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("shr");
+    }
+}
+
+fn _parse_pick__inner_alt_0(p: &mut Parser) -> () with PsBase {
+    let id = p.expect(TK_ID, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_pick__inner_alt_1(p: &mut Parser) -> () with PsBase {
+    let id = p.expect(TK_ID, &EMPTY_SYNC);
+    return;
+}
+
+fn _parse_pick__inner(p: &mut Parser) -> () with PsBase {
+    let kind = p.peek_kind();
+    if kind == TK_ID {
+        if (pred_1(p)) {
+            return _parse_pick__inner_alt_0(p);
+        } else {
+            return _parse_pick__inner_alt_1(p);
+        }
+    }
+    p.no_viable(
+        "no alternative of pick matches",
+        p.peek_span(),
+        &SYNC_1,
+    );
+    return;
+}
+
+fn _parse_pick(p: &mut Parser) -> () with PsBase {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_PICK, _start);
+    _parse_pick__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("pick");
+    }
+}
+
+fn pred_1(p: &Parser) -> bool with PsBase {
+    return  PsBase::first_wins(p) ;
+}
+
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) with PsBase) -> ParseResult with PsBase {
+    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    p.output = p.tokens.output;
+    p.max_errors = max_errors;
+    entry(&mut p);
+    if p.recovering && p.diagnostics.len() < max_errors {
+        if let Some(e) = &p.pending {
+            let lc = line_col(p.tokens.chars, e.span.start);
+            let mut d = Diagnostic::error(p.pending_code, e.full_message(), e.span, lc.0, lc.1);
+            d.rule_stack = e.rule_stack;
+            p.diagnostics.push(d);
+        }
+    }
+    return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.output };
+}
+
+pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with PsBase {
+    return parse_prog(input, max_errors);
+}
+
+pub fn parse_prog(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with PsBase {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_prog(p));
+}
+
+pub fn parse_shr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with PsBase {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_shr(p));
+}
+
+pub fn parse_pick(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with PsBase {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_pick(p));
+}
+
 fn _token_names() -> List<String> {
     let mut v: List<String> = List::with_capacity(5);
     for let mut k = 0; k < 5; k += 1 {
@@ -1610,4 +1690,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_GT];
+global SYNC_1: List<i32> = [TK_ID];
 

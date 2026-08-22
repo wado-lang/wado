@@ -6,15 +6,18 @@
 //! `impl Foo for Base` handler and installs it with `with Foo => &mut base do`.
 //! See `action.md`, "SuperClass — an effect interface".
 //!
-//! This module is the language-independent core: extract the base name, scan
-//! action / predicate bodies for `this.<method>` call sites, synthesize the
-//! effect interface, and rewrite each call site to `Foo::<method>()`. Threading
-//! the `with Foo` effect onto the op-reachable generated fns lives in codegen.
+//! This module is the language-independent core: extract each recognizer's base
+//! name, scan action / predicate bodies for `this.<method>` call sites,
+//! synthesize the effect interface, and rewrite each call site to
+//! `Foo::<method>()`. Threading the `with Foo` effect onto the op-reachable
+//! generated fns lives in codegen. Lexer and parser each have their own base
+//! and their own call form: the lexer's operations read a `LexerView` over the
+//! match window, the parser's read the recognizer.
 
 use {
+    Alternative,
+    Element,
     Grammar,
-    GrammarOption,
-    OptionValue,
     ActionKind,
     AltAction,
     LexerRule,
@@ -41,6 +44,16 @@ pub struct SuperOp {
     pub mixed_role: bool = false,
 }
 
+/// Where a `this.<method>` call sits, which fixes the operation's call form.
+pub enum SuperSite {
+    /// Lexer predicate: the read-only match window.
+    LexerPredicate,
+    /// Lexer action: the match window plus the lexer's command surface.
+    LexerAction,
+    /// Parser predicate: the recognizer, as an ANTLR base method reads `this`.
+    ParserPredicate,
+}
+
 /// One `this.<method>(...)` call site found in a body.
 pub struct SuperCall {
     pub name: String,
@@ -48,25 +61,21 @@ pub struct SuperCall {
     pub has_args: bool,
 }
 
-/// The base name from `options { superClass = Foo }`, or `null` when the
-/// grammar declares no `superClass`. A dotted `a.b.Base` keeps its last
-/// component (the Wado effect name).
-pub fn superclass_base_name(grammar: &Grammar) -> Option<String> {
-    for let o of &grammar.options {
-        if o.name == "superClass" {
-            return Option::<String>::Some(option_value_name(&o.value));
-        }
-    }
-    return null;
+/// The lexer's `superClass` base, or `null` when there is none.
+pub fn lexer_superclass_name(grammar: &Grammar) -> Option<String> {
+    return non_empty(&grammar.lexer_superclass);
 }
 
-fn option_value_name(v: &OptionValue) -> String {
-    return match v {
-        Ident(s) => *s,
-        Qualified(parts) => if parts.is_empty() { "" } else { parts[parts.len() - 1] },
-        Str(s) => *s,
-        _ => "",
-    };
+/// The parser's `superClass` base, or `null` when there is none.
+pub fn parser_superclass_name(grammar: &Grammar) -> Option<String> {
+    return non_empty(&grammar.parser_superclass);
+}
+
+fn non_empty(s: &String) -> Option<String> {
+    if s.is_empty() {
+        return null;
+    }
+    return Option::<String>::Some(*s);
 }
 
 /// The `this.<method>(` call sites in a body, in source order, skipping string
@@ -270,7 +279,7 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
 
 /// Whether `body` is nothing but base-method calls and separators — the source
 /// form `this.m(...)` or the `Foo::m(...)` the rewrite leaves behind. Such a
-/// body is plain Wado once `rewrite_superclass_calls` has run, so it runs
+/// body is plain Wado once `rewrite_lexer_superclass_calls` has run, so it runs
 /// without the host translator a `superClass` grammar carves out; one carrying
 /// host code around the call needs that translator. Both forms are accepted so
 /// the answer does not move across the rewrite.
@@ -339,20 +348,203 @@ fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool 
     };
 }
 
-/// Whether the grammar declares a `superClass` Gale refuses to wire, because an
-/// operation is called with arguments. Nothing reaching the base can then be
-/// emitted — not the interface, and not a body still naming `this`, which the
-/// rewrite would have replaced — so the lexer's actions and predicates stay
+/// Whether the grammar declares a lexer `superClass` Gale refuses to wire,
+/// because an operation is unrepresentable. Nothing reaching the base can then
+/// be emitted — not the interface, and not a body still naming `this`, which
+/// the rewrite would have replaced — so the lexer's actions and predicates stay
 /// unexecuted, each reported.
 pub fn superclass_is_refused(grammar: &Grammar) -> bool {
-    return match superclass_base_name(grammar) {
-        Some(_) => {
-            let ops = collect_lexer_super_ops(grammar);
-            !super_ops_with_args(&ops).is_empty()
-                || !super_ops_mixed_role(&ops).is_empty()
-                || !super_ops_reserved(&ops).is_empty();
-        },
+    return match lexer_superclass_name(grammar) {
+        Some(_) => !lexer_super_refusal(&collect_lexer_super_ops(grammar)).is_empty(),
         None => false,
+    };
+}
+
+/// Why a lexer base cannot be wired, or empty when it can. The message names
+/// the operations that forced it.
+pub fn lexer_super_refusal(ops: &List<SuperOp>) -> String {
+    let with_args = super_ops_with_args(ops);
+    if !with_args.is_empty() {
+        return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+    }
+    let mixed = super_ops_mixed_role(ops);
+    if !mixed.is_empty() {
+        return `calls (${mixed.join(", ")}) from both a predicate and an action; an operation is one or the other`;
+    }
+    let reserved = super_ops_reserved(ops);
+    if !reserved.is_empty() {
+        return `calls (${reserved.join(", ")}), which name a lifecycle hook the interface already declares`;
+    }
+    return "";
+}
+
+/// Why a parser base cannot be wired, or empty when it can. The parser side
+/// carries no command surface, so an action op has nothing to drive.
+pub fn parser_super_refusal(ops: &List<SuperOp>) -> String {
+    let with_args = super_ops_with_args(ops);
+    if !with_args.is_empty() {
+        return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+    }
+    let actions = super_ops_actions(ops);
+    if !actions.is_empty() {
+        return `calls (${actions.join(", ")}) from an action body; a parser base operation is a predicate`;
+    }
+    return "";
+}
+
+/// Operations reached from an action body rather than a predicate.
+pub fn super_ops_actions(ops: &List<SuperOp>) -> List<String> {
+    let mut out: List<String> = [];
+    for let op of ops {
+        if !op.is_predicate || op.mixed_role {
+            out.push(op.name);
+        }
+    }
+    return out;
+}
+
+/// Collect the superClass operations across a grammar's parser rules: every
+/// distinct `this.<method>` call in an action / predicate body, in source
+/// order, deduped by name.
+pub fn collect_parser_super_ops(grammar: &Grammar) -> List<SuperOp> {
+    let mut ops: List<SuperOp> = [];
+    for let rule of &grammar.parser_rules {
+        for let prequel of &[&rule.init_action, &rule.after_action] {
+            if let Some(a) = *prequel {
+                for let call of &find_this_calls(&a.text) {
+                    add_super_op(&mut ops, call, &ActionKind::Action);
+                }
+            }
+        }
+        for let alt of &rule.alternatives {
+            collect_parser_alt_ops(alt, &mut ops);
+        }
+    }
+    return ops;
+}
+
+fn collect_parser_alt_ops(alt: &Alternative, ops: &mut List<SuperOp>) {
+    for let a of &alt.actions {
+        for let call of &find_this_calls(&a.source.text) {
+            add_super_op(ops, call, &a.kind);
+        }
+    }
+    for let e of &alt.elements {
+        collect_parser_elem_ops(e, ops);
+    }
+}
+
+fn collect_parser_elem_ops(elem: &Element, ops: &mut List<SuperOp>) {
+    match elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_parser_alt_ops(alt, ops);
+            }
+        },
+        Repeat(rep) => collect_parser_elem_ops(&rep.element, ops),
+        Label(lab) => collect_parser_elem_ops(&lab.element, ops),
+        Not(n) => collect_parser_elem_ops(&n.element, ops),
+        _ => {
+        },
+    }
+}
+
+/// Emit `interface Foo { ... }` for a parser base: one predicate operation per
+/// op, each reading the recognizer the way an ANTLR base method reads `this`.
+pub fn gen_parser_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
+    w.line(&`pub interface ${*name} {`);
+    for let op of ops {
+        w.line(&`    fn ${to_snake_case(&op.name)}(p: &Parser) -> bool;`);
+    }
+    w.line(&"}");
+    w.blank();
+}
+
+/// Rewrite every parser predicate body in place, turning each
+/// `this.<method>(...)` into `Foo::<method>(p)`. Alternatives only: a `this.`
+/// call in an `@init` / `@after` prequel is an action op, which the parser
+/// side refuses before the rewrite runs.
+pub fn rewrite_parser_superclass_calls(grammar: &mut Grammar, base_name: &String) {
+    for let rule of &mut grammar.parser_rules {
+        for let alt of &mut rule.alternatives {
+            rewrite_parser_alt(alt, base_name);
+        }
+    }
+}
+
+fn rewrite_parser_alt(alt: &mut Alternative, base_name: &String) {
+    for let a of &mut alt.actions {
+        a.source.text = rewrite_this_calls(&a.source.text, base_name, SuperSite::ParserPredicate);
+    }
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        alt.elements[i] = rewrite_parser_elem(&alt.elements[i], base_name);
+    }
+}
+
+fn rewrite_parser_elem(elem: &Element, base_name: &String) -> Element {
+    return match elem {
+        Group(g) => {
+            let mut ng = *g;
+            for let mut i = 0; i < ng.alternatives.len(); i += 1 {
+                rewrite_parser_alt(&mut ng.alternatives[i], base_name);
+            }
+            Element::Group(ng);
+        },
+        Repeat(rep) => {
+            let mut nr = *rep;
+            nr.element = rewrite_parser_elem(&rep.element, base_name);
+            Element::Repeat(nr);
+        },
+        Label(lab) => {
+            let mut nl = *lab;
+            nl.element = rewrite_parser_elem(&lab.element, base_name);
+            Element::Label(nl);
+        },
+        Not(n) => {
+            let mut nn = *n;
+            nn.element = rewrite_parser_elem(&n.element, base_name);
+            Element::Not(nn);
+        },
+        _ => *elem,
+    };
+}
+
+/// Whether every parser action / predicate body is base-calls-only, which is
+/// what lets a `language = Java` `superClass` grammar run them at all.
+pub fn parser_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
+    for let rule of &grammar.parser_rules {
+        for let prequel of &[&rule.init_action, &rule.after_action] {
+            if let Some(a) = *prequel {
+                if !body_is_base_calls_only(&a.text, base_name) {
+                    return false;
+                }
+            }
+        }
+        for let alt of &rule.alternatives {
+            if !parser_alt_is_base_calls(alt, base_name) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+fn parser_alt_is_base_calls(alt: &Alternative, base_name: &String) -> bool {
+    for let a of &alt.actions {
+        if !body_is_base_calls_only(&a.source.text, base_name) {
+            return false;
+        }
+    }
+    return alt.elements.iter_ref().all(|e| parser_elem_is_base_calls(e, base_name));
+}
+
+fn parser_elem_is_base_calls(elem: &Element, base_name: &String) -> bool {
+    return match elem {
+        Group(g) => g.alternatives.iter_ref().all(|a| parser_alt_is_base_calls(a, base_name)),
+        Repeat(rep) => parser_elem_is_base_calls(&rep.element, base_name),
+        Label(lab) => parser_elem_is_base_calls(&lab.element, base_name),
+        Not(n) => parser_elem_is_base_calls(&n.element, base_name),
+        _ => true,
     };
 }
 
@@ -503,18 +695,21 @@ pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
     return `${*base_name}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${*channel})`;
 }
 
-/// The ambient operation call, reading the match-fn locals in scope at every
-/// lexer action / predicate site. An action also passes the replay fn's `lx`.
-/// Arguments are dropped.
-pub fn super_call_expr(base_name: &String, method: &String, is_action: bool) -> String {
-    let lx = if is_action { ", lx" } else { "" };
-    return `${*base_name}::${to_snake_case(method)}(LexerView { chars, start, pos }${lx})`;
+/// The ambient operation call for a call site, reading the locals in scope
+/// there. Arguments are dropped.
+pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite) -> String {
+    let recv = match site {
+        LexerPredicate => "LexerView { chars, start, pos }",
+        LexerAction => "LexerView { chars, start, pos }, lx",
+        ParserPredicate => "p",
+    };
+    return `${*base_name}::${to_snake_case(method)}(${recv})`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each
 /// `this.<method>(...)` into `Foo::<method>(...)`. Run after op collection, so
 /// the identity translator then passes the body through as ordinary Wado.
-pub fn rewrite_superclass_calls(grammar: &mut Grammar, base_name: &String) {
+pub fn rewrite_lexer_superclass_calls(grammar: &mut Grammar, base_name: &String) {
     for let rule of &mut grammar.lexer_rules {
         for let alt of &mut rule.body {
             rewrite_lexer_alt(alt, base_name);
@@ -524,7 +719,8 @@ pub fn rewrite_superclass_calls(grammar: &mut Grammar, base_name: &String) {
 
 fn rewrite_lexer_alt(alt: &mut LexerAlternative, base_name: &String) {
     for let a of &mut alt.actions {
-        a.source.text = rewrite_this_calls(&a.source.text, base_name, a.kind matches { Action });
+        let site = if a.kind matches { Action } { SuperSite::LexerAction } else { SuperSite::LexerPredicate };
+        a.source.text = rewrite_this_calls(&a.source.text, base_name, site);
     }
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         alt.elements[i] = rewrite_lexer_elem(&alt.elements[i], base_name);
@@ -552,11 +748,11 @@ fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
     };
 }
 
-/// Replace each `this.<method>(...)` call in `body` with `Foo::<method>()`,
-/// copying everything else verbatim and skipping string / comment spans so a
-/// `this.` inside host text is never rewritten. Call arguments are dropped
-/// (zero-argument today).
-pub fn rewrite_this_calls(body: &String, base_name: &String, is_action: bool) -> String {
+/// Replace each `this.<method>(...)` call in `body` with the ambient operation
+/// call for `site`, copying everything else verbatim and skipping string /
+/// comment spans so a `this.` inside host text is never rewritten. Call
+/// arguments are dropped (zero-argument today).
+pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) -> String {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(n + 8);
@@ -568,7 +764,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, is_action: bool) ->
             '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
             _ => match this_call_at(&chars, i, n) {
                 Some([method, close]) => {
-                    out.push_str(&super_call_expr(base_name, &method, is_action));
+                    out.push_str(&super_call_expr(base_name, &method, site));
                     close;
                 },
                 None => {

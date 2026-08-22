@@ -28,6 +28,7 @@ use {
 use { is_parser_members, translate_action, translate_members, translate_predicate } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
+use { body_is_base_calls_only } from "./superclass.wado";
 use { escape_ident } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -182,7 +183,18 @@ fn split_top_level_commas(text: &String) -> List<String> {
     return out;
 }
 
-/// Emit each context-free gated predicate as a standalone effect-free fn
+/// Declare the parser's base effect on a generated parse function. Every one
+/// carries it: a `{this.m()}?` predicate can sit in any rule and an effect
+/// propagates to each caller, so the whole recognizer runs under the base the
+/// way an ANTLR recognizer *is* its base. Scan functions are exempt — they
+/// evaluate no action. A no-op without a parser `superClass`.
+pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &GenContext) {
+    if ctx.has_parser_superclass() {
+        f.add_effect(ctx.parser_superclass_name());
+    }
+}
+
+/// Emit each context-free gated predicate as a standalone fn
 /// `fn pred_<id>(p: &Parser) -> bool { return <body>; }`. Registered during the
 /// per-rule marking pass; a `&Parser` receiver keeps it read-only (the same fn
 /// the ATN disabled-seed prune calls). No-op when none were registered.
@@ -190,6 +202,7 @@ pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &GenContext) {
     for let entry of ctx.predicate_fns() {
         let mut f = FnSpec::new(&pred_fn_name(entry.0));
         f.add_param(&"p", &"&Parser");
+        add_parser_super_effect(&mut f, ctx);
         f.set_return_type(&"bool");
         f.emit_begin(w);
         w.line(&`return ${entry.1};`);
@@ -487,7 +500,7 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     if a.kind matches { Action } {
         return null;
     }
-    if predicate_body_is_context_free(&a.source.text, ctx) {
+    if body_needs_no_translator(&a.source.text, ctx) {
         // Extracted to a standalone `pred_<id>(p)` fn (`gen_predicate_fns`), so
         // the dispatch calls it rather than inlining the condition.
         return Option::Some(`${pred_fn_name(a.source.action_id)}(p)`);
@@ -523,13 +536,19 @@ fn pred_fn_name(id: i32) -> String {
     return `pred_${id}`;
 }
 
-/// Whether a gateable alt-initial predicate's body is context-free — a
-/// `language = Wado` body with no `$`-references, so it reads only `p` (and
-/// constants) and extracts to a standalone `pred_<id>(p)` fn. Context-dependent
-/// bodies (`$v` → `vals.v`) stay folded into the dispatch, where `vals` is in
-/// scope.
-fn predicate_body_is_context_free(text: &String, ctx: &GenContext) -> bool {
-    return ctx.action_language() matches { Wado } && find_attr_refs(text).len() == 0;
+/// Whether a body is already Wado, so no host translator is involved: written
+/// in it (`language = Wado`), or turned into ambient base calls by the
+/// superClass rewrite — which is what runs `{this.m()}?` under a host language
+/// java2wado carves out. Such a body is also context-free (it reads only `p`
+/// and constants), so a gateable alt-initial predicate extracts to a standalone
+/// `pred_<id>(p)` fn; a `$`-reference needs the shared resolver either way, and
+/// stays folded into the dispatch where `vals` is in scope.
+fn body_needs_no_translator(text: &String, ctx: &GenContext) -> bool {
+    if find_attr_refs(text).len() != 0 {
+        return false;
+    }
+    return ctx.action_language() matches { Wado }
+        || ctx.has_parser_superclass() && body_is_base_calls_only(text, ctx.parser_superclass_name());
 }
 
 /// Emit the `disabled_alts` seed for an ATN-routed decision: each gated alt is
@@ -697,7 +716,7 @@ fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut GenContext) {
     for let a of &alt.actions {
         if is_gateable_alt_initial_predicate(a, ctx) {
             ctx.mark_predicate_gated(a.source.action_id);
-            if predicate_body_is_context_free(&a.source.text, ctx) {
+            if body_needs_no_translator(&a.source.text, ctx) {
                 ctx.register_predicate_fn(a.source.action_id, &a.source.text);
             }
         }
@@ -834,7 +853,7 @@ pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
 /// condition (`is_predicate = true`, an expression) to Wado, warning (loud) and
 /// returning `null` on failure. A ref-free Wado body passes through verbatim.
 fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
-    if ctx.action_language() matches { Wado } && find_attr_refs(&src.text).len() == 0 {
+    if body_needs_no_translator(&src.text, ctx) {
         return Option::Some(src.text);
     }
     let ridx = ctx.current_rule_index();

@@ -93,6 +93,7 @@ use { vals_struct_name, rule_threads_args, rule_span_lo_local, rule_span_hi_loca
 use {
     NO_ACTIONS,
     add_arg_params,
+    add_parser_super_effect,
     add_seeded_vals_param,
     alt_gate_and_suffix,
     alt_initial_gate_conditions,
@@ -130,6 +131,7 @@ use {
     gen_recover_helpers,
     gen_trace_helpers,
 } from "./parser_runtime_gen.wado";
+use { gen_parser_super_interface } from "./superclass.wado";
 use {
     EMPTY_SYNC,
     build_lookahead_condition,
@@ -181,6 +183,9 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     ctx.set_lr_rule_snakes(&lr_snakes);
 
     let members = collect_parser_members(grammar, ctx);
+    if ctx.has_parser_superclass() {
+        gen_parser_super_interface(w, ctx.parser_superclass_name(), ctx.parser_superclass_ops());
+    }
     gen_parser_struct(
         w,
         ctx.is_trace(),
@@ -188,6 +193,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
         &members,
+        ctx.has_parser_superclass(),
     );
     gen_member_methods(w, &members);
     if ctx.emit_actions() {
@@ -210,7 +216,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     gen_predicate_fns(w, ctx);
     if !ctx.fragment_entries().is_empty() {
         let entries = compute_fragment_entries(grammar, ctx);
-        gen_recover_helpers(w, &entries);
+        gen_recover_helpers(w, &entries, ctx);
     }
     gen_parse_entry(w, lowered, ctx);
     warn_unhandled_actions(grammar, ctx);
@@ -2090,6 +2096,7 @@ fn gen_rule_entry_wrapper(
     let rule_display = &rule.name;
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
+    add_parser_super_effect(&mut f, ctx);
     f.add_param(&"p", &"&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
     // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
@@ -2202,6 +2209,7 @@ fn gen_parse_fn_simple_named(
     gen_visibility_comment(w, &rule.visibility);
 
     let mut f = FnSpec::new(fn_name);
+    add_parser_super_effect(&mut f, ctx);
     f.add_param(&"p", &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
@@ -2254,6 +2262,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     let type_name = rule.type_name;
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(fn_name);
+    add_parser_super_effect(&mut f, ctx);
     f.add_param(&"p", &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
@@ -2394,6 +2403,7 @@ fn gen_parse_fn_named(
                     let helper_name = `${*fn_name}_alt_${alt_index}`;
 
                     let mut f = FnSpec::new(&helper_name);
+                    add_parser_super_effect(&mut f, ctx);
                     f.add_param(&"p", &"&mut Parser");
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
@@ -2442,6 +2452,7 @@ fn gen_parse_fn_named(
     if has_lr {
         let atom_name = `${*fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
+        add_parser_super_effect(&mut f, ctx);
         f.add_param(&"p", &"&mut Parser");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
@@ -2505,6 +2516,7 @@ fn gen_parse_fn_named(
         return;
     } else {
         let mut f = FnSpec::new(fn_name);
+        add_parser_super_effect(&mut f, ctx);
         f.add_param(&"p", &"&mut Parser");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
@@ -3157,6 +3169,7 @@ fn gen_lr_fn(
 ) {
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
+    add_parser_super_effect(&mut f, ctx);
     f.add_param(&"p", &"&mut Parser");
     if ctx.emit_follow() {
         add_follow_param(&mut f);

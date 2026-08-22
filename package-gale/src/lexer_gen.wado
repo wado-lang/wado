@@ -37,7 +37,7 @@ use {
     gen_super_interface,
     lexer_rule_match_calls_super,
     lexer_rule_replay_calls_super,
-    superclass_base_name,
+    lexer_superclass_name,
     superclass_is_refused,
     lexer_action_bodies_are_base_calls,
     super_emit_hook_expr,
@@ -924,7 +924,7 @@ pub fn lexer_grammar_executes_actions(grammar: &Grammar) -> bool {
     if grammar.action_language matches { Wado } || action_language_is_emittable(grammar) {
         return true;
     }
-    return match superclass_base_name(grammar) {
+    return match lexer_superclass_name(grammar) {
         Some(base) => lexer_action_bodies_are_base_calls(grammar, &base),
         None => false,
     };
