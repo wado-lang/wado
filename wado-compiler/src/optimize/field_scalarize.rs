@@ -1663,18 +1663,57 @@ fn bind_for_sync(
     (vec![let_sid], read.into(), vec![(tmp_idx, type_id)])
 }
 
-/// Append `sync_stmts` to `block`, preserving the block's trailing value
-/// if it has one. If the block's last stmt is a non-unit value-producing
-/// `Expr(e)`, the trailing value is bound before the sync stmts run and a
-/// final stmt restores the block's value contract. Otherwise (empty block,
-/// non-Expr trailing stmt, or unit-typed trailing Expr) the sync stmts are
-/// simply appended.
+/// Whether `stmt` never falls through to the statement after it — a `loop`
+/// does not when its only exits are labeled breaks to an enclosing block.
+fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
+    match &body.stmts[stmt].kind {
+        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => true,
+        StmtKind::Expr(e) => e
+            .as_expr()
+            .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
+        StmtKind::Loop { body: b } => !block_breaks_innermost_loop(body, *b),
+        _ => false,
+    }
+}
+
+/// Whether an unlabeled `break` binds to the loop whose body is `block`. A
+/// nested loop captures its own, so its subtree is skipped.
+fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
+    struct Search(bool);
+    impl NirRefVisitor for Search {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Stmt(s) = node {
+                if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
+                    return;
+                }
+                if matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. }) {
+                    self.0 = true;
+                }
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut search = Search(false);
+    search.visit_node(body, NodeRef::Block(block));
+    search.0
+}
+
+/// Append `sync_stmts` to `block`, preserving a trailing value by binding it
+/// ahead of the sync and restoring it after. A diverging tail takes neither
+/// path — nothing after it runs.
 fn append_sync_preserving_block_value(
     body: &mut Body,
     block: BlockId,
     sync_stmts: Vec<StmtId>,
     ctx: &mut WalkCtx,
 ) {
+    if body.blocks[block]
+        .stmts
+        .last()
+        .is_some_and(|&s| stmt_diverges(body, s, ctx.type_table))
+    {
+        return;
+    }
     let trailing_is_value = match body.blocks[block].stmts.last() {
         Some(&s) => matches!(
             &body.stmts[s].kind,

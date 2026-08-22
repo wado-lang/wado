@@ -1,0 +1,38 @@
+// `T::Output` under two bounds that both declare `Output` names two types.
+// Answering with the first let `a * b` be read back as `Add`'s, so a field
+// access compiled against the wrong struct.
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+    extra: i32,
+}
+
+impl Add for Cm {
+    type Output = Cm;
+
+    fn add(&self, rhs: &Cm) -> Cm {
+        return Cm { v: self.v + rhs.v };
+    }
+}
+
+impl Mul for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Cm) -> Area {
+        return Area { v: self.v * rhs.v, extra: 111 };
+    }
+}
+
+fn scale<T: Add + Mul>(a: T, b: T) -> T::Output {
+    return a * b;
+}
+
+export fn run() {
+    assert scale(Cm { v: 2 }, Cm { v: 3 }).v == 6;
+}
+
+__DATA__
+{ "compile_error": "ambiguous associated type 'T::Output'" }

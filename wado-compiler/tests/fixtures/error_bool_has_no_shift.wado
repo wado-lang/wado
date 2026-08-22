@@ -1,0 +1,13 @@
+// The bound a primitive satisfies must match what the operator lowers to.
+// `b << 1` is not a Wado expression, so `T: Shl` must not hold for `bool`; it
+// did, and the fold to an i32 instruction escaped the two-value domain.
+fn twice<T: Shl<Output = T>>(a: T) -> T {
+    return a << 1;
+}
+
+export fn run() {
+    assert twice(true) == true;
+}
+
+__DATA__
+{ "compile_error": "type 'bool' does not implement trait 'Shl'" }

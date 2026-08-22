@@ -1,0 +1,37 @@
+// The literal `1` in `a << 1` is typed from `Shl`'s declared right-hand side.
+// The hint read it off the first bound declaring a method called `shl`, so an
+// unrelated `Doubler::shl(&self, n: u64)` retyped the shift's operand.
+use { println } from "core:cli";
+
+struct Cm {
+    v: i32,
+}
+
+trait Doubler {
+    fn shl(&self, n: u64) -> i32;
+}
+
+impl Doubler for Cm {
+    fn shl(&self, n: u64) -> i32 {
+        return 0;
+    }
+}
+
+impl Shl for Cm {
+    type Output = Cm;
+
+    fn shl(&self, rhs: u32) -> Cm {
+        return Cm { v: self.v * 2 };
+    }
+}
+
+fn twice<T: Doubler + Shl<Output = T>>(a: T) -> T {
+    return a << 1;
+}
+
+export fn run() with Stdout {
+    println(`${twice(Cm { v: 3 }).v}`);
+}
+
+__DATA__
+{"stdout": "6\n"}

@@ -289,7 +289,7 @@ impl ImplHeader {
 /// blanket wrote cannot answer that.
 fn blanket_pack_assocs(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
-    blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
+    blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
 ) -> IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> {
     let mut out: IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> = IndexMap::default();
@@ -341,7 +341,7 @@ pub(crate) enum BlanketParamSource {
 /// written after another parameter sits at a slot the caller never fills.
 fn blanket_param_sources(
     impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
-    blanket_impls: &IndexMap<String, Vec<BlanketImpl>>,
+    blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
 ) -> IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> {
     let mut out: IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> = IndexMap::default();
@@ -420,6 +420,10 @@ pub(crate) struct BlanketBound {
     /// The trait the bound's reference site names, `None` where it reaches no
     /// declaration.
     pub(crate) decl_ref: Option<crate::defs::DefId>,
+    /// Associated types the bound pins to the receiver param itself (`Output`
+    /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
+    /// receiver; any other right-hand side is the instantiation's to answer.
+    pub(crate) pinned_to_receiver: Vec<String>,
 }
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
@@ -504,10 +508,14 @@ pub(super) type TraitDeclIndex = IndexSet<DefId>;
 
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
+///
+/// `writer` is the trait whose declaration listed it: `trait Foo<A>:
+/// Bar<Item = A>` binds `Item` to `Foo`'s `A`, not an asking frame's.
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
     pub(super) decl: DefId,
+    pub(super) writer: DefId,
 }
 
 /// Pre-built index: trait declaration → the transitive closure of its
@@ -766,15 +774,15 @@ pub struct TraitEnv {
     /// declaration wins (matching the previous whole-program scan order).
     /// Consumed by `find_assoc_type_bounds` without an AST scan.
     pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
-    /// `trait_name` → reified blanket impls of that trait, in registration
-    /// order. The single classification source for blanket dispatch (module,
-    /// receiver kind, param, bounds); the `blanket_impl_*_for_trait` queries
-    /// select over it. Used by the monomorphizer to find the home module of a
-    /// generic dispatch when the receiver type has no dedicated `impl Trait for
-    /// Type` block — the blanket provides the body, homed in the blanket's
-    /// module. Keyed by bare trait name; the `type_module` hint at the call site
-    /// disambiguates when several modules host a blanket for the same trait.
-    pub(super) blanket_impls: IndexMap<String, Vec<BlanketImpl>>,
+    /// Blanket impls by the trait they implement, in registration order. The
+    /// single classification source for blanket dispatch (module, receiver
+    /// kind, param, bounds), and where the monomorphizer finds the home module
+    /// of a generic dispatch the receiver wrote no impl for.
+    ///
+    /// Keyed by declaration: a name-keyed bucket merged two modules'
+    /// same-named traits, so one module's blanket answered the other's bound
+    /// (WEP 2026-08-12).
+    pub(super) blanket_impls: IndexMap<DefId, Vec<BlanketImpl>>,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
@@ -877,7 +885,7 @@ impl TraitEnv {
         let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
             IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
-        let mut blanket_impls: IndexMap<String, Vec<BlanketImpl>> = IndexMap::default();
+        let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
@@ -1142,8 +1150,7 @@ impl TraitEnv {
                     .entry(type_key.clone())
                     .or_default()
                     .push((module_source.clone(), impl_block.id));
-                if let Some(trait_type) = &impl_block.trait_type {
-                    let trait_name = get_type_name_static(trait_type);
+                if impl_block.trait_type.is_some() {
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
                     {
@@ -1157,20 +1164,30 @@ impl TraitEnv {
                                     .map(|b| BlanketBound {
                                         name: b.name.clone(),
                                         decl_ref: resolutions.declared(b.id),
+                                        pinned_to_receiver: b
+                                            .assoc_types
+                                            .iter()
+                                            .filter(|c| get_type_name_static(&c.ty) == param)
+                                            .map(|c| c.name.clone())
+                                            .collect(),
                                     })
                                     .collect()
                             })
                             .unwrap_or_default();
-                        blanket_impls
-                            .entry(trait_name.clone())
-                            .or_default()
-                            .push(BlanketImpl {
-                                module: module_source.clone(),
-                                ast_id: impl_block.id,
-                                receiver,
-                                param,
-                                bounds,
-                            });
+                        // A blanket whose trait reference reaches no
+                        // declaration answers no bound, so it is not indexed.
+                        if let Some(implemented) = trait_ref {
+                            blanket_impls
+                                .entry(implemented)
+                                .or_default()
+                                .push(BlanketImpl {
+                                    module: module_source.clone(),
+                                    ast_id: impl_block.id,
+                                    receiver,
+                                    param,
+                                    bounds,
+                                });
+                        }
                     }
                     impl_index
                         .entry(type_key.clone())
@@ -1382,6 +1399,44 @@ impl TraitEnv {
         self.decls_by_name.get(name).into_iter().flatten().copied()
     }
 
+    /// The trait `header` implements, named as a bound can reach it. See
+    /// [`args_without_declared_defaults`] for why an argument may drop out.
+    pub(super) fn fq_trait_of_impl(
+        &self,
+        header: &ImplHeader,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> Option<name::FqTraitName> {
+        let fq = header.fq_trait(resolutions)?;
+        let trait_type = header.trait_type.as_ref()?;
+        Some(self.fq_trait_named_by_impl(fq, trait_type, &header.ty, resolutions))
+    }
+
+    /// [`Self::fq_trait_of_impl`] for a caller holding the written trait
+    /// reference and the impl's target rather than a built header.
+    pub(super) fn fq_trait_named_by_impl(
+        &self,
+        fq: name::FqTraitName,
+        trait_type: &ast::Type,
+        target: &ast::Type,
+        resolutions: &crate::resolve::Resolutions,
+    ) -> name::FqTraitName {
+        let Some(params) = fq
+            .canonical()
+            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .map(|header| &header.type_params)
+        else {
+            return fq;
+        };
+        let args = args_without_declared_defaults(
+            fq.args().to_vec(),
+            trait_type,
+            target,
+            params,
+            resolutions,
+        );
+        fq.with_args(args)
+    }
+
     /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
     /// blanket impl and for a receiver no concrete impl represents (an
     /// anonymous function type whose `Inspect` synthesis auto-derives
@@ -1497,10 +1552,10 @@ impl TraitEnv {
     /// several modules host a value blanket for the trait.
     pub(crate) fn blanket_impl_module_for_trait(
         &self,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
     ) -> Option<&ModuleSource> {
-        self.value_blanket_for_trait(trait_name, type_module)
+        self.value_blanket_for_trait(trait_, type_module)
             .map(|b| &b.module)
     }
 
@@ -1511,11 +1566,11 @@ impl TraitEnv {
     /// first-registered kind and then reject it on the bound check.
     pub(crate) fn value_blanket_for_receiver(
         &self,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
         satisfies: &dyn Fn(&[BlanketBound]) -> bool,
     ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(trait_name)?;
+        let impls = self.blanket_impls.get(&trait_)?;
         let mut values = impls
             .iter()
             .filter(|b| b.receiver == BlanketReceiver::Value)
@@ -1534,10 +1589,10 @@ impl TraitEnv {
     /// never dispatch a value receiver.
     fn value_blanket_for_trait(
         &self,
-        trait_name: &str,
+        trait_: DefId,
         type_module: Option<&ModuleSource>,
     ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(trait_name)?;
+        let impls = self.blanket_impls.get(&trait_)?;
         let mut values = impls
             .iter()
             .filter(|b| b.receiver == BlanketReceiver::Value);
@@ -1555,8 +1610,8 @@ impl TraitEnv {
     /// shape ref impl (`impl<T> IntoIterator for &List<T>`), whose inner is a
     /// concrete/parametric type. Callers route a `&<pointee>` type-param dispatch
     /// through the universal blanket only when one exists.
-    pub(crate) fn has_universal_ref_blanket(&self, trait_name: &str, is_mut: bool) -> bool {
-        self.blanket_impls.get(trait_name).is_some_and(|impls| {
+    pub(crate) fn has_universal_ref_blanket(&self, trait_: DefId, is_mut: bool) -> bool {
+        self.blanket_impls.get(&trait_).is_some_and(|impls| {
             impls
                 .iter()
                 .any(|b| b.receiver == BlanketReceiver::Ref { is_mut })
@@ -1954,6 +2009,7 @@ fn expand_supertraits(
             &InheritedBound {
                 bound: direct.clone(),
                 decl: super_loc,
+                writer: loc,
             },
         );
         for inherited in expand_supertraits(
@@ -2435,29 +2491,111 @@ fn index_decls_by_name(
     out
 }
 
-/// The type arguments a written trait position supplies, structured — read off the
-/// nodes that wrote them, so each argument's own reference site says which
-/// declaration it names and an alias or namespace prefix reaches the same head.
+/// The argument nodes a written trait reference carries, empty for a bare
+/// name. `ns::Trait<T>` supplies them the same as `Trait<T>` does: the
+/// namespace is the head's question, not the argument list's.
+pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
+    match ty {
+        ast::Type::Generic(generic) => &generic.args,
+        ast::Type::NamespacedGeneric(ns) => &ns.args,
+        _ => &[],
+    }
+}
+
+/// The type arguments a written trait position supplies, each read off the node
+/// that wrote it, so its own reference site says which declaration it names.
 pub(super) fn written_type_args(
     ty: &ast::Type,
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<name::FqTypeName> {
-    // `ns::Trait<T>` supplies its arguments the same as `Trait<T>` does — the
-    // namespace says which module declares the head, which is the reference
-    // site's question and not the argument list's.
     match ty {
-        ast::Type::Generic(generic) => generic
-            .args
-            .iter()
-            .map(|arg| written_type_arg(arg, resolutions))
-            .collect(),
-        ast::Type::NamespacedGeneric(ns) => ns
-            .args
+        ast::Type::Generic(_) | ast::Type::NamespacedGeneric(_) => written_arg_nodes(ty)
             .iter()
             .map(|arg| written_type_arg(arg, resolutions))
             .collect(),
         _ => Vec::new(),
     }
+}
+
+/// A trait argument list with every trailing argument that only restates the
+/// declared default dropped, `Self` meaning the impl's own target — so
+/// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
+fn args_without_declared_defaults(
+    written: Vec<name::FqTypeName>,
+    trait_type: &ast::Type,
+    target: &ast::Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+) -> Vec<name::FqTypeName> {
+    let mut kept = written;
+    kept.truncate(non_default_arg_count(
+        trait_type,
+        target,
+        params,
+        resolutions,
+    ));
+    kept
+}
+
+/// Whether a bare bound on the trait selects this header. A bound writes no
+/// arguments, so it asks for the declared default where a position has one
+/// (`T: Mul` is `Mul<Self>`) and nothing where it has none (`T: Pick`).
+pub(super) fn header_answers_bare_bound(
+    trait_type: &ast::Type,
+    target: &ast::Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+) -> bool {
+    let ast_args = written_arg_nodes(trait_type);
+    ast_args.iter().enumerate().all(|(i, arg)| {
+        params
+            .get(i)
+            .and_then(|p| p.default.as_ref())
+            .is_none_or(|default| restates_default(arg, default, target, resolutions))
+    })
+}
+
+/// Whether a written trait argument says exactly what the declared default
+/// does, `Self` meaning the impl's target.
+fn restates_default(
+    arg: &ast::Type,
+    default: &ast::Type,
+    target: &ast::Type,
+    resolutions: &crate::resolve::Resolutions,
+) -> bool {
+    match default {
+        ast::Type::Named(named) if named.name == "Self" => {
+            matches!(arg, ast::Type::Named(a) if a.name == "Self")
+                || written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
+        }
+        _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
+    }
+}
+
+/// How many of `trait_type`'s written arguments say something its declared
+/// defaults do not. One rule behind both an impl's name and the identity its
+/// associated types register under, so the two cannot disagree.
+pub(super) fn non_default_arg_count(
+    trait_type: &ast::Type,
+    target: &ast::Type,
+    params: &[ast::GenericParam],
+    resolutions: &crate::resolve::Resolutions,
+) -> usize {
+    let ast_args = written_arg_nodes(trait_type);
+    let mut kept = ast_args.len();
+    while let Some(last) = kept.checked_sub(1) {
+        let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {
+            break;
+        };
+        let Some(default) = param.default.as_ref() else {
+            break;
+        };
+        if !restates_default(arg, default, target, resolutions) {
+            break;
+        }
+        kept = last;
+    }
+    kept
 }
 
 /// One written type argument as the identity it names.

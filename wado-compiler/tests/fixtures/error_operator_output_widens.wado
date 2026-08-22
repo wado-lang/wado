@@ -1,0 +1,26 @@
+// `Product`'s blanket is bounded `T: Mul<Output = T>`, so a widening operator
+// impl does not reach it. The constraint is what the prelude writes — the
+// blanket index used to drop it and accept any `Mul`.
+struct Cm {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+impl Mul for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Cm) -> Area {
+        return Area { v: self.v * rhs.v };
+    }
+}
+
+export fn run() {
+    let xs: List<Cm> = [Cm { v: 2 }, Cm { v: 3 }];
+    assert xs.iter_value().product() matches { Some(v) && v.v == 6 };
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Product'" }

@@ -75,6 +75,10 @@ impl Monomorphizer {
             let mangled = mangled.clone();
             return Some((key, mangled));
         }
+        let trait_decl = key
+            .method_info
+            .as_ref()
+            .and_then(LocalMethodName::trait_decl);
         let trait_name = key
             .method_info
             .as_ref()
@@ -97,10 +101,11 @@ impl Monomorphizer {
             // Blanket impl fallback: dispatch through `impl<I: Bound> Trait for I`
             // isn't keyed by struct name. The queued instantiation lives in the
             // blanket's home module, looked up by trait name only.
-            if let Some(impl_module) = self
-                .functions
-                .trait_env
-                .blanket_impl_module_for_trait(&trait_name, type_module_hint)
+            if let Some(trait_) = trait_decl
+                && let Some(impl_module) = self
+                    .functions
+                    .trait_env
+                    .blanket_impl_module_for_trait(trait_, type_module_hint)
             {
                 key.module_source = impl_module.clone();
                 if let Some(mangled) = self.lookup_function_instantiation(&key) {
@@ -313,14 +318,14 @@ impl Monomorphizer {
                 if monomorph.is_blanket {
                     names_to_try.insert(0, monomorph.generic_name.clone());
                 }
-                let blanket_trait = info.base_trait_name();
-                let impl_ta = blanket_trait
+                let impl_ta = info
+                    .trait_decl()
                     .filter(|_| monomorph.is_blanket)
-                    .and_then(|tn| {
+                    .and_then(|trait_| {
                         super::func_inst::blanket_pack_dispatch_args(
                             &monomorph.impl_type_args,
                             &self.functions.trait_env,
-                            tn,
+                            trait_,
                             &func.module_source,
                             type_table,
                         )
@@ -400,10 +405,10 @@ impl Monomorphizer {
             && method_func.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
                     let is_mut = ref_kind == RefKind::Mut;
-                    i.base_trait_name().is_some_and(|tn| {
+                    i.trait_decl().is_some_and(|trait_| {
                         self.functions
                             .trait_env
-                            .has_universal_ref_blanket(tn, is_mut)
+                            .has_universal_ref_blanket(trait_, is_mut)
                     })
                 })
             });
@@ -665,12 +670,11 @@ impl Monomorphizer {
                 && mono.is_blanket
             {
                 let info = method_func.method_info.as_ref();
-                let blanket_trait = info.and_then(|i| i.base_trait_name());
-                let impl_ta = match (blanket_trait, info) {
-                    (Some(tn), Some(_)) => super::func_inst::blanket_pack_dispatch_args(
+                let impl_ta = match (info.and_then(LocalMethodName::trait_decl), info) {
+                    (Some(trait_), Some(_)) => super::func_inst::blanket_pack_dispatch_args(
                         &mono.impl_type_args,
                         &self.functions.trait_env,
-                        tn,
+                        trait_,
                         &method_func.module_source,
                         type_table,
                     ),

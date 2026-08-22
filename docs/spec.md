@@ -3073,34 +3073,20 @@ pub trait IntoIterator {
 #### FromIterator - Collection Construction
 
 ```wado
-/// Types that can be constructed from an iterator
-pub trait FromIterator<T> {
-    type Iter;
-    fn from_iter(iter: Self::Iter) -> Self;
+/// Types that can be constructed from an iterator of `Elem`
+pub trait FromIterator {
+    type Elem;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
 }
 ```
 
-#### ListIter
+#### SliceValueIter
 
-The prelude provides `ListIter<T>` as the iterator type for `List<T>`:
+`SliceValueIter<T>` is the by-value iterator for the whole sequence family: `Array<T>`, `List<T>`, and `Slice<T>` all reach it through `iter_value()`. [The Sequence Family](./wep-2026-06-02-sequence-family.md) owns the `Value` / `Ref` / `RefMut` axis and the rest of the family's iterators.
 
-```wado
-/// Iterator over List<T> elements
-pub struct ListIter<T> {
-    // internal fields
-}
+#### Terminals
 
-impl Iterator for ListIter<T> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> { ... }
-}
-
-impl IntoIterator for List<T> {
-    type Item = T;
-    type Iter = ListIter<T>;
-    fn into_iter(&self) -> ListIter<T> { ... }
-}
-```
+Everything `Iterator` declares is available on every implementor, adapters included — the terminals bounded by their element type among them (`sum` / `product` need `Item: Add<Output = Item>` / `Mul<Output = Item>`, `min` / `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
 
 #### Usage
 
@@ -3113,15 +3099,18 @@ for let x of arr {
 }
 
 // Explicit iterator
-let mut iter = arr.iter();
+let mut iter = arr.iter_value();
 while let Some(x) = iter.next() {
     println(`${x}`);
 }
 
 // Collect remaining elements
-let mut iter2 = arr.iter();
-iter2.next();  // skip first
-let rest = iter2.collect();  // [2, 3, 4, 5]
+let mut rest_iter = arr.iter_value();
+rest_iter.next();  // skip first
+let rest = rest_iter.collect();  // [2, 3, 4, 5]
+
+// Terminals compose with the adapters
+let total = arr.iter_value().filter(|x: i32| x % 2 == 1).sum();  // Some(9)
 ```
 
 #### Value Semantics
@@ -3366,6 +3355,30 @@ Selection follows the same unique-or-error rule as a method call's argument
 lists (see [One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
 `Neg` and `BitNot` are unary and take no argument; `Shl` / `Shr` declare
 `rhs: u32`.
+
+The compiler supplies these impls for the integers, and for `f32` / `f64`
+except `Rem`. `bool` holds one bit, so it gets the bit operators and no shift;
+`v128` gets none, its arithmetic being lane-wise and known only to the lane
+type's own impl.
+
+An operator yields `Output`, which a widening impl may make another type, so a
+generic body folding back into its own parameter pins it:
+
+```wado
+fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
+fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
+```
+
+A bound cannot write a trait argument — the parser reads `<...>` after one as
+associated-type bindings — so `T: Add` names the defaulted `Add<Self>`.
+`T::Output` under two bounds that both declare `Output` is ambiguous unless
+they bind it to the same type.
+
+An operator names these traits by construction, not by spelling: a trait
+declared as `Add` elsewhere shadows the name but does not answer `+`.
+
+A parameter with no default is therefore unconstrained by a bound: `T: Pick`
+holds for every `impl Pick<K>`, and the body cannot pass an argument for `K`.
 
 ### Indexing Traits
 

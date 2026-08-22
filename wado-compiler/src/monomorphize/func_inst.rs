@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::compiler_item::CompilerItem;
 use crate::elaborator::trait_env::ReceiverCandidate;
 use crate::elaborator::trait_env::{BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -146,7 +147,7 @@ struct SubstitutedCall {
 pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
-    trait_name: &str,
+    trait_: crate::defs::DefId,
     blanket_module: &ModuleSource,
     type_table: &TypeTable,
 ) -> Option<Vec<TypeId>> {
@@ -155,11 +156,9 @@ pub(super) fn blanket_pack_dispatch_args(
     }
     let receiver = args[0];
     let blanket =
-        trait_env.value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+        trait_env.value_blanket_for_receiver(trait_, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                receiver,
-                bounds.to_vec(),
-                type_table,
+                receiver, bounds, type_table,
             )
         })?;
     // Declaration order, not "receiver then projections": a blanket may write
@@ -174,7 +173,7 @@ pub(super) fn blanket_pack_dispatch_args(
         match source {
             BlanketParamSource::Receiver => out.push(receiver),
             BlanketParamSource::Projection(bound_trait, assoc) => {
-                out.push(type_table.resolve_trait_assoc_type(receiver, &bound_trait, &assoc)?);
+                out.push(type_table.resolve_assoc_type_of_trait(receiver, &bound_trait, &assoc)?);
             }
             BlanketParamSource::Unresolved => return None,
         }
@@ -206,7 +205,7 @@ fn declared_method_type_args(generic: &TirFunction, type_args: &[TypeId]) -> Vec
 /// allowed as before.
 fn blanket_receiver_satisfies(
     trait_env: &TraitEnv,
-    trait_name: &str,
+    trait_: crate::defs::DefId,
     blanket_module: &ModuleSource,
     blanket_receiver: Option<(TypeId, &TypeTable)>,
 ) -> bool {
@@ -214,11 +213,9 @@ fn blanket_receiver_satisfies(
         return true;
     };
     trait_env
-        .value_blanket_for_receiver(trait_name, Some(blanket_module), &|bounds| {
+        .value_blanket_for_receiver(trait_, Some(blanket_module), &|bounds| {
             crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                type_id,
-                bounds.to_vec(),
-                type_table,
+                type_id, bounds, type_table,
             )
         })
         .is_some()
@@ -242,6 +239,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
     if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
         return Some(v);
     }
+    let trait_decl = info.and_then(LocalMethodName::trait_decl);
     let trait_name = info.and_then(|i| i.base_trait_name());
     if let Some(trait_name) = trait_name {
         for candidate in struct_candidates {
@@ -256,9 +254,10 @@ fn lookup_template_with_trait_fallback<'a, V>(
         // name — the receiver-type candidates above can't find them. Consult
         // the blanket index by trait name so `bytes.into_iter()` resolves to
         // the `IntoIterator` blanket in `core:prelude/traits`.
-        if let Some(impl_module) =
-            trait_env.blanket_impl_module_for_trait(trait_name, type_module_hint)
-            && blanket_receiver_satisfies(trait_env, trait_name, impl_module, blanket_receiver)
+        if let Some(trait_) = trait_decl
+            && let Some(impl_module) =
+                trait_env.blanket_impl_module_for_trait(trait_, type_module_hint)
+            && blanket_receiver_satisfies(trait_env, trait_, impl_module, blanket_receiver)
             && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
         {
             return Some(v);
@@ -856,13 +855,13 @@ impl Monomorphizer {
             // re-keyed this way: a concrete impl whose single argument happens
             // to satisfy some blanket's bounds is not that blanket.
             let impl_type_args = info
-                .base_trait_name()
+                .trait_decl()
                 .filter(|_| monomorph.is_blanket)
-                .and_then(|tn| {
+                .and_then(|trait_| {
                     blanket_pack_dispatch_args(
                         &monomorph.impl_type_args,
                         &self.functions.trait_env,
-                        tn,
+                        trait_,
                         module_source,
                         type_table,
                     )
@@ -1437,7 +1436,7 @@ impl Monomorphizer {
                 {
                     let generic_func = generic_func_rc.borrow();
                     let info = method_func.method_info.as_ref();
-                    let trait_name = info.and_then(|i| i.base_trait_name());
+                    let trait_name = info.and_then(LocalMethodName::trait_decl);
                     // Does this dispatch go through a blanket template that keys on
                     // projected type packs (`impl<T: Bound<Assoc = [..P]>, ..P>
                     // Trait for T`, keyed by `[T, T::Assoc, …]`)? Covers
@@ -1649,18 +1648,22 @@ impl Monomorphizer {
     }
 
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
-    /// call: a `newtype` inherits its base's trait impl, so peel it to the base
-    /// unless the newtype defines its own impl of the bound trait.
+    /// call. A `newtype` inherits its base's trait impl and a reference
+    /// forwards to its pointee's — a receiverless method has no receiver to
+    /// deref — so peel to that impl unless the receiver has one of its own, or
+    /// a value blanket it is not disqualified from: a blanket is not
+    /// inherited, and only the reflection bounds are decidable here.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
         info: &LocalMethodName,
         type_table: &TypeTable,
     ) -> TypeId {
-        if !matches!(type_table.get(tid), ResolvedType::Newtype { .. }) {
-            return tid;
-        }
-        let base = type_table.resolve_newtype_base(tid);
+        let base = match type_table.get(tid) {
+            ResolvedType::Newtype { .. } => type_table.resolve_newtype_base(tid),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => return tid,
+        };
         if base == tid {
             return tid;
         }
@@ -1675,7 +1678,57 @@ impl Monomorphizer {
         {
             return tid;
         }
+        if trait_name
+            .canonical()
+            .is_some_and(|trait_| self.value_blanket_serves(tid, trait_, type_table))
+        {
+            return tid;
+        }
         base
+    }
+
+    /// Whether an operator on `id` lowers to a scalar instruction rather than
+    /// the trait call monomorphization produced. A primitive *is* the
+    /// instruction; a type that merely erases to one keeps its own impl.
+    fn operator_lowers_to_scalar(
+        &self,
+        type_table: &TypeTable,
+        id: TypeId,
+        trait_decl: Option<crate::defs::DefId>,
+    ) -> bool {
+        if !type_table.is_scalar_primitive_like(id) {
+            return false;
+        }
+        if matches!(type_table.get(id), ResolvedType::Primitive(_)) {
+            return true;
+        }
+        let Some(trait_) = trait_decl else {
+            return true;
+        };
+        // The receiver only: keeping the call for an impl a link *below* it
+        // wrote leaves the dispatch asking the erased base, which carries no
+        // user impl. `newtype_link_impl_unreached.wado` pins the cost.
+        !self.has_own_trait_impl(type_table, id, trait_)
+    }
+
+    fn value_blanket_serves(
+        &self,
+        tid: TypeId,
+        trait_: crate::defs::DefId,
+        type_table: &TypeTable,
+    ) -> bool {
+        self.functions
+            .trait_env
+            .value_blanket_for_receiver(
+                trait_,
+                module_source_for_trait_impl(type_table, tid).as_ref(),
+                &|bounds| {
+                    crate::synthesis::template::receiver_satisfies_blanket_bounds(
+                        tid, bounds, type_table,
+                    )
+                },
+            )
+            .is_some()
     }
 
     /// Instantiate a generic function with concrete type arguments
@@ -2179,7 +2232,7 @@ impl Monomorphizer {
                             // `&List<i32>^Inspect` to List's impl instead of the
                             // ref blanket's, dropping the leading `&` at codegen.
                             // A generic impl lives in the receiver's own module.
-                            let trait_name_for_blanket = new_info.base_trait_name();
+                            let trait_name_for_blanket = new_info.trait_decl();
                             let generic_or_concrete =
                                 self.functions.generic_or_concrete_impl_module(
                                     &new_info,
@@ -2195,7 +2248,7 @@ impl Monomorphizer {
                                             &|bounds| {
                                                 crate::synthesis::template::receiver_satisfies_blanket_bounds(
                                                     concrete_type_id,
-                                                    bounds.to_vec(),
+                                                    bounds,
                                                     type_table,
                                                 )
                                             },
@@ -2369,19 +2422,56 @@ impl Monomorphizer {
                 // Convert back to a binary op when monomorphization concretized to a primitive.
                 if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
                     let recv_inner = type_table.peel_refs(receiver.type_id);
-                    if type_table.is_primitive_like(recv_inner)
-                        && let Some(binary_op) = trait_method_to_binary_op(
-                            trait_name_before
-                                .as_ref()
-                                .map(crate::name::FqTraitName::base_name),
-                            &method_name_before,
-                        )
+                    let trait_decl = trait_name_before
+                        .as_ref()
+                        .and_then(crate::name::FqTraitName::canonical);
+                    // Which operator this is, by declaration: a user trait
+                    // spelled `Neg` supplies no instruction of its own.
+                    let item = trait_decl.and_then(|decl| {
+                        type_table
+                            .compiler_items()
+                            .trait_item_of_decl(type_table.defs().ast_id(decl))
+                    });
+                    // The op decides first: a trait method that is no operator
+                    // — `Display::to_string`, `Iterator::next` — must not pay
+                    // for the receiver's impl-index query.
+                    let unary = trait_method_to_unary_op(item, &method_name_before);
+                    let binary = trait_method_to_binary_op(item, &method_name_before);
+                    let lowers_to_scalar = (unary.is_some() || binary.is_some())
+                        && self.operator_lowers_to_scalar(type_table, recv_inner, trait_decl);
+                    if let Some(unary_op) = unary
+                        && lowers_to_scalar
+                    {
+                        let operand = unref_operand(receiver, type_table);
+                        expr.type_id = operand.type_id;
+                        expr.kind = TirExprKind::Unary {
+                            op: unary_op,
+                            expr: Box::new(operand),
+                        };
+                    } else if let Some(binary_op) = binary
+                        && lowers_to_scalar
                     {
                         let left = unref_operand(receiver, type_table);
                         let Some(arg) = args.first() else {
                             unreachable!("a binary-op trait method always takes one argument")
                         };
-                        let right = unref_operand(&arg.expr, type_table);
+                        let mut right = unref_operand(&arg.expr, type_table);
+                        // `Shl` / `Shr` declare `rhs: u32` whatever the
+                        // receiver is; the native instruction takes both
+                        // operands at one width.
+                        if matches!(binary_op, TirBinaryOp::Shl | TirBinaryOp::Shr)
+                            && right.type_id != left.type_id
+                        {
+                            let span = right.span;
+                            right = TirExpr {
+                                kind: TirExprKind::Cast {
+                                    expr: Box::new(right),
+                                    target_type: left.type_id,
+                                },
+                                type_id: left.type_id,
+                                span,
+                            };
+                        }
                         let result_type =
                             if matches!(binary_op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
                                 TypeTable::BOOL
@@ -2957,10 +3047,13 @@ impl Monomorphizer {
             return false;
         };
         let trait_name = trait_fq.base_name();
+        let Some(trait_) = trait_fq.canonical() else {
+            return false;
+        };
         if !self
             .functions
             .trait_env
-            .has_universal_ref_blanket(trait_name, is_mut)
+            .has_universal_ref_blanket(trait_, is_mut)
         {
             return false;
         }
@@ -3162,7 +3255,7 @@ impl Monomorphizer {
         receiver: TypeId,
         type_table: &TypeTable,
     ) -> bool {
-        let Some(trait_name) = info.base_trait_name() else {
+        let Some(trait_name) = info.trait_decl() else {
             return false;
         };
         if !crate::synthesis::template::has_reflect_kind(receiver, type_table) {
@@ -3173,9 +3266,7 @@ impl Monomorphizer {
             .trait_env
             .value_blanket_for_receiver(trait_name, receiver_module.as_ref(), &|bounds| {
                 crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                    receiver,
-                    bounds.to_vec(),
-                    type_table,
+                    receiver, bounds, type_table,
                 )
             })
             .is_some()
@@ -3211,7 +3302,7 @@ impl Monomorphizer {
         // ref blanket's, dropping the leading `&` at codegen. With no concrete
         // impl, a generic one lives in the receiver type's own module — how
         // newtype inheritance reuses it — and only a blanket in `blanket_impls`.
-        let trait_name_for_blanket = new_info.base_trait_name();
+        let trait_name_for_blanket = new_info.trait_decl();
         let generic_or_concrete = self
             .functions
             .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
@@ -3224,9 +3315,7 @@ impl Monomorphizer {
                     .trait_env
                     .value_blanket_for_receiver(tn, receiver_module.as_ref(), &|bounds| {
                         crate::synthesis::template::receiver_satisfies_blanket_bounds(
-                            recv_inner,
-                            bounds.to_vec(),
-                            type_table,
+                            recv_inner, bounds, type_table,
                         )
                     })
                     .map(|b| {
@@ -3274,15 +3363,9 @@ impl Monomorphizer {
         let monomorph_info = if self.functions.has_impl(&new_info) || served_by_receiver_scan {
             None
         } else {
-            // Blanket impl: choose the right generic_name for lookup.
-            // For associated type projections (S::SeqSerializer^...), use new_func_name.
-            // Otherwise key by the blanket's own receiver param — the call
-            // site's param head (`old_func_name`) only matches it for a
-            // direct `T::method` call, not a call on another param. This
-            // and the receiver-derived impl args below apply only to a
-            // `ReflectStruct`-derived blanket (identified by the receiver's
-            // `Fields` pack); every other blanket keeps its original
-            // dispatch so serde / iterator blankets are untouched.
+            // Blanket impl: an associated-type projection (`S::SeqSerializer^…`)
+            // keeps `new_func_name`; every other blanket is keyed by its own
+            // receiver param. The impl args below stay `ReflectStruct`-only.
             let recv_inner = type_table.peel_refs(receiver_type_id);
             // Resolve the type packs a blanket keys on. The general form of the
             // former `ReflectStruct`-struct-only `[T, Fields]` keying: a blanket
@@ -3312,7 +3395,7 @@ impl Monomorphizer {
                     // shared borrow and cannot substitute, sees the same answer.
                     type_table.register_assoc_type_resolution(
                         recv_inner,
-                        *bound_trait,
+                        crate::tir::TraitRef::bare(*bound_trait),
                         assoc.clone(),
                         pack,
                     );
@@ -3323,7 +3406,7 @@ impl Monomorphizer {
             let has_projected = !projected_assocs.is_empty();
             let blanket_name = if receiver_is_assoc_projection {
                 new_func_name.clone()
-            } else if let (true, Some(param)) = (has_projected, blanket_param) {
+            } else if let Some(param) = blanket_param {
                 LocalMethodName::new(
                     FqTypeName::binder(&param),
                     new_info.trait_name.clone(),
@@ -4629,21 +4712,30 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
     expr
 }
 
-/// Convert a trait method name to a TIR binary operator, if applicable.
-/// Used when a type-param-receiver method call is monomorphized to a primitive type.
-fn trait_method_to_binary_op(trait_name: Option<&str>, method_name: &str) -> Option<TirBinaryOp> {
-    match (trait_name, method_name) {
-        (Some("Add"), "add") => Some(TirBinaryOp::Add),
-        (Some("Sub"), "sub") => Some(TirBinaryOp::Sub),
-        (Some("Mul"), "mul") => Some(TirBinaryOp::Mul),
-        (Some("Div"), "div") => Some(TirBinaryOp::Div),
-        (Some("Rem"), "rem") => Some(TirBinaryOp::Mod),
-        (Some("BitAnd"), "bitand") => Some(TirBinaryOp::BitAnd),
-        (Some("BitOr"), "bitor") => Some(TirBinaryOp::BitOr),
-        (Some("BitXor"), "bitxor") => Some(TirBinaryOp::BitXor),
-        (Some("Shl"), "shl") => Some(TirBinaryOp::Shl),
-        (Some("Shr"), "shr") => Some(TirBinaryOp::Shr),
-        (Some("Eq"), "eq") => Some(TirBinaryOp::Eq),
+/// The instruction a monomorphized operator call lowers to, named by the
+/// compiler item its trait is.
+fn trait_method_to_unary_op(item: Option<CompilerItem>, method_name: &str) -> Option<TirUnaryOp> {
+    match (item?, method_name) {
+        (CompilerItem::Neg, "neg") => Some(TirUnaryOp::Neg),
+        (CompilerItem::BitNot, "bitnot") => Some(TirUnaryOp::BitNot),
+        _ => None,
+    }
+}
+
+/// [`trait_method_to_unary_op`] for the binary operators.
+fn trait_method_to_binary_op(item: Option<CompilerItem>, method_name: &str) -> Option<TirBinaryOp> {
+    match (item?, method_name) {
+        (CompilerItem::Add, "add") => Some(TirBinaryOp::Add),
+        (CompilerItem::Sub, "sub") => Some(TirBinaryOp::Sub),
+        (CompilerItem::Mul, "mul") => Some(TirBinaryOp::Mul),
+        (CompilerItem::Div, "div") => Some(TirBinaryOp::Div),
+        (CompilerItem::Rem, "rem") => Some(TirBinaryOp::Mod),
+        (CompilerItem::BitAnd, "bitand") => Some(TirBinaryOp::BitAnd),
+        (CompilerItem::BitOr, "bitor") => Some(TirBinaryOp::BitOr),
+        (CompilerItem::BitXor, "bitxor") => Some(TirBinaryOp::BitXor),
+        (CompilerItem::Shl, "shl") => Some(TirBinaryOp::Shl),
+        (CompilerItem::Shr, "shr") => Some(TirBinaryOp::Shr),
+        (CompilerItem::Eq, "eq") => Some(TirBinaryOp::Eq),
         _ => None,
     }
 }

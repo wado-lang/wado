@@ -270,6 +270,57 @@ test "min and max of f64" {
     assert arr.iter_value().max() matches { Some(v) && v == 3.14 };
 }
 
+test "product of integers" {
+    let arr: List<i32> = [1, 2, 3, 4];
+    assert arr.iter_value().product() matches { Some(v) && v == 24 };
+}
+
+test "product of empty array" {
+    let arr: List<i32> = [];
+    assert arr.iter_value().product() matches { None };
+}
+
+test "sum, product, min and max over an adapter" {
+    let arr: List<i32> = [1, 2, 3, 4];
+    assert arr.iter_value().map(|x: i32| x * 2).sum() matches { Some(v) && v == 20 };
+    assert arr.iter_value().filter(|x: i32| x > 2).product() matches { Some(v) && v == 12 };
+    assert arr.iter_value().skip(1).min() matches { Some(v) && v == 2 };
+    assert arr.iter_value().map(|x: i32| -x).max() matches { Some(v) && v == -1 };
+}
+
+test "sum over a range" {
+    assert (1..=100).sum() matches { Some(v) && v == 5050 };
+}
+
+test "max of strings" {
+    let words: List<String> = ["bb", "a", "ccc"];
+    assert words.iter_value().max() matches { Some(v) && v == "ccc" };
+}
+
+test "min_by and max_by" {
+    let arr: List<i32> = [3, 1, 4, 1, 5];
+    assert arr.iter_value().min_by(|a: &i32, b: &i32| a.cmp(b)) matches { Some(v) && v == 1 };
+    assert arr.iter_value().max_by(|a: &i32, b: &i32| a.cmp(b)) matches { Some(v) && v == 5 };
+}
+
+test "min_by and max_by of empty array" {
+    let arr: List<i32> = [];
+    assert arr.iter_value().min_by(|a: &i32, b: &i32| a.cmp(b)) matches { None };
+    assert arr.iter_value().max_by(|a: &i32, b: &i32| a.cmp(b)) matches { None };
+}
+
+test "min_by_key and max_by_key" {
+    let words: List<String> = ["bb", "a", "ccc"];
+    assert words.iter_value().min_by_key(|w: String| w.len()) matches { Some(v) && v == "a" };
+    assert words.iter_value().max_by_key(|w: String| w.len()) matches { Some(v) && v == "ccc" };
+}
+
+test "min_by_key keeps the first of equal keys, max_by_key the last" {
+    let words: List<String> = ["ax", "bx", "cx"];
+    assert words.iter_value().min_by_key(|w: String| w.len()) matches { Some(v) && v == "ax" };
+    assert words.iter_value().max_by_key(|w: String| w.len()) matches { Some(v) && v == "cx" };
+}
+
 test "map doubles elements" {
     let arr: List<i32> = [1, 2, 3, 4, 5];
     let doubled = arr.iter_value().map(|x: i32| x * 2).collect();

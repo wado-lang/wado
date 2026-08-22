@@ -186,7 +186,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Expand a written bound list to include every bound's supertraits, so a
     /// declared `T: Ord` also demands `Eq`. For the sites that *check* a bound;
     /// what a parameter is known to satisfy is elaborated on read instead, by
-    /// [`super::tysys::TypeSystem::bound_implies`]. One declaration stays one
+    /// [`super::tysys::TypeSystem::bound_decl_implies`]. One declaration stays one
     /// bound however spelled, so an alias never competes with its original.
     pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
         self.elaborate_bounds_with(bounds, &IndexMap::default())

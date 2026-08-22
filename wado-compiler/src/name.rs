@@ -634,6 +634,14 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
 }
 
 impl LocalMethodName {
+    /// The declaration of the trait this method implements, for the indices
+    /// keyed by identity. `None` for an inherent method, or where the
+    /// reference reached no declaration.
+    #[must_use]
+    pub fn trait_decl(&self) -> Option<crate::defs::DefId> {
+        self.trait_name.as_ref().and_then(FqTraitName::canonical)
+    }
+
     /// The typed receiver shape — the query consumers use to reason about the
     /// receiver instead of parsing its mangled identity.
     #[must_use]

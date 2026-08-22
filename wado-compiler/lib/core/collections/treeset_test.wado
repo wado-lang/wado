@@ -181,6 +181,13 @@ test "iter matches for-of" {
     assert iter.next() matches { None };
 }
 
+test "sum, min and max over elements" {
+    let s: TreeSet<i32> = [3, 1, 2];
+    assert s.iter_value().sum() matches { Some(v) && v == 6 };
+    assert s.iter_value().min() matches { Some(v) && v == 1 };
+    assert s.iter_value().max() matches { Some(v) && v == 3 };
+}
+
 test "iterate same set twice" {
     let mut s: TreeSet<i32> = TreeSet::new();
     s.insert(1);

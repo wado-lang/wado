@@ -1,0 +1,30 @@
+// A bound is a bare name, so it asks for the trait at its declared defaults.
+// `impl Mul<Inch> for Cm` is a different instantiation and does not answer it;
+// matching on the declaration alone accepted it and failed inside the prelude.
+struct Cm {
+    v: i32,
+}
+
+struct Inch {
+    v: i32,
+}
+
+struct Area {
+    v: i32,
+}
+
+impl Mul<Inch> for Cm {
+    type Output = Area;
+
+    fn mul(&self, rhs: &Inch) -> Area {
+        return Area { v: self.v * rhs.v };
+    }
+}
+
+export fn run() {
+    let xs: List<Cm> = [Cm { v: 2 }, Cm { v: 3 }];
+    assert xs.iter_value().product() matches { Some(_) };
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Product'" }

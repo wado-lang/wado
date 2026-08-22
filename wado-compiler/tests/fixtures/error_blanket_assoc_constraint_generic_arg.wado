@@ -1,0 +1,22 @@
+// `Product`'s blanket pins `Mul<Output = T>`, and the two sides are types, not
+// spellings: `W<i32>` projecting to `W<String>` shares a head and still fails.
+// Comparing heads accepted it, and the widened `reduce` reached codegen.
+struct W<T> {
+    v: T,
+}
+
+impl Mul for W<i32> {
+    type Output = W<String>;
+
+    fn mul(&self, rhs: &W<i32>) -> W<String> {
+        return W { v: `${self.v * rhs.v}` };
+    }
+}
+
+export fn run() {
+    let xs: List<W<i32>> = [W { v: 2 }, W { v: 3 }];
+    assert xs.iter_value().product() matches { Some(_) };
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Product'" }

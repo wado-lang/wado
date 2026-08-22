@@ -1,0 +1,27 @@
+// A bound is a bare name, so it says nothing about a trait parameter that
+// declares no default. `impl Pick<i32> for Cm` satisfies `T: Pick`, but inside
+// the body `K` is still abstract and no argument can be passed for it.
+struct Cm {
+    v: i32,
+}
+
+trait Pick<K> {
+    fn pick(&self, k: K) -> i32;
+}
+
+impl Pick<i32> for Cm {
+    fn pick(&self, k: i32) -> i32 {
+        return self.v + k;
+    }
+}
+
+fn use_pick<T: Pick>(t: T) -> i32 {
+    return t.pick(1);
+}
+
+export fn run() {
+    assert use_pick(Cm { v: 5 }) == 6;
+}
+
+__DATA__
+{ "compile_error": "type mismatch: expected 'K', found 'i32'" }

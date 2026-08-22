@@ -1,0 +1,39 @@
+// After monomorphization a generic operator call on a primitive is relowered
+// to the native instruction. The mapping keyed on the trait's spelling, so a
+// user `Neg` / `Add` on `i32` gave one body two answers.
+use { println } from "core:cli";
+
+trait Neg {
+    fn neg(&self) -> Self;
+}
+
+impl Neg for i32 {
+    fn neg(&self) -> i32 {
+        return 99;
+    }
+}
+
+trait Add {
+    fn add(&self, other: &Self) -> Self;
+}
+
+impl Add for i32 {
+    fn add(&self, other: &i32) -> i32 {
+        return *self * 10 + *other;
+    }
+}
+
+fn neg_through<T: Neg>(a: T) -> T {
+    return a.neg();
+}
+
+fn add_through<T: Add>(a: T, b: T) -> T {
+    return a.add(&b);
+}
+
+export fn run() with Stdout {
+    println(`${neg_through(5)} ${(5).neg()} ${add_through(2, 3)} ${(2).add(&3)}`);
+}
+
+__DATA__
+{"stdout": "99 99 23 23\n"}

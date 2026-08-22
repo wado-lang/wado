@@ -1,0 +1,10 @@
+// A reference satisfies its pointee's bounds by auto-deref at the call, which a
+// receiverless method has nothing to do — so the bound must not hold, rather
+// than hold with no instance to dispatch to.
+export fn run() {
+    let xs: List<i32> = [1, 2, 3];
+    assert xs.iter_ref().sum() matches { Some(v) && *v == 6 };
+}
+
+__DATA__
+{ "compile_error": "does not implement trait 'Sum'" }

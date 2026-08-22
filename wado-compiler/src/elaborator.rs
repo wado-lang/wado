@@ -128,6 +128,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
     /// [`infer_hole`].
     pub(super) infer_holes: infer_hole::InferHoleTable,
+    /// The `(base, assoc)` pairs whose binding is being resolved right now.
+    /// Two assoc types bounded through each other have no fixpoint, so a pair
+    /// already on the walk contributes no binding and stays abstract.
+    pub(super) assoc_binding_stack: crate::hashmap::IndexSet<(crate::tir::TypeId, String)>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
@@ -1036,6 +1040,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.tysys.has_real_trait_impl_for_type(
                 &self.annotate_ctx,
                 &self.type_lookup(),
+                Some(target_type_id),
                 &receiver,
                 trait_,
             )
@@ -1857,10 +1862,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Resolve impl block methods with mangled names
         let struct_name = scope.get_type_name(&impl_block.ty);
-        let trait_name = impl_block
-            .trait_type
-            .as_ref()
-            .map(|t| scope.fq_trait_name(t));
+        let trait_name = impl_block.trait_type.as_ref().map(|t| {
+            let fq = scope.fq_trait_name(t);
+            scope.tysys.trait_env.fq_trait_named_by_impl(
+                fq,
+                t,
+                &impl_block.ty,
+                &scope.tysys.resolutions,
+            )
+        });
 
         // Register type parameters from impl block's generic type FIRST
         // e.g., impl IndexValue<i32> for Triple<T> needs T registered
@@ -1882,11 +1892,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if impl_block.trait_type.is_some() {
             // Resolve the target type for registering associated type resolutions
             let target_type_id = scope.resolve_type(&impl_block.ty);
+            // `type Output = Self;` names this impl's target. Without the
+            // binding it resolved to `unknown` and registered as one.
+            scope.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
             let is_concrete = !scope
                 .tysys
                 .type_table
                 .borrow()
                 .contains_type_param(target_type_id);
+            // The header names one instantiation whatever it binds, so the
+            // arguments are resolved once rather than per associated type.
+            let impl_trait_ref = trait_name
+                .as_ref()
+                .and_then(crate::name::FqTraitName::canonical)
+                .map(|trait_key| {
+                    impl_block.trait_type.as_ref().map_or_else(
+                        || crate::tir::TraitRef::bare(trait_key),
+                        |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
+                    )
+                });
 
             for binding in &impl_block.associated_types {
                 let type_id = scope.resolve_type(&binding.ty);
@@ -1898,10 +1922,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
                 // Register in TypeTable for substitution resolution
                 // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
-                let Some(trait_key) = trait_name
-                    .as_ref()
-                    .and_then(crate::name::FqTraitName::canonical)
-                else {
+                let Some(trait_ref) = impl_trait_ref.clone() else {
                     continue;
                 };
                 if is_concrete {
@@ -1911,7 +1932,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             target_type_id,
-                            trait_key,
+                            trait_ref,
                             binding.name.clone(),
                             type_id,
                         );
@@ -1926,7 +1947,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .borrow_mut()
                             .register_generic_assoc_type_def(
                                 base_decl,
-                                trait_key,
+                                trait_ref,
                                 binding.name.clone(),
                                 type_id,
                             );

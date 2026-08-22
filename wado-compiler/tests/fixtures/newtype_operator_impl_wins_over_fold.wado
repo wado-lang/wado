@@ -1,0 +1,41 @@
+// A newtype over a scalar primitive is its own type. Monomorphization folds an
+// operator's trait call back into the instruction, which must not reach past
+// the newtype's own impl — `gadd` returned 3 where `a + b` returned 1000.
+use { println } from "core:cli";
+
+pub type Wrapped = i32;
+
+impl Add for Wrapped {
+    type Output = Wrapped;
+
+    fn add(&self, rhs: &Wrapped) -> Wrapped {
+        return 1000;
+    }
+}
+
+impl Neg for Wrapped {
+    type Output = Wrapped;
+
+    fn neg(&self) -> Wrapped {
+        return 777;
+    }
+}
+
+fn gadd<T: Add<Output = T>>(a: T, b: T) -> T {
+    return a + b;
+}
+
+fn gneg<T: Neg<Output = T>>(a: T) -> T {
+    return -a;
+}
+
+export fn run() with Stdout {
+    let a: Wrapped = 1;
+    let b: Wrapped = 2;
+    assert gadd(a, b) == a + b;
+    assert gneg(a) == -a;
+    println(`${a + b} ${gadd(a, b)} ${-a} ${gneg(a)}`);
+}
+
+__DATA__
+{"stdout": "1000 1000 777 777\n"}

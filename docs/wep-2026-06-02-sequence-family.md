@@ -105,9 +105,11 @@ instead of a struct the optimizer has to remove again.
 Only methods with no element bound can be defaults, since an associated type
 carries no bound. `contains`, `binary_search`, `starts_with`, and `ends_with`
 need `Elem: Eq` or `Elem: Ord`, so they stay bounded inherent impls with thin
-forwarders. `Iterator` already hits this wall — `sum` / `min` / `max` live on
-`impl<T: Add> SliceValueIter<T>`, not on the trait. Bounds on associated types
-would fold all of them back in; that is a separate proposal.
+forwarders. `Iterator` cleared the same wall with a carrier trait plus a
+defaulted method type parameter
+([Iterator Traits](./wep-2026-01-24-iterator-traits.md)), which these four
+could take as well. Bounds on associated types would fold them
+all back in directly; that stays a separate proposal.
 
 Mutation is absent from both traits: `set`, `sort`, `reverse`, and `[i] = v`
 need a mutable backing `Slice` lacks, and length-changing operations belong to
@@ -305,8 +307,6 @@ declaration, no overloading, no implicit conversion" binds hardest.
 
 ## Roadmap
 
-- [ ] `sum` / `min` / `max` are bounded inherent methods on `SliceValueIter`
-      alone, so `xs.iter_value().map(f).sum()` does not compile.
 - [ ] Accept `Array<T>` in `cm_binding`, matching `wit_emit`.
 - [ ] Lower `Slice<T>` through the canonical ABI and map it in `wit_emit`, then
       narrow the definition-site error to lifting positions only.

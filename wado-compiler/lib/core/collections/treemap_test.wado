@@ -143,6 +143,14 @@ test "values in insertion order" {
     assert values[4] == 9;
 }
 
+test "sum, min and max over values" {
+    let map: TreeMap<String, i32> = { a: 1, b: 5, c: 3 };
+    assert map.values().iter_value().sum() matches { Some(v) && v == 9 };
+    assert map.values().iter_value().min() matches { Some(v) && v == 1 };
+    assert map.values().iter_value().max() matches { Some(v) && v == 5 };
+    assert map.keys().iter_value().max() matches { Some(k) && k == "c" };
+}
+
 test "remove existing key" {
     let mut map: TreeMap<String, i32> = TreeMap::new();
     map["a"] = 1;

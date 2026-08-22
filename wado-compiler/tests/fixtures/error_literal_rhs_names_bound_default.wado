@@ -1,0 +1,13 @@
+// `Add<Rhs = Self>` means a bare `T: Add` adds a `T`, so a literal right
+// operand is an error and the message says `T`. The hint that types the literal
+// bound only `Self`, so it disagreed with the dispatch.
+fn bump<T: Add<Output = T>>(a: T) -> T {
+    return a + 1;
+}
+
+export fn run() {
+    assert bump(4) == 5;
+}
+
+__DATA__
+{ "compile_error": "type mismatch: expected 'T', found 'i32'" }

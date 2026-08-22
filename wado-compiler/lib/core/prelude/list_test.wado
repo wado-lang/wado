@@ -161,8 +161,8 @@ test "slice iterator combinators" {
     assert doubled[1] == 60;
     assert doubled[2] == 80;
 
-    let total = s.iter_value().fold(0, |acc: i32, x: i32| acc + x);
-    assert total == 90;
+    assert s.iter_value().sum() matches { Some(v) && v == 90 };
+    assert s.iter_value().map(|x: i32| x * 2).max() matches { Some(v) && v == 80 };
 }
 
 test "sort ascending" {

@@ -1,0 +1,12 @@
+// A projection in a parameter type is walked in the signature and again at the
+// call site. The ambiguity is one fault, so it is reported once.
+fn take<T: Iterator + IntoIterator>(x: T::Item) -> i32 {
+    return 0;
+}
+
+export fn run() {
+    assert take(1) == 0;
+}
+
+__DATA__
+{ "compile_error": "ambiguous associated type 'T::Item'", "compile_error_count": 1 }

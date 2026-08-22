@@ -1,0 +1,27 @@
+// An operator picks its trait by construction, so a user trait declaring a
+// method of the same name does not answer for it. `Scale::neg` used to capture
+// `-a` under `T: Scale` and reach WIR build with nothing to lower.
+struct Cm {
+    v: i32,
+}
+
+trait Scale {
+    fn neg(&self) -> i32;
+}
+
+impl Scale for Cm {
+    fn neg(&self) -> i32 {
+        return 99;
+    }
+}
+
+fn flip<T: Scale>(a: T) -> T {
+    return -a;
+}
+
+export fn run() {
+    assert flip(Cm { v: 1 }).v == -1;
+}
+
+__DATA__
+{ "compile_error": "type 'T' does not implement trait 'Neg'" }

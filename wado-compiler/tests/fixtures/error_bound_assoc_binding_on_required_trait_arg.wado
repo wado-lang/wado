@@ -1,0 +1,25 @@
+// A trait argument at a position with no declared default is not part of what
+// a bound names, so `T: IndexValue` reaches `impl IndexValue<i32> for Bag`. The
+// impl registered `Output` under that argument, the check queried the bare one.
+struct Bag {
+    xs: List<i32>,
+}
+
+impl IndexValue<i32> for Bag {
+    type Output = i32;
+
+    fn index_value(&self, i: i32) -> i32 {
+        return self.xs[i];
+    }
+}
+
+fn width<T: IndexValue<Output = String>>(x: &T) -> i32 {
+    return 1;
+}
+
+export fn run() {
+    assert width(&Bag { xs: [1, 2, 3] }) == 1;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type"}
