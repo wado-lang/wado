@@ -35,6 +35,19 @@ goal=$(gib "$(awk -v f="$FLOOR_GB" -v m="$MARGIN_GB" 'BEGIN { print f + m }')")
 exec 9<>"$BUILD_LOCK"
 flock --exclusive --nonblock 9 || exit 0
 
+# Debris first, costing nothing to lose: a split-DWARF object holds only the
+# debug info its binary points at, and a killed linker leaves its scratch behind.
+# Neither is an input to a build, and together they outweigh the rest here.
+evicted_debris=0
+if [ -d "$DEPS" ]; then
+    while IFS=$'\t' read -r _ file; do
+        [ "$(avail)" -lt "$goal" ] || break
+        rm -f "$file"
+        evicted_debris=$((evicted_debris + 1))
+    done < <(find "$DEPS" -maxdepth 1 -type f \( -name '*.dwo' -o -name '*.tmp*' \) \
+        -printf '%T@\t%p\n' | sort -n)
+fi
+
 evicted_dirs=0
 if [ -d "$INCREMENTAL" ]; then
     while IFS=$'\t' read -r _ dir; do
@@ -62,9 +75,9 @@ if [ "$(avail)" -lt "$goal" ] && [ -d "$DEPS" ]; then
         -mmin "+$DEPS_MIN_AGE_MIN" -printf '%T@\t%p\n' | sort -n)
 fi
 
-if [ "$evicted_dirs" -gt 0 ] || [ "$evicted_bins" -gt 0 ]; then
-    echo "[incremental-gc] evicted $evicted_dirs crate dirs and $evicted_bins stale" \
-        "test binaries below the ${FLOOR_GB} GB floor;" \
-        "$(($(avail) / 1024 / 1024 / 1024)) GB free" >&2
+if [ "$evicted_debris" -gt 0 ] || [ "$evicted_dirs" -gt 0 ] || [ "$evicted_bins" -gt 0 ]; then
+    echo "[incremental-gc] evicted $evicted_debris debug/scratch files," \
+        "$evicted_dirs crate dirs and $evicted_bins stale test binaries" \
+        "below the ${FLOOR_GB} GB floor; $(($(avail) / 1024 / 1024 / 1024)) GB free" >&2
 fi
 exit 0
