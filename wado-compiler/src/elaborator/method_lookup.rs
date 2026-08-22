@@ -2715,7 +2715,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexRefMut",
+            CompilerItem::IndexRefMut,
             "index_ref_mut",
             "Output",
             expected_index_type,

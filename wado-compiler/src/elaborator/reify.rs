@@ -5569,13 +5569,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return dispatch.return_type;
         }
         recorded
-            .filter(|t| !matches!(self.tysys.type_table.borrow().get(*t), ResolvedType::Unknown))
-            .unwrap_or_else(|| {
-                match self.tysys.type_table.borrow().get(dispatch.return_type) {
+            .filter(|t| {
+                !matches!(
+                    self.tysys.type_table.borrow().get(*t),
+                    ResolvedType::Unknown
+                )
+            })
+            .unwrap_or_else(
+                || match self.tysys.type_table.borrow().get(dispatch.return_type) {
                     ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
                     _ => dispatch.return_type,
-                }
-            })
+                },
+            )
     }
 
     fn build_index_read_from_dispatch(
@@ -6319,11 +6324,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.index_deref_type(Some(recorded_type), &dispatch);
             return self.build_index_read_from_dispatch(
-                receiver,
-                idx_expr,
-                dispatch,
-                deref_type,
-                index.span,
+                receiver, idx_expr, dispatch, deref_type, index.span,
             );
         }
 

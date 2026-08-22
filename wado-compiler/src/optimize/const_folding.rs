@@ -22,7 +22,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::niri::{
+use crate::niri::{BorrowRoot, 
     CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
     Interpreter, Lattice, is_ctfe_runnable,
 };
@@ -1009,7 +1009,8 @@ impl ConstFoldVisitor<'_> {
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {
                         self.interpreter.invalidate_local(*local_index);
-                        self.interpreter.record_ref_root(*local_index, None);
+                        self.interpreter
+                            .record_ref_root(*local_index, BorrowRoot::NotABorrow);
                     }
                     body.for_each_child(node, |c| stack.push(c));
                 }
@@ -1039,25 +1040,36 @@ impl ConstFoldVisitor<'_> {
         self.interpreter.bind_local(local_index, lat);
     }
 
-    /// The local a `let r = &place` borrows into: `None` when the binding is not
-    /// a borrow, `Some(None)` when it is one the walk cannot root.
-    fn borrowed_root(body: &Body, op: Operand) -> Option<Option<u32>> {
-        let mut e = op.as_expr()?;
+    /// What a `let r = &place` binding borrows into.
+    fn borrowed_root(body: &Body, op: Operand) -> BorrowRoot {
+        let Some(mut e) = op.as_expr() else {
+            return BorrowRoot::NotABorrow;
+        };
         loop {
-            match &body.exprs[e].kind {
+            let next = match &body.exprs[e].kind {
                 ExprKind::Unary {
                     op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                     expr: inner,
-                } => return Some(Self::borrowed_root_impl(body, *inner)),
-                ExprKind::Cast { expr: inner, .. } => e = inner.as_expr()?,
-                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-                    let last = *body.blocks[*block].stmts.last()?;
-                    let StmtKind::Expr(value) = &body.stmts[last].kind else {
-                        return None;
+                } => {
+                    return match Self::borrowed_root_impl(body, *inner) {
+                        Some(root) => BorrowRoot::Local(root),
+                        None => BorrowRoot::Unrooted,
                     };
-                    e = value.as_expr()?;
                 }
-                _ => return None,
+                ExprKind::Cast { expr: inner, .. } => inner.as_expr(),
+                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => body.blocks
+                    [*block]
+                    .stmts
+                    .last()
+                    .and_then(|last| match &body.stmts[*last].kind {
+                        StmtKind::Expr(value) => value.as_expr(),
+                        _ => None,
+                    }),
+                _ => None,
+            };
+            match next {
+                Some(inner) => e = inner,
+                None => return BorrowRoot::NotABorrow,
             }
         }
     }

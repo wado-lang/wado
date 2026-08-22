@@ -644,10 +644,11 @@ impl<'a> Interpreter<'a> {
 
     /// Record what `index` borrows into, clearing the entry where the binding
     /// is not a borrow.
-    pub fn record_ref_root(&mut self, index: u32, borrow: Option<Option<u32>>) {
+    pub fn record_ref_root(&mut self, index: u32, borrow: BorrowRoot) {
         match borrow {
-            Some(target) => self.frame.ref_roots.insert(index, target),
-            None => self.frame.ref_roots.swap_remove(&index),
+            BorrowRoot::NotABorrow => self.frame.ref_roots.swap_remove(&index),
+            BorrowRoot::Unrooted => self.frame.ref_roots.insert(index, None),
+            BorrowRoot::Local(target) => self.frame.ref_roots.insert(index, Some(target)),
         };
     }
 
@@ -658,6 +659,14 @@ impl<'a> Interpreter<'a> {
             *lattice = Lattice::NonConst;
         }
     }
+}
+
+/// What a `let` binding borrows into, as [`Interpreter::record_ref_root`] reads it.
+pub enum BorrowRoot {
+    NotABorrow,
+    /// A borrow whose referent no tracked local holds.
+    Unrooted,
+    Local(u32),
 }
 
 /// Whether the place chain bottoms out at a reference — a write through it
