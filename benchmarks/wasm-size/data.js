@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787357739527,
+  "lastUpdate": 1787383247567,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50144,6 +50144,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e40a0fd07784abf3d2e3094caf30ff9e07ebb3a8",
+          "message": "Merge pull request #1874 from wado-lang/claude/power-assert-eval-order-2wy6w8\n\nfix(elaborator): render every assert operand without moving the condition",
+          "timestamp": "2026-08-22T16:05:31+09:00",
+          "tree_id": "c07cf00a1146c9447ff077edaf8595a4ee180cf0",
+          "url": "https://github.com/wado-lang/wado/commit/e40a0fd07784abf3d2e3094caf30ff9e07ebb3a8"
+        },
+        "date": 1787383246758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
             "unit": "bytes"
           },
           {
