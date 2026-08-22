@@ -1101,10 +1101,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the accessor's signature rather than upgrading a shared borrow.
         let expr_type = match (&unary.op, &unary.expr) {
             (UnaryOp::MutRef, ast::Expr::Index(index)) => {
-                self.resolve_index(index, ctx, super::expr::IndexAccess::Mutable)
+                self.resolve_index_access(index, ctx, super::expr::IndexAccess::Mutable)
             }
             (UnaryOp::Ref, ast::Expr::Index(index)) => {
-                self.resolve_index(index, ctx, super::expr::IndexAccess::Shared)
+                self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
             }
             _ => self.resolve_expr(&unary.expr, ctx, inner_expected),
         };

@@ -1502,6 +1502,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an index expression
+    /// [`Self::resolve_index`] for a subscript reached outside
+    /// [`Self::resolve_expr`], which is otherwise the only place a visited
+    /// [`AstId`] is annotated. `&xs[i]` and `&mut xs[i]` resolve the subscript
+    /// by access mode, so they come through here instead.
+    pub(super) fn resolve_index_access(
+        &mut self,
+        index: &ast::IndexExpr,
+        ctx: &mut FunctionContext,
+        access: IndexAccess,
+    ) -> TypeId {
+        let type_id = self.resolve_index(index, ctx, access);
+        self.record_expression_type(index.id, type_id);
+        type_id
+    }
+
     pub(super) fn resolve_index(
         &mut self,
         index: &ast::IndexExpr,
@@ -1613,6 +1628,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A `&mut` subscript asks `IndexRefMut` first so the element arrives
             // as `&mut T` from a `&mut` container. Its `Output: RefMut` bound is
             // what turns a replace-on-assign element back to the shared lookup.
+            // Looked up once: the by-value arm below reuses this instead of
+            // asking again. Only a value read needs it up front — a reference
+            // access that resolves never reaches the by-value lowering.
+            let value_impl = (access == IndexAccess::Value)
+                .then(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
+                    )
+                })
+                .flatten();
             let index_trait_info = (access == IndexAccess::Mutable)
                 .then(|| {
                     self.index_lookup_or_newtype_base(
@@ -1629,16 +1658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A value read prefers the copy `IndexValue` gives it, so a
                     // container offering both keeps its by-value shape; one that
                     // only aliases is still read through `IndexRef` plus a deref.
-                    let aliases_only = access != IndexAccess::Value
-                        || self
-                            .index_lookup_or_newtype_base(
-                                &struct_name,
-                                base_type_id,
-                                &lookup_name,
-                                lookup_type_id,
-                                |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
-                            )
-                            .is_none();
+                    let aliases_only = access != IndexAccess::Value || value_impl.is_none();
                     aliases_only
                         .then(|| {
                             self.index_lookup_or_newtype_base(
@@ -1700,13 +1720,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return trait_info.output_type;
             }
 
-            let index_value_info = self.index_lookup_or_newtype_base(
-                &struct_name,
-                base_type_id,
-                &lookup_name,
-                lookup_type_id,
-                |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
-            );
+            let index_value_info = value_impl.or_else(|| {
+                self.index_lookup_or_newtype_base(
+                    &struct_name,
+                    base_type_id,
+                    &lookup_name,
+                    lookup_type_id,
+                    |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
+                )
+            });
             if let Some((trait_info, matched_type_id)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 

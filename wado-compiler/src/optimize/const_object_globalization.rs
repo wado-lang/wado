@@ -115,11 +115,23 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .zip(&fn_effects)
         .map(|(f, e)| f.borrow().body.is_none() && !e.opaque)
         .collect();
+    // Fixed per function, and asked of every `Call` node on every walk of the
+    // fixpoint, so it is classified once here rather than per query.
+    let element_access: Vec<Option<crate::nir::ArrayElementAccess>> = project
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+                .array_element_access()
+        })
+        .collect();
     let gate = Gate {
         funcs: &project.functions,
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
         instruction_leaf: &instruction_leaf,
+        element_access: &element_access,
         structs: &project.structs,
         param_readonly: RefCell::new(IndexMap::default()),
         param_writes_through: RefCell::new(IndexMap::default()),
@@ -409,16 +421,11 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => inner
-            .as_expr()
-            .and_then(|e| borrows_local(body, e, idx, gate)),
+        } => operand_borrows_local(body, *inner, idx, gate),
         ExprKind::FieldAccess { expr: base, .. }
         | ExprKind::Index { expr: base, .. }
         | ExprKind::Cast { expr: base, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
-            && base
-                .as_expr()
-                .and_then(|e| borrows_local(body, e, idx, gate))
-                .is_some())
+            && operand_borrows_local(body, *base, idx, gate).is_some())
         .then_some(BorrowShape::Derived(body.exprs[expr].type_id)),
         // `xs[i]` reaches this pass as a receiverless `array_get_value(&xs.repr,
         // i)` once `container_sroa` has run, so the receiver is not the only
@@ -427,10 +434,7 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
         // parameter holding it delivers its referent's storage back out.
         ExprKind::Call { func_id, args, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
             && args.iter().enumerate().any(|(pos, arg)| {
-                arg.expr
-                    .as_expr()
-                    .and_then(|e| borrows_local(body, e, idx, gate))
-                    .is_some()
+                operand_borrows_local(body, arg.expr, idx, gate).is_some()
                     && gate.callee_ref_param_leaks(*func_id, pos)
             }))
         .then_some(BorrowShape::Derived(body.exprs[expr].type_id)),
@@ -1162,6 +1166,9 @@ struct Gate<'a> {
     /// opposed to a component-model builtin or an extern with no body at all —
     /// both of which `mod_ref` marks opaque. See [`Gate::instruction_arg_captures`].
     instruction_leaf: &'a [bool],
+    /// Indexed by `func_id.index()`: how the callee reaches an array element,
+    /// or `None` when it is not an accessor.
+    element_access: &'a [Option<crate::nir::ArrayElementAccess>],
     structs: &'a [crate::nir::NirStruct],
     /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
     /// Each verdict costs two walks of the callee body, and one helper taking a
@@ -1298,24 +1305,17 @@ impl Gate<'_> {
     /// Whether `func_id` is one of the array element accessors.
     fn element_accessor(&self, func_id: crate::nir::FuncId) -> bool {
         use cranelift_entity::EntityRef;
-        self.funcs.get(func_id.index()).is_some_and(|f| {
-            let f = f.borrow();
-            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
-                .array_element_access()
-                .is_some()
-        })
+        self.element_access
+            .get(func_id.index())
+            .is_some_and(Option::is_some)
     }
 
     /// Whether `func_id` reaches an array element without writing through it.
     /// `array_get_ref_mut` is excluded: a mutable element handle is a write.
     fn reads_element(&self, func_id: crate::nir::FuncId) -> bool {
         use cranelift_entity::EntityRef;
-        self.funcs.get(func_id.index()).is_some_and(|f| {
-            let f = f.borrow();
-            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
-                .array_element_access()
-                == Some(crate::nir::ArrayElementAccess::Read)
-        })
+        self.element_access.get(func_id.index()).copied().flatten()
+            == Some(crate::nir::ArrayElementAccess::Read)
     }
 
     /// Whether a handle handed to `func_id`'s parameter `param_pos` merely

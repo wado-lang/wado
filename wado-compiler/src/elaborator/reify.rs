@@ -5552,11 +5552,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
-    /// `recv.index_value(idx)`) from an already-reified receiver and subscript
-    /// plus the recorded dispatch. Shared by [`Self::reify_index`] and the
-    /// compound-assign read so the two lowerings cannot drift. `deref_type` is
-    /// the type of the `*…` result used when `dispatch.needs_deref`.
     /// The type of the `*…` result a dispatched index read produces. Each site
     /// supplies the type it recorded; one that is missing or unresolved is
     /// re-derived by peeling the `&Output` the reference index traits return.
@@ -5583,6 +5578,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
     }
 
+    /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
+    /// `recv.index_value(idx)`) from an already-reified receiver and subscript
+    /// plus the recorded dispatch. Shared by [`Self::reify_index`] and the
+    /// compound-assign read so the two lowerings cannot drift. `deref_type` is
+    /// the type of the `*…` result used when `dispatch.needs_deref`.
     fn build_index_read_from_dispatch(
         &self,
         receiver: TirExpr,
