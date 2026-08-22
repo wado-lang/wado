@@ -637,7 +637,6 @@ impl TypeSet {
         self.words[word] |= mask;
         newly
     }
-
 }
 
 /// A trait at the arguments it was instantiated at (WEP 2026-08-12): `Combine`
@@ -777,10 +776,8 @@ pub struct TypeTable {
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
     /// The wrapper `TypeId`s the boxing pass redefined from a reference, each
-    /// mapped to whether that reference was shared. `&T` and `&mut T` get the
-    /// same `Box<T>` content, so this is the only surviving record of how one
-    /// was spelled — see [`Self::is_mut_box`] and
-    /// [`Self::mangle_type_arg_unboxed`].
+    /// mapped to whether that reference was shared — the only surviving record
+    /// of how one was spelled, `&T` and `&mut T` sharing a `Box<T>`.
     boxed_ref_shared: TypeMap<bool>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
@@ -3880,9 +3877,8 @@ impl TypeTable {
     }
 
     /// [`Self::mangle_type_arg_erased`] as the type read *before*
-    /// `boxing::prepare_types` redefined every borrowed `TypeId` into
-    /// `Box<T>`. Lets a post-boxing call site name the reflect bridge that
-    /// pre-boxing synthesis minted after the same type.
+    /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
+    /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
     pub fn mangle_type_arg_unboxed(&self, id: TypeId) -> String {
         if let Some(&is_shared) = self.boxed_ref_shared.get(id) {
             let payload = self.mangle_type_arg_unboxed(

@@ -1647,12 +1647,9 @@ impl Monomorphizer {
             .map(|(_, &tid)| tid)
     }
 
-    /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
-    /// call. A `newtype` inherits its base's trait impl and a reference
-    /// forwards to its pointee's — a receiverless method has no receiver to
-    /// deref — so peel to the link that wrote that impl, or to the base when no
-    /// link did, unless a value blanket serves the receiver: a blanket is not
-    /// inherited, and only the reflection bounds are decidable here.
+    /// Resolve a `T^Trait::method` static call's dispatch receiver: peel a
+    /// newtype or a reference to the link that wrote the impl it inherits,
+    /// unless the receiver has its own, or a value blanket — never inherited.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
@@ -1705,10 +1702,9 @@ impl Monomorphizer {
         let Some(trait_) = trait_decl else {
             return true;
         };
-        // The receiver, then the chain: `enum` and `flags` erase to a scalar
-        // without being a newtype link, and an impl a link below the receiver
-        // wrote is still the one the call inherits. Relowering over either
-        // silently takes the primitive's instruction instead.
+        // `enum` and `flags` erase to a scalar without being a newtype link,
+        // and an impl a link below the receiver wrote is still inherited.
+        // Relowering over either takes the primitive's instruction instead.
         !self.has_own_trait_impl(type_table, id, trait_)
             && self
                 .newtype_link_with_trait_impl(id, type_table, trait_)
