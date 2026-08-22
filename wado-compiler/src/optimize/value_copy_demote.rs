@@ -1240,7 +1240,9 @@ fn is_self_derived(
             // An element accessor yields an element of the spine; other array
             // builtins (`array_clone`, `array_new`) produce fresh storage and
             // are not self-derived.
-            super::dce::callee_descriptor(descriptors, *func_id).reads_array_element()
+            super::dce::callee_descriptor(descriptors, *func_id)
+                .array_element_access()
+                .is_some()
                 && args
                     .first()
                     .is_some_and(|a| is_self_derived_op(body, a.expr, tainted, tt, descriptors))

@@ -33,6 +33,13 @@ pub struct FunctionRef {
     pub method_info: Option<LocalMethodName>,
 }
 
+/// How a builtin reaches an array element.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ArrayElementAccess {
+    Read,
+    Write,
+}
+
 impl FunctionRef {
     /// Create a `FunctionRef` by extracting metadata from a resolved `NirFunction`.
     pub fn from_resolved(func: &NirFunction, module_source: ModuleSource) -> Self {
@@ -78,21 +85,22 @@ impl FunctionRef {
         }
     }
 
-    /// Whether this builtin hands back a handle into its array argument. All
-    /// three element accessors do; which one a subscript picks is the access
-    /// mode's answer, not evidence about aliasing.
-    pub fn reads_array_element(&self) -> bool {
-        matches!(
-            self.builtin_name()
-                .or_else(|| self.monomorphized_builtin_name())
-                .as_deref(),
+    /// How this builtin reaches an array element, or `None` when it is not an
+    /// element accessor. All three hand back a handle into the array argument;
+    /// only `array_get_ref_mut` names a write.
+    pub fn array_element_access(&self) -> Option<ArrayElementAccess> {
+        match self
+            .builtin_name()
+            .or_else(|| self.monomorphized_builtin_name())
+            .as_deref()
+        {
             Some(
-                "builtin::array_get_value"
-                    | "builtin::array_get_value_u8"
-                    | "builtin::array_get_ref"
-                    | "builtin::array_get_ref_mut"
-            )
-        )
+                "builtin::array_get_value" | "builtin::array_get_value_u8"
+                | "builtin::array_get_ref",
+            ) => Some(ArrayElementAccess::Read),
+            Some("builtin::array_get_ref_mut") => Some(ArrayElementAccess::Write),
+            _ => None,
+        }
     }
 
     /// Get the monomorphized builtin name if this is a monomorphized builtin function.

@@ -350,6 +350,10 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                 match operand_borrows_local(body, arg.expr, idx, gate) {
                     None => false,
                     Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
+                    // An element read hands back the element and writes
+                    // nothing through the spine, exactly as the subscript node
+                    // it lowers from did; the element handle's own uses decide.
+                    Some(BorrowShape::Derived(_)) if gate.reads_element(*func_id) => false,
                     Some(BorrowShape::Derived(arg_ty)) => {
                         !gate.instruction_passes_through(*func_id, pos, arg_ty)
                             && (gate.callee_ref_param_leaks(*func_id, pos)
@@ -1288,6 +1292,18 @@ impl Gate<'_> {
                 self.type_table.borrow().get(p0.type_id),
                 ResolvedType::Ref(_)
             )
+        })
+    }
+
+    /// Whether `func_id` reaches an array element without writing through it.
+    /// `array_get_ref_mut` is excluded: a mutable element handle is a write.
+    fn reads_element(&self, func_id: crate::nir::FuncId) -> bool {
+        use cranelift_entity::EntityRef;
+        self.funcs.get(func_id.index()).is_some_and(|f| {
+            let f = f.borrow();
+            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+                .array_element_access()
+                == Some(crate::nir::ArrayElementAccess::Read)
         })
     }
 
