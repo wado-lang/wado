@@ -280,8 +280,8 @@ scope: {
 
 ### 7. Bounded Terminals
 
-`sum`, `product`, `min`, `max` need `Item: Add` or `Item: Ord`, which an
-associated type cannot carry. They take the shape `collect` already uses — a
+`sum`, `product`, `min`, `max` need `Item: Add<Output = Item>`,
+`Mul<Output = Item>` or `Ord`, which an associated type cannot carry. They take the shape `collect` already uses — a
 method type parameter with a default — routing the bound through an `internal`
 carrier trait keyed on `Elem`:
 

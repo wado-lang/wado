@@ -390,14 +390,14 @@ Note: Uses &self due to parser limitation (self by value not yet supported in tr
 ### `pub trait Sum`
 
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
-bound. Implemented for every `Add`.
+bound. Implemented for every `Add<Output = Self>`.
 
 #### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
 ### `pub trait Product`
 
 Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
-element bound. Implemented for every `Mul`.
+element bound. Implemented for every `Mul<Output = Self>`.
 
 #### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
@@ -785,14 +785,14 @@ Note: Uses &self due to parser limitation (self by value not yet supported in tr
 ### `pub trait Sum`
 
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
-bound. Implemented for every `Add`.
+bound. Implemented for every `Add<Output = Self>`.
 
 #### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
 ### `pub trait Product`
 
 Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
-element bound. Implemented for every `Mul`.
+element bound. Implemented for every `Mul<Output = Self>`.
 
 #### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 

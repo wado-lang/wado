@@ -774,17 +774,14 @@ pub struct TraitEnv {
     /// declaration wins (matching the previous whole-program scan order).
     /// Consumed by `find_assoc_type_bounds` without an AST scan.
     pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
-    /// `trait_name` → reified blanket impls of that trait, in registration
-    /// order. The single classification source for blanket dispatch (module,
-    /// receiver kind, param, bounds); the `blanket_impl_*_for_trait` queries
-    /// select over it. Used by the monomorphizer to find the home module of a
-    /// generic dispatch when the receiver type has no dedicated `impl Trait for
-    /// Type` block — the blanket provides the body, homed in the blanket's
-    /// module. Keyed by bare trait name; the `type_module` hint at the call site
-    /// disambiguates when several modules host a blanket for the same trait.
-    /// Blanket impls by the trait they implement. Keyed by declaration:
-    /// a name-keyed bucket merged two modules' same-named traits, so one
-    /// module's blanket answered the other's bound (WEP 2026-08-12).
+    /// Blanket impls by the trait they implement, in registration order. The
+    /// single classification source for blanket dispatch (module, receiver
+    /// kind, param, bounds), and where the monomorphizer finds the home module
+    /// of a generic dispatch the receiver wrote no impl for.
+    ///
+    /// Keyed by declaration: a name-keyed bucket merged two modules'
+    /// same-named traits, so one module's blanket answered the other's bound
+    /// (WEP 2026-08-12).
     pub(super) blanket_impls: IndexMap<DefId, Vec<BlanketImpl>>,
     /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for static methods.
     pub(super) static_method_index: StaticMethodIndex,

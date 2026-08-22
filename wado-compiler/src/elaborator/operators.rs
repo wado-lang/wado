@@ -703,21 +703,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            let arithmetic = matches!(
-                op,
-                BinaryOp::Add
-                    | BinaryOp::Sub
-                    | BinaryOp::Mul
-                    | BinaryOp::Div
-                    | BinaryOp::Mod
-                    | BinaryOp::BitAnd
-                    | BinaryOp::BitOr
-                    | BinaryOp::BitXor
-            )
-            .then(|| super::tysys::operator_trait_method(&op))
-            .flatten();
             if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some((item, method_name)) = arithmetic
+                && let Some((item, method_name)) = super::tysys::operator_trait_method(&op)
             {
                 let bounds = self
                     .annotate_ctx
@@ -1134,11 +1121,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_trait_method_for_op` + `build_trait_op_method_call_on_resolved`
         // pipeline as binary operators.  The builder handles the zero-arg
         // case via `resolved.param_types.is_empty()`.
-        if let Some((trait_name, method_name, item)) = match unary.op {
-            UnaryOp::Neg => Some(("Neg", "neg", CompilerItem::Neg)),
-            UnaryOp::BitNot => Some(("BitNot", "bitnot", CompilerItem::BitNot)),
+        if let Some((method_name, item)) = match unary.op {
+            UnaryOp::Neg => Some(("neg", CompilerItem::Neg)),
+            UnaryOp::BitNot => Some(("bitnot", CompilerItem::BitNot)),
             _ => None,
         } {
+            let trait_name = self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_trait_name(item)
+                .to_string();
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved
                 && let Some(bounds) = self
@@ -1182,7 +1175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved {
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),
-                    trait_name: trait_name.to_string(),
+                    trait_name,
                     param_name: name.clone(),
                     reason: Vec::new(),
                     span: unary.span,
@@ -1209,7 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &struct_name,
                         expr_type,
                         trait_,
-                        trait_name,
+                        &trait_name,
                         method_name,
                         false,
                     )
@@ -1218,7 +1211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &lookup_name,
                             lookup_type_id,
                             trait_,
-                            trait_name,
+                            &trait_name,
                             method_name,
                             false,
                         )

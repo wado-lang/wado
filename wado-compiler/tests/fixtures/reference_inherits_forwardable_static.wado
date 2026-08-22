@@ -1,6 +1,6 @@
 // A receiverless method has no receiver to auto-deref, so `&T` inherits it by
-// forwarding to `T`'s — which forwards exactly when `Self` does not appear in
-// the signature. `error_reference_bound_receiverless.wado` pins the other side.
+// forwarding to `T`'s — the bound and the dispatch alike, which forward exactly
+// when `Self` is absent. `error_reference_bound_receiverless.wado` pins the no.
 use { println } from "core:cli";
 
 struct P {
@@ -27,11 +27,16 @@ fn show<T: Named>(t: T) -> String {
     return t.name();
 }
 
+fn kind_of<T: Named>(t: T) -> String {
+    return T::kind();
+}
+
 export fn run() with Stdout {
     let p = P { n: 1 };
     assert show(&p) == "p";
-    println(`${show(&p)} ${show(P { n: 2 })}`);
+    assert kind_of(&p) == "P";
+    println(`${show(&p)} ${show(P { n: 2 })} ${kind_of(&p)} ${kind_of(P { n: 3 })}`);
 }
 
 __DATA__
-{"stdout": "p p\n"}
+{"stdout": "p p P P\n"}

@@ -1648,20 +1648,22 @@ impl Monomorphizer {
     }
 
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
-    /// call: a `newtype` inherits its base's trait impl, so peel it to the base
-    /// unless the newtype has its own impl, or a value blanket it is not
-    /// disqualified from — a blanket is not inherited, and only the reflection
-    /// bounds are decidable here.
+    /// call. A `newtype` inherits its base's trait impl and a reference
+    /// forwards to its pointee's — a receiverless method has no receiver to
+    /// deref — so peel to that impl unless the receiver has one of its own, or
+    /// a value blanket it is not disqualified from: a blanket is not
+    /// inherited, and only the reflection bounds are decidable here.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
         info: &LocalMethodName,
         type_table: &TypeTable,
     ) -> TypeId {
-        if !matches!(type_table.get(tid), ResolvedType::Newtype { .. }) {
-            return tid;
-        }
-        let base = type_table.resolve_newtype_base(tid);
+        let base = match type_table.get(tid) {
+            ResolvedType::Newtype { .. } => type_table.resolve_newtype_base(tid),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => return tid,
+        };
         if base == tid {
             return tid;
         }

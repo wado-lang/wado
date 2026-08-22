@@ -766,6 +766,10 @@ fn run_normal_test(
                     "[{test_id}] compile error mismatch:\n  expected to contain: {expected_error}\n  actual error: {error_msg}"
                 );
                 if let Some(expected_count) = spec.compile_error_count {
+                    assert!(
+                        expected_count > 0,
+                        "[{test_id}] compile_error_count counts occurrences of compile_error, which the fixture already requires at least one of"
+                    );
                     let actual = error_msg.matches(expected_error.as_str()).count();
                     assert_eq!(
                         actual, expected_count,

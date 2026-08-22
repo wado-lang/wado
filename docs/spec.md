@@ -3086,7 +3086,7 @@ pub trait FromIterator {
 
 #### Terminals
 
-Everything `Iterator` declares is available on every implementor, adapters included — the terminals bounded by their element type among them (`sum` / `product` need `Item: Add` / `Mul`, `min` / `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
+Everything `Iterator` declares is available on every implementor, adapters included — the terminals bounded by their element type among them (`sum` / `product` need `Item: Add<Output = Item>` / `Mul<Output = Item>`, `min` / `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
 
 #### Usage
 

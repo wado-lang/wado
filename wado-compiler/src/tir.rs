@@ -3109,15 +3109,11 @@ impl TypeTable {
                     {
                         return resolved;
                     }
-                    // A primitive's arithmetic is compiler-supplied, so nothing
-                    // registered its `Output`: it is the receiver itself, a
-                    // newtype over one included.
-                    if assoc_name == "Output"
-                        && matches!(
-                            self.get(self.get_ultimate_base_type(concrete)),
-                            ResolvedType::Primitive(_)
-                        )
-                    {
+                    // A scalar primitive's arithmetic is compiler-supplied, so
+                    // nothing registered its `Output`: it is the receiver
+                    // itself, a newtype over one included. `v128` is not one —
+                    // only a lane type's own impl names its output.
+                    if assoc_name == "Output" && self.is_scalar_primitive_like(concrete) {
                         return concrete;
                     }
                 }

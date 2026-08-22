@@ -1154,13 +1154,11 @@ impl TypeSystem {
             {
                 return true;
             }
-            // For other traits, check the type name
-            let type_name = format!("{prim:?}").to_lowercase();
             return self.find_trait_impl_for_subject(
                 ctx,
                 scope,
                 Some(type_id),
-                &Receiver::Type(FqTypeName::builtin(&type_name)),
+                &Receiver::Type(FqTypeName::builtin(prim.as_str())),
                 trait_,
             );
         }

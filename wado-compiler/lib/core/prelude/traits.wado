@@ -1436,7 +1436,7 @@ impl ConvertError {
 
 
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
-/// bound. Implemented for every `Add`.
+/// bound. Implemented for every `Add<Output = Self>`.
 internal trait Sum {
     type Elem;
     fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
@@ -1451,7 +1451,7 @@ impl<T: Add<Output = T>> Sum for T {
 }
 
 /// Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
-/// element bound. Implemented for every `Mul`.
+/// element bound. Implemented for every `Mul<Output = Self>`.
 internal trait Product {
     type Elem;
     fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
