@@ -307,11 +307,11 @@ import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-write from "wasi/future-write";
 
 global mut global:stream_http_response_body.wado::__modules_initialized: bool = 0;
-global global:stream_http_response_body.wado::__const_obj_0: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
 
 fn "stream_http_response_body.wado/handle"(request) {
     let headers: i32;
     let response: i32;
+    let data_9: ref "core:prelude//List<u8>";
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_0: i32;
     let __tv_1: i32;
@@ -922,8 +922,9 @@ fn "stream_http_response_body.wado/handle"(request) {
             }
         }
     }
+    data_9 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
     ptr_217 = "mem/realloc"(0, 0, 1, 5);
-    "core:rt/gc_array_to_memory"(global:stream_http_response_body.wado::__const_obj_0.repr, 0, ptr_217, 5);
+    "core:rt/gc_array_to_memory"(data_9.repr, 0, ptr_217, 5);
     ptr_207 = builtin::i32_wrap_i64(local.tee packed_206(builtin::i64_extend_i32_s(ptr_217) | 21474836480_i64));
     len_208 = builtin::i32_wrap_i64(packed_206 >> 32_i64);
     "core:rt/cm_stream_write_drain"(tx_187, ptr_207, len_208, 1);

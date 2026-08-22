@@ -41,6 +41,19 @@ enum FuncRefInference {
 
 use super::util::placeholder;
 
+/// How a subscript is being used, which decides the indexing trait it selects:
+/// `&mut xs[i]` reaches the element through `IndexRefMut` so the mutability rides
+/// on the signature, while every other position reads it shared.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum IndexAccess {
+    /// `xs[i]` — value semantics hand back a copy, through `IndexValue`.
+    Value,
+    /// `&xs[i]` — `IndexRef` aliases the element in place.
+    Shared,
+    /// `&mut xs[i]` — `IndexRefMut` carries the mutability in its signature.
+    Mutable,
+}
+
 /// Per spread base in an anonymous literal: whether it is a key-value map, and
 /// (for a plain struct base) its defining module plus field list
 /// `(name, concrete type, declared index, visibility)`.
@@ -272,7 +285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_static_method_call(static_call, ctx)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
-            Expr::Index(index) => self.resolve_index(index, ctx),
+            Expr::Index(index) => self.resolve_index(index, ctx, IndexAccess::Value),
             Expr::Block(block) => {
                 // Walk the block for its facts; reify rebuilds the `Block`
                 // node. Read the overall type from `expression_types` (AST
@@ -1489,10 +1502,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an index expression
+    /// [`Self::resolve_index`] for a subscript reached outside
+    /// [`Self::resolve_expr`], which is otherwise the only place a visited
+    /// [`AstId`] is annotated. `&xs[i]` and `&mut xs[i]` resolve the subscript
+    /// by access mode, so they come through here instead.
+    pub(super) fn resolve_index_access(
+        &mut self,
+        index: &ast::IndexExpr,
+        ctx: &mut FunctionContext,
+        access: IndexAccess,
+    ) -> TypeId {
+        let type_id = self.resolve_index(index, ctx, access);
+        self.record_expression_type(index.id, type_id);
+        type_id
+    }
+
     pub(super) fn resolve_index(
         &mut self,
         index: &ast::IndexExpr,
         ctx: &mut FunctionContext,
+        access: IndexAccess,
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
@@ -1596,30 +1625,69 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
-            let index_trait_info = (!self.uses_intrinsic_index_dispatch(base_type_id))
+            // A `&mut` subscript asks `IndexRefMut` first so the element arrives
+            // as `&mut T` from a `&mut` container. Its `Output: RefMut` bound is
+            // what turns a replace-on-assign element back to the shared lookup.
+            // Looked up once: the by-value arm below reuses this instead of
+            // asking again. Only a value read needs it up front — a reference
+            // access that resolves never reaches the by-value lowering.
+            let value_impl = (access == IndexAccess::Value)
                 .then(|| {
                     self.index_lookup_or_newtype_base(
                         &struct_name,
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
-                        |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
+                        |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
                     )
                 })
                 .flatten();
-            if let Some((trait_info, matched_type_id)) = index_trait_info {
+            let index_trait_info = (access == IndexAccess::Mutable)
+                .then(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
+                    )
+                    .map(|found| (found, "index_ref_mut"))
+                })
+                .flatten()
+                .or_else(|| {
+                    // A value read prefers the copy `IndexValue` gives it, so a
+                    // container offering both keeps its by-value shape; one that
+                    // only aliases is still read through `IndexRef` plus a deref.
+                    let aliases_only = access != IndexAccess::Value || value_impl.is_none();
+                    aliases_only
+                        .then(|| {
+                            self.index_lookup_or_newtype_base(
+                                &struct_name,
+                                base_type_id,
+                                &lookup_name,
+                                lookup_type_id,
+                                |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
+                            )
+                            .map(|found| (found, "index_ref"))
+                        })
+                        .flatten()
+                });
+            if let Some(((trait_info, matched_type_id), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
                 let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name =
-                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), "index_ref");
+                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
 
-                // The method returns &Output, so the type is Ref(output_type)
-                let ref_output_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_ref(trait_info.output_type);
+                // `index_ref` returns `&Output`; `index_ref_mut` returns `&mut Output`.
+                let ref_output_type = {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    if index_method == "index_ref_mut" {
+                        tt.make_mut_ref(trait_info.output_type)
+                    } else {
+                        tt.make_ref(trait_info.output_type)
+                    }
+                };
 
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
@@ -1628,7 +1696,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: Some(LocalMethodName::new(
                         receiver,
                         Some(trait_info.trait_name.clone()),
-                        "index_ref".to_string(),
+                        index_method.to_string(),
                     )),
                 };
 
@@ -1652,13 +1720,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return trait_info.output_type;
             }
 
-            let index_value_info = self.index_lookup_or_newtype_base(
-                &struct_name,
-                base_type_id,
-                &lookup_name,
-                lookup_type_id,
-                |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
-            );
+            let index_value_info = value_impl.or_else(|| {
+                self.index_lookup_or_newtype_base(
+                    &struct_name,
+                    base_type_id,
+                    &lookup_name,
+                    lookup_type_id,
+                    |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
+                )
+            });
             if let Some((trait_info, matched_type_id)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 

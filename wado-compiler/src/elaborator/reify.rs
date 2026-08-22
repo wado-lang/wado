@@ -5552,6 +5552,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// The type of the `*…` result a dispatched index read produces. Each site
+    /// supplies the type it recorded; one that is missing or unresolved is
+    /// re-derived by peeling the `&Output` the reference index traits return.
+    fn index_deref_type(
+        &self,
+        recorded: Option<TypeId>,
+        dispatch: &super::sem::types::OperatorDispatch,
+    ) -> TypeId {
+        if !dispatch.needs_deref {
+            return dispatch.return_type;
+        }
+        recorded
+            .filter(|t| {
+                !matches!(
+                    self.tysys.type_table.borrow().get(*t),
+                    ResolvedType::Unknown
+                )
+            })
+            .unwrap_or_else(
+                || match self.tysys.type_table.borrow().get(dispatch.return_type) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                    _ => dispatch.return_type,
+                },
+            )
+    }
+
     /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
     /// `recv.index_value(idx)`) from an already-reified receiver and subscript
     /// plus the recorded dispatch. Shared by [`Self::reify_index`] and the
@@ -5612,16 +5638,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         // Deref result type: the index expr's recorded type, peeling
         // `&Output` on the degenerate missing-annotation path.
-        let deref_type = if dispatch.needs_deref {
-            self.ann_expression_types(index_expr.id).unwrap_or_else(|| {
-                match self.tysys.type_table.borrow().get(dispatch.return_type) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                    _ => dispatch.return_type,
-                }
-            })
-        } else {
-            dispatch.return_type
-        };
+        let deref_type = self.index_deref_type(self.ann_expression_types(index_expr.id), &dispatch);
         self.build_index_read_from_dispatch(recv.clone(), idx.clone(), dispatch, deref_type, span)
     }
 
@@ -6305,12 +6322,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // compound-assign read via `build_index_read_from_dispatch`.
         if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
+            let deref_type = self.index_deref_type(Some(recorded_type), &dispatch);
             return self.build_index_read_from_dispatch(
-                receiver,
-                idx_expr,
-                dispatch,
-                recorded_type,
-                index.span,
+                receiver, idx_expr, dispatch, deref_type, index.span,
             );
         }
 

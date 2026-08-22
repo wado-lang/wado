@@ -69,9 +69,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:stream_write_hello.wado::__modules_initialized: bool = 0;
-global global:stream_write_hello.wado::__const_obj_0: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 10), used: 6 };
 
 fn "stream_write_hello.wado/run"() with Stdout {
+    let data_3: ref "core:prelude//List<u8>";
     let packed_5: i64;
     let rx_6: i32;
     let tx_7: i32;
@@ -92,8 +92,9 @@ fn "stream_write_hello.wado/run"() with Stdout {
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     "wasi/stream-drop-readable"(rx_6);
+    data_3 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 10), used: 6 };
     ptr_36 = "mem/realloc"(0, 0, 1, 6);
-    "core:rt/gc_array_to_memory"(global:stream_write_hello.wado::__const_obj_0.repr, 0, ptr_36, 6);
+    "core:rt/gc_array_to_memory"(data_3.repr, 0, ptr_36, 6);
     ptr_26 = builtin::i32_wrap_i64(local.tee packed_25(builtin::i64_extend_i32_s(ptr_36) | 25769803776_i64));
     len_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
     "core:rt/cm_stream_write_drain"(tx_7, ptr_26, len_27, 1);

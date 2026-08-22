@@ -1,0 +1,29 @@
+// `&mut xs[i]` reduces to `&mut array_get_value(&xs.repr, i)`, so the write
+// through it lands in `xs` rather than in the reference. An interpreter frame
+// that drops only the reference keeps the element's old value foldable.
+
+use { println, Stdout } from "core:cli";
+
+struct Named {
+    name: String,
+}
+
+fn rename(n: &mut Named) {
+    n.name = `renamed`
+}
+
+export fn run() with Stdout {
+    let source: List<Named> = [Named { name: `original` }];
+    let mut copied: List<Named> = source;
+    rename(&mut copied[0]);
+    assert copied[0].name == `renamed`;
+
+    let mut direct: List<Named> = [Named { name: `original` }];
+    rename(&mut direct[0]);
+    assert direct[0].name == `renamed`;
+
+    println(`ok`);
+}
+
+__DATA__
+{"stdout": "ok\n"}

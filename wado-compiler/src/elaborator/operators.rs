@@ -1096,7 +1096,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        let expr_type = self.resolve_expr(&unary.expr, ctx, inner_expected);
+        // `&mut xs[i]` is the one position that reaches an element mutably, so the
+        // subscript resolves through `IndexRefMut` and carries the mutability in
+        // the accessor's signature rather than upgrading a shared borrow.
+        let expr_type = match (&unary.op, &unary.expr) {
+            (UnaryOp::MutRef, ast::Expr::Index(index)) => {
+                self.resolve_index_access(index, ctx, super::expr::IndexAccess::Mutable)
+            }
+            (UnaryOp::Ref, ast::Expr::Index(index)) => {
+                self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
+            }
+            _ => self.resolve_expr(&unary.expr, ctx, inner_expected),
+        };
 
         if unary.op == UnaryOp::MutRef
             && let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx)

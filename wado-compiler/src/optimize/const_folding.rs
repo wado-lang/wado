@@ -23,8 +23,8 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
-    Interpreter, Lattice, is_ctfe_runnable,
+    BorrowRoot, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
+    GlobalKey, Interpreter, Lattice, is_ctfe_runnable,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -1009,6 +1009,8 @@ impl ConstFoldVisitor<'_> {
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {
                         self.interpreter.invalidate_local(*local_index);
+                        self.interpreter
+                            .record_ref_root(*local_index, BorrowRoot::NotABorrow);
                     }
                     body.for_each_child(node, |c| stack.push(c));
                 }
@@ -1033,7 +1035,79 @@ impl ConstFoldVisitor<'_> {
         // This also clears stale field entries from a same-index reuse
         // before we record new ones below.
         self.interpreter.invalidate_local(local_index);
+        self.interpreter
+            .record_ref_root(local_index, Self::borrowed_root(body, value));
         self.interpreter.bind_local(local_index, lat);
+    }
+
+    /// What a `let r = &place` binding borrows into.
+    fn borrowed_root(body: &Body, op: Operand) -> BorrowRoot {
+        let Some(mut e) = op.as_expr() else {
+            return BorrowRoot::NotABorrow;
+        };
+        loop {
+            let next = match &body.exprs[e].kind {
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    expr: inner,
+                } => {
+                    return match Self::borrowed_root_impl(body, *inner) {
+                        Some(root) => BorrowRoot::Local(root),
+                        None => BorrowRoot::Unrooted,
+                    };
+                }
+                ExprKind::Cast { expr: inner, .. } => inner.as_expr(),
+                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                    body.blocks[*block].stmts.last().and_then(|last| {
+                        match &body.stmts[*last].kind {
+                            StmtKind::Expr(value) => value.as_expr(),
+                            _ => None,
+                        }
+                    })
+                }
+                _ => None,
+            };
+            match next {
+                Some(inner) => e = inner,
+                None => return BorrowRoot::NotABorrow,
+            }
+        }
+    }
+
+    /// The local a borrow bottoms out at, following the accessor calls that
+    /// `&mut xs[i]` reduces to.
+    fn borrowed_root_impl(body: &Body, op: Operand) -> Option<u32> {
+        let e = op.as_expr()?;
+        match &body.exprs[e].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                expr: inner,
+            }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::VariantPayload { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. } => Self::borrowed_root_impl(body, *inner),
+            ExprKind::Local { index, .. } => Some(*index),
+            ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                let last = *body.blocks[*block].stmts.last()?;
+                let StmtKind::Expr(value) = &body.stmts[last].kind else {
+                    return None;
+                };
+                Self::borrowed_root_impl(body, *value)
+            }
+            ExprKind::Call { args, .. } => {
+                let mut found = None;
+                for arg in args {
+                    match Self::borrowed_root_impl(body, arg.expr) {
+                        Some(r) if found.is_none_or(|f| f == r) => found = Some(r),
+                        Some(_) => return None,
+                        None => {}
+                    }
+                }
+                found
+            }
+            _ => None,
+        }
     }
 
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,

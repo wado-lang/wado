@@ -264,6 +264,10 @@ struct FrameState {
     /// land in it, which is what keeps a borrow from copying its referent.
     /// Populated only during frame execution; empty everywhere else.
     place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
+    /// Locals this frame bound to a borrow, mapped to the local the referent
+    /// lives in — `&mut xs[i]` reduces to a borrow of an accessor result, which
+    /// still names `xs` — or `None` where it resolved to nothing nameable.
+    ref_roots: IndexMap<u32, Option<u32>>,
     /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
     /// aggregate constant. An unpopulated set refuses every aggregate binding.
     aggregate_locals: LocalSet,
@@ -606,14 +610,90 @@ impl<'a> Interpreter<'a> {
         let Some((root, _)) = self.frame_place_of(body, place) else {
             // A place no frame root names — through a call result, a global —
             // may still be reachable from a tracked local.
-            for lattice in self.frame.env.values_mut() {
-                *lattice = Lattice::NonConst;
-            }
+            self.invalidate_every_local();
             return;
         };
+        // A write through a reference lands in its referent. `frame_place_of`
+        // re-roots a borrow taken over a place the frame can spell; `ref_roots`
+        // names the local for one taken over an accessor result.
+        if place::place_of(body, place).is_some_and(|(raw, _)| raw == root)
+            && place_roots_at_reference(body, place, self.type_table)
+        {
+            match self.frame.ref_roots.get(&root).copied() {
+                Some(Some(target)) => {
+                    self.invalidate_local(target);
+                    for member in self.frame.alias_classes.members(target).to_vec() {
+                        self.invalidate_local(member);
+                    }
+                    return;
+                }
+                Some(None) => {
+                    self.invalidate_every_local();
+                    return;
+                }
+                // A reference the frame never saw bound points outside it — a
+                // parameter above all — so no tracked local holds its referent.
+                None => {}
+            }
+        }
         self.invalidate_local(root);
         for member in self.frame.alias_classes.members(root).to_vec() {
             self.invalidate_local(member);
+        }
+    }
+
+    /// Record what `index` borrows into, clearing the entry where the binding
+    /// is not a borrow.
+    pub fn record_ref_root(&mut self, index: u32, borrow: BorrowRoot) {
+        match borrow {
+            BorrowRoot::NotABorrow => self.frame.ref_roots.swap_remove(&index),
+            BorrowRoot::Unrooted => self.frame.ref_roots.insert(index, None),
+            BorrowRoot::Local(target) => self.frame.ref_roots.insert(index, Some(target)),
+        };
+    }
+
+    /// Drop every tracked value: a write whose destination the frame cannot
+    /// name may have landed in any of them.
+    fn invalidate_every_local(&mut self) {
+        for lattice in self.frame.env.values_mut() {
+            *lattice = Lattice::NonConst;
+        }
+    }
+}
+
+/// What a `let` binding borrows into, as [`Interpreter::record_ref_root`] reads it.
+pub enum BorrowRoot {
+    NotABorrow,
+    /// A borrow whose referent no tracked local holds.
+    Unrooted,
+    Local(u32),
+}
+
+/// Whether the place chain bottoms out at a reference — a write through it
+/// reaches the referent, not the handle.
+fn place_roots_at_reference(body: &Body, place: Operand, type_table: &TypeTable) -> bool {
+    let Some(mut e) = place.as_expr() else {
+        return false;
+    };
+    loop {
+        match &body.exprs[e].kind {
+            ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::VariantPayload { expr: inner, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                expr: inner,
+            } => match inner.as_expr() {
+                Some(next) => e = next,
+                None => return false,
+            },
+            _ => {
+                return matches!(
+                    type_table.get(body.exprs[e].type_id),
+                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                );
+            }
         }
     }
 }

@@ -33,6 +33,13 @@ pub struct FunctionRef {
     pub method_info: Option<LocalMethodName>,
 }
 
+/// How a builtin reaches an array element.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ArrayElementAccess {
+    Read,
+    Write,
+}
+
 impl FunctionRef {
     /// Create a `FunctionRef` by extracting metadata from a resolved `NirFunction`.
     pub fn from_resolved(func: &NirFunction, module_source: ModuleSource) -> Self {
@@ -75,6 +82,25 @@ impl FunctionRef {
             Some(format!("builtin::{}", self.name))
         } else {
             None
+        }
+    }
+
+    /// How this builtin reaches an array element, or `None` when it is not an
+    /// element accessor. All three hand back a handle into the array argument;
+    /// only `array_get_ref_mut` names a write.
+    pub fn array_element_access(&self) -> Option<ArrayElementAccess> {
+        match self
+            .builtin_name()
+            .or_else(|| self.monomorphized_builtin_name())
+            .as_deref()
+        {
+            Some(
+                "builtin::array_get_value"
+                | "builtin::array_get_value_u8"
+                | "builtin::array_get_ref",
+            ) => Some(ArrayElementAccess::Read),
+            Some("builtin::array_get_ref_mut") => Some(ArrayElementAccess::Write),
+            _ => None,
         }
     }
 

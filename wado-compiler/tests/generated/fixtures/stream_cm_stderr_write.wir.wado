@@ -73,10 +73,10 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
 global mut global:stream_cm_stderr_write.wado::__modules_initialized: bool = 0;
-global global:stream_cm_stderr_write.wado::__const_obj_0: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
 
 fn "stream_cm_stderr_write.wado/run"() with Stderr {
     let subtask: i32;
+    let data_4: ref "core:prelude//List<u8>";
     let packed_6: i64;
     let rx_7: i32;
     let tx_8: i32;
@@ -93,8 +93,9 @@ fn "stream_cm_stderr_write.wado/run"() with Stderr {
     rx_7 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
     subtask = "stream_cm_stderr_write.wado/__cm_binding__Stderr_write_via_stream"(rx_7);
+    data_4 = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(101, 114, 114, 32, 109, 115, 103, 10), used: 8 };
     ptr_41 = "mem/realloc"(0, 0, 1, 8);
-    "core:rt/gc_array_to_memory"(global:stream_cm_stderr_write.wado::__const_obj_0.repr, 0, ptr_41, 8);
+    "core:rt/gc_array_to_memory"(data_4.repr, 0, ptr_41, 8);
     ptr_31 = builtin::i32_wrap_i64(local.tee packed_30(builtin::i64_extend_i32_s(ptr_41) | 34359738368_i64));
     len_32 = builtin::i32_wrap_i64(packed_30 >> 32_i64);
     "core:rt/cm_stream_write_drain"(tx_8, ptr_31, len_32, 1);
