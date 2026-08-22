@@ -416,16 +416,16 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
                 .and_then(|e| borrows_local(body, e, idx, gate))
                 .is_some())
         .then_some(BorrowShape::Derived),
-        ExprKind::Call {
-            args,
-            has_receiver: true,
-            ..
-        } => (gate.is_reference_type(body.exprs[expr].type_id)
-            && args
-                .first()
-                .and_then(|receiver| receiver.expr.as_expr())
-                .and_then(|re| borrows_local(body, re, idx, gate))
-                .is_some())
+        // `xs[i]` reaches this pass as a receiverless `array_get_value(&xs.repr,
+        // i)` once `container_sroa` has run, so the receiver is not the only
+        // argument that can carry the handle out.
+        ExprKind::Call { args, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
+            && args.iter().any(|arg| {
+                arg.expr
+                    .as_expr()
+                    .and_then(|e| borrows_local(body, e, idx, gate))
+                    .is_some()
+            }))
         .then_some(BorrowShape::Derived),
         _ => None,
     }
@@ -1305,6 +1305,12 @@ impl Gate<'_> {
             return false;
         };
         let f = f.borrow();
+        if !matches!(
+            self.type_table.borrow().get(f.return_type),
+            ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
+        ) {
+            return false;
+        }
         // A builtin records no parameters, so absence is not evidence of a
         // mutable borrow — only a declared one is.
         f.params

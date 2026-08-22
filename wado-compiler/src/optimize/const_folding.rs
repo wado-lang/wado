@@ -1009,6 +1009,7 @@ impl ConstFoldVisitor<'_> {
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {
                         self.interpreter.invalidate_local(*local_index);
+                        self.interpreter.record_ref_root(*local_index, None);
                     }
                     body.for_each_child(node, |c| stack.push(c));
                 }
@@ -1041,15 +1042,24 @@ impl ConstFoldVisitor<'_> {
     /// The local a `let r = &place` borrows into: `None` when the binding is not
     /// a borrow, `Some(None)` when it is one the walk cannot root.
     fn borrowed_root(body: &Body, op: Operand) -> Option<Option<u32>> {
-        let e = op.as_expr()?;
-        let ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } = &body.exprs[e].kind
-        else {
-            return None;
-        };
-        Some(Self::borrowed_root_impl(body, *inner))
+        let mut e = op.as_expr()?;
+        loop {
+            match &body.exprs[e].kind {
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    expr: inner,
+                } => return Some(Self::borrowed_root_impl(body, *inner)),
+                ExprKind::Cast { expr: inner, .. } => e = inner.as_expr()?,
+                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                    let last = *body.blocks[*block].stmts.last()?;
+                    let StmtKind::Expr(value) = &body.stmts[last].kind else {
+                        return None;
+                    };
+                    e = value.as_expr()?;
+                }
+                _ => return None,
+            }
+        }
     }
 
     /// The local a borrow bottoms out at, following the accessor calls that
