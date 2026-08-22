@@ -41,6 +41,15 @@ enum FuncRefInference {
 
 use super::util::placeholder;
 
+/// How a subscript is being used, which decides the indexing trait it selects:
+/// `&mut xs[i]` reaches the element through `IndexRefMut` so the mutability rides
+/// on the signature, while every other position reads it shared.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum IndexAccess {
+    Shared,
+    Mutable,
+}
+
 /// Per spread base in an anonymous literal: whether it is a key-value map, and
 /// (for a plain struct base) its defining module plus field list
 /// `(name, concrete type, declared index, visibility)`.
@@ -272,7 +281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_static_method_call(static_call, ctx)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
-            Expr::Index(index) => self.resolve_index(index, ctx),
+            Expr::Index(index) => self.resolve_index(index, ctx, IndexAccess::Shared),
             Expr::Block(block) => {
                 // Walk the block for its facts; reify rebuilds the `Block`
                 // node. Read the overall type from `expression_types` (AST
@@ -1493,6 +1502,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         index: &ast::IndexExpr,
         ctx: &mut FunctionContext,
+        access: IndexAccess,
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
@@ -1596,8 +1606,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
-            let index_trait_info = (!self.uses_intrinsic_index_dispatch(base_type_id))
+            // A `&mut` subscript asks `IndexRefMut` first so the element arrives
+            // as `&mut T` from a `&mut` container. Its `Output: RefMut` bound is
+            // what turns a replace-on-assign element back to the shared lookup.
+            let index_trait_info = (access == IndexAccess::Mutable)
                 .then(|| {
+                    self.index_lookup_or_newtype_base(
+                        &struct_name,
+                        base_type_id,
+                        &lookup_name,
+                        lookup_type_id,
+                        |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
+                    )
+                    .map(|found| (found, "index_ref_mut"))
+                })
+                .flatten()
+                .or_else(|| {
                     self.index_lookup_or_newtype_base(
                         &struct_name,
                         base_type_id,
@@ -1605,14 +1629,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
                     )
-                })
-                .flatten();
-            if let Some((trait_info, matched_type_id)) = index_trait_info {
+                    .map(|found| (found, "index_ref"))
+                });
+            if let Some(((trait_info, matched_type_id), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
                 let receiver = self.fq_index_receiver(matched_type_id);
                 let mangled_method_name =
-                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), "index_ref");
+                    MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
@@ -1628,7 +1652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: Some(LocalMethodName::new(
                         receiver,
                         Some(trait_info.trait_name.clone()),
-                        "index_ref".to_string(),
+                        index_method.to_string(),
                     )),
                 };
 

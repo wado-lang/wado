@@ -2611,14 +2611,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.fq_receiver_head(matched_type_id)
     }
 
-    /// Whether concrete subscripts on `type_id` take the optimized intrinsic
-    /// path instead of the `IndexRef` / `IndexRefMut` traits. `List` does: its
-    /// trait bodies index a private `repr` that Container SROA cannot see
-    /// through, so its reference traits dispatch only in generic contexts.
-    pub(super) fn uses_intrinsic_index_dispatch(&self, type_id: TypeId) -> bool {
-        self.tysys.type_table.borrow().as_list(type_id).is_some()
-    }
-
     /// Find an `IndexRef` impl for a type. `expected_index_type` disambiguates
     /// overloaded impls (so a `Range` subscript does not match an `IndexRef<i32>`);
     /// `None` matches by container name alone.
@@ -2633,6 +2625,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             base_type_id,
             "IndexRef",
             "index_ref",
+            "Output",
+            expected_index_type,
+        )
+        .map(
+            |(output_type, self_kind, trait_name, impl_module_source, index_type)| IndexTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+                impl_module_source,
+                index_type,
+            },
+        )
+    }
+
+    /// [`Self::find_index_trait_impl`] over `IndexRefMut`, for a `&mut` subscript.
+    /// Its `Output: RefMut` bound is what declines a replace-on-assign element and
+    /// sends the caller back to the shared lookup.
+    pub(super) fn find_index_mut_trait_impl_as_ref(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        expected_index_type: Option<TypeId>,
+    ) -> Option<IndexTraitInfo> {
+        self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "IndexRefMut",
+            "index_ref_mut",
             "Output",
             expected_index_type,
         )
@@ -3162,10 +3182,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TirExpr> {
         // First, resolve the indexed container to get its type
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-
-        if self.uses_intrinsic_index_dispatch(container_type) {
-            return None;
-        }
 
         let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
