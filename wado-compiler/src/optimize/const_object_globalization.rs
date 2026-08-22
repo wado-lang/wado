@@ -1775,7 +1775,9 @@ fn delivers_projection_operand(body: &Body, op: Operand, roots: &[u32], gate: &G
 /// `match`/`switch`'s is its arm's — the same rule the freshness side follows.
 fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>) -> bool {
     if gate.is_reference_type(body.exprs[expr].type_id)
-        && roots.iter().any(|&r| projection_roots_at(body, expr, r, gate))
+        && roots
+            .iter()
+            .any(|&r| projection_roots_at(body, expr, r, gate))
     {
         return true;
     }
