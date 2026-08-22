@@ -102,7 +102,30 @@ test "an Ord bound's operator takes the flags impl" {
     assert !lt_operator(Modes::quiet, Modes::loud);
 }
 
-// --- Still taking the derived comparison. ---
+test "an Eq bound's operator takes the flags impl" {
+    assert eq_operator(Perms::can_read, Perms::can_write);
+}
+
+test "an Eq bound's method call takes the flags impl" {
+    assert eq_method(&Perms::can_read, &Perms::can_write);
+}
+
+test "the operator takes the newtype's Eq impl" {
+    let a: Meters = 1.0 as Meters;
+    let b: Meters = 2.0 as Meters;
+    assert a == b;
+}
+
+test "an Eq bound's operator takes the newtype's impl" {
+    assert eq_operator(1.0 as Meters, 2.0 as Meters);
+}
+
+test "an Eq bound's method call takes the newtype's impl" {
+    assert eq_method(&(1.0 as Meters), &(2.0 as Meters));
+}
+
+// --- Still taking the derived comparison: an `enum`'s operator, and a
+// `flags` operator written directly. ---
 
 #[TODO]
 test "the operator should take the enum's Eq impl" {
@@ -122,33 +145,6 @@ test "the operator should take the flags Eq impl" {
 #[TODO]
 test "the operator should take the flags Ord impl" {
     assert !(Modes::quiet < Modes::loud);
-}
-
-#[TODO]
-test "an Eq bound's operator should take the flags impl" {
-    assert eq_operator(Perms::can_read, Perms::can_write);
-}
-
-#[TODO]
-test "an Eq bound's method call should take the flags impl" {
-    assert eq_method(&Perms::can_read, &Perms::can_write);
-}
-
-#[TODO]
-test "the operator should take the newtype's Eq impl" {
-    let a: Meters = 1.0 as Meters;
-    let b: Meters = 2.0 as Meters;
-    assert a == b;
-}
-
-#[TODO]
-test "an Eq bound's operator should take the newtype's impl" {
-    assert eq_operator(1.0 as Meters, 2.0 as Meters);
-}
-
-#[TODO]
-test "an Eq bound's method call should take the newtype's impl" {
-    assert eq_method(&(1.0 as Meters), &(2.0 as Meters));
 }
 
 __DATA__

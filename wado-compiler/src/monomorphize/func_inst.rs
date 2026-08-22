@@ -1687,6 +1687,10 @@ impl Monomorphizer {
         let Some(trait_) = trait_decl else {
             return true;
         };
+        // The receiver only: keeping the call for an impl a link *below* it
+        // wrote leaves the dispatch asking the erased base, which carries no
+        // user impl at all. `newtype_link_impl_unreached.wado` pins what that
+        // costs.
         !self
             .functions
             .trait_env

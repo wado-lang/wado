@@ -1,0 +1,38 @@
+// An impl on an *intermediate* newtype link is reached by direct dispatch but
+// not through a bound: the monomorphized call relowers to the base instruction
+// because the receiver itself wrote no impl.
+//
+// The relowering guard cannot close it. Asking about every link keeps the call,
+// and the dispatch then asks the erased base — which carries no user impl at
+// all, so a valid program stops compiling. The fix belongs in how a kept call
+// resolves an inherited impl, not in the guard.
+//
+// 99 means the impl answered, 3 the base instruction.
+use { println } from "core:cli";
+
+type Inner = i32;
+
+type Outer = Inner;
+
+impl Add for Inner {
+    type Output = Inner;
+
+    fn add(&self, rhs: &Inner) -> Inner {
+        return 99 as Inner;
+    }
+}
+
+fn plus<T: Add>(a: T, b: T) -> T::Output {
+    return a + b;
+}
+
+export fn run() with Stdout {
+    let i = builtin::black_box(1) as Inner;
+    let j = builtin::black_box(2) as Inner;
+    let x = builtin::black_box(1) as Outer;
+    let y = builtin::black_box(2) as Outer;
+    println(`${(i + j) as i32} ${(x + y) as i32} ${plus(i, j) as i32} ${plus(x, y) as i32}`);
+}
+
+__DATA__
+{"stdout": "99 99 99 3\n"}
