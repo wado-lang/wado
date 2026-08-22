@@ -495,9 +495,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The right-hand type `trait_`'s declaration gives `method_name`, read off
-    /// whichever of the parameter's bounds names that trait — a hint for typing
-    /// a literal. Reporting an ambiguity from it would print the dispatch's own
-    /// diagnostic a second time, anchored at the literal.
+    /// whichever bound names that trait — a hint for typing a literal, so it
+    /// reports no ambiguity of its own; the dispatch already does.
     fn bound_declared_rhs_type(
         &mut self,
         param_name: &str,

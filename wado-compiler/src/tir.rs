@@ -644,10 +644,9 @@ impl TypeSet {
     }
 }
 
-/// A trait at the arguments it was instantiated at (WEP 2026-08-12):
-/// `Combine` and `Combine<Inch>` are two, so the declaration alone is not the
-/// identity. `args` holds only what an impl wrote beyond the trait's declared
-/// defaults; a bound writes none, so it is always [`TraitRef::bare`].
+/// A trait at the arguments it was instantiated at (WEP 2026-08-12): `Combine`
+/// and `Combine<Inch>` are two. `args` holds only what an impl wrote beyond the
+/// declared defaults, so a bound — writing none — is always [`TraitRef::bare`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TraitRef {
     pub decl: crate::defs::DefId,
@@ -689,8 +688,8 @@ struct AssocTypeKey {
 }
 
 /// The answers registered under one key, by the arguments the impl wrote
-/// beyond the trait's declared defaults. Several instantiations answer one
-/// name — `impl Add for Cm` and `impl Add<Inch> for Cm` both give `Output`.
+/// beyond the declared defaults: `impl Add for Cm` and `impl Add<Inch> for Cm`
+/// both give `Output`.
 #[derive(Debug, Clone, Default)]
 struct AssocAnswers(Vec<(Vec<TypeId>, TypeId)>);
 
@@ -749,10 +748,9 @@ pub struct TypeTable {
     ///
     /// Keyed by trait because one type may implement several declaring the
     /// same name — `f32` has both `FromStr::Err` and `LenientFromStr::Err`.
-    /// `<type as trait[args]>::name` → the type it resolves to. The arguments
-    /// are the ones the impl wrote beyond the trait's declared defaults, so a
-    /// bare bound and `impl Add<Cm> for Cm` meet at the empty list while
-    /// `impl Add<Inch> for Cm` keys its own answer.
+    /// `<type as trait[args]>::name` → the type it resolves to, the arguments
+    /// being what the impl wrote beyond the declared defaults — so a bare bound
+    /// and `impl Add<Cm> for Cm` meet at the empty list.
     assoc_type_resolutions: IndexMap<AssocTypeKey, AssocAnswers>,
     /// Generic associated type definitions:
     /// `(base decl, declaring trait, assoc_name)` → `TypeId`.
@@ -2467,10 +2465,8 @@ impl TypeTable {
     }
 
     /// Resolve `<concrete_id as trait_key>::assoc_name` for a caller that knows
-    /// which trait the projection came from. A projection writes no trait
-    /// arguments, so it names the defaulted instantiation where one is
-    /// registered, and otherwise whatever the arguments-writing impls agree on
-    /// ([`one_assoc_answer`]).
+    /// which trait the projection came from. Writing no trait arguments, it
+    /// names the defaulted instantiation, else what the rest agree on.
     pub fn resolve_assoc_type_of_trait(
         &self,
         concrete_id: TypeId,
@@ -3412,9 +3408,8 @@ impl TypeTable {
     }
 
     /// Whether `id` (recursively) mentions the frame slot `index`, projections
-    /// included. Slot 0 of a trait's frame is `Self`. Tells whether a method
-    /// type parameter is inferable from an argument position (it appears in a
-    /// value-parameter's type) versus only from the return type.
+    /// included; slot 0 of a trait's frame is `Self`. Tells whether a method
+    /// type parameter is inferable from an argument or only from the return.
     pub fn contains_type_param_index(&self, id: TypeId, index: u32) -> bool {
         match self.get(id) {
             ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {

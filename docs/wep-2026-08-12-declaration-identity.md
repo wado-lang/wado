@@ -518,10 +518,9 @@ removal.
 
 Syntax means what the frame that wrote it says. A supertrait bound reached
 through `T: Derived` was written in `Derived`'s frame, so `Item = A` there is
-`Derived`'s `A` — and a bound writes no trait arguments, so an asking frame has
-nothing to bind it to. An inherited bound carries its writer, and a right-hand
-side naming the writer's own parameters stays abstract rather than binding to a
-name the asking frame happens to share.
+`Derived`'s `A`. An inherited bound carries its writer, and a right-hand side
+naming the writer's own parameters stays abstract rather than binding to a name
+the asking frame happens to share.
 
 Fixture: `supertrait_binding_keeps_writer_frame.wado`.
 
@@ -576,22 +575,22 @@ Fixtures: `assoc_type_per_trait_args.wado`,
 
 ## Compiler items
 
-A trait the compiler supplies behaviour for — an operator, `Eq` / `Ord`, a
-reflection kind — is recognised by a `DefId → CompilerItem` map, never by a
-spelling in the asking scope. Matching the spelling answers for a user trait
-that shares the name and declines for the prelude's where a module shadows it,
-so `trait Add { fn add(&self, other: &Self) -> Self; }` used to capture `+`,
-and a monomorphized `T::neg()` used to relower to `i32.sub` over the body the
-program wrote.
+A trait the compiler supplies behaviour for — an operator, indexing, a literal
+builder, `Eq` / `Ord`, a reflection kind — is recognised by a
+`DefId → CompilerItem` map, never by a spelling in the asking scope, which
+answers for a user trait sharing the name and declines where a module shadows
+the prelude's. Every site deciding an operator asks it: which impls a bound
+admits, which primitives supply arithmetic, which instruction a call lowers back
+to, which right-hand type a literal takes.
 
-Every site that decides an operator asks it: which impls a bound admits, which
-primitives supply arithmetic, which instruction a call lowers back to, and
-which right-hand type a literal is typed from.
+A type that merely erases to a scalar — a newtype, `flags`, an `enum` — is its
+own declaration, so an impl it writes outranks the erased form's instruction.
+Only a primitive _is_ the instruction.
 
 Fixtures: `error_user_trait_does_not_capture_add.wado`,
-`error_user_trait_does_not_capture_operator.wado`,
+`error_user_trait_does_not_capture_index.wado`,
 `user_trait_method_survives_relowering.wado`,
-`operator_rhs_hint_names_its_trait.wado`.
+`eq_ord_manual_impl_wins.wado`.
 
 ## Impl target arguments
 

@@ -317,9 +317,8 @@ pub enum TypeError {
     },
 
     /// An associated type name reachable through more than one of a type
-    /// parameter's bounds, so `T::Output` names two types. Reported where it
-    /// is written: the same two traits are unambiguous on a parameter whose
-    /// bounds name only one of them.
+    /// parameter's bounds, so `T::Output` names two types. Reported where it is
+    /// written — the same two traits are unambiguous on another parameter.
     AmbiguousAssocType {
         assoc: String,
         param: String,

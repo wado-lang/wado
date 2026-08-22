@@ -170,9 +170,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The identity an impl header names: the trait, plus the arguments it
-    /// writes beyond the declared defaults. `Rhs = Self` makes
-    /// `impl Add<Cm> for Cm` the bare instantiation a bound reaches, while
-    /// `impl Add<Inch> for Cm` keys its own.
+    /// writes beyond the declared defaults — `impl Add<Cm> for Cm` is the bare
+    /// instantiation a bound reaches, `impl Add<Inch> for Cm` keys its own.
     pub(super) fn impl_trait_ref(
         &mut self,
         trait_type: &crate::ast::Type,
@@ -203,9 +202,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
-    /// whether it did. [`Self::bound_declaring_assoc_type`] would answer with
-    /// the first, which is a coin toss the writer never made. Supertraits are
-    /// not counted: a direct bound redeclaring an inherited name wins there.
+    /// whether it did — answering with the first is a coin toss the writer
+    /// never made. Supertraits do not count: a direct bound wins there.
     fn report_ambiguous_assoc_type(&self, param_name: &str, assoc_name: &str, span: Span) -> bool {
         let Some(bounds) = self
             .annotate_ctx
@@ -850,10 +848,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Every bound on `base_name` a projection may be answered from, each
-    /// paired with the trait that wrote it: the ones the frame wrote itself
-    /// (`None`) and the ones they inherit. A supertrait binds an associated
-    /// type too — `trait Scalar: Mul<Output = Self>` answers `T::Output` for
-    /// `T: Scalar` — so one walk serves every lookup.
+    /// paired with the trait that wrote it (`None` for the frame's own). A
+    /// supertrait binds an assoc type too, so one walk serves every lookup.
     fn bound_closure_of(&mut self, base_name: &str) -> Option<Vec<FrameBound>> {
         let bounds = self
             .annotate_ctx
@@ -908,9 +904,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The projection `base::assoc` as this frame builds it, where `base_name`
-    /// is the name the frame files `base`'s bounds under. The single builder,
-    /// so a projection written in a signature and one synthesized for an
+    /// The projection `base::assoc` as this frame builds it. The single
+    /// builder, so one written in a signature and one synthesized for an
     /// expression intern to the same type.
     pub(super) fn make_frame_projection(
         &mut self,
@@ -950,10 +945,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
-    /// [`Self::frame_projection`] scoped to one trait: `T: Mul<Output = T>`
-    /// answers `T::Output` where a bare `T: Mul` leaves it abstract. A caller
-    /// that knows which trait it dispatched through asks this one, so a second
-    /// bound declaring the same name never answers for it.
+    /// [`Self::frame_projection`] scoped to one trait, so a second bound
+    /// declaring the same name never answers for it: `T: Mul<Output = T>`
+    /// answers `T::Output` where a bare `T: Mul` leaves it abstract.
     pub(super) fn frame_projection_of_trait(
         &mut self,
         base_name: &str,
@@ -999,15 +993,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         projections
             .into_iter()
             .filter_map(|(name, assoc)| {
-                // A frame that binds `Self::X` answers with the binding; one
-                // that does not answers with the projection, which is what the
-                // name means there. Dropping it left `C::Iter::Item` unable to
-                // reach the `C::Item` a bare `C: IntoIterator` still names.
-                //
-                // Building that projection reads `assoc`'s own bounds, which
-                // may name this pair again: two associated types bounded
-                // through each other have no fixpoint, and the one already on
-                // the walk stays abstract.
+                // A frame that binds `Self::X` answers with the binding, one
+                // that does not with the projection. Building that reads
+                // `assoc`'s own bounds, which may name this pair again — two
+                // assoc types bounded through each other have no fixpoint, so
+                // the one already on the walk stays abstract.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
                     let key = (base, assoc.clone());
                     if !self.assoc_binding_stack.insert(key.clone()) {

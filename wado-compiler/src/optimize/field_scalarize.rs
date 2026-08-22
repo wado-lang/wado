@@ -1698,10 +1698,9 @@ fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
     search.0
 }
 
-/// Append `sync_stmts` to `block`, preserving the trailing value where the last
-/// stmt produces one by binding it ahead of the sync and restoring it after. A
-/// diverging tail takes neither path: nothing after it runs, and appending
-/// leaves the block ending on an assignment where its type demands a value.
+/// Append `sync_stmts` to `block`, preserving a trailing value by binding it
+/// ahead of the sync and restoring it after. A diverging tail takes neither
+/// path — nothing after it runs.
 fn append_sync_preserving_block_value(
     body: &mut Body,
     block: BlockId,

@@ -1,13 +1,10 @@
-// An impl on an *intermediate* newtype link is reached by direct dispatch but
-// not through a bound: the monomorphized call relowers to the base instruction
-// because the receiver itself wrote no impl.
+// An impl on an *intermediate* newtype link answers direct dispatch but not a
+// call through a bound, which relowers because the receiver wrote no impl.
 //
-// The relowering guard cannot close it. Asking about every link keeps the call,
-// and the dispatch then asks the erased base — which carries no user impl at
-// all, so a valid program stops compiling. The fix belongs in how a kept call
-// resolves an inherited impl, not in the guard.
-//
-// 99 means the impl answered, 3 the base instruction.
+// The relowering guard cannot close it: asking about every link keeps the call,
+// and the dispatch then asks the erased base, which carries no user impl — so a
+// valid program stops compiling. The fix belongs in how a kept call resolves an
+// inherited impl. 99 means the impl answered, 3 the base instruction.
 use { println } from "core:cli";
 
 type Inner = i32;

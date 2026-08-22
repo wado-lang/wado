@@ -629,9 +629,8 @@ impl TypeSystem {
     }
 
     /// Whether every member of `resolved` satisfies `trait_` under `tr`'s
-    /// structural rule, and which one decided when they do not. The single
-    /// structural-conformance walk: the satisfaction check takes the yes and
-    /// the diagnostic takes the no, so they cannot name different members.
+    /// structural rule, and which one decided when they do not. One walk: the
+    /// check takes the yes and the diagnostic the no, so they cannot disagree.
     fn structural_conformance(
         &self,
         ctx: &Scope,
@@ -753,8 +752,7 @@ impl TypeSystem {
 
     /// Which compiler item `trait_` is, by identity. A trait is a declaration,
     /// so this is a lookup and not a comparison: a user trait sharing a prelude
-    /// name is not that trait, and a scope shadowing one does not stop the
-    /// prelude's from being itself.
+    /// name is not that trait.
     pub(super) fn on_bound_of(&self, trait_: DefId) -> Option<OnBoundTrait> {
         OnBoundTrait::of_compiler_item(self.compiler_item_of_trait(trait_)?)
     }
@@ -766,9 +764,8 @@ impl TypeSystem {
     }
 
     /// [`Self::on_bound_of`] for a caller holding a spelling with no reference
-    /// site — a `#[derive(...)]` prefix, which names no trait reference to
-    /// resolve. Distinct from the identity form so the two questions cannot be
-    /// mistaken for one.
+    /// site — a `#[derive(...)]` prefix. Kept distinct from the identity form
+    /// so the two questions cannot be mistaken for one.
     pub(super) fn classify_on_bound_trait(
         &self,
         scope: &TypeLookup,
@@ -851,11 +848,8 @@ impl TypeSystem {
     }
 
     /// Whether holding the bound spelled `bound_name` in `scope` also gives
-    /// `trait_` — the same declaration, or one of its supertraits.
-    ///
-    /// [`Self::bound_decl_implies`] compares two spellings; this compares the
-    /// bound's declaration against an identity the caller already holds, which
-    /// is what a satisfaction check has.
+    /// `trait_` — the same declaration, or one of its supertraits. Compares the
+    /// bound's declaration against an identity, not two spellings.
     pub(super) fn bound_decl_implies(
         &self,
         scope: &TypeLookup,
@@ -1069,16 +1063,14 @@ impl TypeSystem {
 
     /// Whether a reference is denied `trait_`'s bound, which it otherwise
     /// inherits from its pointee by auto-deref at the call. `==` on a reference
-    /// is identity, so no ordering follows from it and `&T` is no `Ord`; and a
-    /// receiverless method has no receiver to deref.
+    /// is identity, so `&T` is no `Ord`; and see below for the other rule.
     fn ref_denies_bound(&self, on_bound: Option<OnBoundTrait>, trait_: DefId) -> bool {
         if on_bound == Some(OnBoundTrait::Ord) {
             return true;
         }
-        // A receiverless method has no receiver to auto-deref, so `&T` can only
-        // inherit it by forwarding to `T`'s. That forwards only where `Self`
-        // does not appear in the signature: `kind() -> String` does,
-        // `sum_iter(…) -> Option<Self>` cannot.
+        // A receiverless method has no receiver to deref, so `&T` inherits it
+        // by forwarding — which works only where `Self` is absent from the
+        // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
         trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
             |sig| {
                 sig.methods.values().any(|m| {
@@ -1383,10 +1375,8 @@ impl TypeSystem {
     }
 
     /// Whether an impl block makes `type_key` implement `trait_`. `subject` is
-    /// the receiver's own `TypeId` where the caller still holds one: a blanket
-    /// bound pinning an associated type to its receiver
-    /// (`impl<T: Mul<Output = T>> Product for T`) is decidable only against
-    /// that, so a key alone cannot answer it.
+    /// the receiver's own `TypeId` where the caller holds one: a blanket
+    /// pinning an assoc type to its receiver is decidable only against that.
     pub(super) fn find_trait_impl_for_subject(
         &self,
         ctx: &Scope,
@@ -1567,17 +1557,9 @@ impl TypeSystem {
         false
     }
 
-    /// Whether `subject` satisfies the associated-type constraints the
-    /// blanket's own bounds pin to its receiver param
-    /// (`impl<T: Mul<Output = T>> Product for T`).
-    ///
-    /// Both sides are `TypeId`s, so a generic argument counts (`W<i32>` with
-    /// `Output = W<String>` fails) and a `type Output = Self;` passes. The
-    /// answer comes from whichever registry the serving impl wrote to — a
-    /// concrete one records the resolution, `impl<T> Mul for W<T>` records a
-    /// definition to substitute — so only a compiler-supplied impl answers
-    /// nothing, and its `Output` is the type itself. A caller with no subject
-    /// cannot decide, and a blanket that pins nothing needs no subject.
+    /// Whether `subject` satisfies the associated-type constraints a blanket's
+    /// bounds pin to its receiver param (`impl<T: Mul<Output = T>> Product for
+    /// T`). Compared as `TypeId`s, so a generic argument counts.
     pub(super) fn blanket_assoc_constraints_hold(
         &self,
         subject: Option<TypeId>,
@@ -1671,10 +1653,9 @@ impl TypeSystem {
     }
 }
 
-/// An associated type paired with the trait that declares it. A subtrait's
-/// default body may name a supertrait's, and the projection belongs to the
-/// declaring trait — keying it to the dispatched-through one made
-/// `<T as Base>::Elem` and `<T as Derived>::Elem` two types.
+/// An associated type paired with the trait that *declares* it: a subtrait's
+/// default body may name a supertrait's, and keying the projection to the
+/// dispatched-through trait made `<T as Base>::Elem` and `Derived`'s two types.
 type DeclaredAssocType = (crate::defs::DefId, ast::AssociatedTypeDecl);
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -2209,11 +2190,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// What a bare bound binds `decl`'s slots to. Slot 0 is `Self`; the
-    /// trait's own parameters follow, and a bound names none of them
-    /// positionally (`T: Add<Output = T>` binds an associated type, not an
-    /// argument), so they take their declared defaults — `trait Add<Rhs = Self>`
-    /// makes `add`'s parameter `&Self`, not a rigid `&Rhs` nothing satisfies.
+    /// What a bare bound binds `decl`'s slots to: slot 0 is `Self`, and the
+    /// trait's own parameters take their declared defaults, since a bound names
+    /// none of them positionally (`T: Add<Output = T>` binds an assoc type).
     pub(super) fn bare_bound_slots(
         &mut self,
         decl: crate::defs::DefId,

@@ -229,53 +229,20 @@ pub enum CompilerItem {
     SequenceLiteralBuilder,
     KeyValueLiteralBuilder,
     SequenceLiteral,
-    /// `Add` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
+    /// The traits an operator dispatches to. The compiler picks each by
+    /// construction, so they are items and not spellings a user trait of
+    /// the same name could answer for.
     Add,
-    /// `Sub` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Sub,
-    /// `Mul` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Mul,
-    /// `Div` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Div,
-    /// `Rem` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Rem,
-    /// `Neg` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Neg,
-    /// `BitAnd` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     BitAnd,
-    /// `BitOr` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     BitOr,
-    /// `BitXor` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     BitXor,
-    /// `BitNot` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     BitNot,
-    /// `Shl` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Shl,
-    /// `Shr` — the trait an operator dispatches to. The compiler picks it
-    /// by construction, so it is an item and not a spelling a user trait
-    /// of the same name could answer for.
     Shr,
     /// `Eq` — anchor for synthesised `==` / `!=` lowering and the
     /// auto-derive checks that decide whether a compound type
@@ -1608,9 +1575,8 @@ impl Default for CompilerItems {
 }
 
 /// Discriminant → slot in [`CompilerItems::items`]. `ALL` groups the variants
-/// by kind rather than by discriminant, so the registry cannot index by
-/// `item as usize` directly. A variant missing from `ALL` leaves its slot
-/// `usize::MAX`, which the assertion below rejects at compile time.
+/// by kind, not by discriminant, so the registry cannot index by `item as
+/// usize`; a variant missing from `ALL` fails the assertion below at compile.
 const SLOT_OF_ITEM: [usize; CompilerItem::COUNT] = {
     let mut table = [usize::MAX; CompilerItem::COUNT];
     let mut i = 0;
@@ -1845,11 +1811,9 @@ impl CompilerItems {
         }
     }
 
-    /// Which compiler item `decl` is the trait of, or `None` for a trait the
-    /// compiler does not know. The inverse of [`Self::trait_decl`], and the
-    /// only way to recognise one: matching the spelling in the asking scope
-    /// answers for a user trait that shares the name, and declines for the
-    /// prelude's when a scope shadows it.
+    /// Which compiler item `decl` is the trait of. The inverse of
+    /// [`Self::trait_decl`] and the only way to recognise one: the spelling
+    /// answers for a user trait sharing the name.
     #[must_use]
     pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
         self.trait_by_decl.get(&decl).copied()

@@ -332,9 +332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_comparison {
             // A type that erases to a scalar is still its own type, so an impl
             // it writes answers the comparison before the erased form's
-            // instruction does. Nothing here is newtype-specific: `enum` erases
-            // to its discriminant and `flags` to its bitmask, and the arms
-            // below dropped an impl written on any of the three.
+            // instruction does — newtype, `enum` and `flags` alike.
             let own_comparison_impl = super::tysys::operator_compiler_item(&op)
                 .and_then(|item| self.tysys.compiler_trait_def(item))
                 .is_some_and(|trait_| {
@@ -759,9 +757,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                         .type_id;
                 }
-                // A type parameter reaches its operator only through a bound.
-                // None gave one, so there is nothing to dispatch to and nothing
-                // below answers for it — say so here rather than at WIR build.
+                // A type parameter reaches its operator only through a bound,
+                // so say so here rather than at WIR build.
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),
                     trait_name: self
@@ -1158,8 +1155,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         } {
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
-            // A type parameter dispatches through its bounds, as the binary
-            // operators do; the name-keyed lookup below reaches no impl for one.
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved
                 && let Some(bounds) = self
                     .annotate_ctx
@@ -1197,9 +1192,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                     .type_id;
             }
-            // A type parameter reaches its operator only through a bound. None
-            // gave one, so there is nothing to dispatch to and nothing below
-            // answers for it — say so here rather than at WIR build.
+            // A type parameter reaches its operator only through a bound, so
+            // say so here rather than at WIR build.
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved {
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),

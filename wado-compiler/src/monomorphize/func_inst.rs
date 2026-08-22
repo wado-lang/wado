@@ -1633,10 +1633,9 @@ impl Monomorphizer {
 
     /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
     /// call: a `newtype` inherits its base's trait impl, so peel it to the base
-    /// unless the newtype has its own impl, or a value blanket the newtype is
-    /// not disqualified from — a blanket is not inherited. Only the reflection
-    /// bounds are decidable here; see
-    /// [`receiver_satisfies_blanket_bounds`](crate::synthesis::template::receiver_satisfies_blanket_bounds).
+    /// unless the newtype has its own impl, or a value blanket it is not
+    /// disqualified from — a blanket is not inherited, and only the reflection
+    /// bounds are decidable here.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
@@ -1671,11 +1670,8 @@ impl Monomorphizer {
     }
 
     /// Whether an operator on `id` lowers to a scalar instruction rather than
-    /// the trait call monomorphization produced. A primitive is the
-    /// instruction; a type that merely erases to one — a newtype, `flags`, an
-    /// `enum` — is its own type, so one writing an impl of `trait_` keeps the
-    /// call. Which declaration wrote a body is the impl index's question, and
-    /// an associated type does not answer it (`Eq` declares none).
+    /// the trait call monomorphization produced. A primitive *is* the
+    /// instruction; a type that merely erases to one keeps its own impl.
     fn operator_lowers_to_scalar(
         &self,
         type_table: &TypeTable,

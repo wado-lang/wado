@@ -420,10 +420,9 @@ pub(crate) struct BlanketBound {
     /// The trait the bound's reference site names, `None` where it reaches no
     /// declaration.
     pub(crate) decl_ref: Option<crate::defs::DefId>,
-    /// Associated types the bound pins to the receiver param itself
-    /// (`Output` in `T: Mul<Output = T>`). Only that shape is decidable
-    /// against a candidate receiver; any other right-hand side is the
-    /// instantiation's to answer.
+    /// Associated types the bound pins to the receiver param itself (`Output`
+    /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
+    /// receiver; any other right-hand side is the instantiation's to answer.
     pub(crate) pinned_to_receiver: Vec<String>,
 }
 
@@ -510,10 +509,8 @@ pub(super) type TraitDeclIndex = IndexSet<DefId>;
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
 ///
-/// `writer` is the trait whose declaration listed it. A bound means what its
-/// writer's frame says, so `trait Foo<A>: Bar<Item = A>` binds `Item` to
-/// `Foo`'s `A` and to nothing an asking frame happens to spell the same
-/// (WEP 2026-08-12).
+/// `writer` is the trait whose declaration listed it: `trait Foo<A>:
+/// Bar<Item = A>` binds `Item` to `Foo`'s `A`, not an asking frame's.
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
     pub(super) bound: ast::TraitBound,
@@ -2498,9 +2495,8 @@ fn index_decls_by_name(
 }
 
 /// The argument nodes a written trait reference carries, empty for a bare
-/// name. `ns::Trait<T>` supplies them the same as `Trait<T>` does — the
-/// namespace says which module declares the head, which is the reference
-/// site's question and not the argument list's.
+/// name. `ns::Trait<T>` supplies them the same as `Trait<T>` does: the
+/// namespace is the head's question, not the argument list's.
 pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
     match ty {
         ast::Type::Generic(generic) => &generic.args,
@@ -2525,12 +2521,8 @@ pub(super) fn written_type_args(
 }
 
 /// A trait argument list with every trailing argument that only restates the
-/// trait's declared default dropped, `Self` meaning the impl's own target.
-///
-/// A bound is a bare name — the parser reads `<...>` after one as
-/// associated-type bindings — so `impl Add<Cm> for Cm` is reachable from
-/// `T: Add` only if it names the same trait as `impl Add for Cm` does.
-/// `impl Add<Inch> for Cm` keeps its argument and stays a distinct impl.
+/// declared default dropped, `Self` meaning the impl's own target — so
+/// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
 fn args_without_declared_defaults(
     written: Vec<name::FqTypeName>,
     trait_type: &ast::Type,
@@ -2548,11 +2540,9 @@ fn args_without_declared_defaults(
     kept
 }
 
-/// Whether a bare bound on the trait selects this header. A bound cannot write
-/// trait arguments — the parser reads `<...>` after one as associated-type
-/// bindings — so it asks for the declared defaults where a position has one
-/// (`T: Mul` is `Mul<Self>`) and says nothing about a position that has none
-/// (`T: Pick` is every `impl Pick<K>`).
+/// Whether a bare bound on the trait selects this header. A bound writes no
+/// arguments, so it asks for the declared default where a position has one
+/// (`T: Mul` is `Mul<Self>`) and nothing where it has none (`T: Pick`).
 pub(super) fn header_answers_bare_bound(
     trait_type: &ast::Type,
     target: &ast::Type,
