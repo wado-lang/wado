@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787353344891,
+  "lastUpdate": 1787357739527,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50085,6 +50085,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/47bfd89ad24457fdfdf9b8f3ec70a1dd69354a6e"
         },
         "date": 1787353344356,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16660,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "908ef924bfb8f5f717ea1573fe56b45a7ae151d6",
+          "message": "Merge pull request #1873 from wado-lang/claude/go-1-27-uuid-evaluation-887rvz\n\nrefactor(compiler): resolve a direct effect-op callee by declaration only",
+          "timestamp": "2026-08-22T09:04:24+09:00",
+          "tree_id": "f253756e8a361ba22ca6d9a00ede27b3b752c86e",
+          "url": "https://github.com/wado-lang/wado/commit/908ef924bfb8f5f717ea1573fe56b45a7ae151d6"
+        },
+        "date": 1787357738843,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
