@@ -314,12 +314,8 @@ impl TypeSystem {
     /// For newtypes, get the base type name and ID for trait impl lookup fallback.
     /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
     /// The first link at or below `type_id` — itself included — writing its own
-    /// impl of `trait_`. A link's impl answers for every level above it, so a
-    /// type erasing to a scalar reaches it before the base's instruction does.
-    ///
-    /// The descent stops above a base that *is* a scalar: a primitive's
-    /// operator impl is the instruction, and taking it as an inherited one
-    /// would route `type Duration = u64` through a call.
+    /// impl of `trait_`, stopping above a scalar base: a primitive's operator
+    /// impl *is* the instruction, not one a newtype inherits.
     pub(crate) fn own_impl_link(
         &self,
         type_id: TypeId,

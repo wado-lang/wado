@@ -332,9 +332,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if is_comparison {
             // A type that erases to a scalar is still its own type, so an impl
-            // it writes answers the comparison before the erased form's
-            // instruction does — newtype, `enum` and `flags` alike. A link
-            // below it answers the same way, being what the receiver inherits.
+            // it writes — or inherits from a link below — answers the
+            // comparison before the erased form's instruction does.
             let comparison_impl_link = super::tysys::operator_compiler_item(&op)
                 .and_then(|item| self.tysys.compiler_trait_def(item))
                 .and_then(|trait_| self.tysys.own_impl_link(left.type_id, trait_));

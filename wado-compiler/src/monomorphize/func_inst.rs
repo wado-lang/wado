@@ -2299,11 +2299,9 @@ impl Monomorphizer {
                             } else {
                                 Vec::new()
                             };
-                            // A generic newtype dispatching to its *own* impl
-                            // keeps its own head, so the impl instantiation is
-                            // keyed on the arguments it carries — which
-                            // `generic_type_args` reports only for the shapes
-                            // that cannot inherit.
+                            // A generic newtype dispatching to its own impl is
+                            // keyed on the arguments it carries, which
+                            // `generic_type_args` reports only for other shapes.
                             let impl_type_arg_tids: Vec<TypeId> = type_table
                                 .generic_type_args(concrete_type_id)
                                 .or_else(|| match type_table.get(concrete_type_id) {
