@@ -1,6 +1,6 @@
 //! What each condition shape contributes to a power-assert failure, read back
-//! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what
-//! `docs/wep-2026-08-19-power-assert-coverage.md` sanctions rendering nothing.
+//! from `wado dump --assert-plan`. Every shape `SOURCE` covers captures an
+//! operand, so `EXPECTED_EMPTY` is empty; a shape that stops is a regression.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
@@ -27,6 +27,10 @@ fn twice(n: i32) -> i32 {
     return n * 2;
 }
 
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
 export fn run() {
     let a = 1;
     let b = 2;
@@ -51,6 +55,8 @@ export fn run() {
     assert (a..<b).contains(&a);
     assert a < b && b < 3;
     assert a > b || b > 0;
+    assert apply(|y: i32| -> i32 { return y; }, a) == 1;
+    assert list[a] + list[b] == 99;
 }
 "#;
 
@@ -59,10 +65,10 @@ export fn run() {
 const EXPECTED: &[(&str, &[&str])] = &[
     ("a < b", &["a", "b"]),
     ("!(a > b)", &["a", "b", "a > b"]),
-    ("twice(a) == b", &["twice(a)", "b"]),
-    ("s.len() == 5", &["s.len()"]),
+    ("twice(a) == b", &["a", "twice(a)", "b"]),
+    ("s.len() == 5", &["s", "s.len()"]),
     ("o.inner.v == 1", &["o.inner.v"]),
-    ("list[a] == 20", &["a", "list[a]"]),
+    ("list[a] == 20", &["list", "a", "list[a]"]),
     ("a as i64 == 1", &["a", "a as i64"]),
     ("0 <= a < b", &["a", "b"]),
     ("[a, b] == [1, 2]", &["a", "b"]),
@@ -76,6 +82,11 @@ const EXPECTED: &[(&str, &[&str])] = &[
         &["a", "match a { 1 => a, _ => b, }"],
     ),
     ("(a..<b).contains(&a)", &["(a..<b).contains(&a)"]),
+    ("shape matches { Point }", &["shape"]),
+    (
+        "apply(|y: i32| -> i32 { return y; }, a) == 1",
+        &["|y: i32| -> i32 { return y; }", "a"],
+    ),
     ("a < b && b < 3", &["a", "b", "a < b", "b", "b < 3"]),
     ("a > b || b > 0", &["a", "b", "a > b", "b", "b > 0"]),
 ];
@@ -133,6 +144,37 @@ fn plan_of<'a>(plan: &'a str, condition: &str) -> &'a str {
     &rest[..end]
 }
 
+/// Whether some plan line for `label` carries `column`. One label can have
+/// several lines — `a < b && b < 3` captures `b` twice, and only the second is
+/// conditional.
+fn some_plan_line_has(block: &str, label: &str, column: &str) -> bool {
+    let mut lines = block
+        .lines()
+        .filter(|line| line.ends_with(&format!("  {label}")))
+        .peekable();
+    assert!(
+        lines.peek().is_some(),
+        "no plan line for `{label}` in:\n{block}"
+    );
+    lines.any(|line| line.contains(column))
+}
+
+/// A place is re-read in the failure branch, so one slot serves every mention.
+#[test]
+fn a_place_named_twice_is_captured_once() {
+    let plan = entry_plan();
+    let block = plan_of(&plan, "list[a] + list[b] == 99");
+
+    let occurrences = block
+        .lines()
+        .filter(|line| line.ends_with("  list"))
+        .count();
+    assert_eq!(
+        occurrences, 1,
+        "`list` should be captured once, got:\n{block}"
+    );
+}
+
 #[test]
 fn every_condition_shape_captures_its_operands() {
     let plan = entry_plan();
@@ -156,17 +198,58 @@ fn a_short_circuited_operand_is_marked_conditional() {
     for (condition, labels) in EXPECTED_CONDITIONAL {
         let block = plan_of(&plan, condition);
         for label in *labels {
-            let needle = format!("conditional  {label}\n");
             assert!(
-                block.contains(&needle),
+                some_plan_line_has(block, label, "conditional"),
                 "`{condition}` should mark `{label}` conditional, got:\n{block}"
             );
         }
     }
 }
 
-/// The shapes the WEP's *Deliberately out of scope* sanctions rendering nothing.
-const EXPECTED_EMPTY: &[&str] = &["shape matches { Point }"];
+/// Where each operand's capture is taken: `hoisted` binds ahead of the
+/// condition, `re-read` takes no binding, and `in-place` writes a slot where the
+/// operand sits — what WEP rule 1 requires once anything earlier stays behind.
+const EXPECTED_BINDING: &[(&str, &[(&str, &str)])] = &[
+    // A place passes the fact through, so the operand after it still binds.
+    ("a < b", &[("a", "re-read"), ("b", "re-read")]),
+    (
+        "twice(a) == b",
+        &[("twice(a)", "hoisted"), ("b", "re-read")],
+    ),
+    ("o.inner.v == 1", &[("o.inner.v", "hoisted")]),
+    // A subscript's receiver runs first and is re-read rather than bound, and
+    // the index after it stays where it sits; the subscript moves as one group.
+    (
+        "list[a] == 20",
+        &[
+            ("list", "re-read"),
+            ("a", "re-read"),
+            ("list[a]", "hoisted"),
+        ],
+    ),
+    // Past a short-circuit nothing binds ahead: the operand may not run.
+    (
+        "a < b && b < 3",
+        &[("a < b", "hoisted"), ("b < 3", "in-place")],
+    ),
+];
+
+#[test]
+fn a_capture_binds_ahead_only_while_order_allows() {
+    let plan = entry_plan();
+
+    for (condition, bindings) in EXPECTED_BINDING {
+        let block = plan_of(&plan, condition);
+        for (label, binding) in *bindings {
+            assert!(
+                some_plan_line_has(block, label, binding),
+                "`{condition}` should take `{label}` {binding}, got:\n{block}"
+            );
+        }
+    }
+}
+
+const EXPECTED_EMPTY: &[&str] = &[];
 
 #[test]
 fn only_the_documented_shapes_render_an_empty_plan() {

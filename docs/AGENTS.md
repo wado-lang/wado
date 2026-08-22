@@ -20,12 +20,17 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Decision: What was decided and why
 - Consequences: Impact and trade-offs
 
+Deciding is the human's role, to adopt and to refuse alike. Propose, and record
+what is still open as a gap; never write a decision of your own into a WEP.
+
 It may include TODOs on WIP.
 
-A WEP is a living standard: it states the design as it stands now. When a design
-changes, rewrite the affected sections. Do not append an update log, keep
-superseded alternatives, or leave a checklist of what already landed — the git
-history is the SSoT for how the design got here.
+A WEP states the design as it stands now; a change rewrites the affected
+sections. No update log, superseded alternatives, or landed-checklist — git
+history is the SSoT.
+
+No "out of scope" section: an unfinished mechanism is a "Known gap" — what is
+missing and what closing it takes. A deliberate omission goes in Decision.
 
 ### Index of WEPs
 

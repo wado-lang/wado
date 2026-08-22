@@ -1,0 +1,23 @@
+// A place operand is read where it sits, so nothing after it may be bound ahead
+// of the condition: a hoisted operand that writes through the place would land
+// before the read, which WEP rule 1 forbids.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i32) -> i32 {
+    *x = *x + 100;
+    return *x;
+}
+
+export fn run() with Stdout {
+    let mut a = 5;
+    assert a == bump(&mut a);
+    println("the condition was reordered");
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stdout": "",
+    "stderr_contains": ["condition: a == bump(&mut a)"]
+}

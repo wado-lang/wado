@@ -8,14 +8,18 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
     mut value: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(2)
+struct core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree> {  // TypeId(2)
+    mut value: ref "value_copy_variant_recursive.wado//Tree",
+}
 
-struct core:prelude/string.wado//String {  // TypeId(3)
+array Array<u8> (mut u8);  // TypeId(3)
+
+struct core:prelude/string.wado//String {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(4)
+struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -26,110 +30,118 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-variant value_copy_variant_recursive.wado//Tree {  // TypeId(5)
+variant value_copy_variant_recursive.wado//Tree {  // TypeId(6)
     Branch(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>"),
     Leaf(i32),
 }
 
-struct value_copy_variant_recursive.wado//Tree::Branch {  // TypeId(6)
+struct value_copy_variant_recursive.wado//Tree::Branch {  // TypeId(7)
     discriminant: i32,
     payload_0: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>",
 }
 
-struct value_copy_variant_recursive.wado//Tree::Leaf {  // TypeId(7)
+struct value_copy_variant_recursive.wado//Tree::Leaf {  // TypeId(8)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct value_copy_variant_recursive.wado//Node {  // TypeId(8)
+struct value_copy_variant_recursive.wado//Node {  // TypeId(9)
     mut value: i32,
     mut next: ref null "value_copy_variant_recursive.wado//Node",
 }
 
-array Array<value_copy_variant_recursive.wado/Tree> (mut ref "value_copy_variant_recursive.wado//Tree");  // TypeId(9)
+array Array<value_copy_variant_recursive.wado/Tree> (mut ref "value_copy_variant_recursive.wado//Tree");  // TypeId(10)
 
-struct core:prelude//List<value_copy_variant_recursive.wado/Tree> {  // TypeId(10)
+struct core:prelude//List<value_copy_variant_recursive.wado/Tree> {  // TypeId(11)
     mut repr: ref "Array<value_copy_variant_recursive.wado/Tree>",
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(14)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//value_copy_variant_recursive.wado/__test_0_recursive_struct_copy_is_deep" = fn();  // TypeId(19)
+type "functype//value_copy_variant_recursive.wado/__test_0_recursive_struct_copy_is_deep" = fn();  // TypeId(20)
 
-type "functype//value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep" = fn();  // TypeId(20)
+type "functype//value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep" = fn();  // TypeId(21)
 
-type "functype//value_copy_variant_recursive.wado/__cm_export____test_0_recursive_struct_copy_is_deep" = fn();  // TypeId(21)
+type "functype//value_copy_variant_recursive.wado/__cm_export____test_0_recursive_struct_copy_is_deep" = fn();  // TypeId(22)
 
-type "functype//value_copy_variant_recursive.wado/__cm_export____test_1_recursive_variant_copy_is_deep" = fn();  // TypeId(22)
+type "functype//value_copy_variant_recursive.wado/__cm_export____test_1_recursive_variant_copy_is_deep" = fn();  // TypeId(23)
 
-type "functype//value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>" = fn(ref null "value_copy_variant_recursive.wado//Node") -> ref null "value_copy_variant_recursive.wado//Node";  // TypeId(23)
+type "functype//value_copy_variant_recursive.wado/$value_copy$core:prelude/types.wado/Option<value_copy_variant_recursive.wado/Node>" = fn(ref null "value_copy_variant_recursive.wado//Node") -> ref null "value_copy_variant_recursive.wado//Node";  // TypeId(24)
 
-type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Tree" = fn(ref "value_copy_variant_recursive.wado//Tree") -> ref "value_copy_variant_recursive.wado//Tree";  // TypeId(24)
+type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Tree" = fn(ref "value_copy_variant_recursive.wado//Tree") -> ref "value_copy_variant_recursive.wado//Tree";  // TypeId(25)
 
-type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node" = fn(ref "value_copy_variant_recursive.wado//Node") -> ref "value_copy_variant_recursive.wado//Node";  // TypeId(25)
+type "functype//value_copy_variant_recursive.wado/$value_copy$value_copy_variant_recursive.wado/Node" = fn(ref "value_copy_variant_recursive.wado//Node") -> ref "value_copy_variant_recursive.wado//Node";  // TypeId(26)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(26)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, i64, i32);  // TypeId(27)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(27)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(28)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(28)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(29)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(29)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(30)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(31)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(32)
+type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(33)
 
-type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(33)
+type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // TypeId(34)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(34)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<value_copy_variant_recursive.wado/Tree>" = fn(ref "Array<value_copy_variant_recursive.wado/Tree>", i32, i32, ref "core:prelude/format.wado//Formatter", bool, i32);  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(36)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(38)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(39)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(40)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(41)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(42)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(43)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(43)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(44)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(45)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>::push" = fn(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>", ref "value_copy_variant_recursive.wado//Tree");  // TypeId(45)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(46)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>::grow" = fn(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>");  // TypeId(46)
+type "functype//core:prelude/format.wado/&core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>::push" = fn(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>", ref "value_copy_variant_recursive.wado//Tree");  // TypeId(48)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>::grow" = fn(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>");  // TypeId(49)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>", ref "core:prelude/format.wado//Formatter");  // TypeId(50)
+
+type "functype//core:prelude/traits.wado/value_copy_variant_recursive.wado/Tree^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>", ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -158,11 +170,20 @@ global global:value_copy_variant_recursive.wado::__const_obj_9: ref null "core:p
 global global:value_copy_variant_recursive.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 110, 46, 118, 97, 108, 117, 101, 32, 61, 61, 32, 50, 10), used: 25 };
 global global:value_copy_variant_recursive.wado::__const_obj_15: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 20 };
 global global:value_copy_variant_recursive.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 104, 105, 108, 100, 114, 101, 110, 46, 108, 101, 110, 40, 41, 58, 32), used: 16 };
-global global:value_copy_variant_recursive.wado::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 104, 105, 108, 100, 114, 101, 110, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 50, 10), used: 32 };
-global global:value_copy_variant_recursive.wado::__const_obj_21: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 44 };
-global global:value_copy_variant_recursive.wado::__const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 49, 95, 114, 101, 99, 117, 114, 115, 105, 118, 101, 95, 118, 97, 114, 105, 97, 110, 116, 95, 99, 111, 112, 121, 95, 105, 115, 95, 100, 101, 101, 112), used: 39 };
-global global:value_copy_variant_recursive.wado::__const_obj_26: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 104, 105, 108, 100, 114, 101, 110, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 49, 10), used: 32 };
-global global:value_copy_variant_recursive.wado::__const_obj_27: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 41 };
+global global:value_copy_variant_recursive.wado::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 104, 105, 108, 100, 114, 101, 110, 58, 32), used: 10 };
+global global:value_copy_variant_recursive.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 104, 105, 108, 100, 114, 101, 110, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 50, 10), used: 32 };
+global global:value_copy_variant_recursive.wado::__const_obj_22: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 44 };
+global global:value_copy_variant_recursive.wado::__const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(95, 95, 116, 101, 115, 116, 95, 49, 95, 114, 101, 99, 117, 114, 115, 105, 118, 101, 95, 118, 97, 114, 105, 97, 110, 116, 95, 99, 111, 112, 121, 95, 105, 115, 95, 100, 101, 101, 112), used: 39 };
+global global:value_copy_variant_recursive.wado::__const_obj_28: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 104, 105, 108, 100, 114, 101, 110, 46, 108, 101, 110, 40, 41, 32, 61, 61, 32, 49, 10), used: 32 };
+global global:value_copy_variant_recursive.wado::__const_obj_29: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 41 };
+global global:core:prelude/format.wado::__const_obj_33: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38), used: 1 };
+global global:core:prelude/array.wado::__const_obj_34: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
+global global:core:prelude/array.wado::__const_obj_35: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32, 46, 46, 46), used: 5 };
+global global:core:prelude/array.wado::__const_obj_36: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
+global global:core:prelude/traits.wado::__const_obj_37: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
+global global:core:prelude/traits.wado::__const_obj_38: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40), used: 1 };
+global global:core:prelude/traits.wado::__const_obj_39: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
+global global:core:prelude/traits.wado::__const_obj_40: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(84, 114, 101, 101), used: 4 };
 
 fn "value_copy_variant_recursive.wado/__test_0_recursive_struct_copy_is_deep"() {
     let b: ref "value_copy_variant_recursive.wado//Node";
@@ -223,9 +244,9 @@ fn "value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep"()
     let leaves: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
     let children_4: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
     let children_5: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
-    let __v0_6: i32;
+    let __v1_6: i32;
     let children_8: ref "core:prelude//List<value_copy_variant_recursive.wado/Tree>";
-    let __v0_9: i32;
+    let __v1_9: i32;
     let __local_11: ref "core:prelude/string.wado//String";
     let __local_12: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/string.wado//String";
@@ -250,20 +271,20 @@ fn "value_copy_variant_recursive.wado/__test_1_recursive_variant_copy_is_deep"()
     }
     if ref.test "value_copy_variant_recursive.wado//Tree::Branch"(__sroa_a_value) {
         children_5 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"(__sroa_a_value).payload_0;
-        __v0_6 = children_5.used;
-        if @unlikely(__v0_6 != 1) {
+        __v1_6 = children_5.used;
+        if @unlikely(__v1_6 != 1) {
             cold_path;
-            "core:rt/panic"(__local_11 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_23); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 58); __local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_11); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:value_copy_variant_recursive.wado::__const_obj_27, __local_12); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_26); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_19); __local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_11); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_6 }, __local_12); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 10); __local_11);
+            "core:rt/panic"(__local_11 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(165); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_24); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 58); __local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_11); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:value_copy_variant_recursive.wado::__const_obj_29, __local_12); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_28); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_20); __local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_11); "core:prelude/format.wado/&core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect"(children_5, __local_12); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_11, global:value_copy_variant_recursive.wado::__const_obj_19); __local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_11); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1_6 }, __local_12); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_11, 10); __local_11);
             unreachable;
         }
     } else {
     }
     if ref.test "value_copy_variant_recursive.wado//Tree::Branch"(__sroa_b_value) {
         children_8 = ref.cast "value_copy_variant_recursive.wado//Tree::Branch"(__sroa_b_value).payload_0;
-        __v0_9 = children_8.used;
-        if @unlikely(__v0_9 != 2) {
+        __v1_9 = children_8.used;
+        if @unlikely(__v1_9 != 2) {
             cold_path;
-            "core:rt/panic"(__local_13 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(138); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_23); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 58); __local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:value_copy_variant_recursive.wado::__const_obj_21, __local_14); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_20); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_19); __local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_9 }, __local_14); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 10); __local_13);
+            "core:rt/panic"(__local_13 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(165); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_6); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_24); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 58); __local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:value_copy_variant_recursive.wado::__const_obj_22, __local_14); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_21); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_20); __local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/format.wado/&core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect"(children_8, __local_14); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_13, global:value_copy_variant_recursive.wado::__const_obj_19); __local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_13); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1_9 }, __local_14); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_13, 10); __local_13);
             unreachable;
         }
     } else {
@@ -464,6 +485,48 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     };
 }
 
+fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<value_copy_variant_recursive.wado/Tree>"(repr, start, end, f, marker, limit) {
+    let shown: i32;
+    let truncated: bool;
+    let i: i32;
+    let s_12: ref "core:prelude/string.wado//String";
+    let s_16: ref "core:prelude/string.wado//String";
+    let s_18: ref "core:prelude/string.wado//String";
+    let _licm_arith_21: bool;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 91);
+    shown = 0;
+    truncated = 0;
+    i = start;
+    _licm_arith_21 = limit >= 0;
+    b26: block {
+        l27: loop {
+            break_if b26 i >= end;
+            if select i32(_licm_arith_21, shown >= limit, 0) {
+                truncated = 1;
+                break b26;
+            }
+            if shown > 0 {
+                s_12 = global:core:prelude/array.wado::__const_obj_36;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_12);
+            }
+            "core:prelude/traits.wado/value_copy_variant_recursive.wado/Tree^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<value_copy_variant_recursive.wado/Tree>" { value: builtin::array_get_value<ref "value_copy_variant_recursive.wado//Tree">(repr, i) }, f);
+            shown = shown + 1;
+            i = i + 1;
+            continue l27;
+        };
+    };
+    if select i32(marker, truncated, 0) {
+        if shown > 0 {
+            s_16 = global:core:prelude/array.wado::__const_obj_35;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_16);
+        } else {
+            s_18 = global:core:prelude/array.wado::__const_obj_34;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_18);
+        }
+    }
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 93);
+}
+
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
@@ -483,12 +546,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b27: block {
-            l28: loop {
-                break_if b27 t <= 0_i64;
+        b33: block {
+            l34: loop {
+                break_if b33 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l28;
+                continue l34;
             };
         };
         break __inline_count_digits_i64_0: n;
@@ -655,12 +718,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         i_24 = 0;
         _licm_buf_61 = self.buf;
-        b45: block {
-            l46: loop {
-                break_if b45 i_24 >= padding;
+        b51: block {
+            l52: loop {
+                break_if b51 i_24 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(_licm_buf_61, 48);
                 i_24 = i_24 + 1;
-                continue l46;
+                continue l52;
             };
         };
         return self_25 = self.buf, new_used_27 = self_25.used + digit_count, if @unlikely(new_used_27 > builtin::array_len(self_25.repr)) {
@@ -687,12 +750,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_36 = self.fill;
         i_38 = 0;
         _licm_buf_62 = self.buf;
-        b52: block {
-            l53: loop {
-                break_if b52 i_38 >= padding;
+        b58: block {
+            l59: loop {
+                break_if b58 i_38 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_62, c_36);
                 i_38 = i_38 + 1;
-                continue l53;
+                continue l59;
             };
         };
         return start_33;
@@ -702,12 +765,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_40 = self.fill;
         i_42 = 0;
         _licm_buf_63 = self.buf;
-        b55: block {
-            l56: loop {
-                break_if b55 i_42 >= left_pad;
+        b61: block {
+            l62: loop {
+                break_if b61 i_42 >= left_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_63, c_40);
                 i_42 = i_42 + 1;
-                continue l56;
+                continue l62;
             };
         };
         if sign_len > 0 {
@@ -727,12 +790,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_49 = self.fill;
         i_51 = 0;
         _licm_buf_64 = self.buf;
-        b60: block {
-            l61: loop {
-                break_if b60 i_51 >= right_pad;
+        b66: block {
+            l67: loop {
+                break_if b66 i_51 >= right_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_64, c_49);
                 i_51 = i_51 + 1;
-                continue l61;
+                continue l67;
             };
         };
         return start_46;
@@ -740,12 +803,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         c_53 = self.fill;
         i_55 = 0;
         _licm_buf_65 = self.buf;
-        b62: block {
-            l63: loop {
-                break_if b62 i_55 >= padding;
+        b68: block {
+            l69: loop {
+                break_if b68 i_55 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_65, c_53);
                 i_55 = i_55 + 1;
-                continue l63;
+                continue l69;
             };
         };
         if sign_len > 0 {
@@ -759,6 +822,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_56, new_used_58);
         }, start_59 = self_56.used, self_56.used = new_used_58, start_59;
     }
+}
+
+fn "core:prelude/format.wado/&core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let s: ref "core:prelude/string.wado//String";
+    s = global:core:prelude/format.wado::__const_obj_33;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s);
+    "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect"(self, f);
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>::push"(self, value) {
@@ -781,6 +851,68 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recurs
     new_repr = builtin::array_new<ref "value_copy_variant_recursive.wado//Tree">(local.tee new_capacity(select i32(a > 4, a, 4)));
     builtin::array_copy<ref "value_copy_variant_recursive.wado//Tree">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let _av_3: i32;
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<value_copy_variant_recursive.wado/Tree>"(self.repr, 0, self.used, f, 1, __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: block -> i32 {
+        _av_3 = f.precision;
+        if _av_3 == -2 {
+            break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: 256;
+        }
+        break __inline_core_prelude_format_wado_Formatter__resolved_seq_limit_0: _av_3;
+    });
+}
+
+fn "core:prelude/traits.wado/value_copy_variant_recursive.wado/Tree^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+    let s_9: ref "core:prelude/string.wado//String";
+    let s_11: ref "core:prelude/string.wado//String";
+    let s_17: ref "core:prelude/string.wado//String";
+    let v_19: ref "value_copy_variant_recursive.wado//Tree";
+    let s_21: ref "core:prelude/string.wado//String";
+    let s_25: ref "core:prelude/string.wado//String";
+    let s_27: ref "core:prelude/string.wado//String";
+    let s_33: ref "core:prelude/string.wado//String";
+    let v_37: ref "value_copy_variant_recursive.wado//Tree";
+    let s_41: ref "core:prelude/string.wado//String";
+    if self.value.discriminant == 0 {
+        s_9 = global:core:prelude/traits.wado::__const_obj_40;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_9);
+        s_11 = global:core:prelude/traits.wado::__const_obj_39;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 66);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 114);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 110);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 99);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 104);
+        s_17 = global:core:prelude/traits.wado::__const_obj_38;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_17);
+        "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_variant_recursive.wado/Tree>^core:prelude/traits.wado/Inspect::inspect"(v_19 = self.value; if @unlikely(v_19.discriminant != 0) {
+            unreachable;
+        }; ref.cast "value_copy_variant_recursive.wado//Tree::Branch"(v_19).payload_0, f);
+        s_21 = global:core:prelude/traits.wado::__const_obj_37;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_21);
+    }
+    if self.value.discriminant == 1 {
+        s_25 = global:core:prelude/traits.wado::__const_obj_40;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_25);
+        s_27 = global:core:prelude/traits.wado::__const_obj_39;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 76);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 101);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 97);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(f.buf, 102);
+        s_33 = global:core:prelude/traits.wado::__const_obj_38;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_33);
+        v_37 = self.value;
+        if @unlikely(v_37.discriminant != 1) {
+            unreachable;
+        }
+        "core:prelude/primitive.wado/i32::fmt_decimal"(ref.cast "value_copy_variant_recursive.wado//Tree::Leaf"(v_37).payload_0, f);
+        s_41 = global:core:prelude/traits.wado::__const_obj_37;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(f.buf, s_41);
+    }
 }
 
 export fn "value_copy_variant_recursive.wado/__cm_export____test_0_recursive_struct_copy_is_deep" as "__test_0_recursive_struct_copy_is_deep"

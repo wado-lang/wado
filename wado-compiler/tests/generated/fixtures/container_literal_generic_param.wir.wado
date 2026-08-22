@@ -185,7 +185,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:collecti
 
 type "functype//core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::split" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(63)
 
-type "functype//core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(64)
+type "functype//core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,i32>", ref "core:prelude/types.wado//Option<i32>") -> [i32, i32];  // TypeId(64)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>");  // TypeId(65)
 
@@ -193,7 +193,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:collecti
 
 type "functype//core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(67)
 
-type "functype//core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(68)
+type "functype//core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::skew" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>", ref "core:prelude/types.wado//Option<i32>") -> [i32, i32];  // TypeId(68)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow" = fn(ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>");  // TypeId(69)
 
@@ -1038,7 +1038,6 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
     let new_left: ref "core:prelude/types.wado//Option<i32>";
     let right: ref "core:prelude/types.wado//Option<i32>";
     let new_right: ref "core:prelude/types.wado//Option<i32>";
-    let after_skew: ref "core:prelude/types.wado//Option<i32>";
     let new_idx: i32;
     let __local_11: "core:prelude/traits.wado//enum:Ordering";
     let __v1_14: i32;
@@ -1077,8 +1076,14 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
                 unreachable;
             }; builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, n_idx).right = new_right;
         }
-        after_skew = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::skew"(self, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx });
-        return "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split"(self, after_skew);
+        let after_skew_mv_0: i32;
+        let after_skew_mv_1: i32;
+        multivalue_bind [after_skew_mv_0, after_skew_mv_1] = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::skew"(self, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx });
+        return "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::split"(self, (if after_skew_mv_0 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: after_skew_mv_1 };
+        } else {
+            struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+        }));
     } else {
     }
     new_idx = self.nodes.used;
@@ -1103,7 +1108,6 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
     let new_left: ref "core:prelude/types.wado//Option<i32>";
     let right: ref "core:prelude/types.wado//Option<i32>";
     let new_right: ref "core:prelude/types.wado//Option<i32>";
-    let after_skew: ref "core:prelude/types.wado//Option<i32>";
     let new_idx: i32;
     let __local_11: "core:prelude/traits.wado//enum:Ordering";
     let __v1_14: i32;
@@ -1142,8 +1146,14 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
                 unreachable;
             }; builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, n_idx).right = new_right;
         }
-        after_skew = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::skew"(self, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx });
-        return "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::split"(self, after_skew);
+        let after_skew_mv_0: i32;
+        let after_skew_mv_1: i32;
+        multivalue_bind [after_skew_mv_0, after_skew_mv_1] = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::skew"(self, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx });
+        return "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::split"(self, (if after_skew_mv_0 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
+            struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: after_skew_mv_1 };
+        } else {
+            struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+        }));
     } else {
     }
     new_idx = self.nodes.used;
@@ -1250,14 +1260,14 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i3
             }; builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, left_idx).level == builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, n_idx).level {
                 builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, n_idx).left = builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, left_idx).right;
                 builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, left_idx).right = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
-                return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: left_idx };
+                return 0, left_idx;
             }
         } else {
         }
-        return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
+        return 0, n_idx;
     } else {
     }
-    return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+    return 1, 0;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self) {
@@ -1359,14 +1369,14 @@ fn "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,co
             }; builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, left_idx).level == builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, n_idx).level {
                 builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, n_idx).left = builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, left_idx).right;
                 builtin::array_get_value<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(self.nodes.repr, left_idx).right = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
-                return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: left_idx };
+                return 0, left_idx;
             }
         } else {
         }
-        return struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: n_idx };
+        return 0, n_idx;
     } else {
     }
-    return struct.new "core:prelude/types.wado//Option<i32>" { 1 };
+    return 1, 0;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string.wado/String>>::grow"(self) {
@@ -1396,12 +1406,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
         }
         n = 0;
         t = abs_val;
-        b120: block {
-            l121: loop {
-                break_if b120 t <= 0_i64;
+        b122: block {
+            l123: loop {
+                break_if b122 t <= 0_i64;
                 n = n + 1;
                 t = t / 10_i64;
-                continue l121;
+                continue l123;
             };
         };
         break __inline_count_digits_i64_0: n;

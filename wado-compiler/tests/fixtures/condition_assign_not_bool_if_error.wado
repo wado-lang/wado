@@ -1,0 +1,12 @@
+// Regression: `if` must reject an assignment as its condition, for the reason
+// `assert` must — an assignment has type `()`.
+
+export fn run() {
+    let mut x = 1;
+    if x = 5 {
+        x = 6;
+    }
+}
+
+__DATA__
+{"compile_error": "bool"}

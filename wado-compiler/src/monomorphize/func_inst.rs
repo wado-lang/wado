@@ -1072,8 +1072,16 @@ impl Monomorphizer {
                                 .get(&struct_name)
                                 .map(|k| (k.name.clone(), k.impl_type_args.clone()))
                                 .or_else(|| {
-                                    self.get_struct_info_from_type(receiver.type_id, type_table)
-                                        .filter(|(_, args)| !args.is_empty())
+                                    self.struct_info_for_method(
+                                        receiver.type_id,
+                                        type_table,
+                                        &method_name,
+                                        method_func
+                                            .method_info
+                                            .as_ref()
+                                            .and_then(|info| info.trait_name.as_ref()),
+                                    )
+                                    .filter(|(_, args)| !args.is_empty())
                                 });
                             if let Some((base_struct, impl_type_args)) = base_info {
                                 let receiver_head =
@@ -1171,7 +1179,15 @@ impl Monomorphizer {
 
                 // Also check if the receiver is a monomorphized generic struct
                 // e.g., c.get() where c: Counter<i32>, or arr.push() where arr: List<fn(i32)->i32>
-                let struct_info = self.get_struct_info_from_type(receiver.type_id, type_table);
+                let struct_info = self.struct_info_for_method(
+                    receiver.type_id,
+                    type_table,
+                    &method_name,
+                    method_func
+                        .method_info
+                        .as_ref()
+                        .and_then(|info| info.trait_name.as_ref()),
+                );
                 if let Some((base_struct, impl_type_args)) = struct_info
                     && !impl_type_args.is_empty()
                 {
@@ -1234,7 +1250,7 @@ impl Monomorphizer {
                             // A true ref blanket (`impl<T> Inspect for &T`) needs
                             // the ref's whole inner type — `[List<i32>]` for
                             // `&List<i32>` — while a specific ref impl wants
-                            // what `get_struct_info_from_type` gave.
+                            // what `struct_info_for_method` gave.
                             // `&&TypeParam` is the blanket, not `&&GenericInstance`.
                             let effective_impl_type_args = if is_ref_blanket_impl
                                 && generic_method_name == &names_to_try[0]

@@ -1,0 +1,21 @@
+#![TODO]
+// A trait impl written for a generic newtype never dispatches: the call is
+// named after the newtype and no instance is generated for it. Inheriting the
+// base's impl works — `newtype_generic_inherited_trait`.
+
+trait Label {
+    fn label(&self) -> String;
+}
+
+type MyArray<T> = List<T>;
+
+impl<T: Display> Label for MyArray<T> {
+    fn label(&self) -> String {
+        return `${self[0]}`;
+    }
+}
+
+test "a generic newtype's own trait impl dispatches" {
+    let a: MyArray<i32> = [7, 8];
+    assert a.label() == "7";
+}

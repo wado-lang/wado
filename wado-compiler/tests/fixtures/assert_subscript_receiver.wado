@@ -1,0 +1,14 @@
+// A subscript renders the sequence it read from alongside the index and the
+// element, its receiver being a place the failure branch re-reads.
+
+export fn run() {
+    let list: List<i32> = [10, 20];
+    let i = 1;
+    assert list[i] == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["list[i]: 20", "list: ["]
+}

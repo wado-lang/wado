@@ -1,0 +1,11 @@
+// Regression: an assignment has type `()`, so it is not a condition. Every
+// condition position must reject it — `assert`, `if` and `while` alike reached
+// codegen and tripped the WIR validator instead.
+
+export fn run() {
+    let mut x = 1;
+    assert x = 5;
+}
+
+__DATA__
+{"compile_error": "bool"}

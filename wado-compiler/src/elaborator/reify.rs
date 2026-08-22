@@ -147,6 +147,8 @@ pub(super) struct ReifyAssertSlot {
     pub(super) conditional: bool,
     /// See [`super::sem::types::AssertSlot::is_place`].
     pub(super) is_place: bool,
+    /// See [`super::sem::types::AssertSlot::hoisted`].
+    pub(super) hoisted: bool,
     /// The operand itself, for a slot the failure branch re-reads.
     pub(super) place_expr: Option<TirExpr>,
     /// The `bool` recording whether the capture site ran.
@@ -2956,6 +2958,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Reify an expression in condition position, the walk
+    /// `resolve_condition_expr` made: a `Bool` expectation would reach the
+    /// operands and propagate into `If`/`Match` branches, where it is wrong.
+    fn reify_condition_expr(&mut self, expr: &ast::Expr, ctx: &mut FunctionContext) -> TirExpr {
+        use crate::tir::TypeTable;
+
+        let cond = self.reify_expr(expr, ctx, None);
+        match cond.type_id {
+            TypeTable::BOOL | TypeTable::UNKNOWN | TypeTable::ERROR => cond,
+            type_id => unreachable!(
+                "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {type_id}"
+            ),
+        }
+    }
+
     /// Reify a `while cond { body }` statement. Mirrors
     /// `Elaborator::resolve_while`'s `Condition::Expr` arm
     /// the loop lowers into
@@ -2972,7 +2989,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let stmts = match &w.condition {
             ast::Condition::Expr(cond_expr) => {
                 let cond_span = cond_expr.span();
-                let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let cond_tir = self.reify_condition_expr(cond_expr, ctx);
                 let neg_cond = TirExpr::new(
                     TirExprKind::Unary {
                         op: TirUnaryOp::Not,
@@ -3069,13 +3086,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let type_id = resolved.type_id;
         let cap_span = resolved.span;
-        let (cap_name, conditional, is_place) = {
+        let (cap_name, conditional, is_place, hoisted) = {
             let slot = &ctx
                 .reify_assert_capture_ctx
                 .as_ref()
                 .expect("reify_assert_capture_ctx survives recursive reify")
                 .slots[slot_idx];
-            (slot.name.clone(), slot.conditional, slot.is_place)
+            (
+                slot.name.clone(),
+                slot.conditional,
+                slot.is_place,
+                slot.hoisted,
+            )
         };
 
         // Re-read rather than bind: straight-line code makes the read exact,
@@ -3093,7 +3115,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
-        let local_index = ctx.add_local(cap_name.clone(), type_id, conditional, None);
+        let local_index = ctx.add_local(cap_name.clone(), type_id, !hoisted, None);
         let seen_local_index = conditional.then(|| {
             ctx.add_local(
                 super::assert::seen_local_name(&cap_name),
@@ -3112,10 +3134,39 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cap_span,
         );
 
-        // A conditional slot takes its value where the operand sits, so the
-        // short-circuit still governs it; only the flag is bound ahead. Until
-        // the capture site assigns it, the value local holds its Wasm default.
-        let (hoisted, in_place) = if let Some(seen_index) = seen_local_index {
+        // A hoisted slot binds ahead of the condition, its scope reaching the
+        // failure branch too — sound because all that precedes it is bound too.
+        if hoisted {
+            assert!(
+                seen_local_index.is_none(),
+                "a conditional slot is never hoisted"
+            );
+            let binding = TirStmt::new(
+                TirStmtKind::Let {
+                    name: cap_name,
+                    local_index,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id,
+                    value: resolved,
+                    skip_value_copy: false,
+                },
+                cap_span,
+            );
+            let cap_ctx = ctx
+                .reify_assert_capture_ctx
+                .as_mut()
+                .expect("reify_assert_capture_ctx survives recursive reify");
+            cap_ctx.slots[slot_idx].emitted = true;
+            cap_ctx.slots[slot_idx].local_index = Some(local_index);
+            cap_ctx.slots[slot_idx].type_id = Some(type_id);
+            cap_ctx.emitted_lets.push(binding);
+            return local_ref;
+        }
+
+        // Otherwise the capture sits where the operand does, moving no
+        // evaluation; until it runs, the local holds its Wasm default.
+        let (decls, spliced) = if let Some(seen_index) = seen_local_index {
             let decls = vec![TirStmt::new(
                 TirStmtKind::Let {
                     name: super::assert::seen_local_name(&cap_name),
@@ -3160,20 +3211,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
             )
         } else {
+            let capture_block = crate::tir::TirBlock::new(
+                vec![
+                    assign_stmt(local_ref.clone(), resolved, cap_span),
+                    TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
+                ],
+                cap_span,
+            );
             (
-                vec![TirStmt::new(
-                    TirStmtKind::Let {
-                        name: cap_name,
-                        local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id,
-                        value: resolved,
-                        skip_value_copy: false,
-                    },
-                    cap_span,
-                )],
-                local_ref,
+                Vec::new(),
+                TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
             )
         };
 
@@ -3185,9 +3232,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         cap_ctx.slots[slot_idx].local_index = Some(local_index);
         cap_ctx.slots[slot_idx].type_id = Some(type_id);
         cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
-        cap_ctx.emitted_lets.extend(hoisted);
+        cap_ctx.emitted_lets.extend(decls);
 
-        in_place
+        spliced
     }
 
     /// Reify `assert cond[, msg];` into the power-assert expansion, from the
@@ -3285,18 +3332,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Always install the context: an empty `ast_id_to_slot` map
         // intercepts nothing, and the hook is a single Option check.
         let info = self.ann_assert_captures(assert_stmt.id);
-        let (slot_facts, ast_id_to_slot): (Vec<(String, bool, bool)>, IndexMap<AstId, usize>) =
-            if let Some(info) = info.as_ref() {
-                let mut facts: Vec<(String, bool, bool)> = Vec::with_capacity(info.slots.len());
-                let mut map: IndexMap<AstId, usize> = IndexMap::default();
-                for (i, s) in info.slots.iter().enumerate() {
-                    facts.push((s.capture_label.clone(), s.conditional, s.is_place));
-                    map.insert(s.ast_id, i);
-                }
-                (facts, map)
-            } else {
-                (Vec::new(), IndexMap::default())
-            };
+        let (slot_facts, ast_id_to_slot): (
+            Vec<(String, bool, bool, bool)>,
+            IndexMap<AstId, usize>,
+        ) = if let Some(info) = info.as_ref() {
+            let mut facts: Vec<(String, bool, bool, bool)> = Vec::with_capacity(info.slots.len());
+            let mut map: IndexMap<AstId, usize> = IndexMap::default();
+            for (i, s) in info.slots.iter().enumerate() {
+                facts.push((
+                    s.capture_label.clone(),
+                    s.conditional,
+                    s.is_place,
+                    s.hoisted,
+                ));
+                map.insert(s.ast_id, i);
+            }
+            (facts, map)
+        } else {
+            (Vec::new(), IndexMap::default())
+        };
 
         ctx.enter_scope();
 
@@ -3304,27 +3358,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             slots: slot_facts
                 .iter()
                 .enumerate()
-                .map(|(i, (label, conditional, is_place))| ReifyAssertSlot {
-                    name: format!("__v{i}"),
-                    label: label.clone(),
-                    emitted: false,
-                    local_index: None,
-                    type_id: None,
-                    conditional: *conditional,
-                    is_place: *is_place,
-                    place_expr: None,
-                    seen_local_index: None,
-                })
+                .map(
+                    |(i, (label, conditional, is_place, hoisted))| ReifyAssertSlot {
+                        name: format!("__v{i}"),
+                        label: label.clone(),
+                        emitted: false,
+                        local_index: None,
+                        type_id: None,
+                        conditional: *conditional,
+                        is_place: *is_place,
+                        hoisted: *hoisted,
+                        place_expr: None,
+                        seen_local_index: None,
+                    },
+                )
                 .collect(),
             ast_id_to_slot,
             in_progress: IndexSet::default(),
             emitted_lets: Vec::new(),
         });
 
-        // `expected_type = None`: a `Bool` expectation propagates into
-        // `If`/`Match` branches inside the condition and rejects
-        // non-bool arm bodies.
-        let cond_tir = self.reify_expr(&assert_stmt.condition, ctx, None);
+        let cond_tir = self.reify_condition_expr(&assert_stmt.condition, ctx);
 
         let actx = ctx
             .reify_assert_capture_ctx
@@ -4625,7 +4679,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 stmts
             }
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_branch = self.reify_block_with_position(
                     &if_stmt.then_block,
                     ctx,
@@ -4666,7 +4720,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::TirStmtKind;
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
                 let else_block = if_stmt
                     .else_block
@@ -4758,7 +4812,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
             }
         };
-        let condition = self.reify_expr(cond_expr, ctx, Some(crate::tir::TypeTable::BOOL));
+        let condition = self.reify_condition_expr(cond_expr, ctx);
         let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
         let else_branch = if_expr
             .else_block
