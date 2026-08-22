@@ -330,6 +330,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if is_comparison {
+            // A newtype over a primitive is its own type, so an impl it writes
+            // answers the comparison before the base's instruction does. The
+            // arm below peels to the ultimate base, which for a primitive
+            // names no receiver at all and dropped the impl.
+            let comparison_impl_on_newtype = matches!(left_type, ResolvedType::Newtype { .. })
+                && super::tysys::operator_compiler_item(&op)
+                    .and_then(|item| self.tysys.compiler_trait_def(item))
+                    .is_some_and(|trait_| {
+                        let key = self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .impl_receiver_key(left.type_id);
+                        self.tysys
+                            .trait_env
+                            .has_any_methodful_impl_by_receiver(&key, trait_)
+                    });
             // The receiver for trait lookup, named by its declaring module and
             // read off the resolved type. `Enum` is deliberately absent, its `==`
             // lowering to a native discriminant compare; `Variant` must be
@@ -342,6 +359,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `fq_base_type_name` spells a raw GC array `Array`, the name its
                 // `Eq` / `Ord` impls attach to.
                 | ResolvedType::BuiltinArray(_) => Some(
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .fq_base_type_name(left.type_id)
+                        .into_string(),
+                ),
+                ResolvedType::Newtype { base_type, .. } if comparison_impl_on_newtype => Some(
                     self.tysys
                         .type_table
                         .borrow()
@@ -368,8 +392,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                // For newtypes, use the base type ID for trait lookup
-                let lookup_type_id = {
+                // For newtypes, use the base type ID for trait lookup — unless
+                // the newtype itself wrote the impl.
+                let lookup_type_id = if comparison_impl_on_newtype {
+                    left.type_id
+                } else {
                     let tt = self.tysys.type_table.borrow();
                     tt.get_newtype_base(left.type_id).unwrap_or(left.type_id)
                 };

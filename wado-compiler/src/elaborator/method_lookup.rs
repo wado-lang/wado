@@ -8,6 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
 use crate::tir::{
@@ -2661,7 +2662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexRef",
+            CompilerItem::IndexRef,
             "index_ref",
             "Output",
             expected_index_type,
@@ -2691,7 +2692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "KeyValueLiteralBuilder",
+            CompilerItem::KeyValueLiteralBuilder,
             "insert_literal",
             "Value",
             None,
@@ -2701,7 +2702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find_assoc_type_in_trait_impl(
                     struct_name,
                     base_type_id,
-                    "KeyValueLiteralBuilder",
+                    CompilerItem::KeyValueLiteralBuilder,
                     "Output",
                 )
                 .unwrap_or(TypeTable::UNKNOWN);
@@ -2721,14 +2722,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let builder_type = self.find_assoc_type_in_trait_impl(
             struct_name,
             base_type_id,
-            "KeyValueLiteral",
+            CompilerItem::KeyValueLiteral,
             "Builder",
         )?;
         let builder_name = self.tysys.struct_name_for_type(builder_type)?;
         if let Some((value_type, self_kind, trait_name, _, _)) = self.find_indexing_trait_impl(
             &builder_name,
             builder_type,
-            "KeyValueLiteralBuilder",
+            CompilerItem::KeyValueLiteralBuilder,
             "insert_literal",
             "Value",
             None,
@@ -2749,7 +2750,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_base_name: &str,
+        item: CompilerItem,
         assoc_name: &str,
     ) -> Option<TypeId> {
         let concrete_type_args = self
@@ -2759,10 +2760,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
 
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |trait_name, _| trait_name.starts_with(trait_base_name),
+            |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
@@ -2794,7 +2796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_indexing_trait_impl(
                 struct_name,
                 base_type_id,
-                "SequenceLiteralBuilder",
+                CompilerItem::SequenceLiteralBuilder,
                 "push_literal",
                 "Element",
                 None,
@@ -2804,7 +2806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find_assoc_type_in_trait_impl(
                     struct_name,
                     base_type_id,
-                    "SequenceLiteralBuilder",
+                    CompilerItem::SequenceLiteralBuilder,
                     "Output",
                 )
                 .unwrap_or(base_type_id);
@@ -2822,7 +2824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let builder_type = self.find_assoc_type_in_trait_impl(
             struct_name,
             base_type_id,
-            "SequenceLiteral",
+            CompilerItem::SequenceLiteral,
             "Builder",
         )?;
         let builder_name = self.tysys.struct_name_for_type(builder_type)?;
@@ -2830,7 +2832,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find_indexing_trait_impl(
                 &builder_name,
                 builder_type,
-                "SequenceLiteralBuilder",
+                CompilerItem::SequenceLiteralBuilder,
                 "push_literal",
                 "Element",
                 None,
@@ -2840,7 +2842,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .find_assoc_type_in_trait_impl(
                     &builder_name,
                     builder_type,
-                    "SequenceLiteralBuilder",
+                    CompilerItem::SequenceLiteralBuilder,
                     "Output",
                 )
                 .unwrap_or(base_type_id);
@@ -2865,7 +2867,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexAssign",
+            CompilerItem::IndexAssign,
             "index_assign",
             "Output",
             None,
@@ -2891,7 +2893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexRefMut",
+            CompilerItem::IndexRefMut,
             "index_ref_mut",
             "Output",
             None,
@@ -2920,7 +2922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "IndexValue",
+            CompilerItem::IndexValue,
             "index_value",
             "Output",
             expected_index_type,
@@ -3102,7 +3104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_base_name: &str,
+        item: CompilerItem,
         method_name: &str,
         assoc_type_name: &str,
         expected_index_type: Option<TypeId>,
@@ -3120,10 +3122,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(base_type_id)
             .unwrap_or_default();
 
+        // The indexing traits name declarations, as the operators do: a
+        // prefix match let a user trait answer, and `IndexRef` accept an
+        // `IndexRefMut` impl.
+        let trait_ = self.tysys.compiler_trait_def(item)?;
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
             &concrete_type_args,
-            |trait_base, _| trait_base.starts_with(trait_base_name),
+            |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
                 // The trait's index-type argument (`List<i32>` in `impl
                 // Index<List<i32>>`), returned for subscript coercion and used

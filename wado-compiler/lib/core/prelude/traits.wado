@@ -571,6 +571,7 @@ internal trait RefMut {
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
+#[compiler_item("index_ref")]
 internal trait IndexRef<IndexType> {
     type Output: Ref;
 
@@ -581,6 +582,7 @@ internal trait IndexRef<IndexType> {
 /// Mutable reference indexing: `container[i].mutating_method()`.
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
+#[compiler_item("index_ref_mut")]
 internal trait IndexRefMut<IndexType> {
     type Output: RefMut;
 
@@ -591,6 +593,7 @@ internal trait IndexRefMut<IndexType> {
 /// Value-assignment indexing: `container[i] = value`.
 /// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
+#[compiler_item("index_assign")]
 internal trait IndexAssign<IndexType> {
     type Output;
 
@@ -1486,6 +1489,7 @@ internal trait FromIterator {
 /// Implement this to make a type constructible from `{ key: value, ... }` literals.
 /// Keys are always String (from field names); `Value` is the element type.
 /// `Output` is the finished value (often `Self` for mutable types).
+#[compiler_item("key_value_literal_builder")]
 internal trait KeyValueLiteralBuilder {
     type Value;
     type Output;
@@ -1519,6 +1523,7 @@ impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
 /// Builder trait for constructing a value from a sequence literal `[e0, e1, ...]`.
 /// Implement this to make a type constructible from sequence literals.
 /// `Element` is the element type; `Output` is the finished value.
+#[compiler_item("sequence_literal_builder")]
 internal trait SequenceLiteralBuilder {
     type Element;
     type Output;
@@ -1534,6 +1539,7 @@ internal trait SequenceLiteralBuilder {
 /// Implemented automatically for any `T: SequenceLiteralBuilder<Output = T>`.
 /// For immutable output types, implement this explicitly and set `type Builder`
 /// to the mutable builder struct that builds this type.
+#[compiler_item("sequence_literal")]
 internal trait SequenceLiteral {
     type Element;
     type Builder;

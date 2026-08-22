@@ -219,10 +219,16 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexRefMut`.
     RefMut,
-    /// `IndexValue<I>` — the value-copy indexing trait the CM list adapters
-    /// call through. Registered so a synthesis site names the declaration
-    /// rather than spelling `IndexValue`, which a user trait may share.
+    /// The indexing and literal-builder traits `a[i]`, `a[i] = v`, `&mut a[i]`
+    /// and a literal dispatch to. Registered for the same reason the operator
+    /// traits are: a user trait of the same name is a different declaration.
     IndexValue,
+    IndexRef,
+    IndexRefMut,
+    IndexAssign,
+    SequenceLiteralBuilder,
+    KeyValueLiteralBuilder,
+    SequenceLiteral,
     /// `Add` — the trait an operator dispatches to. The compiler picks it
     /// by construction, so it is an item and not a spelling a user trait
     /// of the same name could answer for.
@@ -634,6 +640,12 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::IndexValue,
+        Self::IndexRef,
+        Self::IndexRefMut,
+        Self::IndexAssign,
+        Self::SequenceLiteralBuilder,
+        Self::KeyValueLiteralBuilder,
+        Self::SequenceLiteral,
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -810,6 +822,12 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::IndexValue => "index_value",
+            Self::IndexRef => "index_ref",
+            Self::IndexRefMut => "index_ref_mut",
+            Self::IndexAssign => "index_assign",
+            Self::SequenceLiteralBuilder => "sequence_literal_builder",
+            Self::KeyValueLiteralBuilder => "key_value_literal_builder",
+            Self::SequenceLiteral => "sequence_literal",
             Self::Add => "add",
             Self::Sub => "sub",
             Self::Mul => "mul",
@@ -1002,6 +1020,12 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::IndexValue
+            | Self::IndexRef
+            | Self::IndexRefMut
+            | Self::IndexAssign
+            | Self::SequenceLiteralBuilder
+            | Self::KeyValueLiteralBuilder
+            | Self::SequenceLiteral
             | Self::Eq
             | Self::Ord
             | Self::From
@@ -1173,6 +1197,12 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::IndexValue
+            | Self::IndexRef
+            | Self::IndexRefMut
+            | Self::IndexAssign
+            | Self::SequenceLiteralBuilder
+            | Self::KeyValueLiteralBuilder
+            | Self::SequenceLiteral
             | Self::Eq
             | Self::Ord
             | Self::From

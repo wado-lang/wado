@@ -1,6 +1,8 @@
-// A monomorphized operator call relowers to the native instruction only where
-// no impl wrote a body. The guard asked whether the newtype declared `Output`,
-// which `Eq` never does, so `impl Eq for Meters` was replaced by `i32.eq`.
+// A newtype over a primitive is its own type, so an impl it writes answers the
+// operator — through a bound and written directly. The relowering guard asked
+// whether the newtype declared `Output`, which `Eq` never does; the direct path
+// peeled to the ultimate base, which for a primitive named no receiver at all.
+// Both replaced `impl Eq for Meters` with `i32.eq`.
 use { println } from "core:cli";
 
 type Meters = i32;
@@ -22,8 +24,8 @@ fn plain<T: Eq>(a: T, b: T) -> bool {
 export fn run() with Stdout {
     let a = builtin::black_box(1) as Meters;
     let b = builtin::black_box(2) as Meters;
-    println(`${same(a, b)} ${plain(builtin::black_box(1), builtin::black_box(2))}`);
+    println(`${same(a, b)} ${a == b} ${plain(builtin::black_box(1), builtin::black_box(2))}`);
 }
 
 __DATA__
-{"stdout": "true false\n"}
+{"stdout": "true true false\n"}

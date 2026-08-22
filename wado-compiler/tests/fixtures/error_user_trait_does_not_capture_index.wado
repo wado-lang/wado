@@ -1,0 +1,30 @@
+// Indexing names a declaration, as the operators do. `a[i]` matched any trait
+// whose spelling began `IndexValue`, so a user trait of that name answered it —
+// and `IndexRef` accepted an `IndexRefMut` impl by the same prefix.
+use { println } from "core:cli";
+
+struct Bag {
+    xs: List<i32>,
+}
+
+internal trait IndexValue<K> {
+    type Output;
+
+    fn index_value(&self, k: K) -> Self::Output;
+}
+
+impl IndexValue<i32> for Bag {
+    type Output = i32;
+
+    fn index_value(&self, k: i32) -> i32 {
+        return 999;
+    }
+}
+
+export fn run() with Stdout {
+    let b = Bag { xs: [1, 2, 3] };
+    println(`${b.xs[1]}`);
+}
+
+__DATA__
+{"stdout": "2\n"}
