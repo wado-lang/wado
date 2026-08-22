@@ -1295,6 +1295,17 @@ impl Gate<'_> {
         })
     }
 
+    /// Whether `func_id` is one of the array element accessors.
+    fn element_accessor(&self, func_id: crate::nir::FuncId) -> bool {
+        use cranelift_entity::EntityRef;
+        self.funcs.get(func_id.index()).is_some_and(|f| {
+            let f = f.borrow();
+            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+                .array_element_access()
+                .is_some()
+        })
+    }
+
     /// Whether `func_id` reaches an array element without writing through it.
     /// `array_get_ref_mut` is excluded: a mutable element handle is a write.
     fn reads_element(&self, func_id: crate::nir::FuncId) -> bool {
@@ -1547,13 +1558,13 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
             return false;
         };
         match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => projection_roots_at(body, *target, idx),
+            ExprKind::Assign { target, .. } => projection_roots_at(body, *target, idx, gate),
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => inner
                 .as_expr()
-                .is_some_and(|i| projection_roots_at(body, i, idx)),
+                .is_some_and(|i| projection_roots_at(body, i, idx, gate)),
             ExprKind::Call {
                 func_id,
                 args,
@@ -1562,7 +1573,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
             } => args.first().is_some_and(|recv| {
                 recv.expr
                     .as_expr()
-                    .is_some_and(|r| projection_roots_at(body, strip_refs(body, r), idx))
+                    .is_some_and(|r| projection_roots_at(body, strip_refs(body, r), idx, gate))
                     && gate.callee_mutates_self(*func_id) != Some(false)
             }),
             _ => false,
@@ -1764,7 +1775,7 @@ fn delivers_projection_operand(body: &Body, op: Operand, roots: &[u32], gate: &G
 /// `match`/`switch`'s is its arm's — the same rule the freshness side follows.
 fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>) -> bool {
     if gate.is_reference_type(body.exprs[expr].type_id)
-        && roots.iter().any(|&r| projection_roots_at(body, expr, r))
+        && roots.iter().any(|&r| projection_roots_at(body, expr, r, gate))
     {
         return true;
     }
@@ -1828,7 +1839,7 @@ fn yields_projection_of(body: &Body, op: Operand, root: u32, gate: &Gate<'_>) ->
     let mut stack = vec![NodeRef::Expr(expr)];
     while let Some(node) = stack.pop() {
         if let NodeRef::Expr(e) = node
-            && projection_roots_at(body, e, root)
+            && projection_roots_at(body, e, root, gate)
             && gate.is_reference_type(body.exprs[e].type_id)
         {
             return true;
@@ -1840,23 +1851,29 @@ fn yields_projection_of(body: &Body, op: Operand, root: u32, gate: &Gate<'_>) ->
 
 /// Whether `expr` is a projection chain (`x`, `x.f`, `x[i].f`) rooted at local
 /// `idx`.
-fn projection_roots_at(body: &Body, expr: ExprId, idx: u32) -> bool {
+fn projection_roots_at(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => *index == idx,
         ExprKind::FieldAccess { expr: base, .. }
         | ExprKind::Index { expr: base, .. }
         | ExprKind::Cast { expr: base, .. } => base
             .as_expr()
-            .is_some_and(|e| projection_roots_at(body, e, idx)),
-        // `*r` names the referent's storage, not a copy of it: whether the
-        // caller keeps a copy is the ownership analysis's call, and for a fresh
-        // literal it elides one.
+            .is_some_and(|e| projection_roots_at(body, e, idx, gate)),
+        // A borrow and a deref both name the referent's storage, not a copy of
+        // it: whether the caller keeps a copy is the ownership analysis's call,
+        // and for a fresh literal it elides one.
         ExprKind::Unary {
-            op: NirUnaryOp::Deref,
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: base,
         } => base
             .as_expr()
-            .is_some_and(|e| projection_roots_at(body, e, idx)),
+            .is_some_and(|e| projection_roots_at(body, e, idx, gate)),
+        // An element accessor names the array's storage as an `Index` node
+        // does; it is the same projection, spelled as a call.
+        ExprKind::Call { func_id, args, .. } if gate.element_accessor(*func_id) => args
+            .first()
+            .and_then(|a| a.expr.as_expr())
+            .is_some_and(|e| projection_roots_at(body, e, idx, gate)),
         _ => false,
     }
 }
