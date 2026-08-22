@@ -1,6 +1,6 @@
 //! What each condition shape contributes to a power-assert failure, read back
-//! from `wado dump --assert-plan`. `EXPECTED_EMPTY` is the whole of what renders
-//! nothing today, one WEP *Known gaps* entry each.
+//! from `wado dump --assert-plan`. Every shape `SOURCE` covers captures an
+//! operand, so `EXPECTED_EMPTY` is empty; a shape that stops is a regression.
 
 use crate::common::InMemoryHost;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
