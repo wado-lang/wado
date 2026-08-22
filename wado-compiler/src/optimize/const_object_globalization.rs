@@ -418,13 +418,18 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
         .then_some(BorrowShape::Derived),
         // `xs[i]` reaches this pass as a receiverless `array_get_value(&xs.repr,
         // i)` once `container_sroa` has run, so the receiver is not the only
-        // argument that can carry the handle out.
-        ExprKind::Call { args, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
-            && args.iter().any(|arg| {
+        // argument that can carry the handle out. Which of them does is the
+        // callee's answer: a result is a handle into `idx` only where the
+        // parameter holding it delivers its referent's storage back out.
+        ExprKind::Call {
+            func_id, args, ..
+        } => (gate.is_reference_type(body.exprs[expr].type_id)
+            && args.iter().enumerate().any(|(pos, arg)| {
                 arg.expr
                     .as_expr()
                     .and_then(|e| borrows_local(body, e, idx, gate))
                     .is_some()
+                    && gate.callee_ref_param_leaks(*func_id, pos)
             }))
         .then_some(BorrowShape::Derived),
         _ => None,
@@ -1293,29 +1298,22 @@ impl Gate<'_> {
     /// One taking the parameter mutably writes the caller's storage itself.
     fn instruction_passes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
-        if !self
-            .instruction_leaf
-            .get(func_id.index())
-            .copied()
-            .unwrap_or(false)
-        {
-            return false;
-        }
         let Some(f) = self.funcs.get(func_id.index()) else {
             return false;
         };
-        let f = f.borrow();
-        if !matches!(
-            self.type_table.borrow().get(f.return_type),
-            ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
-        ) {
+        // Without a declared parameter there is no type to judge, and a builtin
+        // that records none is not thereby proven harmless.
+        let Some(param_ty) = ({
+            let f = f.borrow();
+            match f.params.get(param_pos) {
+                Some(p) if self.param_borrows_mutably(p) => None,
+                Some(p) => Some(p.type_id),
+                None => None,
+            }
+        }) else {
             return false;
-        }
-        // A builtin records no parameters, so absence is not evidence of a
-        // mutable borrow — only a declared one is.
-        f.params
-            .get(param_pos)
-            .is_none_or(|p| !self.param_borrows_mutably(p))
+        };
+        !self.instruction_arg_captures(func_id, param_ty)
     }
 
     /// Whether the callee may write through parameter `param_pos`. Boxing
