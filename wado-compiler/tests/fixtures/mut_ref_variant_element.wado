@@ -1,0 +1,39 @@
+// `&mut xs[i]` on a list of variants reaches the payload, which is a shared GC
+// struct, so a write through it lands. This is what a variant list has instead
+// of `&mut` iteration, which it cannot have.
+
+use { println, Stdout } from "core:cli";
+
+struct Named {
+    name: String,
+}
+
+variant Element {
+    Ref(Named),
+    Wildcard,
+}
+
+fn rename(elem: &mut Element) {
+    match elem {
+        Ref(r) => {
+            r.name = `renamed`;
+        },
+        Wildcard => (),
+    }
+}
+
+export fn run() with Stdout {
+    let mut items: List<Element> = [Element::Ref(Named { name: `original` })];
+    rename(&mut items[0]);
+    assert items[0] matches { Ref(r) && r.name == `renamed` };
+
+    let mut nested: List<Element> = [Element::Wildcard, Element::Ref(Named { name: `original` })];
+    rename(&mut nested[1]);
+    assert nested[0] matches { Wildcard };
+    assert nested[1] matches { Ref(r) && r.name == `renamed` };
+
+    println(`ok`);
+}
+
+__DATA__
+{"stdout": "ok\n"}

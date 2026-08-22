@@ -337,7 +337,8 @@ fn collect_candidates(
 }
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
-/// referent's storage back out.
+/// referent's storage back out, or that writes through it. A shared global must
+/// survive both.
 ///
 /// [`is_readonly_body`] only sees the caller, where `__b."…build"()` reads.
 fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
@@ -347,44 +348,100 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
         };
         match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => args.iter().enumerate().any(|(pos, arg)| {
-                operand_borrows_local(body, arg.expr, idx)
-                    && gate.callee_ref_param_leaks(*func_id, pos)
+                match operand_borrows_local(body, arg.expr, idx, gate) {
+                    None => false,
+                    // A borrow spelled in the caller (`x`, `&x`) carries its own
+                    // mutability, which `is_readonly_body` judges; only escape
+                    // is left to ask. A handle reached by projection or accessor
+                    // carries none, so the callee must also be proven not to
+                    // write through it — unless it is an instruction that cannot
+                    // hold the handle at all, which neither escapes nor writes.
+                    Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
+                    Some(BorrowShape::Derived) => {
+                        !gate.is_instruction_leaf(*func_id)
+                            && (gate.callee_ref_param_leaks(*func_id, pos)
+                                || gate.callee_param_writes_through(*func_id, pos))
+                    }
+                }
             }),
             // No callee body to ask, so the borrow is assumed to escape.
-            ExprKind::IndirectCall { args, .. } => {
-                args.iter().any(|&a| operand_borrows_local(body, a, idx))
-            }
-            ExprKind::CmRawCall { args, .. } => {
-                args.iter().any(|&a| operand_borrows_local(body, a, idx))
-            }
+            ExprKind::IndirectCall { args, .. } => args
+                .iter()
+                .any(|&a| operand_borrows_local(body, a, idx, gate).is_some()),
+            ExprKind::CmRawCall { args, .. } => args
+                .iter()
+                .any(|&a| operand_borrows_local(body, a, idx, gate).is_some()),
             _ => false,
         }
     })
 }
 
+/// How an argument names local `idx`'s storage.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BorrowShape {
+    /// The local itself, or an explicit `&` / `&mut` / `*` of it. A write
+    /// through one is spelled in the caller, so [`is_readonly_body`] sees it.
+    Direct,
+    /// A handle reached by projection or accessor. Nothing in the caller marks
+    /// it mutable — `&mut xs[i]` reduces to the accessor result — so only the
+    /// callee says whether it writes.
+    Derived,
+}
+
 /// [`borrows_local`] over an operand. A promoted argument is still an argument.
-fn operand_borrows_local(body: &Body, op: Operand, idx: u32) -> bool {
+fn operand_borrows_local(
+    body: &Body,
+    op: Operand,
+    idx: u32,
+    gate: &Gate<'_>,
+) -> Option<BorrowShape> {
     match op.as_expr() {
-        Some(e) => borrows_local(body, e, idx),
+        Some(e) => borrows_local(body, e, idx, gate),
         // Only the shape that fills the slot whole: a value that merely reads
         // the local (`f(x.len())`) computes from it rather than handing it over.
-        None => bare_promoted_local(body, op) == Some(idx),
+        None => (bare_promoted_local(body, op) == Some(idx)).then_some(BorrowShape::Direct),
     }
 }
 
-/// Whether `expr` hands over local `idx` itself — the local, or a borrow of it.
+/// Whether `expr` hands over a handle into local `idx` — the local, a borrow of
+/// it, or a reference-typed projection or accessor result that aliases its
+/// storage.
 ///
-/// The callee side ([`projection_roots_at`]) also reads a field, index or deref
-/// chain as naming the root's storage, so `h.inner.build()` slips this. Widening
-/// to match costs hoists the callee gate is too coarse to keep: see #1819.
-fn borrows_local(body: &Body, expr: ExprId, idx: u32) -> bool {
+/// A step is followed only while the value stays reference-typed: `xs[0]` on a
+/// list of structs yields the element's handle, while `xs.len()` computes a
+/// scalar from it and hands over nothing.
+fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<BorrowShape> {
     match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => *index == idx,
+        ExprKind::Local { index, .. } => (*index == idx).then_some(BorrowShape::Direct),
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => inner.as_expr().is_some_and(|e| borrows_local(body, e, idx)),
-        _ => false,
+        } => inner
+            .as_expr()
+            .and_then(|e| borrows_local(body, e, idx, gate)),
+        // `xs[i]` lowers to `IndexValue::index_value`, which is what a
+        // replace-on-assign element type has instead of `&mut` iteration, so
+        // the element's handle leaves with nothing marking it mutable.
+        ExprKind::FieldAccess { expr: base, .. }
+        | ExprKind::Index { expr: base, .. }
+        | ExprKind::Cast { expr: base, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
+            && base
+                .as_expr()
+                .and_then(|e| borrows_local(body, e, idx, gate))
+                .is_some())
+        .then_some(BorrowShape::Derived),
+        ExprKind::Call {
+            args,
+            has_receiver: true,
+            ..
+        } => (gate.is_reference_type(body.exprs[expr].type_id)
+            && args
+                .first()
+                .and_then(|receiver| receiver.expr.as_expr())
+                .and_then(|re| borrows_local(body, re, idx, gate))
+                .is_some())
+        .then_some(BorrowShape::Derived),
+        _ => None,
     }
 }
 
@@ -1240,6 +1297,49 @@ impl Gate<'_> {
                 ResolvedType::Ref(_)
             )
         })
+    }
+
+    /// Whether `func_id` is a plain Wasm instruction rather than a real callee.
+    /// Such a leaf cannot hold a handle past the call, so what becomes of its
+    /// result is what decides the handle's fate — and that is another call this
+    /// same walk sees.
+    fn is_instruction_leaf(&self, func_id: crate::nir::FuncId) -> bool {
+        use cranelift_entity::EntityRef;
+        self.instruction_leaf
+            .get(func_id.index())
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Whether the callee may write through parameter `param_pos`.
+    ///
+    /// [`Self::callee_param_readonly`] answers a by-value question and rejects
+    /// every reference outright; a derived handle needs this one. A shared `&T`
+    /// cannot be written through at all, so it answers `false` where that one
+    /// answers "not readonly".
+    fn callee_param_writes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+        use cranelift_entity::EntityRef;
+        let Some(f) = self.funcs.get(func_id.index()) else {
+            return true;
+        };
+        let f = f.borrow();
+        let Some(param) = f.params.get(param_pos) else {
+            return true;
+        };
+        let by_ref = {
+            let tt = self.type_table.borrow();
+            match tt.get(param.type_id) {
+                ResolvedType::Ref(_) => Some(false),
+                ResolvedType::MutRef(_) => Some(true),
+                _ => None,
+            }
+        };
+        if let Some(writes) = by_ref {
+            return writes;
+        }
+        f.body
+            .as_ref()
+            .is_none_or(|body| !is_readonly_body(body, param.local_index, self))
     }
 
     /// Whether parameter `param_pos` is taken by value and never written or
