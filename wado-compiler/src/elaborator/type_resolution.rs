@@ -194,12 +194,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &params,
             &self.tysys.resolutions,
         );
-        let written: Vec<crate::ast::Type> = super::trait_env::written_arg_nodes(trait_type)
+        let args = super::trait_env::written_arg_nodes(trait_type)
             .iter()
             .take(kept)
-            .cloned()
+            .map(|arg| self.resolve_type(arg))
             .collect();
-        let args = written.iter().map(|arg| self.resolve_type(arg)).collect();
         crate::tir::TraitRef::new(trait_decl, args)
     }
 
@@ -1011,10 +1010,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the walk stays abstract.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
                     let key = (base, assoc.clone());
-                    if self.assoc_binding_stack.contains(&key) {
+                    if !self.assoc_binding_stack.insert(key.clone()) {
                         return None;
                     }
-                    self.assoc_binding_stack.insert(key.clone());
                     let built = self.make_frame_projection(base, base_name, &assoc);
                     self.assoc_binding_stack.shift_remove(&key);
                     Some(built)

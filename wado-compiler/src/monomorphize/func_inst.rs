@@ -1671,10 +1671,11 @@ impl Monomorphizer {
     }
 
     /// Whether an operator on `id` lowers to a scalar instruction rather than
-    /// the trait call monomorphization produced. A newtype is its own type, so
-    /// one writing an impl of `trait_` keeps the call — the question is which
-    /// declaration wrote a body, which the impl index answers and an
-    /// associated type does not (`Eq` declares none).
+    /// the trait call monomorphization produced. A primitive is the
+    /// instruction; a type that merely erases to one — a newtype, `flags`, an
+    /// `enum` — is its own type, so one writing an impl of `trait_` keeps the
+    /// call. Which declaration wrote a body is the impl index's question, and
+    /// an associated type does not answer it (`Eq` declares none).
     fn operator_lowers_to_scalar(
         &self,
         type_table: &TypeTable,
@@ -1684,6 +1685,9 @@ impl Monomorphizer {
         if !type_table.is_scalar_primitive_like(id) {
             return false;
         }
+        if matches!(type_table.get(id), ResolvedType::Primitive(_)) {
+            return true;
+        }
         let Some(trait_) = trait_decl else {
             return true;
         };
@@ -1691,10 +1695,7 @@ impl Monomorphizer {
         // wrote leaves the dispatch asking the erased base, which carries no
         // user impl at all. `newtype_link_impl_unreached.wado` pins what that
         // costs.
-        !self
-            .functions
-            .trait_env
-            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(id), trait_)
+        !self.has_own_trait_impl(type_table, id, trait_)
     }
 
     fn value_blanket_serves(
@@ -2420,10 +2421,15 @@ impl Monomorphizer {
                             .compiler_items()
                             .trait_item_of_decl(type_table.defs().ast_id(decl))
                     });
-                    let lowers_to_scalar =
-                        self.operator_lowers_to_scalar(type_table, recv_inner, trait_decl);
-                    if lowers_to_scalar
-                        && let Some(unary_op) = trait_method_to_unary_op(item, &method_name_before)
+                    // The op decides first: a trait method that is no operator
+                    // — `Display::to_string`, `Iterator::next` — must not pay
+                    // for the receiver's impl-index query.
+                    let unary = trait_method_to_unary_op(item, &method_name_before);
+                    let binary = trait_method_to_binary_op(item, &method_name_before);
+                    let lowers_to_scalar = (unary.is_some() || binary.is_some())
+                        && self.operator_lowers_to_scalar(type_table, recv_inner, trait_decl);
+                    if let Some(unary_op) = unary
+                        && lowers_to_scalar
                     {
                         let operand = unref_operand(receiver, type_table);
                         expr.type_id = operand.type_id;
@@ -2431,9 +2437,8 @@ impl Monomorphizer {
                             op: unary_op,
                             expr: Box::new(operand),
                         };
-                    } else if lowers_to_scalar
-                        && let Some(binary_op) =
-                            trait_method_to_binary_op(item, &method_name_before)
+                    } else if let Some(binary_op) = binary
+                        && lowers_to_scalar
                     {
                         let left = unref_operand(receiver, type_table);
                         let Some(arg) = args.first() else {

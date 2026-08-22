@@ -706,35 +706,28 @@ impl AssocAnswers {
     /// registered, else whatever the arguments-writing impls agree on. A bound
     /// writes no arguments, so it cannot pick between impls that disagree.
     fn bare(&self) -> Option<TypeId> {
-        let has_bare = self.0.iter().any(|(args, _)| args.is_empty());
-        let mut answers = self
-            .0
-            .iter()
-            .filter(|(args, _)| args.is_empty() || !has_bare)
-            .map(|(_, answer)| *answer);
-        let first = answers.next()?;
-        answers.all(|answer| answer == first).then_some(first)
+        one_assoc_answer(self.tagged())
     }
 
     /// Each answer paired with whether a bare bound names it, for a caller
     /// weighing answers from several traits at once.
-    fn tagged(&self) -> Vec<(bool, TypeId)> {
+    fn tagged(&self) -> impl Iterator<Item = (bool, TypeId)> + Clone {
         self.0
             .iter()
             .map(|(args, answer)| (args.is_empty(), *answer))
-            .collect()
     }
 }
 
 /// The one answer among `candidates`, preferring those a bare bound names when
 /// any is registered: a bound writes no trait arguments, so an impl that does
 /// is consulted only when nothing else answers. `None` when they disagree.
-fn one_assoc_answer<T: Copy + PartialEq>(candidates: &[(bool, T)]) -> Option<T> {
-    let bare = candidates.iter().any(|(bare, _)| *bare);
+fn one_assoc_answer<T: Copy + PartialEq>(
+    candidates: impl Iterator<Item = (bool, T)> + Clone,
+) -> Option<T> {
+    let bare = candidates.clone().any(|(bare, _)| bare);
     let mut answers = candidates
-        .iter()
         .filter(|(is_bare, _)| *is_bare || !bare)
-        .map(|(_, answer)| *answer);
+        .map(|(_, answer)| answer);
     let first = answers.next()?;
     answers.all(|answer| answer == first).then_some(first)
 }
@@ -2520,13 +2513,12 @@ impl TypeTable {
     /// two make it a coin flip, so the caller must qualify with
     /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
-        let candidates: Vec<(bool, TypeId)> = self
-            .assoc_type_resolutions
-            .iter()
-            .filter(|(key, _)| key.receiver == concrete_id && key.assoc_name == assoc_name)
-            .flat_map(|(_, answers)| answers.tagged())
-            .collect();
-        one_assoc_answer(&candidates)
+        one_assoc_answer(
+            self.assoc_type_resolutions
+                .iter()
+                .filter(move |(key, _)| key.receiver == concrete_id && key.assoc_name == assoc_name)
+                .flat_map(|(_, answers)| answers.tagged()),
+        )
     }
 
     /// Register a generic associated type definition.
@@ -2569,7 +2561,6 @@ impl TypeTable {
             .flat_map(|(key, answers)| {
                 answers
                     .tagged()
-                    .into_iter()
                     .map(move |(bare, def_id)| (bare, key.trait_decl, def_id))
             })
             .collect();

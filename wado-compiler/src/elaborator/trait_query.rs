@@ -756,13 +756,7 @@ impl TypeSystem {
     /// name is not that trait, and a scope shadowing one does not stop the
     /// prelude's from being itself.
     pub(super) fn on_bound_of(&self, trait_: DefId) -> Option<OnBoundTrait> {
-        let decl = self.resolutions.defs().ast_id(trait_);
-        let item = self
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_item_of_decl(decl)?;
-        OnBoundTrait::of_compiler_item(item)
+        OnBoundTrait::of_compiler_item(self.compiler_item_of_trait(trait_)?)
     }
 
     /// Whether `trait_` is the prelude's `Display`. Not an [`OnBoundTrait`] —
@@ -1168,7 +1162,7 @@ impl TypeSystem {
             // supplies. Which operator is an item, not a spelling, so a user
             // `trait Rem` is a different declaration and gets none of it.
             if self
-                .compiler_operator_of(trait_)
+                .compiler_item_of_trait(trait_)
                 .is_some_and(|op| primitive_has_operator(prim.as_str(), op))
             {
                 return true;
@@ -1504,15 +1498,8 @@ impl TypeSystem {
             self.on_bound_of(trait_),
             Some(OnBoundTrait::Eq | OnBoundTrait::Ord)
         ) || self
-            .compiler_operator_of(trait_)
+            .compiler_item_of_trait(trait_)
             .is_some_and(|op| primitive_has_operator(name, op))
-    }
-
-    /// The operator the compiler supplies for a primitive under `trait_`, or
-    /// `None` for a trait it supplies none for. An identity lookup: a user
-    /// trait spelled `Rem` is a different declaration and gets nothing.
-    fn compiler_operator_of(&self, trait_: DefId) -> Option<CompilerItem> {
-        self.compiler_item_of_trait(trait_)
     }
 
     /// Which compiler item `trait_` is, or `None` for a trait the compiler does

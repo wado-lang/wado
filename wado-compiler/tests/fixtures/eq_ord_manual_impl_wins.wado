@@ -1,12 +1,13 @@
-// A hand-written `impl Eq` / `impl Ord` must win over the derived comparison
-// for every type kind, including the three whose values erase to a scalar
-// first: `enum` to its discriminant, `flags` to its bitmask, a newtype to its
-// base. A newtype most of all — it exists to be a type distinct from its base.
+// A hand-written `impl Eq` / `impl Ord` wins over the derived comparison for
+// every type kind, including the three whose values erase to a scalar first:
+// `enum` to its discriminant, `flags` to its bitmask, a newtype to its base.
+// Erasing to a scalar does not make a type the scalar — only a primitive is
+// the instruction.
 //
-// Each impl below answers "always equal", which no derived comparison would, so
-// asserting that answer tells the two apart. The `#[TODO]` blocks are the sites
-// still taking the derived comparison; the plain ones pin those that already
-// dispatch, so a fix cannot regress them.
+// Each impl answers "always equal", which no derived comparison would, so
+// asserting that answer tells the two apart. Every route is covered: the
+// operator written directly, an `Eq`/`Ord` bound's operator, a bound's method
+// call, and a direct method call.
 
 enum Color {
     Red,
@@ -72,7 +73,7 @@ fn lt_operator<T: Ord>(a: T, b: T) -> bool {
     return a < b;
 }
 
-// --- Already dispatching: pin them so a fix cannot regress them. ---
+// --- Every route, for every kind. ---
 
 test "a direct method call takes the enum's impl" {
     assert Color::Red.eq(&Color::Green);
@@ -124,26 +125,19 @@ test "an Eq bound's method call takes the newtype's impl" {
     assert eq_method(&(1.0 as Meters), &(2.0 as Meters));
 }
 
-// --- Still taking the derived comparison: an `enum`'s operator, and a
-// `flags` operator written directly. ---
-
-#[TODO]
-test "the operator should take the enum's Eq impl" {
+test "the operator takes the enum's Eq impl" {
     assert Color::Red == Color::Green;
 }
 
-#[TODO]
-test "the operator should take the enum's Ord impl" {
+test "the operator takes the enum's Ord impl" {
     assert !(Rank::Low < Rank::High);
 }
 
-#[TODO]
-test "the operator should take the flags Eq impl" {
+test "the operator takes the flags Eq impl" {
     assert Perms::can_read == Perms::can_write;
 }
 
-#[TODO]
-test "the operator should take the flags Ord impl" {
+test "the operator takes the flags Ord impl" {
     assert !(Modes::quiet < Modes::loud);
 }
 

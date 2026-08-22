@@ -330,26 +330,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if is_comparison {
-            // A newtype over a primitive is its own type, so an impl it writes
-            // answers the comparison before the base's instruction does. The
-            // arm below peels to the ultimate base, which for a primitive
-            // names no receiver at all and dropped the impl.
-            let comparison_impl_on_newtype = matches!(left_type, ResolvedType::Newtype { .. })
-                && super::tysys::operator_compiler_item(&op)
-                    .and_then(|item| self.tysys.compiler_trait_def(item))
-                    .is_some_and(|trait_| {
-                        let key = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .impl_receiver_key(left.type_id);
-                        self.tysys
-                            .trait_env
-                            .has_any_methodful_impl_by_receiver(&key, trait_)
-                    });
+            // A type that erases to a scalar is still its own type, so an impl
+            // it writes answers the comparison before the erased form's
+            // instruction does. Nothing here is newtype-specific: `enum` erases
+            // to its discriminant and `flags` to its bitmask, and the arms
+            // below dropped an impl written on any of the three.
+            let own_comparison_impl = super::tysys::operator_compiler_item(&op)
+                .and_then(|item| self.tysys.compiler_trait_def(item))
+                .is_some_and(|trait_| {
+                    let key = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .impl_receiver_key(left.type_id);
+                    self.tysys
+                        .trait_env
+                        .has_any_methodful_impl_by_receiver(&key, trait_)
+                });
             // The receiver for trait lookup, named by its declaring module and
-            // read off the resolved type. `Enum` is deliberately absent, its `==`
-            // lowering to a native discriminant compare; `Variant` must be
+            // read off the resolved type. `Enum` and `Flags` appear only under
+            // the guard above — absent an impl of their own, `==` lowers to a
+            // native discriminant or bitmask compare. `Variant` must be
             // present, since only `resolve_trait_method_for_op` records the
             // bound-driven synthesis request, and synthesis has already run.
             let struct_name = match &left_type {
@@ -365,13 +366,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .fq_base_type_name(left.type_id)
                         .into_string(),
                 ),
-                ResolvedType::Newtype { base_type, .. } if comparison_impl_on_newtype => Some(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .fq_base_type_name(left.type_id)
-                        .into_string(),
-                ),
+                ResolvedType::Newtype { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Flags { .. }
+                    if own_comparison_impl =>
+                {
+                    Some(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .fq_base_type_name(left.type_id)
+                            .into_string(),
+                    )
+                }
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.get_ultimate_base_type(*base_type);
@@ -394,7 +401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(struct_name) = struct_name {
                 // For newtypes, use the base type ID for trait lookup — unless
                 // the newtype itself wrote the impl.
-                let lookup_type_id = if comparison_impl_on_newtype {
+                let lookup_type_id = if own_comparison_impl {
                     left.type_id
                 } else {
                     let tt = self.tysys.type_table.borrow();
@@ -715,12 +722,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let ResolvedType::TypeParam { name, .. } = &left_type
                 && let Some((item, method_name)) = arithmetic
             {
-                let trait_name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .compiler_trait_name(item)
-                    .to_string();
                 let bounds = self
                     .annotate_ctx
                     .trait_ctx
@@ -763,7 +764,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // below answers for it — say so here rather than at WIR build.
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),
-                    trait_name,
+                    trait_name: self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .compiler_trait_name(item)
+                        .to_string(),
                     param_name: name.clone(),
                     reason: Vec::new(),
                     span,
@@ -780,12 +786,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some((shift_item, shift_method)) = super::tysys::operator_trait_method(&op) else {
                 return TypeTable::ERROR;
             };
-            let shift_trait = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_trait_name(shift_item)
-                .to_string();
             // A type parameter dispatches through its bounds, as the arithmetic
             // operators do; the name-keyed lookup below reaches no impl for one.
             if let ResolvedType::TypeParam { name, .. } = &left_type
@@ -828,7 +828,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let ResolvedType::TypeParam { name, .. } = &left_type {
                 let _ = self.emit(TypeError::TraitBoundNotSatisfied {
                     type_name: name.clone(),
-                    trait_name: shift_trait,
+                    trait_name: self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .compiler_trait_name(shift_item)
+                        .to_string(),
                     param_name: name.clone(),
                     reason: Vec::new(),
                     span,

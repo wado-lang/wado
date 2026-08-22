@@ -21,7 +21,7 @@ use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::elaborator::trait_env::{BlanketBound, BlanketParamSource, ImplReceiver, TraitEnv};
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal,
     TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
@@ -760,13 +760,13 @@ fn peel_transparent_newtype(
         let base = {
             let tt = ctx.tt.borrow();
             match tt.get(tid) {
-                ResolvedType::Newtype { def, base_type, .. }
+                ResolvedType::Newtype { base_type, .. }
                     if ctx
                         .trait_env
                         .trait_def_of_fq(trait_name)
                         .is_none_or(|trait_| {
                             !ctx.trait_env.has_any_methodful_impl_by_receiver(
-                                &Receiver::Type(FqTypeName::of_head(tt.defs(), *def)),
+                                &tt.impl_receiver_key(tid),
                                 trait_,
                             )
                         }) =>

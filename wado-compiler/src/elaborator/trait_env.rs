@@ -2497,11 +2497,10 @@ fn index_decls_by_name(
     out
 }
 
-/// The type arguments a written trait position supplies, structured — read off the
-/// nodes that wrote them, so each argument's own reference site says which
-/// declaration it names and an alias or namespace prefix reaches the same head.
 /// The argument nodes a written trait reference carries, empty for a bare
-/// name. `ns::Trait<T>` supplies them the same as `Trait<T>` does.
+/// name. `ns::Trait<T>` supplies them the same as `Trait<T>` does — the
+/// namespace says which module declares the head, which is the reference
+/// site's question and not the argument list's.
 pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
     match ty {
         ast::Type::Generic(generic) => &generic.args,
@@ -2510,21 +2509,14 @@ pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
     }
 }
 
+/// The type arguments a written trait position supplies, each read off the node
+/// that wrote it, so its own reference site says which declaration it names.
 pub(super) fn written_type_args(
     ty: &ast::Type,
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<name::FqTypeName> {
-    // `ns::Trait<T>` supplies its arguments the same as `Trait<T>` does — the
-    // namespace says which module declares the head, which is the reference
-    // site's question and not the argument list's.
     match ty {
-        ast::Type::Generic(generic) => generic
-            .args
-            .iter()
-            .map(|arg| written_type_arg(arg, resolutions))
-            .collect(),
-        ast::Type::NamespacedGeneric(ns) => ns
-            .args
+        ast::Type::Generic(_) | ast::Type::NamespacedGeneric(_) => written_arg_nodes(ty)
             .iter()
             .map(|arg| written_type_arg(arg, resolutions))
             .collect(),
