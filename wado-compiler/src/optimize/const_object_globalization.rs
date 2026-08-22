@@ -421,9 +421,7 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
         // argument that can carry the handle out. Which of them does is the
         // callee's answer: a result is a handle into `idx` only where the
         // parameter holding it delivers its referent's storage back out.
-        ExprKind::Call {
-            func_id, args, ..
-        } => (gate.is_reference_type(body.exprs[expr].type_id)
+        ExprKind::Call { func_id, args, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
             && args.iter().enumerate().any(|(pos, arg)| {
                 arg.expr
                     .as_expr()
