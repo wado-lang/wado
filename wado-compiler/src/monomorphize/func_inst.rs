@@ -2440,7 +2440,25 @@ impl Monomorphizer {
                         let Some(arg) = args.first() else {
                             unreachable!("a binary-op trait method always takes one argument")
                         };
-                        let right = unref_operand(&arg.expr, type_table);
+                        let mut right = unref_operand(&arg.expr, type_table);
+                        // `Shl` / `Shr` declare `rhs: u32` whatever the
+                        // receiver is, and the native instruction takes both
+                        // operands at one width — so a 64-bit receiver needs
+                        // the amount widened rather than an `i64.shl` fed an
+                        // `i32`.
+                        if matches!(binary_op, TirBinaryOp::Shl | TirBinaryOp::Shr)
+                            && right.type_id != left.type_id
+                        {
+                            let span = right.span;
+                            right = TirExpr {
+                                kind: TirExprKind::Cast {
+                                    expr: Box::new(right),
+                                    target_type: left.type_id,
+                                },
+                                type_id: left.type_id,
+                                span,
+                            };
+                        }
                         let result_type =
                             if matches!(binary_op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
                                 TypeTable::BOOL

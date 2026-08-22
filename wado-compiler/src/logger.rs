@@ -103,7 +103,9 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         if self.quiet_depth.get() > 0 {
             return Ok(());
         }
-        if !self.reported.borrow_mut().insert(Self::identity(&diag)) {
+        if let Some(identity) = Self::identity(&diag)
+            && !self.reported.borrow_mut().insert(identity)
+        {
             return Ok(());
         }
         let count = self.error_count.get() + 1;
@@ -117,11 +119,14 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// What makes two diagnostics the same fault: one place, one message.
-    fn identity(diag: &Diagnostic) -> String {
-        let at = diag.span.as_ref().map_or_else(String::new, |span| {
-            format!("{}:{}:{}", span.file, span.line, span.column)
-        });
-        format!("{at}\u{1}{:?}\u{1}{}", diag.code, diag.message)
+    /// `None` where the span names no file — an offset alone is not a place,
+    /// and two modules share plenty of them.
+    fn identity(diag: &Diagnostic) -> Option<String> {
+        let span = diag.span.as_ref().filter(|span| !span.file.is_empty())?;
+        Some(format!(
+            "{}:{}:{}\u{1}{:?}\u{1}{}",
+            span.file, span.line, span.column, diag.code, diag.message
+        ))
     }
 
     /// Stamp `file` onto a diagnostic's span when the span carries no file of
