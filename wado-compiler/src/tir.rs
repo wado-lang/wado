@@ -638,10 +638,6 @@ impl TypeSet {
         newly
     }
 
-    pub(crate) fn contains(&self, id: TypeId) -> bool {
-        let (word, mask) = Self::slot(id);
-        self.words.get(word).is_some_and(|w| w & mask != 0)
-    }
 }
 
 /// A trait at the arguments it was instantiated at (WEP 2026-08-12): `Combine`
@@ -780,11 +776,12 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
-    /// The wrapper `TypeId`s the boxing pass redefined from a *shared* `&T`.
-    /// `&T` and `&mut T` get the same `Box<T>` content, so this is the only
-    /// surviving record of which boxed handles cannot be written through — see
-    /// [`Self::is_mut_box`].
-    shared_box_type_ids: TypeSet,
+    /// The wrapper `TypeId`s the boxing pass redefined from a reference, each
+    /// mapped to whether that reference was shared. `&T` and `&mut T` get the
+    /// same `Box<T>` content, so this is the only surviving record of how one
+    /// was spelled — see [`Self::is_mut_box`] and
+    /// [`Self::mangle_type_arg_unboxed`].
+    boxed_ref_shared: TypeMap<bool>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -940,7 +937,7 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
-            shared_box_type_ids: TypeSet::default(),
+            boxed_ref_shared: TypeMap::default(),
             struct_name_index: IndexMap::default(),
             decl_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -2369,10 +2366,10 @@ impl TypeTable {
             || self.box_payload_of(type_id).is_some()
     }
 
-    /// Record that `wrapper` was redefined from a shared `&T`, so it cannot be
-    /// written through. Called by the boxing pass; see [`Self::is_mut_box`].
-    pub fn register_shared_box(&mut self, wrapper: TypeId) {
-        self.shared_box_type_ids.insert(wrapper);
+    /// Record that `wrapper` was redefined from a reference, shared or not.
+    /// Called by the boxing pass; see [`Self::is_mut_box`].
+    pub fn register_boxed_ref(&mut self, wrapper: TypeId, is_shared: bool) {
+        self.boxed_ref_shared.set_growing(wrapper, is_shared);
     }
 
     /// Whether `wrapper` is a boxed reference that can be written through: a
@@ -2380,7 +2377,8 @@ impl TypeTable {
     /// caller still holds. Only ids known to come from a shared `&T` answer
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
-        self.box_payload_types.get(wrapper).is_some() && !self.shared_box_type_ids.contains(wrapper)
+        self.box_payload_types.get(wrapper).is_some()
+            && self.boxed_ref_shared.get(wrapper) != Some(&true)
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
@@ -3862,18 +3860,53 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_erased(*t))
                     .collect();
-                let name = self.def_name(*def);
-                if Self::is_tuple_type(name) {
-                    return crate::name::mangle_tuple_type(&args);
-                }
-                let unqualified =
-                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
-                format!("{}/{unqualified}", self.def_module(*def))
+                self.mangle_generic_instance(*def, &args)
             }
             ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_erased(*inner)),
             ResolvedType::BuiltinArray(elem) => {
                 crate::name::mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
+            }
+            _ => self.mangle_type_arg_for_generic(id),
+        }
+    }
+
+    fn mangle_generic_instance(&self, def: crate::defs::DefId, args: &[String]) -> String {
+        if Self::is_tuple_type(self.def_name(def)) {
+            return crate::name::mangle_tuple_type(args);
+        }
+        let unqualified = crate::name::mangle_generic_name(&self.decl_render_name(def), args);
+        format!("{}/{unqualified}", self.def_module(def))
+    }
+
+    /// [`Self::mangle_type_arg_erased`] as the type read *before*
+    /// `boxing::prepare_types` redefined every borrowed `TypeId` into
+    /// `Box<T>`. Lets a post-boxing call site name the reflect bridge that
+    /// pre-boxing synthesis minted after the same type.
+    pub fn mangle_type_arg_unboxed(&self, id: TypeId) -> String {
+        if let Some(&is_shared) = self.boxed_ref_shared.get(id) {
+            let payload = self.mangle_type_arg_unboxed(
+                self.box_payload_of(id)
+                    .expect("boxing registers a payload with every reference it redefines"),
+            );
+            return if is_shared {
+                format!("&{payload}")
+            } else {
+                format!("&mut {payload}")
+            };
+        }
+        match self.get(id) {
+            ResolvedType::GenericInstance { def, type_args } => {
+                let args: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.mangle_type_arg_unboxed(*t))
+                    .collect();
+                self.mangle_generic_instance(*def, &args)
+            }
+            ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_unboxed(*inner)),
+            ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_unboxed(*inner)),
+            ResolvedType::BuiltinArray(elem) => {
+                crate::name::mangle_builtin_array_type(&self.mangle_type_arg_unboxed(*elem))
             }
             _ => self.mangle_type_arg_for_generic(id),
         }
