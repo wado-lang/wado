@@ -316,6 +316,10 @@ impl TypeSystem {
     /// The first link at or below `type_id` — itself included — writing its own
     /// impl of `trait_`. A link's impl answers for every level above it, so a
     /// type erasing to a scalar reaches it before the base's instruction does.
+    ///
+    /// The descent stops above a base that *is* a scalar: a primitive's
+    /// operator impl is the instruction, and taking it as an inherited one
+    /// would route `type Duration = u64` through a call.
     pub(crate) fn own_impl_link(
         &self,
         type_id: TypeId,
@@ -330,7 +334,17 @@ impl TypeSystem {
             {
                 return Some(tid);
             }
-            tid = self.type_table.borrow().get_newtype_base(tid)?;
+            let base = self.type_table.borrow().get_newtype_base(tid)?;
+            if !matches!(
+                self.type_table.borrow().get(base),
+                ResolvedType::Newtype { .. }
+                    | ResolvedType::Struct { .. }
+                    | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Variant { .. }
+            ) {
+                return None;
+            }
+            tid = base;
         }
     }
 
