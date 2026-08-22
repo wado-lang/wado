@@ -631,10 +631,18 @@ impl ClosureLowerer {
             }
 
             let mut body_locals: Vec<(u32, TypeId)> = Vec::new();
+            let mut assigned: Vec<(u32, TypeId)> = Vec::new();
             LocalCollector {
                 locals: &mut body_locals,
+                assigned: &mut assigned,
             }
             .visit_block(&body_block);
+            let declared: IndexSet<u32> = body_locals.iter().map(|(idx, _)| *idx).collect();
+            body_locals.extend(
+                assigned
+                    .into_iter()
+                    .filter(|(idx, _)| !declared.contains(idx)),
+            );
 
             // Body locals use synthetic placeholders here; `wir_build`
             // recovers source names from `TirFunction::locals[idx].name`.
@@ -1390,6 +1398,10 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
 /// statement in the closure body, including those nested in inner blocks.
 struct LocalCollector<'a> {
     locals: &'a mut Vec<(u32, TypeId)>,
+    /// Assignment targets, kept apart from the declarations: a slot a producer
+    /// preallocates and assigns is declared by that assignment, but one a `Let`
+    /// or pattern already declares takes its type from there.
+    assigned: &'a mut Vec<(u32, TypeId)>,
 }
 
 impl TirRefVisitor for LocalCollector<'_> {
@@ -1428,7 +1440,7 @@ impl TirRefVisitor for LocalCollector<'_> {
         if let TirExprKind::Assign { target, value } = &expr.kind
             && let TirExprKind::Local { index, .. } = &target.kind
         {
-            self.locals.push((*index, value.type_id));
+            self.assigned.push((*index, value.type_id));
         }
         self.walk_expr(expr);
     }

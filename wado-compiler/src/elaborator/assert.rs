@@ -240,6 +240,19 @@ fn is_inert(expr: &Expr) -> bool {
     }
 }
 
+/// The local an lvalue chain roots at, for the operand of a `&mut` or the
+/// receiver of a method call. `None` where the chain roots in an rvalue, which
+/// names no local the condition could also read.
+fn place_root_name(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Ident(ident) => Some(ident.name.clone()),
+        Expr::FieldAccess(f) => place_root_name(&f.expr),
+        Expr::Index(i) => place_root_name(&i.expr),
+        Expr::Unary(u) => place_root_name(&u.expr),
+        _ => None,
+    }
+}
+
 /// What the walk knows about an operand on reaching it, before its own children
 /// can change any of it.
 struct Position {
@@ -250,6 +263,12 @@ struct Position {
     /// Everything evaluated before this operand is bound ahead of it, so this
     /// one may be too.
     bindable: bool,
+    /// How many places were already read where they sit. Binding this operand
+    /// ahead moves it before every one of them.
+    places_len: usize,
+    /// How many writes the walk had recorded, so this operand's own subtree is
+    /// everything appended past it.
+    writes_len: usize,
 }
 
 /// Per-assert state carried on [`FunctionContext::assert_capture_ctx`]
@@ -293,6 +312,14 @@ struct CaptureScanner {
     /// too. Cleared by the first fragment left in place — binding after it would
     /// run the pair backwards.
     frontier_ok: bool,
+    /// Places read where they sit, in scan order. A place is neither bound nor
+    /// moved, so the read stays in the condition and a later operand bound
+    /// ahead of it runs first.
+    places_behind: Vec<String>,
+    /// Writes the walk has passed, in scan order: the local a `&mut` borrow or
+    /// a method receiver names, or `None` where a subtree the walk does not
+    /// enter could write anything. The only channels into a caller's local.
+    writes: Vec<Option<String>>,
 }
 
 impl CaptureScanner {
@@ -303,6 +330,8 @@ impl CaptureScanner {
             is_root: true,
             conditional: false,
             frontier_ok: true,
+            places_behind: Vec::new(),
+            writes: Vec::new(),
         }
     }
 
@@ -311,29 +340,47 @@ impl CaptureScanner {
         self.scan(expr);
     }
 
-    fn add(&mut self, source: String, ast_id: AstId, is_place: bool, bindable: bool) {
+    fn add(&mut self, source: String, ast_id: AstId, is_place: bool, pos: &Position) {
         let conditional = self.conditional;
-        // A conditional slot may never run, and a place is re-read, not bound.
-        let hoisted = bindable && !conditional && !is_place;
-        let idx = match self.place_slot(&source, is_place, conditional) {
-            Some(idx) => idx,
-            None => {
-                let idx = self.slots.len();
-                self.slots.push(Capture {
-                    name: format!("__v{idx}"),
-                    source,
-                    conditional,
-                    is_place,
-                    hoisted,
-                });
-                idx
-            }
+        if is_place {
+            self.places_behind.push(source.clone());
+        }
+        // A conditional slot may never run, a place is re-read rather than
+        // bound, and binding ahead is off once this operand may write through a
+        // place the condition already read where it sits.
+        let hoisted = pos.bindable && !conditional && !is_place && !self.disturbs_behind(pos);
+        let idx = if let Some(idx) = self.place_slot(&source, is_place, conditional) {
+            idx
+        } else {
+            let idx = self.slots.len();
+            self.slots.push(Capture {
+                name: format!("__v{idx}"),
+                source,
+                conditional,
+                is_place,
+                hoisted,
+            });
+            idx
         };
         self.ast_id_to_slot.insert(ast_id, idx);
         // A place is neither bound nor moved, so it passes the fact through —
         // never restores it: a receiver that cleared it still forbids binding
-        // what follows.
-        self.frontier_ok = hoisted || (is_place && !conditional && bindable);
+        // what follows. `disturbs_behind` is what keeps the pass-through sound.
+        self.frontier_ok = hoisted || (is_place && !conditional && pos.bindable);
+    }
+
+    /// Whether this operand's own subtree writes through a place the condition
+    /// already read where it sits. Binding it ahead would put the write before
+    /// that read. A place first read inside this subtree does not count: binding
+    /// the node moves the whole group, and so moves nothing within it.
+    fn disturbs_behind(&self, pos: &Position) -> bool {
+        let behind = &self.places_behind[..pos.places_len];
+        if behind.is_empty() {
+            return false;
+        }
+        self.writes[pos.writes_len..]
+            .iter()
+            .any(|write| write.as_ref().is_none_or(|name| behind.contains(name)))
     }
 
     /// The slot an earlier occurrence of this place already earned. A place is
@@ -357,6 +404,8 @@ impl CaptureScanner {
             is_root,
             conditional,
             bindable: self.frontier_ok,
+            places_len: self.places_behind.len(),
+            writes_len: self.writes.len(),
         };
 
         self.scan_node(expr, ast_id, &pos);
@@ -377,15 +426,25 @@ impl CaptureScanner {
         self.frontier_ok = false;
     }
 
+    /// Record that evaluating the current operand may write through `expr`.
+    /// A `&mut` borrow and a `&mut self` receiver are the only channels into a
+    /// local the rest of the condition also reads; one rooted in an rvalue
+    /// names no such local.
+    fn record_write(&mut self, expr: &Expr) {
+        if let Some(name) = place_root_name(expr) {
+            self.writes.push(Some(name));
+        }
+    }
+
     fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
         let Position {
             is_root,
             conditional,
-            bindable,
+            ..
         } = *pos;
         match expr {
             Expr::Ident(ident) => {
-                self.add(ident.name.clone(), ast_id, true, bindable);
+                self.add(ident.name.clone(), ast_id, true, pos);
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
@@ -393,12 +452,7 @@ impl CaptureScanner {
                 self.scan(&b.right);
                 self.conditional = conditional;
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Unary(u) => {
@@ -409,6 +463,7 @@ impl CaptureScanner {
                 }
                 // `&mut` needs a mutable lvalue; the binding is immutable.
                 if u.op == UnaryOp::MutRef {
+                    self.record_write(&u.expr);
                     return;
                 }
                 self.scan(&u.expr);
@@ -419,12 +474,7 @@ impl CaptureScanner {
                     return;
                 }
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Call(c) => {
@@ -434,36 +484,24 @@ impl CaptureScanner {
                 for arg in &c.args {
                     self.scan(arg);
                 }
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::MethodCall(m) => {
+                // The scan runs ahead of resolution, so `&mut self` is not yet
+                // knowable: every place receiver counts as written.
+                self.record_write(&m.receiver);
                 self.scan_receiver(&m.receiver);
                 for arg in &m.args {
                     self.scan(arg);
                 }
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::StaticMethodCall(s) => {
                 self.frontier_ok = false;
                 for arg in &s.args {
                     self.scan(arg);
                 }
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::ComparisonChain(chain) => {
                 self.scan(&chain.first);
@@ -474,12 +512,7 @@ impl CaptureScanner {
                 }
                 self.conditional = conditional;
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Cast(c) => {
@@ -488,34 +521,19 @@ impl CaptureScanner {
                 }
                 self.scan(&c.expr);
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Matches(m) => {
                 self.scan_receiver(&m.expr);
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Index(i) => {
                 self.scan_receiver(&i.expr);
                 self.scan(&i.index);
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::TupleLiteral(t) => {
                 // A literal takes its shape from the expected type, which a
@@ -530,26 +548,17 @@ impl CaptureScanner {
                 }
             }
             Expr::FieldAccess(_) => {
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::TemplateString(_) => {
                 // The rendered string only: a captured interpolation would
                 // evaluate twice, once for its slot and once for the template.
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::If(i) => {
                 // Bodies are not walked: this node's own capture is the value
                 // of the branch the run took. Its condition chose that branch.
+                self.writes.push(None);
                 match &i.condition {
                     ast::Condition::Expr(cond) => self.scan(cond),
                     ast::Condition::LetChain { elements, .. } => {
@@ -562,81 +571,53 @@ impl CaptureScanner {
                     }
                 }
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Match(m) => {
                 // Arms are not walked, for the reason `If` bodies are not.
+                self.writes.push(None);
                 self.scan(&m.expr);
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Block(_) | Expr::LabeledBlock(_) => {
                 // Statements are not walked: a binding inside one is not an
                 // operand of the condition.
+                self.writes.push(None);
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::Range(r) => {
                 self.scan(&r.start);
                 self.scan(&r.end);
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             Expr::TryOp(t) => {
                 self.scan(&t.expr);
                 if !is_root {
-                    self.add(
-                        unparse_expr_source(expr),
-                        ast_id,
-                        is_place_expr(expr),
-                        bindable,
-                    );
+                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
             // Renders its signature, all `Inspect` has for one. The body is not
             // walked: nothing there has a value when the condition failed.
             Expr::Closure(_) => {
-                self.add(
-                    unparse_expr_source(expr),
-                    ast_id,
-                    is_place_expr(expr),
-                    bindable,
-                );
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             // Neither captured nor walked; the WEP's *Known gaps* has the
-            // reason for each.
-            Expr::Literal(_)
-            | Expr::WithHandler(_)
+            // reason for each. What the walk does not enter may write anything,
+            // so nothing after one of these binds ahead of a place.
+            Expr::Literal(_) | Expr::Error(_) => {}
+            Expr::WithHandler(_)
             | Expr::Resume(_)
             | Expr::Spread(_, _)
             | Expr::Assign(_)
             | Expr::CompoundAssign(_)
-            | Expr::TupleComprehension(_)
-            | Expr::Error(_) => {}
+            | Expr::TupleComprehension(_) => self.writes.push(None),
         }
     }
 }
