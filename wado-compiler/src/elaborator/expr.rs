@@ -189,6 +189,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_id
     }
 
+    /// Resolve an expression standing in condition position, which must be
+    /// `bool`: nothing coerces to it. `bool` is checked, never passed down as an
+    /// expected type — an expectation reaches the operands, where it is wrong.
+    pub(super) fn resolve_condition_expr(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let type_id = self.resolve_expr(expr, ctx, None);
+        if type_id == TypeTable::BOOL
+            || type_id == TypeTable::UNKNOWN
+            || type_id == TypeTable::ERROR
+        {
+            return type_id;
+        }
+        let (expected, found) = self
+            .tysys
+            .type_table
+            .borrow()
+            .type_names_for_mismatch(TypeTable::BOOL, type_id);
+        let _ = self.emit(TypeError::TypeMismatch {
+            expected,
+            found,
+            span: expr.span(),
+        });
+        TypeTable::BOOL
+    }
+
     fn resolve_expr_inner(
         &mut self,
         expr: &Expr,
@@ -670,14 +698,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify resolves the fallback-module global / `FuncRef` its own
         // way; project the type only. This default-expr path is never an
         // assignment target, so no place is recorded.
-        if let Some((ty, _)) = self.tysys.signatures.global(fallback, name) {
+        let (owner, name) = self.declaring_module_of_ident(name, fallback);
+        if let Some((ty, _)) = self.tysys.signatures.global(&owner, &name) {
             return Some(ty);
         }
-        let sig = self.tysys.signatures.function_sig(fallback, name)?.clone();
+        let sig = self.tysys.signatures.function_sig(&owner, &name)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
         )
+    }
+
+    /// Where `name` is *declared*, as seen from `fallback`. The signature
+    /// tables are keyed by declaring module, so a name `fallback` merely
+    /// imported or re-exported is not found under `fallback` itself.
+    fn declaring_module_of_ident(
+        &self,
+        name: &str,
+        fallback: &ModuleSource,
+    ) -> (ModuleSource, String) {
+        if self.tysys.signatures.global(fallback, name).is_some()
+            || self.tysys.signatures.function_sig(fallback, name).is_some()
+        {
+            return (fallback.clone(), name.to_string());
+        }
+        // Imports and re-exports are different maps; a default may name either.
+        let resolved = self
+            .symbols
+            .imported(fallback, name)
+            .or_else(|| self.symbols.lookup_in_module(fallback, name));
+        match resolved {
+            Some(symbol) => (symbol.module.clone(), symbol.name.clone()),
+            None => (fallback.clone(), name.to_string()),
+        }
     }
 
     /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
@@ -1826,7 +1879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve the condition and both blocks for their facts; reify
                 // rebuilds the `If` node. The result type is inferred from the
                 // AST (`ast_block_result_type`) below.
-                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(expr, ctx);
                 self.resolve_block_value(&if_expr.then_block, ctx, expected_type);
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);

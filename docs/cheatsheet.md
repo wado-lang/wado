@@ -1354,8 +1354,7 @@ if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 
 ### core:collections
 
-`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. `TreeMap` has
-no `insert` — use `map[key] = value` or a `{ key: value }` literal. See
+`TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
 [`core:collections`](./stdlib-core-collections.md).
 
 ```wado
@@ -1366,6 +1365,8 @@ map["key"] = 42;              // index assignment
 let v = map["key"];           // index access (panics if absent)
 let opt = map.get("key");     // fallible access -> Option<V>
 map.remove("key");            // -> bool
+map.try_insert("k", 1);       // insert if absent -> bool
+map.get_or_insert("k", 1);    // the stored value, or the inserted one
 for let [k, v] of map.entries() { println(`${k}=${v}`); }
 
 let sizes = { small: 1, large: 3 } as TreeMap<String, i32>;
@@ -1439,6 +1440,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
+- [`core:random`](./stdlib-core-random.md) — entropy buffering for `wasi:random`
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time (`Instant`, `ZonedDateTime`)
 - [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)

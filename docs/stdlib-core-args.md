@@ -99,6 +99,12 @@ _Fields are private._
 
 #### `impl Deserializer for ArgvDeserializer`
 
+##### `fn on_duplicate_key(&self) -> DuplicateKeyPolicy`
+
+A command line is last-wins by convention, so a wrapper can append an
+override. A repeatable option never reaches this — `gather_option_values`
+consumes its later occurrences.
+
 ##### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
 
 ##### `fn deserialize_i64(&mut self) -> Result<i64, DeserializeError>`
@@ -132,6 +138,8 @@ _Fields are private._
 ##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError> with stores[self]`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
+
+An argv token is always text, so a dynamic `Deserialize` gets it raw.
 
 ## Enums
 

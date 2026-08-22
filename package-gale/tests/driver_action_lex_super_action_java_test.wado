@@ -8,7 +8,7 @@ use js from "./grammars/java_lex_super_action.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super_action_java" },
     };
-use { JsBase, LexerView } from "./grammars/java_lex_super_action.g4";
+use { JsBase, LexerView, Lexer } from "./grammars/java_lex_super_action.g4";
 
 struct JsBaseImpl {
     depth: i32,
@@ -17,7 +17,7 @@ struct JsBaseImpl {
 }
 
 impl JsBase for JsBaseImpl {
-    fn process_open(&mut self, view: LexerView) {
+    fn process_open(&mut self, view: LexerView, lx: &mut Lexer) {
         self.depth += 1;
         if self.depth > self.max_depth {
             self.max_depth = self.depth;
@@ -25,7 +25,7 @@ impl JsBase for JsBaseImpl {
         resume ();
     }
 
-    fn process_close(&mut self, view: LexerView) {
+    fn process_close(&mut self, view: LexerView, lx: &mut Lexer) {
         self.depth -= 1;
         resume ();
     }

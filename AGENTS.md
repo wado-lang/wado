@@ -119,6 +119,8 @@ Wado-specific features:
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module. (`wado-bundled-icu/` is a not-yet-wired spike.)
 - `docs/` — the language spec (`docs/spec.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
+- `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
+  Worker, via jco.
 - `package-*/` — packages written in Wado; `package-gale/` is the ANTLR4 port.
 - `vendor/` — reference specs and runtimes, as git submodules (see References).
 

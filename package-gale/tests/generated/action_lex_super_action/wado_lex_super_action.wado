@@ -1107,12 +1107,18 @@ pub global TK_EOF: i32 = 5;
 pub global TK_ERROR: i32 = 6;
 
 pub interface SaBase {
-    fn mark(view: LexerView);
-    fn done(view: LexerView);
+    fn mark(view: LexerView, lx: &mut Lexer);
+    fn done(view: LexerView, lx: &mut Lexer);
     fn enabled(view: LexerView) -> bool;
+    /// Called with the span, type and channel of each token the lexer
+    /// commits — not a skipped or `more`d match, and not the EOF
+    /// sentinel. Returns the type to emit.
+    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
+        return ty;
+    }
 }
 
-struct Lexer {
+pub struct Lexer {
     chars: List<char>,
     pos: i32,
     act_output: String = "",
@@ -1135,7 +1141,7 @@ impl Lexer {
         return LexerSlice::new(&self.chars, start, end);
     }
 
-    fn emit(&mut self, s: String) {
+    pub fn emit(&mut self, s: String) {
         self.act_output.push_str(&s);
     }
 
@@ -1146,19 +1152,19 @@ impl Lexer {
         self.act_more = false;
     }
 
-    fn set_type(&mut self, t: i32) {
+    pub fn set_type(&mut self, t: i32) {
         self.act_type = t;
     }
 
-    fn set_channel(&mut self, c: i32) {
+    pub fn set_channel(&mut self, c: i32) {
         self.act_channel = c;
     }
 
-    fn skip(&mut self) {
+    pub fn skip(&mut self) {
         self.act_skip = true;
     }
 
-    fn more(&mut self) {
+    pub fn more(&mut self) {
         self.act_more = true;
     }
 }
@@ -1168,10 +1174,10 @@ fn apply_AB_actions(lx: &mut Lexer, start: i32, end: i32) with (SaBase, stores[l
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return; }
     pos += 1;
-    SaBase::mark(LexerView { chars, start, pos });
+    SaBase::mark(LexerView { chars, start, pos }, lx);
     if pos >= chars.len() || chars[pos] != 'b' { return; }
     pos += 1;
-    SaBase::done(LexerView { chars, start, pos });
+    SaBase::done(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with (SaBase, stores[lx]) {
@@ -1179,7 +1185,7 @@ fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with (SaBase, stores[lx
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != 'a' { return; }
     pos += 1;
-    SaBase::mark(LexerView { chars, start, pos });
+    SaBase::mark(LexerView { chars, start, pos }, lx);
 }
 
 fn try_AB(chars: &List<char>, start: i32) -> i32 {
@@ -1309,6 +1315,9 @@ pub fn tokenize(input: &String) -> TokenStream with SaBase {
             }
             let tok_start = if more_start >= 0 { more_start } else { start };
             let is_skip = best_kind matches { TK_WS } || best_act_skip;
+            if !is_skip && !best_more {
+                best_kind = SaBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
+            }
             if best_more {
                 if more_start < 0 { more_start = start; }
             } else if is_skip {

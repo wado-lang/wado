@@ -1,0 +1,22 @@
+//! Declares the defaulted functions. Both defaults name items this module
+//! *imported* rather than declared, which is the case under test.
+
+use { SHARED_LIMIT, shared_fn } from "./default_arg_xmod_imported_global_base.wado";
+
+global LOCAL_LIMIT: i32 = 3;
+
+pub fn with_imported_global(v: i32 = SHARED_LIMIT) -> i32 {
+    return v;
+}
+
+pub fn with_local_global(v: i32 = LOCAL_LIMIT) -> i32 {
+    return v;
+}
+
+pub fn with_imported_fn(f: fn() -> i32 = shared_fn) -> i32 {
+    return f();
+}
+
+pub fn generic_with_imported_global<T>(v: i32 = SHARED_LIMIT) -> i32 {
+    return v;
+}

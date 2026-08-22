@@ -5,6 +5,7 @@
 //! abandons the evaluation rather than stepping past an unperformed write.
 
 use crate::const_eval::Value;
+use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
@@ -623,6 +624,22 @@ impl Interpreter<'_> {
         }
     }
 
+    /// The value bound to a by-value or shared-reference parameter. A shared
+    /// reference cannot write, so the referent's own constant stands; one
+    /// retained past the callee's return is refused by `stores`.
+    fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
+        if let Some(e) = arg.as_expr()
+            && let ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: inner,
+            } = &body.exprs[e].kind
+        {
+            let inner = *inner;
+            return self.operand_lattice_folded(body, inner).as_const();
+        }
+        self.operand_lattice_folded(body, arg).as_const()
+    }
+
     /// The callee a call names, and the operands bound to its parameters, in
     /// parameter order.
     fn call_target(&self, body: &Body, e: ExprId) -> Option<(CalleeKey, Vec<Operand>)> {
@@ -673,7 +690,7 @@ impl Interpreter<'_> {
                 targets.push((param.local_index, root, path));
                 value
             } else {
-                self.operand_lattice_folded(body, *arg).as_const()?
+                self.shared_ref_arg_value(body, *arg)?
             };
             places.extend(place);
             bound.push((param.local_index, value));
@@ -775,7 +792,8 @@ impl Interpreter<'_> {
         }
         let free = region_free_reads(body, block, self.facts, self.type_table)?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
-        for index in free {
+        for read in free {
+            let index = read.index;
             if self.frame.alias_involves(index) {
                 crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
                 return None;
@@ -787,6 +805,15 @@ impl Interpreter<'_> {
                 );
                 return None;
             };
+            // A scalar under a reference would be a value where the program
+            // holds an alias.
+            if read.is_reference && value.is_scalar() {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: reference local {index} holds a scalar"
+                );
+                return None;
+            }
             seeds.push((index, value.clone()));
         }
         self.charge(1)?;

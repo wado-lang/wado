@@ -40,6 +40,7 @@ use {
     superclass_base_name,
     superclass_is_refused,
     lexer_action_bodies_are_base_calls,
+    super_emit_hook_expr,
 } from "./superclass.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
@@ -326,7 +327,9 @@ pub fn gen_lexer(
     if !sc_name.is_empty() {
         gen_super_interface(w, sc_name, sc_ops);
     }
-    gen_lexer_struct(w, members, has_actions, uses_modes);
+    // A base's action op drives the lexer from the user's own module.
+    let sc_action = sc_ops.iter_ref().any(|o| !o.is_predicate);
+    gen_lexer_struct(w, members, has_actions, uses_modes, sc_action);
     if has_actions {
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
@@ -360,8 +363,8 @@ pub fn gen_lexer(
     gen_token_kind_name_fn(w, &grammar.lexer_rules, lit_tokens);
 }
 
-fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool, uses_modes: bool) {
-    let mut s = StructSpec::new(&"Lexer");
+fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool, uses_modes: bool, sc_action: bool) {
+    let mut s = StructSpec::new(&"Lexer", if sc_action { Vis::Pub } else { Vis::Private });
     s.add_field(&"chars", &"List<char>");
     s.add_field(&"pos", &"i32");
     for let mf of &members.fields {
@@ -377,6 +380,8 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
             s.add_field_default(&"act_push_mode", &"i32", &"-1");
             s.add_field_default(&"act_pop_mode", &"bool", &"false");
             s.add_field_default(&"act_set_mode", &"i32", &"-1");
+            // ANTLR's `_modeStack.size()`, which a base branches on.
+            s.add_field_default(&"act_mode_depth", &"i32", &"0");
         }
     }
     s.emit(w);
@@ -411,7 +416,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     w.end();
 
     if has_actions {
-        gen_lexer_action_methods(w, uses_modes);
+        gen_lexer_action_methods(w, uses_modes, sc_action);
     }
 
     for let m of &members.methods {
@@ -423,11 +428,12 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, has_actions: bool
     w.blank();
 }
 
-fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
+fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool, sc_action: bool) {
+    let vis = if sc_action { Vis::Pub } else { Vis::Private };
     w.blank();
     // Deliberately outside `reset_actions`: the sink is the whole run's output,
     // not one token's.
-    let mut fe = FnSpec::new(&"emit");
+    let mut fe = FnSpec::new(&"emit", vis);
     fe.set_receiver(&"&mut self");
     fe.add_param(&"s", &"String");
     fe.emit_begin(w);
@@ -437,6 +443,9 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
 
     let mut fr = FnSpec::new(&"reset_actions");
     fr.set_receiver(&"&mut self");
+    if uses_modes {
+        fr.add_param(&"depth", &"i32");
+    }
     fr.emit_begin(w);
     w.line(&"self.act_type = -1;");
     w.line(&"self.act_channel = -1;");
@@ -446,30 +455,77 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, uses_modes: bool) {
         w.line(&"self.act_push_mode = -1;");
         w.line(&"self.act_pop_mode = false;");
         w.line(&"self.act_set_mode = -1;");
+        w.line(&"self.act_mode_depth = depth;");
     }
     w.end();
     w.blank();
 
-    lexer_setter(w, &"set_type", &"t", &"act_type");
+    lexer_setter(w, &"set_type", &"t", &"act_type", vis);
     w.blank();
-    lexer_setter(w, &"set_channel", &"c", &"act_channel");
+    lexer_setter(w, &"set_channel", &"c", &"act_channel", vis);
     w.blank();
-    lexer_flag(w, &"skip", &"act_skip");
+    lexer_flag(w, &"skip", &"act_skip", vis);
     w.blank();
-    lexer_flag(w, &"more", &"act_more");
+    lexer_flag(w, &"more", &"act_more", vis);
 
     if uses_modes {
         w.blank();
-        lexer_setter(w, &"push_mode", &"m", &"act_push_mode");
-        w.blank();
-        lexer_flag(w, &"pop_mode", &"act_pop_mode");
-        w.blank();
-        lexer_setter(w, &"set_mode", &"m", &"act_set_mode");
+        gen_lexer_mode_commands(w, vis);
     }
 }
 
-fn lexer_setter(w: &mut CodeWriter, name: &String, arg: &String, field: &String) {
-    let mut f = FnSpec::new(name);
+/// The mode commands. Each is a single latch the commit applies once per token,
+/// in a fixed push-pop-set order — hence the guard. No current-mode read is
+/// offered: `pop_mode` cannot restore a stack the `Lexer` has no copy of.
+fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis) {
+    let mut fp = FnSpec::new(&"push_mode", vis);
+    fp.set_receiver(&"&mut self");
+    fp.add_param(&"m", &"i32");
+    fp.emit_begin(w);
+    gen_one_mode_command_assert(w);
+    w.line(&"self.act_push_mode = m;");
+    w.line(&"self.act_mode_depth += 1;");
+    w.end();
+    w.blank();
+
+    let mut fo = FnSpec::new(&"pop_mode", vis);
+    fo.set_receiver(&"&mut self");
+    fo.emit_begin(w);
+    gen_one_mode_command_assert(w);
+    w.line(&"self.act_pop_mode = true;");
+    w.line(&"self.act_mode_depth -= 1;");
+    w.end();
+    w.blank();
+
+    let mut fs = FnSpec::new(&"set_mode", vis);
+    fs.set_receiver(&"&mut self");
+    fs.add_param(&"m", &"i32");
+    fs.emit_begin(w);
+    gen_one_mode_command_assert(w);
+    w.line(&"self.act_set_mode = m;");
+    w.end();
+    w.blank();
+
+    lexer_reader(w, &"mode_depth", &"act_mode_depth", vis);
+}
+
+fn gen_one_mode_command_assert(w: &mut CodeWriter) {
+    w.line(
+        &"assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, \"a lexer action may issue at most one mode command per token\";",
+    );
+}
+
+fn lexer_reader(w: &mut CodeWriter, name: &String, field: &String, vis: Vis) {
+    let mut f = FnSpec::new(name, vis);
+    f.set_receiver(&"&self");
+    f.set_return_type(&"i32");
+    f.emit_begin(w);
+    w.line(&`return self.${*field};`);
+    w.end();
+}
+
+fn lexer_setter(w: &mut CodeWriter, name: &String, arg: &String, field: &String, vis: Vis) {
+    let mut f = FnSpec::new(name, vis);
     f.set_receiver(&"&mut self");
     f.add_param(arg, &"i32");
     f.emit_begin(w);
@@ -477,8 +533,8 @@ fn lexer_setter(w: &mut CodeWriter, name: &String, arg: &String, field: &String)
     w.end();
 }
 
-fn lexer_flag(w: &mut CodeWriter, name: &String, field: &String) {
-    let mut f = FnSpec::new(name);
+fn lexer_flag(w: &mut CodeWriter, name: &String, field: &String, vis: Vis) {
+    let mut f = FnSpec::new(name, vis);
     f.set_receiver(&"&mut self");
     f.emit_begin(w);
     w.line(&`self.${*field} = true;`);
@@ -1261,7 +1317,11 @@ fn apply_fn_name(rule_name: &String) -> String {
 /// `best_act >= 0`, i.e. the winner runs actions.
 fn gen_lexer_action_replay(w: &mut CodeWriter, act_rule_names: &List<String>, use_modes: bool, has_set_mode_rules: bool) {
     w.begin(&"if best_act >= 0");
-    w.line(&"lexer.reset_actions();");
+    if use_modes {
+        w.line(&"lexer.reset_actions(mode_stack.len());");
+    } else {
+        w.line(&"lexer.reset_actions();");
+    }
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
         let call = `${apply_fn_name(&act_rule_names[i])}(&mut lexer, start, best_end);`;
         if i == 0 {
@@ -4266,6 +4326,8 @@ fn gen_tokenize_fn(
         w.write(&` }${act_skip};\n`);
     }
 
+    gen_lexer_emit_hook(w, sc_name, has_skip, has_more_rules, has_channel_rules);
+
     if has_more_rules {
         // A `more` match suppresses emission and remembers the starting
         // position so the next non-`more` match covers the full span.
@@ -4348,6 +4410,40 @@ fn gen_tokenize_fn(
     w.line(&"return ts;");
     w.end();  // fn
     w.blank();
+}
+
+/// Call the base's `emit` hook for a token that will be pushed. Placed after
+/// the skip / more decision, so a suppressed match never reaches the base and a
+/// non-default channel still does. The hook may retype the token.
+fn gen_lexer_emit_hook(
+    w: &mut CodeWriter,
+    sc_name: &String,
+    has_skip: bool,
+    has_more_rules: bool,
+    has_channel_rules: bool,
+) {
+    if sc_name.is_empty() {
+        return;
+    }
+    let mut guard = String::new();
+    if has_skip {
+        guard.push_str(&"!is_skip");
+    }
+    if has_more_rules {
+        if !guard.is_empty() {
+            guard.push_str(&" && ");
+        }
+        guard.push_str(&"!best_more");
+    }
+    let channel = if has_channel_rules { "best_channel" } else { "0" };
+    let call = `best_kind = ${super_emit_hook_expr(sc_name, &channel)};`;
+    if guard.is_empty() {
+        w.line(&call);
+        return;
+    }
+    w.begin(&`if ${guard}`);
+    w.line(&call);
+    w.end();
 }
 
 /// Emit a default-channel token commit: push it with the pending leading-trivia

@@ -4,34 +4,57 @@
 //! Only the two versions in common use today are provided:
 //!
 //! - `Uuid::v4()` — random UUID. The default for "just give me a unique id".
-//! - `Uuid::v7()` — time-ordered UUID. A 48-bit Unix-millisecond timestamp in
-//!   the high bytes makes values sortable by creation time, which is ideal for
-//!   database keys and log correlation.
-//!
-//! A `Uuid` is a single 128-bit value (stored as a `u8x16` SIMD register, one
-//! lane per byte). Construction, formatting, and parsing are all byte-oriented,
-//! which maps directly onto the lane layout. Equality and ordering compare the
-//! 16 bytes in big-endian order, so `v7` values sort by timestamp.
+//! - `Uuid::v7()` — time-ordered UUID, ideal for database keys and log
+//!   correlation.
 //!
 //! `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-//! `parse` accepts both the hyphenated form and the 32-digit hyphenless
-//! "simple" form, matching Rust's `uuid` and Go's `google/uuid`.
+//! Generating in bulk, install `core:random`'s `BufferedRandom` so the host
+//! call is drawn once per block rather than once per UUID.
+//! `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
+//! and `Inspect` render the canonical hyphenated form, as does `Serialize` for
+//! text formats; binary ones get CBOR tag 37 and the 16 bytes.
+//!
+//! `v7` sorts by creation time under RFC 9562 method 3: the timestamp leads the
+//! bytes, `rand_a` holding its sub-millisecond fraction, one tick per 244 ns.
+//! Values within a tick, or across a backwards clock step, are unordered.
 
 use { u8x16 } from "core:simd";
+use {
+    Serialize,
+    Serializer,
+    SerializeError,
+    Deserialize,
+    Deserializer,
+    DeserializeError,
+    DeserializeSeq,
+    DeserializeMap,
+    Visitor,
+} from "core:serde";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
 
+global SUB_MS_TICKS: i64 = 4096;
+
+/// IANA CBOR tag for a UUID's 16 raw bytes.
+global CBOR_TAG_UUID: u64 = 37;
+
 #[synopsis]
 test {
-    assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Some(id) && id.version() == 4
+    assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
         && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 }
 
-/// A 128-bit universally unique identifier.
-///
-/// The bytes are held big-endian: byte 0 is the most significant. This is the
-/// order RFC 9562 lays out the fields in, so the natural byte order is also the
-/// canonical string order and (for `v7`) the timestamp order.
+/// Why a string was not a UUID.
+pub variant ParseError {
+    /// Not 32, 36, 38 (braced) or 45 (URN) characters long.
+    InvalidLength,
+    /// Hyphens, braces or the `urn:uuid:` prefix are not where they belong.
+    InvalidGroups,
+    InvalidCharacter,
+}
+
+/// A 128-bit universally unique identifier, held big-endian as RFC 9562 lays
+/// the fields out.
 pub struct Uuid {
     bytes: u8x16,
 }
@@ -42,76 +65,105 @@ impl Uuid {
         return Uuid { bytes: u8x16::splat(0) };
     }
 
-    /// Generate a version-4 (random) UUID.
-    ///
-    /// All 122 free bits come from the cryptographically-secure `Random`
-    /// effect; the version (`0100`) and variant (`10`) bits are then forced
-    /// into place per RFC 9562.
+    /// The max UUID — all 128 bits one (`ffffffff-ffff-ffff-ffff-ffffffffffff`).
+    pub fn max() -> Uuid {
+        return Uuid { bytes: u8x16::splat(0xFF) };
+    }
+
+    /// Generate a version-4 (random) UUID: 122 bits from `Random`, with the
+    /// RFC 9562 version and variant bits forced into place.
     pub fn v4() -> Uuid with Random {
         let mut b = fill_random(16);
-        set_version_and_variant(&mut b, 0x40);
+        b[6] = (b[6] as i32 & 0x0F | 0x40) as u8;
+        b[8] = with_variant(b[8]);
         return from_byte_list(&b);
     }
 
-    /// Generate a version-7 (time-ordered) UUID.
-    ///
-    /// The high 48 bits are the Unix timestamp in milliseconds, read from the
-    /// `SystemClock` effect; the remaining bits are random. Because the
-    /// timestamp occupies the most significant bytes, lexicographic / numeric
-    /// ordering of `v7` values matches creation-time ordering.
+    /// Generate a version-7 (time-ordered) UUID: a 48-bit millisecond timestamp
+    /// and a 12-bit sub-millisecond fraction from `SystemClock`, then 62
+    /// random bits.
     pub fn v7() -> Uuid with (Random, SystemClock) {
         let now = SystemClock::now();
-        let ms = now.seconds as i64 * 1000 + now.nanoseconds as i64 / 1_000_000;
-        let mut b = fill_random(16);
-        b[0] = (ms >> 40 & 0xFF) as u8;
-        b[1] = (ms >> 32 & 0xFF) as u8;
-        b[2] = (ms >> 24 & 0xFF) as u8;
-        b[3] = (ms >> 16 & 0xFF) as u8;
-        b[4] = (ms >> 8 & 0xFF) as u8;
-        b[5] = (ms & 0xFF) as u8;
-        set_version_and_variant(&mut b, 0x70);
+        let ms = now.seconds * 1000 + now.nanoseconds as i64 / 1_000_000;
+        let sub_ms = now.nanoseconds as i64 % 1_000_000 * SUB_MS_TICKS / 1_000_000;
+        // Bytes 0..=7 are all clock, so only the trailing 8 need entropy.
+        let r = fill_random(8);
+        let mut b = ByteList::with_capacity(16);
+        b.push((ms >> 40 & 0xFF) as u8);
+        b.push((ms >> 32 & 0xFF) as u8);
+        b.push((ms >> 24 & 0xFF) as u8);
+        b.push((ms >> 16 & 0xFF) as u8);
+        b.push((ms >> 8 & 0xFF) as u8);
+        b.push((ms & 0xFF) as u8);
+        b.push((0x70 | sub_ms >> 8 & 0x0F) as u8);
+        b.push((sub_ms & 0xFF) as u8);
+        b.push(with_variant(r[0]));
+        for let mut i = 1; i < 8; i += 1 {
+            b.push(r[i]);
+        }
         return from_byte_list(&b);
     }
 
-    /// Parse a UUID string (case-insensitive), like Rust's `uuid` and Go's
-    /// `google/uuid`:
-    ///
-    /// - the canonical hyphenated form `8-4-4-4-12` (36 chars), with hyphens
-    ///   required at exactly the field boundaries, or
-    /// - the simple form: 32 hex digits with no hyphens.
-    ///
-    /// Returns `null` for anything else.
-    pub fn parse(s: &String) -> Option<Uuid> {
+    /// Parse a UUID string (case-insensitive), accepting every form Go's
+    /// `uuid` and Rust's `uuid` do: `8-4-4-4-12`, 32 bare hex digits,
+    /// `{8-4-4-4-12}`, and `urn:uuid:8-4-4-4-12`.
+    pub fn parse(s: &String) -> Result<Uuid, ParseError> {
         let len = s.len();
-        if len != 36 && len != 32 {
-            return null;
+        let mut start = 0;
+        let mut hyphenated = true;
+        if len == 32 {
+            hyphenated = false;
+        } else if len == 38 {
+            if s.get_byte_unchecked(0) != b'{' || s.get_byte_unchecked(37) != b'}' {
+                return Result::Err(ParseError::InvalidGroups);
+            }
+            start = 1;
+        } else if len == 45 {
+            if !has_urn_prefix(s) {
+                return Result::Err(ParseError::InvalidGroups);
+            }
+            start = 9;
+        } else if len != 36 {
+            return Result::Err(ParseError::InvalidLength);
         }
-        // Field widths in hex digits. The hyphenated form's separators fall
-        // between these groups (8-4-4-4-12); the simple form is one group of
-        // 32. Deriving the hyphen positions from the field structure keeps the
-        // canonical layout explicit instead of hardcoding offsets.
-        let groups: List<i32> = if len == 36 { [8, 4, 4, 4, 12] } else { [32] };
-        let bytes: ByteList = s.bytes().collect();
-        let mut out: ByteList = [];
-        let mut pos = 0;
+        let groups: List<i32> = if hyphenated { [8, 4, 4, 4, 12] } else { [32] };
+        let mut out = ByteList::with_capacity(16);
+        let mut pos = start;
         for let mut g = 0; g < groups.len(); g += 1 {
             if g > 0 {
-                if bytes[pos] != b'-' {
-                    return null;
+                if s.get_byte_unchecked(pos) != b'-' {
+                    return Result::Err(ParseError::InvalidGroups);
                 }
                 pos += 1;
             }
             for let mut k = 0; k < groups[g]; k += 2 {
-                let hi = hex_value(bytes[pos]);
-                let lo = hex_value(bytes[pos + 1]);
-                if hi < 0 || lo < 0 {
-                    return null;
+                let hi = s.get_byte_unchecked(pos) as char;
+                let lo = s.get_byte_unchecked(pos + 1) as char;
+                if !hi.is_hexdigit() || !lo.is_hexdigit() {
+                    return Result::Err(ParseError::InvalidCharacter);
                 }
-                out.push((hi << 4 | lo) as u8);
+                out.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
                 pos += 2;
             }
         }
-        return Option::Some(from_byte_list(&out));
+        return Result::Ok(from_byte_list(&out));
+    }
+
+    /// Build a UUID from its 16 big-endian bytes. `null` for any other length.
+    pub fn from_bytes(bytes: &ByteList) -> Option<Uuid> {
+        if bytes.len() != 16 {
+            return null;
+        }
+        return Option::Some(from_byte_list(bytes));
+    }
+
+    /// The 16 bytes, most significant first.
+    pub fn as_bytes(&self) -> ByteList {
+        let mut out = ByteList::with_capacity(16);
+        for let mut i = 0; i < 16; i += 1 {
+            out.push(self.bytes.extract_lane(i) as u8);
+        }
+        return out;
     }
 
     /// The version number (4 or 7 for UUIDs produced by this module).
@@ -127,7 +179,8 @@ impl Uuid {
                 s.push('-');
             }
             let byte = self.bytes.extract_lane(i);
-            s.push_str(&`${byte:02x}`);
+            s.push(hex_digit(byte >> 4 & 0xF));
+            s.push(hex_digit(byte & 0xF));
         }
         return s;
     }
@@ -136,6 +189,78 @@ impl Uuid {
 impl Display for Uuid {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(&self.to_string());
+    }
+}
+
+impl Inspect for Uuid {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&self.to_string());
+    }
+}
+
+impl InspectAlt for Uuid {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        f.write_str(&self.to_string());
+    }
+}
+
+impl Serialize for Uuid {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        if s.is_human_readable() {
+            let str = self.to_string();
+            return s.serialize_string(&str);
+        }
+        s.serialize_tag(CBOR_TAG_UUID)?;
+        return s.serialize_bytes(self.as_bytes().as_byte_slice());
+    }
+}
+
+/// Accepts the canonical text form or the 16 raw bytes.
+struct UuidVisitor {
+}
+
+impl Visitor for UuidVisitor {
+    type Value = Uuid;
+
+    fn visit_string(&mut self, v: String) -> Result<Uuid, DeserializeError> {
+        return match Uuid::parse(&v) {
+            Ok(id) => Result::Ok(id),
+            Err(_) => Result::Err(DeserializeError::invalid_value("invalid UUID", -1)),
+        };
+    }
+
+    fn visit_bytes(&mut self, v: ByteList) -> Result<Uuid, DeserializeError> {
+        return match Uuid::from_bytes(&v) {
+            Some(id) => Result::Ok(id),
+            None => Result::Err(DeserializeError::invalid_value("a UUID is 16 bytes", -1)),
+        };
+    }
+
+    fn visit_null(&mut self) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID", -1));
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID", -1));
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID", -1));
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, _seq: &mut A) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID, found sequence", -1));
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, _map: &mut A) -> Result<Uuid, DeserializeError> {
+        return Result::Err(DeserializeError::unexpected_type("expected a UUID, found map", -1));
+    }
+}
+
+impl Deserialize for Uuid {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Uuid, DeserializeError> {
+        let mut v = UuidVisitor {};
+        return d.deserialize_any::<UuidVisitor>(&mut v);
     }
 }
 
@@ -167,18 +292,15 @@ impl Default for Uuid {
     }
 }
 
-/// Force the RFC 9562 version (high nibble of byte 6) and variant (top two bits
-/// of byte 8) into a 16-byte buffer. `version_byte` is the version nibble
-/// already shifted into the high position (`0x40` for v4, `0x70` for v7).
-fn set_version_and_variant(b: &mut ByteList, version_byte: u8) {
-    b[6] = (b[6] as i32 & 0x0F | version_byte as i32) as u8;
-    b[8] = (b[8] as i32 & 0x3F | 0x80) as u8;
+/// Byte 8 with the RFC 9562 variant forced into its top two bits.
+fn with_variant(byte: u8) -> u8 {
+    return (byte as i32 & 0x3F | 0x80) as u8;
 }
 
 /// Collect exactly `n` random bytes, looping to tolerate short reads (the
 /// `Random` contract allows returning fewer bytes than requested).
 fn fill_random(n: i32) -> ByteList with Random {
-    let mut out: ByteList = [];
+    let mut out = Random::get_random_bytes(n as u64) as ByteList;
     while out.len() < n {
         let chunk = Random::get_random_bytes((n - out.len()) as u64);
         if chunk.is_empty() {
@@ -199,17 +321,20 @@ fn from_byte_list(b: &ByteList) -> Uuid {
     return Uuid { bytes: v };
 }
 
-/// The value of a single ASCII hex digit byte (`0`–`9`, `a`–`f`, `A`–`F`), or
-/// `-1` when the byte is not a hex digit.
-fn hex_value(byte: u8) -> i32 {
-    if byte >= b'0' && byte <= b'9' {
-        return (byte - b'0') as i32;
+/// The lowercase hex digit for a nibble.
+fn hex_digit(nibble: i32) -> char {
+    assert nibble >= 0 && nibble < 16;
+    return if nibble < 10 { (b'0' + nibble as u8) as char } else { (b'a' + (nibble - 10) as u8) as char };
+}
+
+fn has_urn_prefix(s: &String) -> bool {
+    assert s.len() >= 9;
+    let prefix = "urn:uuid:";
+    for let mut i = 0; i < 9; i += 1 {
+        let c = s.get_byte_unchecked(i) as char;
+        if !c.eq_ignore_ascii_case(&(prefix.get_byte_unchecked(i) as char)) {
+            return false;
+        }
     }
-    if byte >= b'a' && byte <= b'f' {
-        return (byte - b'a') as i32 + 10;
-    }
-    if byte >= b'A' && byte <= b'F' {
-        return (byte - b'A') as i32 + 10;
-    }
-    return -1;
+    return true;
 }

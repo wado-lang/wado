@@ -1,9 +1,7 @@
 /// Driver test for the ANTLR4 grammar parser.
 ///
-/// The ANTLR4 grammar uses semantic predicates to distinguish TOKEN_REF
-/// from RULE_REF, so full parsing of real ANTLR4 input is not supported.
-/// These tests verify tokenization, basic parsing, and that the generated
-/// parser compiles.
+/// `TOKEN_REF` and `RULE_REF` are virtual tokens: the base's `emit` hook
+/// retypes each `ID` by the case of its first character.
 use antlr4 from "./grammars/ANTLRv4Lexer.g4"
     with {
         generator: {
@@ -13,31 +11,91 @@ use antlr4 from "./grammars/ANTLRv4Lexer.g4"
         },
     };
 use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.g4";
-use { LexerAdaptor, LexerView } from "./grammars/ANTLRv4Lexer.g4";
+use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, TK_ID, TK_SEMI } from "./grammars/ANTLRv4Lexer.g4";
+use { TK_TOKEN_REF, TK_RULE_REF, MODE_Argument, MODE_LexerCharSet } from "./grammars/ANTLRv4Lexer.g4";
+use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
 
-// A hand-written stand-in for ANTLR's LexerAdaptor. The real adaptor drives the
-// lexer from these two ops — `handleBeginArgument` pushes the Argument mode and
-// calls `more()`, `handleEndArgument` pops it and retypes the token — and a
-// Gale base reaches none of that: an operation gets a read-only `LexerView`,
-// not the lexer's command surface, and the rule-type state it branches on needs
-// the `emit` / `nextToken` hooks (both open Stage C items, see TODO.md). This
-// port therefore only counts the ops, leaving `[ ... ]` bodies as the ordinary
-// DEFAULT-mode tokens they were before the base was wired.
 struct Antlr4Base {
     begins: i32,
     ends: i32,
+    /// The kind the enclosing rule's name was retyped to, or `-1` between
+    /// rules — ANTLR's `currentRuleType`, reset by each `;`.
+    current_rule_type: i32 = -1,
+}
+
+/// Upstream asks `Character.isUpperCase`, which is Unicode-wide;
+/// `NameStartChar` admits `\u00C0` upwards, so a rule named `ÀBC` diverges.
+/// Wado's prelude has no `char::is_uppercase` (see TODO.md).
+fn is_token_ref_name(view: &LexerView) -> bool {
+    return match char::from_u32(view.char_at(view.start()) as u32) {
+        Some(c) => c.is_ascii_uppercase(),
+        None => false,
+    };
 }
 
 impl LexerAdaptor for Antlr4Base {
-    fn handle_begin_argument(&mut self, view: LexerView) {
+    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
+        if ty == TK_SEMI {
+            self.current_rule_type = -1;
+            resume ty;
+        }
+        if ty != TK_ID {
+            resume ty;
+        }
+        let retyped = if is_token_ref_name(&view) { TK_TOKEN_REF } else { TK_RULE_REF };
+        if self.current_rule_type < 0 {
+            self.current_rule_type = retyped;
+        }
+        resume retyped;
+    }
+
+    fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.begins += 1;
+        // Inside a lexer rule a `[` opens a char set, not an argument list.
+        if self.current_rule_type == TK_TOKEN_REF {
+            lx.push_mode(MODE_LexerCharSet);
+            lx.more();
+        } else {
+            lx.push_mode(MODE_Argument);
+        }
         resume ();
     }
 
-    fn handle_end_argument(&mut self, view: LexerView) {
+    fn handle_end_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.ends += 1;
+        lx.pop_mode();
+        // A nested `[` pushed another Argument mode, so the closing bracket of
+        // an inner pair is content, not the end of the argument list.
+        if lx.mode_depth() > 0 {
+            lx.set_type(TK_ARGUMENT_CONTENT);
+        }
         resume ();
     }
+}
+
+struct DoublePushBase {
+    hits: i32,
+}
+
+impl LexerAdaptor for DoublePushBase {
+    fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
+        self.hits += 1;
+        lx.push_mode(MODE_Argument);
+        lx.push_mode(MODE_Argument);
+        resume ();
+    }
+
+    fn handle_end_argument(&mut self, view: LexerView, lx: &mut Lexer) {
+        resume ();
+    }
+}
+
+#[expect_trap]
+test "a second mode command in one action is a hard error" {
+    let mut base = DoublePushBase { hits: 0 };
+    with LexerAdaptor => &mut base do {
+        antlr4::tokenize(&"r[int x] : 'a' ;");
+    };
 }
 
 fn new_antlr4_base() -> Antlr4Base {
@@ -111,11 +169,43 @@ test "tokenize lexer commands" {
 
 
 test "parse minimal grammar" {
-    // ANTLR4 lexer produces ID tokens, but the parser expects RULE_REF/TOKEN_REF
-    // (distinguished by semantic predicates based on case). Without predicates,
-    // any input with identifiers fails to parse. Verify the error is sensible.
     let r = a4_parse(&"grammar Foo;");
-    assert !r.ok(), "expected a diagnostic";
+    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
+}
+
+test "parse a grammar with a parser rule and a lexer rule" {
+    let r = a4_parse(&"grammar Foo;\nexpr : expr '+' expr | INT ;\nINT : [0-9]+ ;\n");
+    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
+}
+
+test "the emit hook retypes ID by the case of its first character" {
+    let tokens = a4_tokenize(&"expr : INT ;");
+    let mut names: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        names.push(antlr4::token_kind_name(tokens.kinds[i]));
+    }
+    assert names.contains(&"RULE_REF"), `expected a RULE_REF, got ${names:?}`;
+    assert names.contains(&"TOKEN_REF"), `expected a TOKEN_REF, got ${names:?}`;
+    assert !names.contains(&"ID"), `no ID may survive the hook, got ${names:?}`;
+}
+
+#[TODO]
+test "a non-ASCII uppercase rule name is a TOKEN_REF" {
+    let tokens = a4_tokenize(&"ÀBC : [0-9]+ ;");
+    let name = antlr4::token_kind_name(tokens.kinds[0]);
+    assert name == "TOKEN_REF", `expected TOKEN_REF, got ${name}`;
+}
+
+test "a lexer rule's bracket opens a char set, not an argument list" {
+    let mut base = new_antlr4_base();
+    with LexerAdaptor => &mut base do {
+        let tokens = antlr4::tokenize(&"INT : [0-9]+ ;");
+        for let mut i = 0; i < tokens.len(); i += 1 {
+            assert tokens.kinds[i] != TK_ARGUMENT_CONTENT, "a char set must not lex as argument content";
+        }
+    };
+    assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
+    assert base.ends == 0, "a char set is closed by the mode, not by handleEndArgument";
 }
 
 //
@@ -176,9 +266,32 @@ test "the base's argument-bracket ops run on the winning tokens" {
         assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
     };
     assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
-    // END_ARGUMENT lives in the `Argument` mode, which nothing enters: only the
-    // adaptor's own `pushMode` would, and a base has no lexer command surface
-    // yet. So the closing bracket never reaches the base — flip this to 1 when
-    // that lands.
-    assert base.ends == 0, `expected 0 handleEndArgument, got ${base.ends}`;
+    assert base.ends == 1, `expected 1 handleEndArgument, got ${base.ends}`;
+}
+
+test "the base drives the Argument mode from handleBeginArgument" {
+    let tokens = a4_tokenize(&"r[int x] : 'a' ;");
+    let mut content = 0;
+    let mut ends = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_ARGUMENT_CONTENT {
+            content += 1;
+        }
+        if tokens.kinds[i] == TK_END_ARGUMENT {
+            ends += 1;
+        }
+    }
+    assert content > 0, "the argument body must lex as ARGUMENT_CONTENT";
+    assert ends == 1, `expected 1 END_ARGUMENT, got ${ends}`;
+}
+
+test "a nested bracket retypes its closing bracket as content" {
+    let tokens = a4_tokenize(&"r[int[] a] : 'a' ;");
+    let mut ends = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_END_ARGUMENT {
+            ends += 1;
+        }
+    }
+    assert ends == 1, `expected 1 END_ARGUMENT, got ${ends}`;
 }

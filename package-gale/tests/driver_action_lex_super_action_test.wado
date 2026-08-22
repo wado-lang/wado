@@ -7,7 +7,7 @@ use sa from "./grammars/wado_lex_super_action.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/action_lex_super_action" },
     };
-use { SaBase, LexerView } from "./grammars/wado_lex_super_action.g4";
+use { SaBase, LexerView, Lexer } from "./grammars/wado_lex_super_action.g4";
 
 struct SaBaseImpl {
     on: bool,
@@ -15,12 +15,12 @@ struct SaBaseImpl {
 }
 
 impl SaBase for SaBaseImpl {
-    fn mark(&mut self, view: LexerView) {
+    fn mark(&mut self, view: LexerView, lx: &mut Lexer) {
         self.log.push(`mark@${view.pos()}`);
         resume ();
     }
 
-    fn done(&mut self, view: LexerView) {
+    fn done(&mut self, view: LexerView, lx: &mut Lexer) {
         self.log.push(`done@${view.pos()}:${view.text()}`);
         resume ();
     }

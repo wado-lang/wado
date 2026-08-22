@@ -1,0 +1,35 @@
+// A receiver runs before the arguments, so no argument may be bound ahead of
+// the condition — not even one following a place, which neither binds nor
+// moves and so cannot license what the receiver forbade.
+
+use { println, Stdout } from "core:cli";
+
+struct Adder {
+    base: i32,
+}
+
+impl Adder {
+    fn sum(&self, x: i32, y: i32) -> i32 {
+        return self.base + x + y;
+    }
+}
+
+fn recv() -> Adder with Stdout {
+    println("recv");
+    return Adder { base: 1 };
+}
+
+fn arg() -> i32 with Stdout {
+    println("arg");
+    return 2;
+}
+
+export fn run() with Stdout {
+    let plain = 3;
+    assert recv().sum(plain, arg()) == 6;
+}
+
+__DATA__
+{
+    "stdout": "recv\narg\n"
+}

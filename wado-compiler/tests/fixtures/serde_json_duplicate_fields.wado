@@ -1,8 +1,7 @@
-// Duplicate fields during JSON deserialization
-// When the same field appears twice in JSON, the last value should win
-// (consistent with JSON RFC 8259 which says names SHOULD be unique,
-// but behavior for duplicates is implementation-defined).
-use { Serialize, Deserialize } from "core:serde";
+// RFC 8259 leaves duplicate names implementation-defined. Wado rejects them: a
+// repeat is how two readers of the same bytes are made to disagree. A format
+// that wants leniency overrides `on_duplicate_key`.
+use { Serialize, Deserialize, DeserializeErrorKind } from "core:serde";
 use { from_string } from "core:json";
 
 struct Point {
@@ -12,12 +11,13 @@ struct Point {
 
 impl Deserialize for Point;
 
-test "duplicate field last value wins" {
-    let r = from_string::<Point>(`\{"x":1.0,"y":2.0,"x":99.0\}`);
-    if let Ok(p) = r {
-        assert p.x == 99.0;
-        assert p.y == 2.0;
-    } else {
-        panic("expected duplicate field to succeed with last-value-wins");
-    }
+export fn run() {
+    let dup = from_string::<Point>(`\{"x":1.0,"y":2.0,"x":99.0\}`);
+    assert dup matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+
+    let ok = from_string::<Point>(`\{"x":1.0,"y":2.0\}`);
+    assert ok matches { Ok(p) && p.x == 1.0 && p.y == 2.0 };
 }
+
+__DATA__
+{"stdout": ""}

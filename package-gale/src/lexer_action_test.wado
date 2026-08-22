@@ -265,10 +265,118 @@ options { superClass = B; language = Wado; }
 A : 'a' { this.hit() } ;
 WS : ' ' -> skip ;
 ");
-    assert src.contains("fn hit(view: LexerView);"), "an action op returns unit";
+    assert src.contains("fn hit(view: LexerView, lx: &mut Lexer);"), "an action op returns unit and reaches the lexer";
     assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with (B, stores[lx])"), "the replay carries the base effect";
-    assert src.contains("B::hit(LexerView { chars, start, pos });"), "the action op is called from the replay";
+    assert src.contains("B::hit(LexerView { chars, start, pos }, lx);"), "the action op is called from the replay";
     assert src.contains("fn try_A(chars: &List<char>, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
+}
+
+test "a superClass action op reaches the lexer mode state" {
+    // The depth is a tokenize-loop local, so it rides on the `Lexer`.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : '[' { this.hit() } ;
+WS : ' ' -> skip ;
+mode Arg;
+C : ']' ;
+");
+    assert src.contains("fn mode_depth(&self) -> i32 {"), "the base can read the mode-stack depth";
+    assert src.contains("lexer.reset_actions(mode_stack.len());"), "the depth is seeded per token";
+    assert src.contains("self.act_mode_depth += 1;"), "push_mode keeps the depth the base reads consistent";
+    assert src.contains("self.act_mode_depth -= 1;"), "pop_mode keeps the depth the base reads consistent";
+}
+
+test "a base method used as both a predicate and an action is refused" {
+    let src = &"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : { this.m() }? 'a' { this.m() } ;
+WS : ' ' -> skip ;
+";
+    // Two reports: the refused base, and the action that can no longer run.
+    assert unsupported_count(src) == 2, "a mixed-role base method must be reported";
+    let out = gen_source(src);
+    assert !out.contains("pub interface B {"), "a refused base is not wired";
+}
+
+test "an action may issue at most one mode command per token" {
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : '[' { this.hit() } ;
+WS : ' ' -> skip ;
+mode Arg;
+C : ']' ;
+");
+    assert src.contains("assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0,"), "each mode command guards against a second one";
+}
+
+test "the lexer exposes no current-mode read" {
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : '[' { this.hit() } ;
+WS : ' ' -> skip ;
+mode Arg;
+C : ']' ;
+");
+    assert !src.contains("fn mode(&self)"), "no stale current-mode read";
+    assert src.contains("fn mode_depth(&self) -> i32 {"), "the depth a base branches on stays";
+}
+
+test "the emit hook fires once per emitted token, never for a skipped one" {
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("if !is_skip"), "a skipped token never reaches the base";
+    assert src.contains(
+        "best_kind = B::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);",
+    ), "the hook takes the token span and may retype it";
+}
+
+test "a predicate-only base gets the emit hook without the channel machinery" {
+    // No action and no `-> channel` rule means no `best_channel` local.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; }
+A : { this.ok() }? 'a' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("best_channel"), "the channel machinery stays off";
+    assert src.contains(
+        "best_kind = B::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, 0);",
+    ), "the hook takes the default channel";
+}
+
+test "a base whose only override is the emit hook is still wired" {
+    // No `this.<m>()` call anywhere, so the grammar contributes zero ops.
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' ;
+WS : ' ' -> skip ;
+");
+    assert src.contains("pub interface B {"), "a hook-only base still gets an interface";
+    assert src.contains("fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {"), "the hook is declared";
+    assert src.contains("::emit(LexerView"), "the tokenize loop calls it";
+    assert src.contains("pub fn tokenize(input: &String) -> TokenStream with B"), "tokenize carries the effect";
+}
+
+test "a grammar with no base has no emit hook" {
+    let src = gen_source(&"lexer grammar L;
+options { language = Wado; }
+A : 'a' { lx.set_type(TK_B) } ;
+B : 'b' ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("::emit(LexerView"), "no base, no lifecycle call";
+}
+
+test "a modeless grammar keeps the mode-state surface off" {
+    let src = gen_source(&"lexer grammar L;
+options { superClass = B; language = Wado; }
+A : 'a' { this.hit() } ;
+WS : ' ' -> skip ;
+");
+    assert !src.contains("fn mode_depth(&self)"), "no modes, no mode-state reads";
+    assert src.contains("lexer.reset_actions();"), "a modeless reset takes no mode state";
 }
 
 test "a superClass grammar's host-code action body is reported, not emitted" {

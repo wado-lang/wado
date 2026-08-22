@@ -1,0 +1,21 @@
+//! A default expression naming an item its declaring module *imported*. A
+//! default binds names in the declaring module's scope, so this module
+//! deliberately imports neither name.
+
+use {
+    with_imported_global,
+    with_local_global,
+    with_imported_fn,
+    generic_with_imported_global,
+} from "./sub/default_arg_xmod_imported_global_mid.wado";
+
+export fn run() {
+    assert with_imported_global() == 7;
+    assert with_imported_global(1) == 1;
+    assert with_local_global() == 3;
+    assert with_imported_fn() == 11;
+    assert generic_with_imported_global::<i32>() == 7;
+}
+
+__DATA__
+{"stdout": ""}

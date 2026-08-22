@@ -1,0 +1,17 @@
+// A closure operand renders through the boxed `fn(..)` the value became, so the
+// payload behind the box has to survive DCE: the inspect scan and the canonical
+// closure registration both read it back out of a surviving wrapper.
+
+fn take(f: fn(i32) -> bool) -> bool {
+    return f(2);
+}
+
+export fn run() {
+    let pred = |x: i32| -> bool {
+        return x > 1;
+    };
+    assert take(pred);
+}
+
+__DATA__
+{"stdout": ""}

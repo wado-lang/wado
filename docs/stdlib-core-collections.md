@@ -4,8 +4,8 @@
 # core:collections
 
 Collection types: `TreeMap<K, V>` and `TreeSet<T>`, both iterating in
-insertion order. `TreeMap` has no `insert` method — write `map[key] = value`
-or build one from a `{ key: value, ... }` literal. `TreeSet` has `insert`.
+insertion order. `map[key] = value` overwrites; `try_insert` /
+`get_or_insert` insert only when the key is absent.
 
 ## Synopsis
 
@@ -48,6 +48,17 @@ Returns the number of key-value pairs in the map.
 #### `pub fn is_empty(&self) -> bool`
 
 Returns true if the map contains no elements.
+
+#### `pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value]`
+
+Inserts only if `key` is absent, and reports whether it was inserted.
+The losing insert keeps the existing value, unlike `map[key] = value`.
+
+#### `pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value]`
+
+The value already stored under `key`, or `value` inserted and returned.
+The shape of TC39's `Map.prototype.getOrInsert`; for whether it
+inserted, use `try_insert`.
 
 #### `pub fn contains_key(&self, key: K) -> bool`
 

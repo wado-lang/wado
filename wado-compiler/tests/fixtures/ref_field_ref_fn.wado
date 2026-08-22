@@ -1,0 +1,23 @@
+// A fn-typed element replaces on assign, so `&mut xs[i]` of one would borrow a
+// boxed copy. The index place is refused the same way a field place is.
+
+fn zero() -> i32 {
+    return 0
+}
+
+fn one() -> i32 {
+    return 1
+}
+
+fn swap(slot: &mut fn() -> i32) {
+    *slot = one
+}
+
+export fn run() {
+    let mut fns: List<fn() -> i32> = [zero];
+    swap(&mut fns[0]);
+    assert fns[0]() == 1;
+}
+
+__DATA__
+{"compile_error": "cannot take a mutable reference to a field or element of a replace-on-assign type"}

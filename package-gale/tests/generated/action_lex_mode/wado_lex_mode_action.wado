@@ -1074,6 +1074,7 @@ struct Lexer {
     act_push_mode: i32 = -1,
     act_pop_mode: bool = false,
     act_set_mode: i32 = -1,
+    act_mode_depth: i32 = 0,
 }
 
 impl Lexer {
@@ -1093,7 +1094,7 @@ impl Lexer {
         self.act_output.push_str(&s);
     }
 
-    fn reset_actions(&mut self) {
+    fn reset_actions(&mut self, depth: i32) {
         self.act_type = -1;
         self.act_channel = -1;
         self.act_skip = false;
@@ -1101,6 +1102,7 @@ impl Lexer {
         self.act_push_mode = -1;
         self.act_pop_mode = false;
         self.act_set_mode = -1;
+        self.act_mode_depth = depth;
     }
 
     fn set_type(&mut self, t: i32) {
@@ -1120,15 +1122,24 @@ impl Lexer {
     }
 
     fn push_mode(&mut self, m: i32) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_push_mode = m;
+        self.act_mode_depth += 1;
     }
 
     fn pop_mode(&mut self) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_pop_mode = true;
+        self.act_mode_depth -= 1;
     }
 
     fn set_mode(&mut self, m: i32) {
+        assert self.act_push_mode < 0 && !self.act_pop_mode && self.act_set_mode < 0, "a lexer action may issue at most one mode command per token";
         self.act_set_mode = m;
+    }
+
+    fn mode_depth(&self) -> i32 {
+        return self.act_mode_depth;
     }
 }
 
@@ -1262,7 +1273,7 @@ pub fn tokenize(input: &String) -> TokenStream {
             lexer.pos = start + 1;
         } else {
             if best_act >= 0 {
-                lexer.reset_actions();
+                lexer.reset_actions(mode_stack.len());
                 if best_act == 0 {
                     apply_LT_actions(&mut lexer, start, best_end);
                 } else if best_act == 1 {

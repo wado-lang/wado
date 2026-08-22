@@ -474,8 +474,13 @@ impl Monomorphizer {
                     .get(&struct_name)
                     .map(|k| (k.name.clone(), k.impl_type_args.clone()))
                     .or_else(|| {
-                        self.get_struct_info_from_type(receiver.type_id, type_table)
-                            .filter(|(_, args)| !args.is_empty())
+                        self.struct_info_for_method(
+                            receiver.type_id,
+                            type_table,
+                            &method_name,
+                            trait_name_opt.as_ref(),
+                        )
+                        .filter(|(_, args)| !args.is_empty())
                     });
                 if let Some((base_struct, impl_type_args)) = base_info {
                     // The method template is named after the receiver's fq head:
@@ -555,9 +560,15 @@ impl Monomorphizer {
         // `monomorph_info`: the args derived from the receiver (`[i32]`) are not
         // what the blanket was queued with (`[List<i32>]`), so a match here would
         // route to the inner type's impl. The blanket branch below handles it.
-        else if let Some((base_struct, impl_type_args)) =
-            self.get_struct_info_from_type(receiver.type_id, type_table)
-            && !impl_type_args.is_empty()
+        else if let Some((base_struct, impl_type_args)) = self.struct_info_for_method(
+            receiver.type_id,
+            type_table,
+            &method_name,
+            method_func
+                .method_info
+                .as_ref()
+                .and_then(|info| info.trait_name.as_ref()),
+        ) && !impl_type_args.is_empty()
             && !method_func
                 .monomorph_info
                 .as_ref()

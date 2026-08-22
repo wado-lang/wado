@@ -1,0 +1,24 @@
+// A method call's receiver is a place, so it renders without being bound: the
+// failure branch re-reads it, which copies nothing and so cannot hide the
+// call's own mutation.
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() {
+    let p = Counter { n: 7 };
+    assert p.get() == 99;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["p.get(): 7", "p: Counter"]
+}

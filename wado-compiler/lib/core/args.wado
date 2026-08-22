@@ -58,6 +58,7 @@ use {
     FieldSchema,
     DeserializeError,
     DeserializeErrorKind,
+    DuplicateKeyPolicy,
     Visitor,
 } from "core:serde";
 
@@ -464,6 +465,13 @@ impl Deserializer for ArgvDeserializer {
     type StructAccess = ArgvStructAccess;
     type VariantAccess = ArgvVariantAccess;
 
+    /// A command line is last-wins by convention, so a wrapper can append an
+    /// override. A repeatable option never reaches this — `gather_option_values`
+    /// consumes its later occurrences.
+    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+        return DuplicateKeyPolicy::PassThru;
+    }
+
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
         let tok = self.take_value()?;
         if let Ok(v) = i32::from_str_lenient(&tok) {
@@ -614,8 +622,10 @@ impl Deserializer for ArgvDeserializer {
         return Result::Ok(ArgvVariantAccess { de: self, tag });
     }
 
+    /// An argv token is always text, so a dynamic `Deserialize` gets it raw.
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
-        return Result::Err(unsupported("dynamic deserialization"));
+        let text = self.take_value()?;
+        return visitor.visit_string(text);
     }
 }
 

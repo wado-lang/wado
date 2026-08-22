@@ -158,9 +158,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$spec0" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(55)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[match_nested_patterns.wado/Color,i32]>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<[match_nested_patterns.wado/Color,i32]>") -> ref null "tuple//[match_nested_patterns.wado/Color, i32]";  // TypeId(56)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,i32]>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<[i32,i32]>") -> ref null "tuple//[i32, i32]";  // TypeId(56)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,i32]>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<[i32,i32]>") -> ref null "tuple//[i32, i32]";  // TypeId(57)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[match_nested_patterns.wado/Color,i32]>^core:prelude/traits.wado/Iterator::next$spec0" = fn(ref "core:prelude/slice.wado//SliceValueIter<[match_nested_patterns.wado/Color,i32]>") -> ref null "tuple//[match_nested_patterns.wado/Color, i32]";  // TypeId(57)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(58)
 
@@ -2275,20 +2275,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(self_9 = f.buf; self_9.repr, offset, abs_val, digit_count);
 }
 
-fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[match_nested_patterns.wado/Color,i32]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
-    let item: ref "tuple//[match_nested_patterns.wado/Color, i32]";
-    let v: ref "tuple//[match_nested_patterns.wado/Color, i32]";
-    let _av_3: i32;
-    _av_3 = self.index;
-    if _av_3 >= 3 {
-        return ref.null none;
-    }
-    v = builtin::array_get_value<ref "tuple//[match_nested_patterns.wado/Color, i32]">(self.repr, _av_3);
-    item = struct.new "tuple//[match_nested_patterns.wado/Color, i32]" { 0: v.0, 1: v.1 };
-    self.index = _av_3 + 1;
-    return item;
-}
-
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,i32]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
     let item: ref "tuple//[i32, i32]";
     let v: ref "tuple//[i32, i32]";
@@ -2299,6 +2285,20 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[i32,i32]>^co
     }
     v = builtin::array_get_value<ref "tuple//[i32, i32]">(self.repr, _av_3);
     item = struct.new "tuple//[i32, i32]" { 0: v.0, 1: v.1 };
+    self.index = _av_3 + 1;
+    return item;
+}
+
+fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[match_nested_patterns.wado/Color,i32]>^core:prelude/traits.wado/Iterator::next$spec0"(self) {
+    let item: ref "tuple//[match_nested_patterns.wado/Color, i32]";
+    let v: ref "tuple//[match_nested_patterns.wado/Color, i32]";
+    let _av_3: i32;
+    _av_3 = self.index;
+    if _av_3 >= 3 {
+        return ref.null none;
+    }
+    v = builtin::array_get_value<ref "tuple//[match_nested_patterns.wado/Color, i32]">(self.repr, _av_3);
+    item = struct.new "tuple//[match_nested_patterns.wado/Color, i32]" { 0: v.0, 1: v.1 };
     self.index = _av_3 + 1;
     return item;
 }

@@ -1,0 +1,24 @@
+// A handler holds the effect it handles, and nothing else: performing another
+// effect from inside the method still needs that effect's capability, which the
+// interface-fixed signature cannot declare.
+
+use { Random } from "wasi:random";
+use { println } from "core:cli";
+
+struct Chatty {
+}
+
+impl Random for Chatty {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+        println("leaking");
+        resume Random::get_random_bytes(max_len);
+    }
+
+    ..forward
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'println'"}

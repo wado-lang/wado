@@ -10,6 +10,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
+use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 
@@ -1119,28 +1120,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        if unary.op == UnaryOp::MutRef && matches!(&unary.expr, ast::Expr::FieldAccess(_)) {
-            let field_type = self.tysys.type_table.borrow().get(expr_type).clone();
-            let base_type = self
-                .tysys
-                .type_table
-                .borrow()
-                .get(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .get_ultimate_base_type(expr_type),
-                )
-                .clone();
-            let is_scalar_field = |ty: &ResolvedType| {
-                matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
-            };
-            if is_scalar_field(&field_type) || is_scalar_field(&base_type) {
-                let _ = self.emit(TypeError::CannotAssign {
-                    message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
-                    span: unary.span,
-                });
-            }
+        if unary.op == UnaryOp::MutRef
+            && matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
+            && self.is_replace_on_assign_place_type(expr_type)
+        {
+            let _ = self.emit(TypeError::CannotAssign {
+                message: format!("cannot take a mutable reference to {REPLACE_ON_ASSIGN_PLACE}"),
+                span: unary.span,
+            });
         }
 
         // Unary trait operators (`-x`, `~x`) dispatch through the same

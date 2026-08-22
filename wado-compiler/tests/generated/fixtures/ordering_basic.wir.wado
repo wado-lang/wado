@@ -41,13 +41,11 @@ type "functype//core:rt/cm_stream_write_drain" = fn(i32, i32, i32, i32);  // Typ
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> bool;  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -63,7 +61,6 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:ordering_basic.wado::__modules_initialized: bool = 0;
-global global:ordering_basic.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 112, 112, 108, 101), used: 5 };
 
 fn "ordering_basic.wado/run"() with Stdout {
     let handle_15: i32;
@@ -175,13 +172,11 @@ fn "ordering_basic.wado/run"() with Stdout {
     handle_132 = "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_135);
     "core:cli/write_to_stream"(tx_136, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana > apple"), used: 14 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_132);
-    if "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(global:ordering_basic.wado::__const_obj_0, global:ordering_basic.wado::__const_obj_0) {
-        rx_144 = builtin::i32_wrap_i64(local.tee packed_143("wasi/stream-new"()));
-        tx_145 = builtin::i32_wrap_i64(packed_143 >> 32_i64);
-        handle_141 = "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_144);
-        "core:cli/write_to_stream"(tx_145, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple == apple"), used: 14 }, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_141);
-    }
+    rx_144 = builtin::i32_wrap_i64(local.tee packed_143("wasi/stream-new"()));
+    tx_145 = builtin::i32_wrap_i64(packed_143 >> 32_i64);
+    handle_141 = "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(rx_144);
+    "core:cli/write_to_stream"(tx_145, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple == apple"), used: 14 }, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_141);
 }
 
 fn "ordering_basic.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -242,12 +237,12 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
     i = 0;
-    b2: block {
-        l3: loop {
-            break_if b2 i >= len;
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l3;
+            continue l2;
         };
     };
 }
@@ -271,48 +266,21 @@ fn "core:rt/cm_stream_write_drain"(handle, ptr, count, elem_size) {
     let offset: i32;
     let result: i32;
     offset = 0;
-    b4: block {
-        l5: loop {
-            break_if b4 offset >= count;
+    b3: block {
+        l4: loop {
+            break_if b3 offset >= count;
             result = "wasi/stream-write"(handle, ptr + (offset * elem_size), count - offset);
             if result == -1 {
                 result = "core:rt/cm_await_blocked"(handle);
             }
             offset = offset + (result >> 4);
-            break_if b4 select i32((result >> 4) == 0, 1, (result & 15) != 0);
-            continue l5;
+            break_if b3 select i32((result >> 4) == 0, 1, (result & 15) != 0);
+            continue l4;
         };
     };
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self, other) {
-    let len: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
-    len = self.used;
-    if len != other.used {
-        return 0;
-    }
-    return __inline_bytes_match_at_2: block -> bool {
-        haystack = self.repr;
-        needle = other.repr;
-        j = 0;
-        b8: block {
-            l9: loop {
-                break_if b8 j >= len;
-                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                    break __inline_bytes_match_at_2: 0;
-                }
-                j = j + 1;
-                continue l9;
-            };
-        };
-        break __inline_bytes_match_at_2: 1;
-    };
 }
 
 export fn "ordering_basic.wado/__cm_export__run" as "run"

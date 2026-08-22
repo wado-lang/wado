@@ -1,0 +1,47 @@
+// Self-delegation on a `#[cm]` (WASI) effect reaches the OUTER handler, as it
+// does for a user-declared interface. The method needs no `with` clause of its
+// own — its signature comes from the interface and could not carry one.
+
+use { println, Stdout } from "core:cli";
+use { Random } from "wasi:random";
+
+struct FixedRandom {
+    byte: u8,
+}
+
+impl Random for FixedRandom {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32; i += 1 {
+            out.push(self.byte);
+        }
+        resume out;
+    }
+
+    ..trap
+}
+
+struct DoublingRandom {
+}
+
+impl Random for DoublingRandom {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+        resume Random::get_random_bytes(max_len * 2);
+    }
+
+    ..forward
+}
+
+export fn run() with Stdout {
+    let inner = FixedRandom { byte: 7 };
+    with Random => &inner do {
+        let outer = DoublingRandom {};
+        with Random => &outer do {
+            let bytes = Random::get_random_bytes(3);
+            println(`${bytes.len()},${bytes[0]}`);
+        }
+    }
+}
+
+__DATA__
+{"stdout_contains": ["6,7"]}

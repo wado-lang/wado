@@ -237,6 +237,11 @@ impl Semantics {
     /// saw, powering binding synthesis, lift/lower, and WIT emission. `None`
     /// under the same conditions as [`Self::world_registry`].
     #[must_use]
+    /// Name resolution: which declaration a spelling in a module reaches.
+    pub(crate) fn resolutions(&self) -> Option<&crate::resolve::Resolutions> {
+        self.state.as_ref().map(|s| &*s.tysys.resolutions)
+    }
+
     pub fn cm_interface_registry(&self) -> Option<&CmInterfaceRegistry> {
         self.state.as_ref().map(|s| &*s.tysys.cm_interface_registry)
     }

@@ -1,0 +1,35 @@
+// A `with` clause spells its effect as this module names it; the declaration it
+// reaches is the identity, so an aliased import satisfies the operation.
+
+use { println, Stdout } from "core:cli";
+use { Random as HostRandom } from "wasi:random";
+
+struct FixedRandom {
+    byte: u8,
+}
+
+impl HostRandom for FixedRandom {
+    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32; i += 1 {
+            out.push(self.byte);
+        }
+        resume out;
+    }
+
+    ..trap
+}
+
+fn draw() -> i32 with HostRandom {
+    return HostRandom::get_random_bytes(4).len();
+}
+
+export fn run() with Stdout {
+    let fixed = FixedRandom { byte: 1 };
+    with HostRandom => &fixed do {
+        println(`${draw()}`);
+    }
+}
+
+__DATA__
+{"stdout_contains": ["4"]}

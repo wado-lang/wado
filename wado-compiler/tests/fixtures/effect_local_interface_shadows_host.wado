@@ -1,0 +1,15 @@
+// A local `interface` spelled like a host one is a different declaration, and
+// leaves the host operation's capability requirement standing.
+
+use { Random as HostRandom } from "wasi:random";
+
+interface Random {
+    fn beep();
+}
+
+export fn run() {
+    let _ = HostRandom::get_random_bytes(4).len();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Random' required by 'HostRandom::get_random_bytes'"}

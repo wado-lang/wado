@@ -14,6 +14,7 @@ mod closure_confinement;
 mod closure_frame_moves;
 mod cm_catalog;
 mod cm_donut_canary;
+mod cm_interface_export_decodes;
 mod cm_newtype_boundary;
 mod cm_provider_compose;
 mod cm_reexport_type;

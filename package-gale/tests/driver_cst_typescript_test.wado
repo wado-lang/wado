@@ -19,18 +19,27 @@ use {
     TK_Let,
     TK_Divide,
     TK_RegularExpressionLiteral,
+    TK_Identifier,
+    TK_NullLiteral,
+    TK_BooleanLiteral,
+    TK_This,
+    TK_CloseBracket,
+    TK_CloseParen,
+    TK_OctalIntegerLiteral,
+    TK_DecimalLiteral,
+    TK_HexIntegerLiteral,
+    TK_StringLiteral,
+    TK_PlusPlus,
+    TK_MinusMinus,
 } from "./grammars/TypeScriptLexer.g4";
-use { TypeScriptLexerBase, LexerView } from "./grammars/TypeScriptLexer.g4";
+use { TypeScriptLexerBase, LexerView, Lexer } from "./grammars/TypeScriptLexer.g4";
 
 // A hand-written TypeScriptLexerBase port, installed around every recognizer
-// call: the action ops carry the brace / template state the predicate ops read.
+// call: the action ops carry the brace / template state the predicate ops read,
+// and the `emit` hook carries the last default-channel token.
 //
-// Two upstream behaviours need recognizer state a base cannot reach yet (see
-// TODO.md, Stage C). `IsRegexPossible` is written against the last emitted
-// token, which needs the `nextToken` hook; this port decides on the character
-// before the candidate, which agrees wherever the preceding token ends in an
-// identifier char, `)`, `]` or `}`. `IsStrictMode` sees only the `'use strict'`
-// literal the lexer passes, not the parser's notion of scope.
+// `IsStrictMode` still sees only the `'use strict'` literal the lexer passes,
+// not the parser's notion of scope (see TODO.md, Stage C).
 struct TsBase {
     // One entry per `${` interpolation still open: how many plain `{` are open
     // inside it. A `}` ends the interpolation only at count 0.
@@ -39,16 +48,27 @@ struct TsBase {
     // backtick drops what its interpolations left behind.
     template_marks: List<i32>,
     strict: bool,
+    /// `-1` before the first token. Upstream tracks this by overriding
+    /// `nextToken`.
+    last_token: i32 = -1,
+}
+
+/// Whether a token ends an operand, so a following `/` is a division rather
+/// than the start of a regular expression.
+fn ends_operand(kind: i32) -> bool {
+    return kind matches { TK_Identifier | TK_NullLiteral | TK_BooleanLiteral | TK_This | TK_CloseBracket | TK_CloseParen | TK_OctalIntegerLiteral | TK_DecimalLiteral | TK_HexIntegerLiteral | TK_StringLiteral | TK_PlusPlus | TK_MinusMinus };
 }
 
 impl TypeScriptLexerBase for TsBase {
-    fn is_regex_possible(&self, view: LexerView) -> bool {
-        let mut i = view.start() - 1;
-        while i >= 0 && is_space(view.char_at(i)) {
-            i -= 1;
+    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
+        if channel == 0 {
+            self.last_token = ty;
         }
-        let c = view.char_at(i);
-        resume !ends_operand(c);
+        resume ty;
+    }
+
+    fn is_regex_possible(&self, view: LexerView) -> bool {
+        resume !ends_operand(self.last_token);
     }
 
     fn is_in_template_string(&self, view: LexerView) -> bool {
@@ -62,7 +82,7 @@ impl TypeScriptLexerBase for TsBase {
         resume self.strict;
     }
 
-    fn process_open_brace(&mut self, view: LexerView) {
+    fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
         let n = self.interp_braces.len();
         if n > 0 {
             self.interp_braces[n - 1] += 1;
@@ -70,7 +90,7 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn process_close_brace(&mut self, view: LexerView) {
+    fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
         let n = self.interp_braces.len();
         if n > 0 && self.interp_braces[n - 1] > 0 {
             self.interp_braces[n - 1] -= 1;
@@ -78,7 +98,7 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn process_string_literal(&mut self, view: LexerView) {
+    fn process_string_literal(&mut self, view: LexerView, lx: &mut Lexer) {
         let text = view.text();
         if text == "'use strict'" || text == "\"use strict\"" {
             self.strict = true;
@@ -86,35 +106,22 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn increase_template_depth(&mut self, view: LexerView) {
+    fn increase_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
         self.template_marks.push(self.interp_braces.len());
         resume ();
     }
 
-    fn decrease_template_depth(&mut self, view: LexerView) {
+    fn decrease_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
         if let Some(mark) = self.template_marks.pop() {
             self.interp_braces.truncate(mark);
         }
         resume ();
     }
 
-    fn start_template_string(&mut self, view: LexerView) {
+    fn start_template_string(&mut self, view: LexerView, lx: &mut Lexer) {
         self.interp_braces.push(0);
         resume ();
     }
-}
-
-fn is_space(c: i32) -> bool {
-    return c == ' ' as i32 || c == '\t' as i32 || c == '\r' as i32 || c == '\n' as i32;
-}
-
-/// Whether `c` ends an operand, so a following `/` is a division rather than
-/// the start of a regular expression.
-fn ends_operand(c: i32) -> bool {
-    if c >= 'a' as i32 && c <= 'z' as i32 || c >= 'A' as i32 && c <= 'Z' as i32 || c >= '0' as i32 && c <= '9' as i32 {
-        return true;
-    }
-    return c == '_' as i32 || c == '$' as i32 || c == ')' as i32 || c == ']' as i32 || c == '}' as i32;
 }
 
 fn new_ts_base() -> TsBase {
@@ -505,6 +512,34 @@ test "regex vs division: a slash after an operator starts a regex" {
         }
     }
     assert regexes == 1, `expected 1 RegularExpressionLiteral, got ${regexes}`;
+}
+
+test "regex vs division: a slash after a keyword starts a regex" {
+    // `return` ends in an identifier character but is not an operand, so
+    // reading the last token is what separates this from `a / b`.
+    let tokens = ts_tokenize(&"return /ab+/;");
+    let mut regexes = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_Divide, "a regex was tokenized as a division";
+        if tokens.kinds[i] == TK_RegularExpressionLiteral {
+            regexes += 1;
+        }
+    }
+    assert regexes == 1, `expected 1 RegularExpressionLiteral, got ${regexes}`;
+}
+
+test "regex vs division: a comment between the operand and the slash is skipped" {
+    // The hook records only default-channel tokens, so the comment does not
+    // become the "last token" and `/ c` stays a division.
+    let tokens = ts_tokenize(&"a /* note */ / c");
+    let mut divides = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_RegularExpressionLiteral, "a division was tokenized as a regex";
+        if tokens.kinds[i] == TK_Divide {
+            divides += 1;
+        }
+    }
+    assert divides == 1, `expected 1 Divide token, got ${divides}`;
 }
 
 test "template interpolation: the base tracks which brace closes the hole" {

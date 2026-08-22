@@ -1104,6 +1104,12 @@ pub global TK_ERROR: i32 = 4;
 
 pub interface SlBase {
     fn enabled(view: LexerView) -> bool;
+    /// Called with the span, type and channel of each token the lexer
+    /// commits — not a skipped or `more`d match, and not the EOF
+    /// sentinel. Returns the type to emit.
+    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
+        return ty;
+    }
 }
 
 struct Lexer {
@@ -1214,6 +1220,9 @@ pub fn tokenize(input: &String) -> TokenStream with SlBase {
         } else {
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
+            if !is_skip {
+                best_kind = SlBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, 0);
+            }
             if is_skip {
                 ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else {

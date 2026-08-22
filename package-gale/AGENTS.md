@@ -38,6 +38,8 @@ ANTLR4 is BSD-3; copying or paraphrasing its implementation risks making Gale a 
 - OK to read: `.g4` files anywhere under `vendor/antlr4/`; `runtime-testsuite/**/*.txt` descriptors; `vendor/antlr4/doc/*.md` (spec-like prose — the canonical `.g4` semantics reference; a curated index is in `antlr4-compatibility.md`).
 - OK to run: the published `antlr-4.13.2-complete.jar` as a black-box oracle (clean-room measurement).
 
+The first rule is enforced: `permissions.deny` covers the Read tool, `.claude/hooks/antlr4-license-guard.sh` covers Bash.
+
 ## Standing codegen rules
 
 - No backtracking on the accept path — parser or lexer. Disambiguate with static k-token lookahead; a decision static prediction cannot resolve in depth 5 routes to the runtime ATN simulator, never a try-fail-retry loop. The one exception decides nothing: the repeat-exit probe re-parses a failed element under `speculating` to record where the error is, and rolls back all but the message. Mechanics, soundness invariants, and ATN escalation: [`antlr4-compatibility.md`](./antlr4-compatibility.md) (Prediction & codegen design).

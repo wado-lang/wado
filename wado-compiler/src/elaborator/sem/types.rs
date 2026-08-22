@@ -708,6 +708,10 @@ pub(crate) struct AssertSlot {
     /// A binding the failure branch can re-read, so the slot needs none of its
     /// own — straight-line code makes the read exact.
     pub(crate) is_place: bool,
+    /// Bound ahead of the condition rather than where the operand sits — sound
+    /// only while all that precedes it is bound too. Its scope then covers the
+    /// failure branch as well.
+    pub(crate) hoisted: bool,
 }
 
 /// Power-assert capture map recorded by

@@ -11,8 +11,8 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 ## Order of attack
 
 1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. Empty right now.
-2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-07-30 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
-3. **Stage C**, starting with the lexer command surface for a superClass base op: the largest block, and the gate for drop-in ANTLR4 replacement.
+2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-08-21 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
+3. **Stage C**, starting with the parser side of superClass: the largest block, and the gate for drop-in ANTLR4 replacement.
 4. Everything else, in whatever order a live case surfaces it.
 
 The two LL-prediction gaps are deliberately parked, not queued — see below.
@@ -44,10 +44,9 @@ Gale still silently discards action / predicate contents on the **parser** side 
 
 Both call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass mechanism, not just action translation.
 
-- **The SuperClass effect interface.** Landed for lexer bases, predicate and action ops alike, including `language = Java`: `RustLexer`, `TypeScriptLexer` and `ANTLRv4Lexer` all tokenize through a hand-written `impl` (the ports live in their driver tests). An action op runs from the winner replay, so it never fires for a losing candidate, and a grammar whose action language Gale does not translate runs an action body only when it is nothing but base calls (`{this.m();}` — every real-world case); anything else is reported. See `action.md` ("SuperClass — an effect interface"). What is left before the two grammars behave as ANTLR4 does:
-  - **The lexer command surface for a base op.** An operation receives a read-only `LexerView`, so a base cannot `setType` / `skip` / `more` / push or pop a mode. ANTLRv4's `LexerAdaptor` drives the whole `Argument` mode from `handleBeginArgument`, so its `[ ... ]` bodies stay DEFAULT-mode tokens and `END_ARGUMENT` never fires (pinned in `driver_cst_antlr4_test`).
-  - **Lifecycle hooks** (`nextToken` / `emit`) for the last-token and current-rule state a base branches on — TypeScript's `IsRegexPossible`, ANTLRv4's rule-type tracking. Both ports approximate it from the match window instead.
-  - **The parser side**: parser-rule superClass predicates like `{this.NextGT()}?` are still discarded.
+The lexer half of that mechanism is in place — `action.md` ("SuperClass — an effect interface") is its design. What is left:
+
+- **The parser side**: parser-rule superClass predicates like `{this.NextGT()}?` are still discarded.
 
 Then the paths that still warn — each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong:
 
@@ -60,6 +59,7 @@ Then the surface gaps:
 - `@lexer::members` for a `language = Java` grammar. A Java member method takes `&mut self`, but a lexer predicate runs inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through a losing candidate. Java lexer bodies therefore see no members, and a reference is reported. Wiring them needs a split between members a predicate may read and members only an action may touch.
 - The recognizer accessors ANTLR exposes to an action that Gale does not model: `getExpectedTokens()` and `getVocabulary()` (live case: the `ParserErrors/LL1ErrorInfo` descriptor, one of the `[stage_c_todo]` entries, prints the expected set), and `PredictionMode` / `dumpDFA`, which describe ANTLR's simulator rather than the grammar — decide whether those two are ever in scope.
 - Two same-named rule labels bound to _different_ rules in different alternatives (`x=a | x=b`). Per-alternative resolution disambiguates token-vs-rule, which is all the binding records, so a `.field` read still resolves against the first-declared rule's value channel. `$<label>.text` is unaffected — it reads the call's own span.
+- `char::is_uppercase` in the Wado prelude — Unicode-wide, as `is_whitespace` already is. ANTLR retypes a grammar's rule name by `Character.isUpperCase`, and `NameStartChar` admits `\u00C0` upwards, so an ANTLRv4 base can only answer for ASCII names until this lands.
 - The ATN-class lexer path.
 - java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it — lowest priority here. A proper fix threads Java's promotion rules through the translator.
 
@@ -71,14 +71,14 @@ And the corpus side, which is extractor work rather than codegen work (see "Desc
 
 The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized.
 
-`[stage_b_oracle_skip]` has been re-triaged (2026-07-30) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
+`[stage_b_oracle_skip]` has been re-triaged (2026-08-21) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
 
 Stage B′ is the **fallback** for descriptors Stage B cannot compare, not a parallel pin: the oracle manifest is written only on the paths where the descriptor's own `[output]` is not a tree Stage B can use. So a category having no `stage_b_oracle/` directory is not by itself a gap — it can equally mean every comparable descriptor is already covered by Stage B directly. Read coverage per descriptor, not per directory.
 
 Remaining:
 
 - **Pin the `superClass` lexers as their own Stage B′ key.** `antlr4-oracle.sh --super` now answers for `RustLexer` against the same base class `driver_cst_rust_test` models, so its token stream can be oracle-pinned the way `sqlite` and `json` pin trees. `regen-oracle.sh` pins `to_string_tree()` output only, so a token-stream key is new plumbing rather than config.
-- **`TypeScriptLexer` and `ANTLRv4Lexer` have no oracle at all** until each has a base class on both sides. The Wado `impl` now exists for both (in their driver tests); the `tests/grammars/java/` twin does not, and neither port is faithful — each is missing what the Stage C bullets above withhold, so pinning one would pin that gap. `--probe-super` does not substitute; until then those grammars are pinned only by parse-success.
+- **`TypeScriptLexer` and `ANTLRv4Lexer` have no oracle at all** until each has a base class on both sides. The Wado `impl` exists for both (in their driver tests), but the `tests/grammars/java/` twin does not, and each port still has one gap a pin would fix in place: ANTLR4's retypes a rule name by `is_ascii_uppercase` where upstream asks `Character.isUpperCase` (marked `#[TODO]` in its driver test), and TypeScript's approximates `IsStrictMode`, which has no lexer-visible answer. `--probe-super` does not substitute; until then those grammars are pinned only by parse-success.
 - **The `[skip]` bucket is down to three, each held by a directive that changes what the parser produces**: `ParseTrees/AltNum` (`contextSuperClass` + `<TreeNodeWithAltNumField>` render alt numbers into node names), `ParserExec/ParserProperty` (`<ParserPropertyMember()>` declares the member a semantic predicate calls), `LexerExec/PositionAdjustingLexer` (`<PositionAdjustingLexer()>` overrides `nextToken()`). Expanding any of them away would leave a test that no longer tests what the descriptor is for, so each needs the host-side construct genuinely modelled — or the judgement that it is target-language-specific and stays skipped.
 - **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does — it lost a real divergence that way (a token whose own text ends in a space). Stage B is exposed to the same class of masking; no committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live.
 

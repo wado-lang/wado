@@ -16,6 +16,8 @@ use {
     DeserializeError,
     DeserializeErrorKind,
     apply_case,
+    DuplicateKeyPolicy,
+    report_duplicate_key,
 } from "core:serde";
 
 struct MockWriter {
@@ -381,4 +383,20 @@ test "apply_case heck-parity edge corpus" {
     assert apply_case(CaseStyle::Snake, "ID") == "id";
     assert apply_case(CaseStyle::Pascal, "ID") == "Id";
     assert apply_case(CaseStyle::Camel, "userID") == "userId";
+}
+
+test "report_duplicate_key rejects under Error" {
+    let r = report_duplicate_key(DuplicateKeyPolicy::Error, &"role");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
+    if let Err(e) = r {
+        assert e.message == "duplicate field: role";
+    }
+}
+
+test "report_duplicate_key continues under Warn" {
+    assert report_duplicate_key(DuplicateKeyPolicy::Warn, &"role") matches { Ok };
+}
+
+test "report_duplicate_key continues under PassThru" {
+    assert report_duplicate_key(DuplicateKeyPolicy::PassThru, &"role") matches { Ok };
 }

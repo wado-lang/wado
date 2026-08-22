@@ -1947,6 +1947,45 @@ impl Inspect for () {
     }
 }
 
+/// Debug representation for the raw 128-bit SIMD register: 32 hex digits,
+/// most-significant lane first. The lane-typed aliases are all the same `v128`,
+/// so no canonical lane interpretation exists to print.
+impl Inspect for v128 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f.write_str(&"v128(0x");
+        for let mut i = 0; i < 16; i += 1 {
+            // A lane index is an immediate operand, so the sixteen are spelled
+            // out rather than computed.
+            let byte = match i {
+                0 => builtin::i8x16_extract_lane_u(0, *self),
+                1 => builtin::i8x16_extract_lane_u(1, *self),
+                2 => builtin::i8x16_extract_lane_u(2, *self),
+                3 => builtin::i8x16_extract_lane_u(3, *self),
+                4 => builtin::i8x16_extract_lane_u(4, *self),
+                5 => builtin::i8x16_extract_lane_u(5, *self),
+                6 => builtin::i8x16_extract_lane_u(6, *self),
+                7 => builtin::i8x16_extract_lane_u(7, *self),
+                8 => builtin::i8x16_extract_lane_u(8, *self),
+                9 => builtin::i8x16_extract_lane_u(9, *self),
+                10 => builtin::i8x16_extract_lane_u(10, *self),
+                11 => builtin::i8x16_extract_lane_u(11, *self),
+                12 => builtin::i8x16_extract_lane_u(12, *self),
+                13 => builtin::i8x16_extract_lane_u(13, *self),
+                14 => builtin::i8x16_extract_lane_u(14, *self),
+                _ => builtin::i8x16_extract_lane_u(15, *self),
+            } as u8;
+            f.write_str(&`${byte:02x}`);
+        }
+        f.write_char(')');
+    }
+}
+
+impl InspectAlt for v128 {
+    pub fn inspect_alt(&self, f: &mut Formatter) {
+        self.inspect(f);
+    }
+}
+
 impl Inspect for bool {
     pub fn inspect(&self, f: &mut Formatter) {
         self.fmt_into(f);

@@ -1106,12 +1106,18 @@ pub global TK_EOF: i32 = 5;
 pub global TK_ERROR: i32 = 6;
 
 pub interface JsBase {
-    fn process_open(view: LexerView);
-    fn process_close(view: LexerView);
+    fn process_open(view: LexerView, lx: &mut Lexer);
+    fn process_close(view: LexerView, lx: &mut Lexer);
     fn names_enabled(view: LexerView) -> bool;
+    /// Called with the span, type and channel of each token the lexer
+    /// commits — not a skipped or `more`d match, and not the EOF
+    /// sentinel. Returns the type to emit.
+    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {
+        return ty;
+    }
 }
 
-struct Lexer {
+pub struct Lexer {
     chars: List<char>,
     pos: i32,
     act_output: String = "",
@@ -1134,7 +1140,7 @@ impl Lexer {
         return LexerSlice::new(&self.chars, start, end);
     }
 
-    fn emit(&mut self, s: String) {
+    pub fn emit(&mut self, s: String) {
         self.act_output.push_str(&s);
     }
 
@@ -1145,19 +1151,19 @@ impl Lexer {
         self.act_more = false;
     }
 
-    fn set_type(&mut self, t: i32) {
+    pub fn set_type(&mut self, t: i32) {
         self.act_type = t;
     }
 
-    fn set_channel(&mut self, c: i32) {
+    pub fn set_channel(&mut self, c: i32) {
         self.act_channel = c;
     }
 
-    fn skip(&mut self) {
+    pub fn skip(&mut self) {
         self.act_skip = true;
     }
 
-    fn more(&mut self) {
+    pub fn more(&mut self) {
         self.act_more = true;
     }
 }
@@ -1167,7 +1173,7 @@ fn apply_OPEN_actions(lx: &mut Lexer, start: i32, end: i32) with (JsBase, stores
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '{' { return; }
     pos += 1;
-    JsBase::process_open(LexerView { chars, start, pos });
+    JsBase::process_open(LexerView { chars, start, pos }, lx);
 }
 
 fn apply_CLOSE_actions(lx: &mut Lexer, start: i32, end: i32) with (JsBase, stores[lx]) {
@@ -1175,7 +1181,7 @@ fn apply_CLOSE_actions(lx: &mut Lexer, start: i32, end: i32) with (JsBase, store
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '}' { return; }
     pos += 1;
-    JsBase::process_close(LexerView { chars, start, pos });
+    JsBase::process_close(LexerView { chars, start, pos }, lx);
 }
 
 fn try_OPEN(chars: &List<char>, start: i32) -> i32 {
@@ -1304,6 +1310,9 @@ pub fn tokenize(input: &String) -> TokenStream with JsBase {
             }
             let tok_start = if more_start >= 0 { more_start } else { start };
             let is_skip = best_kind matches { TK_WS } || best_act_skip;
+            if !is_skip && !best_more {
+                best_kind = JsBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
+            }
             if best_more {
                 if more_start < 0 { more_start = start; }
             } else if is_skip {

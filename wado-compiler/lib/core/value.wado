@@ -29,6 +29,8 @@ use {
     SerializeErrorKind,
     DeserializeError,
     Visitor,
+    DuplicateKeyPolicy,
+    report_duplicate_key,
 } from "core:serde";
 
 use { TreeMap } from "core:collections";
@@ -156,6 +158,8 @@ impl Serialize for Value {
 }
 
 struct ValueVisitor {
+    /// `visit_map` is handed the map access, never the deserializer.
+    on_duplicate: DuplicateKeyPolicy,
 }
 
 impl Visitor for ValueVisitor {
@@ -218,7 +222,11 @@ impl Visitor for ValueVisitor {
         loop {
             match map.next_key_string()? {
                 Some(key) => {
-                    obj[key] = map.next_value::<Value>()?;
+                    let val = map.next_value::<Value>()?;
+                    if !obj.try_insert(key, val) {
+                        report_duplicate_key(self.on_duplicate, &key)?;
+                        obj[key] = val;
+                    }
                 },
                 None => {
                     map.end()?;
@@ -341,7 +349,7 @@ impl InspectAlt for Value {
 
 impl Deserialize for Value {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Value, DeserializeError> {
-        let mut visitor = ValueVisitor {};
+        let mut visitor = ValueVisitor { on_duplicate: d.on_duplicate_key() };
         return d.deserialize_any::<ValueVisitor>(&mut visitor);
     }
 }

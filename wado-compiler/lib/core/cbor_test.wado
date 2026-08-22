@@ -3,7 +3,7 @@
 //! value and its canonical diagnostic/hex form from that table.
 
 use { to_bytes, to_bytes_canonical, from_bytes } from "core:cbor";
-use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
+use { Serialize, Deserialize, DeserializeError, DeserializeErrorKind, DEFAULT_MAX_DEPTH } from "core:serde";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
 
@@ -52,6 +52,13 @@ fn decodes_err<T: Deserialize>(b: ByteList) -> bool {
     return match from_bytes::<T, ByteList>(b) {
         Ok(_) => false,
         Err(_) => true,
+    };
+}
+
+fn decode_err_kind<T: Deserialize>(b: ByteList) -> Option<DeserializeErrorKind> {
+    return match from_bytes::<T, ByteList>(b) {
+        Ok(_) => Option::None,
+        Err(e) => Option::Some(e.kind),
     };
 }
 
@@ -696,12 +703,12 @@ variant Nest {
 }
 impl Deserialize for Nest;
 
-test "reject: deeply nested recursive variant exceeds the depth bound" {
-    // Each level is map(1) {"More": <inner>}; payload-carrying variants nest
-    // through begin_variant, so they must be depth-bounded like arrays/maps.
+/// `levels` nestings of `More`, innermost `Stop`. Each level is
+/// map(1) {"More": <inner>} — six bytes, so a nesting bomb is compact.
+fn nested_more(levels: i32) -> ByteList {
     let mut bytes: ByteList = [];
     let mut i = 0;
-    while i < 400 {
+    while i < levels {
         // a1 64 4d6f7265 = map(1), text(4) "More"
         bytes.push(0xa1);
         bytes.push(0x64);
@@ -717,5 +724,20 @@ test "reject: deeply nested recursive variant exceeds the depth bound" {
     bytes.push(0x74);
     bytes.push(0x6f);
     bytes.push(0x70);
-    assert decodes_err::<Nest>(bytes);
+    return bytes;
+}
+
+test "reject: deeply nested recursive variant exceeds the depth bound" {
+    // A depth bound is a resource limit: these bytes are well-formed CBOR.
+    assert decode_err_kind::<Nest>(nested_more(400)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+}
+
+test "nesting within the depth bound decodes" {
+    assert from_bytes::<Nest, ByteList>(nested_more(DEFAULT_MAX_DEPTH - 1)) matches { Ok(_) };
+}
+
+test "max_depth is caller-tunable" {
+    let deep = nested_more(150);
+    assert from_bytes::<Nest, ByteList>(deep, true, 200) matches { Ok(_) };
+    assert from_bytes::<Nest, ByteList>(deep) matches { Err(_) };
 }
