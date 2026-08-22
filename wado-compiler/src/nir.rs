@@ -95,7 +95,8 @@ impl FunctionRef {
             .as_deref()
         {
             Some(
-                "builtin::array_get_value" | "builtin::array_get_value_u8"
+                "builtin::array_get_value"
+                | "builtin::array_get_value_u8"
                 | "builtin::array_get_ref",
             ) => Some(ArrayElementAccess::Read),
             Some("builtin::array_get_ref_mut") => Some(ArrayElementAccess::Write),
