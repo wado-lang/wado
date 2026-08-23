@@ -2107,12 +2107,10 @@ fn rewrite_call_sites(
     }
 }
 
-/// Retype every reachable call to a rewritten callee. The node's own `type_id`
-/// is what downstream passes and `wir_build` read; leaving the variant there
-/// would make a tuple-returning call claim to produce a boxed variant. Reports
-/// `changed` only when a type actually moved, and only over the nodes that run
-/// — retyping one an earlier rewrite orphaned re-dirties the caller for a node
-/// no consumer reads.
+/// Retype every reachable call to a rewritten callee: the node's own `type_id` is
+/// what downstream passes and `wir_build` read, and a variant left there makes a
+/// tuple-returning call claim to produce a boxed one. Reports `changed` only when
+/// a type moved on a node that runs.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
     let mut changed = false;
     for e in crate::nir_visitor::reachable_exprs(body) {
