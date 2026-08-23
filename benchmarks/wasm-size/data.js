@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787484707426,
+  "lastUpdate": 1787488397451,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50481,6 +50481,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4895f563777dd81f702e433a5b39f3873f9e3e65"
         },
         "date": 1787484707147,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "effa03c1de27a2e9eaa37d6740756eadfcad1b51",
+          "message": "Merge pull request #1886 from wado-lang/gale-parser-superclass\n\nfeat(gale): wire the parser side of superClass",
+          "timestamp": "2026-08-23T21:19:59+09:00",
+          "tree_id": "a2318a96d7081a6c70d8c5c9a36a21fcf01c74ea",
+          "url": "https://github.com/wado-lang/wado/commit/effa03c1de27a2e9eaa37d6740756eadfcad1b51"
+        },
+        "date": 1787488397156,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
