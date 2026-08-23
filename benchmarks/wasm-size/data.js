@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787470171187,
+  "lastUpdate": 1787471497604,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50349,6 +50349,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3bf0fa847055c94f9adac9d1219f457b26316ef2"
         },
         "date": 1787470170547,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7935de32cc3d55de96c706a7d7861b0d4a6f0bb8",
+          "message": "Merge pull request #1880 from wado-lang/claude/ice-duplicate-eq-monomorphization-xdefub\n\nfix(compiler): compile a bundled stdlib module as its own entry point",
+          "timestamp": "2026-08-23T16:21:57+09:00",
+          "tree_id": "276f41639d07c31ae7e288e4bc353880d051b9fe",
+          "url": "https://github.com/wado-lang/wado/commit/7935de32cc3d55de96c706a7d7861b0d4a6f0bb8"
+        },
+        "date": 1787471496903,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
