@@ -515,8 +515,8 @@ async fn render_phases(
     let dependencies = crate::data_section::extract_dependencies_from_data_section(source);
 
     if needs_dump {
-        let host =
-            FilesystemCompilerHost::silent(base_path.clone()).with_dependencies(dependencies.clone());
+        let host = FilesystemCompilerHost::silent(base_path.clone())
+            .with_dependencies(dependencies.clone());
         let dumped = wado_compiler::dump_with_host_and_world(
             source,
             &host,
