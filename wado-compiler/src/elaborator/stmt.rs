@@ -1602,7 +1602,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             super::expr::MemberOwner::Written(variant_qualifier.as_ref()),
                             variant_name,
                             super::types::ImplMemberKind::AssociatedConstant,
-                            None,
+                            *name_id,
                             *span,
                         );
                         // Resolve the const body for its facts. An associated
