@@ -53,7 +53,7 @@ Backing is **always declared explicitly** on the resource, and **structurally ve
 
 Concretely:
 
-- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-ref"` or `"i32"`. The CM-layer naming is used; the backing has no user-facing Wado type name. **Not yet mandatory**: requiring it means migrating every stdlib resource, which no consumer needs — omitting it reads as `i32`, and only `extends` demands the declaration.
+- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-ref"` or `"i32"`. `extern-ref` is rejected outside `web:*` while its lowering is unbuilt: on a resource the compiler does lower, the backing turns off the drop and the move check while the own-handle surface stays, leaking a handle and admitting a double use. The CM-layer naming is used; the backing has no user-facing Wado type name. **Not yet mandatory**: requiring it means migrating every stdlib resource, which no consumer needs — omitting it reads as `i32`, and only `extends` demands the declaration.
   ```wado
   #[cm("web:dom/element", type = "extern-ref")]
   pub resource Element { ... }
