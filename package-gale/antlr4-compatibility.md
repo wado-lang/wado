@@ -611,6 +611,16 @@ relevant sites.
     Keep it separate from `enclosing_at_tail`, which the FOLLOW gate uses and
     which asks a weaker question — conflating the two is what put the probe
     there. Fixture `tests/grammars/lr_atom_probe.g4`.
+11. An LR overlap group's second-token sub-dispatch measures the element that
+    carries the shared token, not the one after it — reading the next element
+    is right only when the carrier matches exactly one token. Rust's
+    `expression (shl | shr) expression` puts a two-token rule in the group
+    (`shr : GT GT`), and answering with the operand's FIRST made every `a > b`
+    take the shift alternative, whose scan then failed and broke the loop: no
+    Rust `<` / `>` comparison parsed at all. A nullable carrier is the same —
+    `('>' '>')?` is measurable from what follows only when one token wide. A
+    shape no K-prefix walk measures falls back to the candidate's own suffix
+    scan. Fixtures `lr_overlap_{multi_token,opaque_op,nullable_carrier}.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

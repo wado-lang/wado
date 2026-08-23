@@ -1,0 +1,26 @@
+//! An overlapping LR suffix whose shared first token sits inside a multi-token
+//! optional, so offset 1 is the optional's own second token.
+
+use nc from "./grammars/lr_overlap_nullable_carrier.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_overlap_nullable" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = nc::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = nc::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "lr-overlap-nullable: the optional is taken" {
+    assert_tree(&"1 >>= 2", &"(e (e 1) > > = (e 2))");
+}
+
+test "lr-overlap-nullable: a bare > is a comparison" {
+    assert_tree(&"1 > 2", &"(e (e 1) (cmp >) (e 2))");
+}
+
+test "lr-overlap-nullable: the optional is skipped" {
+    assert_tree(&"1 = 2", &"(e (e 1) = (e 2))");
+}

@@ -1269,7 +1269,7 @@ pub fn resolve_import_with_invocations(
 ) -> ModuleSource {
     if !invocations.is_empty() {
         let decl_file = match from_module {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path } => path.as_str(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
             ModuleSource::EntryPoint { filename } => filename.as_str(),
             ModuleSource::Redirected { uri } => uri.as_str(),
             _ => "",
@@ -1298,13 +1298,13 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
-    // Relative import from within a dependency module stays inside that
-    // dependency package (resolved against the importing dependency file).
-    if let ModuleSource::Dependency { path } = from_module
+    // A relative import inherits the importer's package root.
+    if let ModuleSource::Dependency { pkg, path } = from_module
         && (import_source.starts_with("./") || import_source.starts_with("../"))
     {
         let resolved = resolve_module_path(path, import_source);
-        return interner.dependency(&resolved);
+        let pkg = pkg.to_string();
+        return interner.dependency_module(&pkg, &resolved);
     }
 
     // Dependency name (`use { … } from "router"` / `from "ns:pkg"`): resolve

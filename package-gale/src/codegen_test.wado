@@ -929,11 +929,13 @@ test "metadata comment lists grammar-level options" {
         named_actions: [],
         pending_refs: [],
         source_files: [],
+        parser_superclass: "BaseParser",
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
     assert str_contains(&output, &"//   option language = Python");
-    assert str_contains(&output, &"//   option superClass = my.pkg.BaseParser");
+    assert str_contains(&output, &"//   option superClass = BaseParser (parser)");
+    assert !str_contains(&output, &"//   option superClass = my.pkg.BaseParser");
     assert str_contains(&output, &"//   option tokenVocab = TestLexer");
     assert str_contains(&output, &"//   option caseInsensitive = true");
 }

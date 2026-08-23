@@ -11,7 +11,7 @@ use { List } from "core:prelude/list.wado";
 
 /// Result of a comparison between two values.
 #[compiler_item("ordering")]
-internal enum Ordering {
+pub enum Ordering {
     /// The first value is less than the second.
     #[compiler_item("ordering_less")]
     Less,
@@ -26,7 +26,7 @@ internal enum Ordering {
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 #[compiler_item("eq")]
-internal trait Eq {
+pub trait Eq {
     /// Returns true if self equals other.
     fn eq(&self, other: &Self) -> bool;
 }
@@ -46,7 +46,7 @@ impl<T> Eq for &mut T {
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 #[compiler_item("ord")]
-internal trait Ord: Eq {
+pub trait Ord: Eq {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -578,7 +578,7 @@ internal trait RefMut {
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
 #[compiler_item("index_ref")]
-internal trait IndexRef<IndexType> {
+pub trait IndexRef<IndexType> {
     type Output: Ref;
 
     /// Returns a reference to the element at the given index.
@@ -589,7 +589,7 @@ internal trait IndexRef<IndexType> {
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
 #[compiler_item("index_ref_mut")]
-internal trait IndexRefMut<IndexType> {
+pub trait IndexRefMut<IndexType> {
     type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
@@ -600,7 +600,7 @@ internal trait IndexRefMut<IndexType> {
 /// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
 #[compiler_item("index_assign")]
-internal trait IndexAssign<IndexType> {
+pub trait IndexAssign<IndexType> {
     type Output;
 
     /// Assigns a value to the element at the given index.
@@ -611,7 +611,7 @@ internal trait IndexAssign<IndexType> {
 /// The value-semantics counterpart to `IndexRef` for elements that cannot be
 /// aliased by reference (scalars, resources).
 #[compiler_item("index_value")]
-internal trait IndexValue<IndexType> {
+pub trait IndexValue<IndexType> {
     type Output;
 
     /// Returns a copy of the element at the given index.
@@ -621,7 +621,7 @@ internal trait IndexValue<IndexType> {
 /// Trait for the `+` operator.
 /// Types implementing this trait can use the `+` operator for addition.
 #[compiler_item("add")]
-internal trait Add<Rhs = Self> {
+pub trait Add<Rhs = Self> {
     type Output;
 
     /// Adds two values and returns the result.
@@ -631,7 +631,7 @@ internal trait Add<Rhs = Self> {
 /// Trait for the `-` operator (binary subtraction).
 /// Types implementing this trait can use the `-` operator for subtraction.
 #[compiler_item("sub")]
-internal trait Sub<Rhs = Self> {
+pub trait Sub<Rhs = Self> {
     type Output;
 
     /// Subtracts rhs from self and returns the result.
@@ -641,7 +641,7 @@ internal trait Sub<Rhs = Self> {
 /// Trait for the `*` operator.
 /// Types implementing this trait can use the `*` operator for multiplication.
 #[compiler_item("mul")]
-internal trait Mul<Rhs = Self> {
+pub trait Mul<Rhs = Self> {
     type Output;
 
     /// Multiplies two values and returns the result.
@@ -651,7 +651,7 @@ internal trait Mul<Rhs = Self> {
 /// Trait for the `/` operator.
 /// Types implementing this trait can use the `/` operator for division.
 #[compiler_item("div")]
-internal trait Div<Rhs = Self> {
+pub trait Div<Rhs = Self> {
     type Output;
 
     /// Divides self by rhs and returns the result.
@@ -661,7 +661,7 @@ internal trait Div<Rhs = Self> {
 /// Trait for the `%` operator.
 /// Types implementing this trait can use the `%` operator for remainder.
 #[compiler_item("rem")]
-internal trait Rem<Rhs = Self> {
+pub trait Rem<Rhs = Self> {
     type Output;
 
     /// Returns the remainder of dividing self by rhs.
@@ -671,7 +671,7 @@ internal trait Rem<Rhs = Self> {
 /// Trait for the unary `-` operator (negation).
 /// Types implementing this trait can use the `-` prefix operator.
 #[compiler_item("neg")]
-internal trait Neg {
+pub trait Neg {
     type Output;
 
     /// Returns the negation of self.
@@ -679,7 +679,7 @@ internal trait Neg {
 }
 /// Trait for the `&` operator (bitwise AND).
 #[compiler_item("bit_and")]
-internal trait BitAnd<Rhs = Self> {
+pub trait BitAnd<Rhs = Self> {
     type Output;
 
     /// Returns the bitwise AND of self and rhs.
@@ -688,7 +688,7 @@ internal trait BitAnd<Rhs = Self> {
 
 /// Trait for the `|` operator (bitwise OR).
 #[compiler_item("bit_or")]
-internal trait BitOr<Rhs = Self> {
+pub trait BitOr<Rhs = Self> {
     type Output;
 
     /// Returns the bitwise OR of self and rhs.
@@ -697,7 +697,7 @@ internal trait BitOr<Rhs = Self> {
 
 /// Trait for the `^` operator (bitwise XOR).
 #[compiler_item("bit_xor")]
-internal trait BitXor<Rhs = Self> {
+pub trait BitXor<Rhs = Self> {
     type Output;
 
     /// Returns the bitwise XOR of self and rhs.
@@ -706,7 +706,7 @@ internal trait BitXor<Rhs = Self> {
 
 /// Trait for the `~` operator (bitwise NOT).
 #[compiler_item("bit_not")]
-internal trait BitNot {
+pub trait BitNot {
     type Output;
 
     /// Returns the bitwise NOT of self.
@@ -715,7 +715,7 @@ internal trait BitNot {
 
 /// Trait for the `<<` operator (left shift).
 #[compiler_item("shl")]
-internal trait Shl {
+pub trait Shl {
     type Output;
 
     /// Returns self shifted left by rhs bits.
@@ -724,7 +724,7 @@ internal trait Shl {
 
 /// Trait for the `>>` operator (right shift).
 #[compiler_item("shr")]
-internal trait Shr {
+pub trait Shr {
     type Output;
 
     /// Returns self shifted right by rhs bits.
@@ -734,7 +734,7 @@ internal trait Shr {
 /// Types implementing this trait can be formatted with `${x}` in template strings.
 /// All format traits write to a `Formatter` that wraps `&mut String`.
 #[compiler_item("display")]
-internal trait Display {
+pub trait Display {
     /// Formats the value and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -847,7 +847,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
 /// Trait for formatting values as binary integers.
 /// Used with the `${x:b}` format specifier.
 #[compiler_item("binary")]
-internal trait Binary {
+pub trait Binary {
     /// Formats the value as binary and writes to the given formatter.
     fn fmt_binary(&self, f: &mut Formatter);
 }
@@ -855,7 +855,7 @@ internal trait Binary {
 /// Trait for formatting values as octal integers.
 /// Used with the `${x:o}` format specifier.
 #[compiler_item("octal")]
-internal trait Octal {
+pub trait Octal {
     /// Formats the value as octal and writes to the given formatter.
     fn fmt_octal(&self, f: &mut Formatter);
 }
@@ -863,7 +863,7 @@ internal trait Octal {
 /// Trait for formatting values as lowercase hexadecimal.
 /// Used with the `${x:x}` format specifier.
 #[compiler_item("lower_hex")]
-internal trait LowerHex {
+pub trait LowerHex {
     /// Formats the value as lowercase hex and writes to the given formatter.
     fn fmt_lower_hex(&self, f: &mut Formatter);
 }
@@ -871,7 +871,7 @@ internal trait LowerHex {
 /// Trait for formatting values as uppercase hexadecimal.
 /// Used with the `${x:X}` format specifier.
 #[compiler_item("upper_hex")]
-internal trait UpperHex {
+pub trait UpperHex {
     /// Formats the value as uppercase hex and writes to the given formatter.
     fn fmt_upper_hex(&self, f: &mut Formatter);
 }
@@ -879,7 +879,7 @@ internal trait UpperHex {
 /// Trait for formatting values in lowercase exponential notation.
 /// Used with the `${x:e}` format specifier.
 #[compiler_item("lower_exp")]
-internal trait LowerExp {
+pub trait LowerExp {
     /// Formats the value in lowercase exponential notation and writes to the given formatter.
     fn fmt_lower_exp(&self, f: &mut Formatter);
 }
@@ -887,7 +887,7 @@ internal trait LowerExp {
 /// Trait for formatting values in uppercase exponential notation.
 /// Used with the `${x:E}` format specifier.
 #[compiler_item("upper_exp")]
-internal trait UpperExp {
+pub trait UpperExp {
     /// Formats the value in uppercase exponential notation and writes to the given formatter.
     fn fmt_upper_exp(&self, f: &mut Formatter);
 }
@@ -941,7 +941,7 @@ internal trait UpperHexAlt {
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
-internal trait Iterator {
+pub trait Iterator {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -1177,7 +1177,7 @@ internal trait Iterator {
 }
 
 /// Generic map iterator adapter that wraps any Iterator.
-internal struct IterMap<I: Iterator, U> {
+pub struct IterMap<I: Iterator, U> {
     pub inner: I,
     pub f: fn mut(I::Item) -> U,
 }
@@ -1203,7 +1203,7 @@ impl<I: Iterator, U> IntoIterator for IterMap<I, U> {
 }
 
 /// Generic filter iterator adapter that wraps any Iterator.
-internal struct IterFilter<I: Iterator> {
+pub struct IterFilter<I: Iterator> {
     pub inner: I,
     pub pred: fn mut(I::Item) -> bool,
 }
@@ -1234,7 +1234,7 @@ impl<I: Iterator> IntoIterator for IterFilter<I> {
 }
 
 /// Generic enumerate iterator adapter that yields (index, element) pairs.
-internal struct IterEnumerate<I: Iterator> {
+pub struct IterEnumerate<I: Iterator> {
     pub inner: I,
     pub count: i32,
 }
@@ -1262,7 +1262,7 @@ impl<I: Iterator> IntoIterator for IterEnumerate<I> {
 }
 
 /// Generic take iterator adapter that limits elements from any Iterator.
-internal struct IterTake<I: Iterator> {
+pub struct IterTake<I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
@@ -1293,7 +1293,7 @@ impl<I: Iterator> IntoIterator for IterTake<I> {
 }
 
 /// Generic skip iterator adapter that skips elements from any Iterator.
-internal struct IterSkip<I: Iterator> {
+pub struct IterSkip<I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
@@ -1323,7 +1323,7 @@ impl<I: Iterator> IntoIterator for IterSkip<I> {
 }
 
 /// Generic chain iterator adapter that chains two iterators of the same item type.
-internal struct IterChain<I: Iterator, J: Iterator> {
+pub struct IterChain<I: Iterator, J: Iterator> {
     pub first: I,
     pub second: J,
     pub first_done: bool,
@@ -1353,7 +1353,7 @@ impl<I: Iterator, J: Iterator<Item = I::Item>> IntoIterator for IterChain<I, J> 
 }
 
 /// Generic zip iterator adapter that pairs elements from two iterators.
-internal struct IterZip<I: Iterator, J: Iterator> {
+pub struct IterZip<I: Iterator, J: Iterator> {
     pub first: I,
     pub second: J,
 }
@@ -1383,7 +1383,7 @@ impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
 #[compiler_item("into_iterator")]
-internal trait IntoIterator {
+pub trait IntoIterator {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -1424,7 +1424,7 @@ internal trait TryFrom<T> {
 }
 
 /// Error type returned by fallible conversions.
-internal struct ConvertError {
+pub struct ConvertError {
     pub message: String,
 }
 
@@ -1437,7 +1437,7 @@ impl ConvertError {
 
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 /// bound. Implemented for every `Add<Output = Self>`.
-internal trait Sum {
+pub trait Sum {
     type Elem;
     fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
@@ -1452,7 +1452,7 @@ impl<T: Add<Output = T>> Sum for T {
 
 /// Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
 /// element bound. Implemented for every `Mul<Output = Self>`.
-internal trait Product {
+pub trait Product {
     type Elem;
     fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
@@ -1467,7 +1467,7 @@ impl<T: Mul<Output = T>> Product for T {
 
 /// Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 /// `max`'s element bound. Implemented for every `Ord`.
-internal trait Extremum {
+pub trait Extremum {
     type Elem;
     fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
     fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
@@ -1486,7 +1486,7 @@ impl<T: Ord> Extremum for T {
 }
 
 /// Trait for creating a collection from any iterator of `Elem`.
-internal trait FromIterator {
+pub trait FromIterator {
     type Elem;
     fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
 }

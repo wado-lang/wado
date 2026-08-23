@@ -1841,7 +1841,7 @@ impl FunctionTranslator<'_, '_> {
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::GenericInstance { .. } => {
                         crate::name::variant_tag_helper_name(
-                            &tt.mangle_type_arg_for_generic(variant_ty),
+                            &tt.mangle_type_arg_unboxed(variant_ty),
                         )
                     }
                     _ => crate::name::MethodName::format_local(
@@ -1895,8 +1895,8 @@ impl FunctionTranslator<'_, '_> {
             let (helper_name, helper_module) = {
                 let tt = self.base.type_table.borrow();
                 let name = crate::name::field_get_helper_name(
-                    &tt.mangle_type_arg_for_generic(struct_ty),
-                    &tt.mangle_type_arg_for_generic(field_ty),
+                    &tt.mangle_type_arg_unboxed(struct_ty),
+                    &tt.mangle_type_arg_unboxed(field_ty),
                 );
                 let module = tt
                     .nominal_head(struct_ty)
@@ -1954,8 +1954,8 @@ impl FunctionTranslator<'_, '_> {
         let (helper_name, helper_module) = {
             let tt = self.base.type_table.borrow();
             let name = helper_name_for(
-                &tt.mangle_type_arg_for_generic(variant_ty),
-                &tt.mangle_type_arg_for_generic(payload_ty),
+                &tt.mangle_type_arg_unboxed(variant_ty),
+                &tt.mangle_type_arg_unboxed(payload_ty),
             );
             // An instantiated generic variant stays spelled as a
             // `GenericInstance`; its bridges are homed in the declaration's

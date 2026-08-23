@@ -1,0 +1,247 @@
+//! Parser-side `superClass` (Stage C): a `{this.m()}?` predicate in a parser
+//! rule lowers to an ambient operation on the parser base's effect interface.
+
+use { parse } from "./g4/parser.wado";
+use { merge_grammars } from "./ir.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+use { Diagnostic, DiagnosticKind } from "./gir.wado";
+
+global OPTS: GenerateOptions = GenerateOptions {};
+
+fn gen_source(src: &String) -> String {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &OPTS).source;
+}
+
+fn unsupported_count(src: &String) -> i32 {
+    let mut g = parse(*src).unwrap();
+    let mut n = 0;
+    for let d of &generate(&mut g, &OPTS).diagnostics {
+        if d.kind matches { UnsupportedAction } {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+test "a combined grammar's superClass is the parser's base" {
+    // `vendor/antlr4/doc/options.md`: for a combined grammar the option sets
+    // the superclass of the parser, and the lexer keeps ANTLR's own base.
+    let src = gen_source(&"grammar C;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+GT : '>' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+");
+    assert src.contains("pub interface PBase {"), "the parser interface is emitted";
+    assert src.contains("fn next_gt(p: &Parser) -> bool;"), "one predicate op per call site";
+    assert src.contains("PBase::next_gt(p)"), "the call site reads the recognizer";
+    assert !src.contains("LexerView"), "no lexer base is wired";
+}
+
+test "the parse entries carry the parser base effect" {
+    let src = gen_source(&"grammar C;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+GT : '>' ;
+");
+    assert src.contains("pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with PBase"), "a caller that installs no handler must fail to compile";
+    assert src.contains("fn _parse_shr(p: &mut Parser) -> () with PBase"), "the rule carrying the predicate declares it";
+}
+
+test "a base-call-only predicate runs under a host language java2wado carves out" {
+    // The rewrite turns `this.m()` into Wado on its own, so no translator is
+    // involved and the default `language = Java` does not suppress the body.
+    let src = gen_source(&"grammar C;
+options { superClass = PBase; }
+shr : GT { this.NextGT() }? GT ;
+GT : '>' ;
+");
+    assert src.contains("PBase::next_gt(p)"), "the predicate is emitted, not discarded";
+    assert unsupported_count(&"grammar C;
+options { superClass = PBase; }
+shr : GT { this.NextGT() }? GT ;
+GT : '>' ;
+") == 0, "an executed predicate must not warn";
+}
+
+test "the parser action-context API is public under a parser base" {
+    let src = gen_source(&"grammar C;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+GT : '>' ;
+");
+    assert src.contains("pub fn la(&self, k: i32) -> i32"), "the base reads lookahead through the recognizer";
+    assert src.contains("pub fn token_start(&self, i: i32) -> i32"), "and token positions";
+}
+
+test "a parser base called with arguments is refused" {
+    let src = &"grammar C;
+options { superClass = PBase; language = Wado; }
+r : A { this.p(\"of\") }? A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "the refusal is reported once";
+    let out = gen_source(src);
+    assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    // The recognizer surface turns public only for a base that is wired, so it
+    // and the interface emit cannot drift apart.
+    assert !out.contains("pub struct Parser"), out;
+    assert !out.contains("pub fn la("), out;
+    // The rewrite never ran, so the body still names `this`.
+    assert !out.contains("this."), out;
+}
+
+test "a parser base reached from an action body is refused" {
+    // The parser side carries no command surface, so a unit-returning
+    // operation would have nothing to drive.
+    let src = &"grammar C;
+options { superClass = PBase; language = Wado; }
+r : A { this.mark() } A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "the refusal is reported once";
+    let out = gen_source(src);
+    assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    assert !out.contains("this."), out;
+}
+
+test "an alt-initial predicate on a refused base is not extracted either" {
+    // The gate path has its own passthrough (`pred_<id>`), so it needs the
+    // same guard as the inline one.
+    let src = &"grammar C;
+options { superClass = PBase; language = Wado; }
+r : { this.p(\"of\") }? A | B ;
+A : 'a' ;
+B : 'b' ;
+";
+    // The refusal, then the un-gated predicate the alt dispatch is left with.
+    assert unsupported_count(src) == 2, "both the refusal and the dropped gate are reported";
+    assert !gen_source(src).contains("this."), gen_source(src);
+}
+
+test "a lexer and a parser split each keep their own base" {
+    let lexer_g = parse("lexer grammar SLexer;
+options { superClass = LBase; language = Wado; }
+GT : { this.ok() }? '>' ;
+").unwrap();
+    let parser_g = parse("parser grammar SParser;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+").unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.lexer_superclass == "LBase";
+    assert merged.parser_superclass == "PBase";
+}
+
+test "a grammar with no parser base is unaffected" {
+    let plain = gen_source(&"grammar C;
+r : A ;
+A : 'a' ;
+");
+    assert !plain.contains("interface"), "no interface";
+    assert !plain.contains("with PBase"), "no effect clause";
+    assert !plain.contains("pub fn la("), "the action-context API stays private";
+}
+
+test "a base call sharing its body with untranslatable host code is refused" {
+    // The rewrite makes a base call Wado on its own, but only a body that is
+    // nothing else: this one needs the java2wado a superClass grammar carves
+    // out, so nothing runs and the base is not wired.
+    let src = &"grammar C;
+options { superClass = PBase; }
+r : A { this.ok() }? A ;
+s : A { System.out.println(\"x\"); } ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "the refusal is reported once";
+    assert !gen_source(src).contains("pub interface PBase"), "and nothing reaching the base is emitted";
+}
+
+test "the metadata comment names each recognizer's base" {
+    let lexer_g = parse("lexer grammar SLexer;
+options { superClass = LBase; language = Wado; }
+GT : { this.ok() }? '>' ;
+").unwrap();
+    let parser_g = parse("parser grammar SParser;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+").unwrap();
+    let mut merged = merge_grammars([lexer_g, parser_g]);
+    let src = generate(&mut merged, &OPTS).source;
+    assert src.contains("//   option superClass = LBase (lexer)"), src;
+    assert src.contains("//   option superClass = PBase (parser)"), src;
+}
+
+test "a this-call with no parser base declared is reported, not emitted" {
+    // Nothing else reports it: there is no base to refuse.
+    let src = &"grammar C;
+options { language = Wado; }
+r : A { this.p() }? A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "the stray receiver is reported";
+    assert !gen_source(src).contains("this."), gen_source(src);
+}
+
+test "a lexer this-call in a combined grammar is reported, not emitted" {
+    // A combined grammar's `superClass` is the parser's, so a lexer body naming
+    // `this` has no receiver at all.
+    let src = &"grammar C;
+options { superClass = B; language = Wado; }
+r : X ;
+X : { this.ok() }? [a-z]+ ;
+";
+    assert unsupported_count(src) == 1, "the stray lexer receiver is reported";
+    assert !gen_source(src).contains("this."), gen_source(src);
+}
+
+test "a wired parser base does not un-carve java members" {
+    // `language = Java` under a `superClass` is java2wado's carve-out: the base
+    // rewrite runs the bodies, but `@parser::members` still has no translator.
+    let src = gen_source(&"grammar C;
+options { superClass = PBase; }
+@parser::members {
+    int calls = 0;
+    void bump() { this.calls += 1; }
+}
+shr : GT { this.NextGT() }? GT ;
+GT : '>' ;
+");
+    assert src.contains("PBase::next_gt(p)"), "the base predicate still runs";
+    assert !src.contains("fn bump"), src;
+}
+
+test "fragment recovery reaches the base through expect" {
+    // `expect` calls `_recover_try_descend`, which descends into rule entries,
+    // so it must declare the effect those entries carry.
+    let mut g = parse("grammar C;
+options { superClass = PsBase; language = Wado; }
+prog : shr ;
+shr : GT { this.next_gt() }? GT ;
+GT : '>' ;
+").unwrap();
+    let opts = GenerateOptions {
+        fragment_entries: ["shr"],
+    };
+    let src = generate(&mut g, &opts).source;
+    assert src.contains("fn _recover_try_descend(p: &mut Parser) with PsBase"), src;
+    assert src.contains("fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 with PsBase"), src;
+}
+
+test "a this field read with no parser base is reported, not emitted" {
+    let src = &"grammar C;
+options { language = Wado; }
+r : A { this.flag }? A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "a receiver-less `this` is reported whatever follows it";
+    assert !gen_source(src).contains("this"), gen_source(src);
+}
+
+test "parse wado_prs_super.g4" {
+    let g = parse(#include_str("../tests/grammars/wado_prs_super.g4")).unwrap();
+    assert g.name == "WadoPrsSuper";
+    assert g.parser_superclass == "PsBase";
+    assert g.lexer_superclass.is_empty(), "a combined grammar's superClass is the parser's";
+}

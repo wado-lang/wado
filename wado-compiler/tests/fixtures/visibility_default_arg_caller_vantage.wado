@@ -1,0 +1,18 @@
+//! Each half of a spliced default answers to the module that wrote it: the
+//! caller's substituted argument, and the callee's own literal.
+use { with_scalar_default, with_literal_default } from "./sub/default_vantage_lib.wado";
+
+struct Local { v: i32 }
+
+impl Local {
+  fn secret(&self) -> i32 { return self.v }
+}
+
+test "a caller's private method reaches into a substituted default" {
+    let t = Local { v: 1 };
+    assert with_scalar_default(t.secret()) == 3;
+}
+
+test "a callee's private field reaches inside its own default literal" {
+    assert with_literal_default(1) == 2;
+}

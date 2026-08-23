@@ -206,7 +206,7 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
 
 /// A UTF-8 encoded, growable string.
 #[compiler_item("string")]
-internal struct String {
+pub struct String {
     repr: ByteArray,
     used: i32,
 }
@@ -219,7 +219,7 @@ fn substring(repr: &Array<u8>, start: i32, len: i32) -> String {
 }
 
 /// Iterator over the raw UTF-8 bytes of a String, yielding each as `u8`.
-internal struct StrUtf8ByteIter {
+pub struct StrUtf8ByteIter {
     repr: &Array<u8>,
     used: i32,
     index: i32,
@@ -240,7 +240,7 @@ impl Iterator for StrUtf8ByteIter {
 }
 
 /// Iterator over the Unicode scalar values (chars) of a String.
-internal struct StrCharIter {
+pub struct StrCharIter {
     repr: &Array<u8>,
     used: i32,
     byte_index: i32,

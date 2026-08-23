@@ -1,6 +1,6 @@
 //! Generate sliced ICU4X postcard *blobs* for the BDP separation experiment.
 //!
-//! Usage: `cargo run --release -- <set> <out.blob>`
+//! Usage: `cargo run --release -- <set> <out.blob> [locales] [dedup]`
 //!
 //! Marker sets:
 //!   casemap   casemap markers
@@ -9,6 +9,10 @@
 //!             (root collation only) — i.e. exactly what a collator feature loads
 //!   shared    collator markers + ALL normalizer markers (root collation) —
 //!             one blob serving both a collator feature and a normalizer feature
+//!   coll-loc  collator markers alone — the locale axis
+//!   fmt-loc   datetime + decimal + list + plurals, same arguments
+//!
+//! `[locales]` is `und,ja,…` or `FULL`; `[dedup]` is `none` or `maximal`.
 //!
 //! Comparing sizes of `coll`, `norm` and `shared` quantifies the marker dedup:
 //! `size(coll) + size(norm) - size(shared)` is the normalization data that
@@ -49,6 +53,57 @@ fn main() -> Result<()> {
     let out = std::env::args().nth(2).unwrap_or_else(|| format!("{set}.blob"));
 
     let provider = SourceDataProvider::new();
+
+    if set == "coll-loc" || set == "fmt-loc" {
+        let locales = std::env::args().nth(3).unwrap_or_else(|| "und".into());
+        let dedup = std::env::args().nth(4).unwrap_or_else(|| "none".into());
+        let families: Vec<DataLocaleFamily> = if locales == "FULL" {
+            vec![DataLocaleFamily::FULL]
+        } else {
+            locales
+                .split(',')
+                .map(|l| {
+                    let langid = l
+                        .parse()
+                        .with_context(|| format!("locale {l:?} in {locales:?}"))?;
+                    Ok(DataLocaleFamily::single(langid))
+                })
+                .collect::<Result<_>>()?
+        };
+        let strategy = match dedup.as_str() {
+            "none" => DeduplicationStrategy::None,
+            "maximal" => DeduplicationStrategy::Maximal,
+            other => anyhow::bail!("unknown dedup strategy: {other}"),
+        };
+        let markers: Vec<DataMarkerInfo> = if set == "fmt-loc" {
+            let mut m = icu_datetime::provider::MARKERS.to_vec();
+            m.extend_from_slice(icu_decimal::provider::MARKERS);
+            m.extend_from_slice(icu_list::provider::MARKERS);
+            m.extend_from_slice(icu_plurals::provider::MARKERS);
+            m
+        } else {
+            icu_collator::provider::MARKERS.to_vec()
+        };
+        ExportDriver::new(
+            families,
+            strategy.into(),
+            LocaleFallbacker::try_new_unstable(&provider).context("fallbacker")?,
+        )
+        .with_markers(markers.iter().copied())
+        .export(
+            &provider,
+            BlobExporter::new_with_sink(Box::new(
+                File::create(&out).with_context(|| format!("create {out}"))?,
+            )),
+        )
+        .context("export blob")?;
+        let bytes = std::fs::metadata(&out)?.len();
+        println!(
+            "wrote {out} ({bytes} bytes) — set={set}, locales={locales}, dedup={dedup}, {} markers",
+            markers.len()
+        );
+        return Ok(());
+    }
 
     // Collation data is locale-bearing; restrict it to root ("und") so the blob
     // stays focused on the normalization-dedup story. Normalizer/casemap data is

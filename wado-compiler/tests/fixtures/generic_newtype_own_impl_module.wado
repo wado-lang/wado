@@ -1,0 +1,38 @@
+// A generic newtype's own impl lives in *its* module, not the base's. Homing
+// the call with the base peeled off mints an extern stub for a name the
+// package defines, or leaves the bound looking unsatisfied.
+use { println } from "core:cli";
+
+type MyArray<T> = List<T>;
+
+trait Tagged {
+    fn tag() -> String;
+
+    fn label(&self) -> String;
+}
+
+impl<T> Tagged for MyArray<T> {
+    fn tag() -> String {
+        return "M";
+    }
+
+    fn label(&self) -> String {
+        return "m";
+    }
+}
+
+fn tag_of<T: Tagged>(t: T) -> String {
+    return T::tag();
+}
+
+fn label_of<T: Tagged>(t: T) -> String {
+    return t.label();
+}
+
+export fn run() with Stdout {
+    let m: MyArray<i32> = [1, 2] as MyArray<i32>;
+    println(`${tag_of(m)} ${label_of(m)}`);
+}
+
+__DATA__
+{"stdout": "M m\n"}

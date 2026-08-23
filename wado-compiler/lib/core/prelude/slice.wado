@@ -75,7 +75,7 @@ internal trait Sequence {
 /// `[start, end)`. Holds a reference to the whole array, so creating a slice
 /// never copies elements.
 #[compiler_item("slice")]
-internal struct Slice<T> {
+pub struct Slice<T> {
     repr: &Array<T>,
     start: i32,
     end: i32,
@@ -308,7 +308,7 @@ impl<T> IntoIterator for Slice<T> {
 }
 
 /// A by-value forward iterator over a backing `Array<T>` range `[index, end)`.
-internal struct SliceValueIter<T> {
+pub struct SliceValueIter<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
@@ -358,7 +358,7 @@ impl SliceValueIter<T> {
 /// A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
 /// points to a fresh copy of the element — Wasm GC has no interior references —
 /// so it reads but never writes the backing array. Backs `for x of &list`.
-internal struct SliceRefIter<T> {
+pub struct SliceRefIter<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
@@ -415,7 +415,7 @@ impl<T> Iterator for SliceRefMutIter<T> {
 }
 
 /// Each item is a `Slice<T>` viewing the backing array, not a copy of it.
-internal struct SliceWindows<T> {
+pub struct SliceWindows<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
@@ -456,7 +456,7 @@ impl<T> IntoIterator for SliceWindows<T> {
 }
 
 /// Each item is a `Slice<T>` viewing the backing array, not a copy of it.
-internal struct SliceChunks<T> {
+pub struct SliceChunks<T> {
     repr: &Array<T>,
     index: i32,
     end: i32,

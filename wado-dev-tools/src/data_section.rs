@@ -27,6 +27,31 @@ pub fn should_skip_file(source: &str) -> bool {
 /// world (mirroring `run_fixture` in e2e.rs), while the `format.fixtures` set
 /// passes `None` to keep the CLI default. A `__DATA__` section that is present
 /// but carries no world key always falls through to the CLI default (`None`).
+/// The stubbed path `[dependencies]` a fixture declares, name → the
+/// dependency's `[package].lib` relative to the fixture directory. Golden
+/// generation compiles a fixture the way the e2e harness does, so it reads the
+/// same key.
+#[must_use]
+pub fn extract_dependencies_from_data_section(source: &str) -> Vec<(String, String)> {
+    let marker = "\n__DATA__\n";
+    let data = if let Some(pos) = source.find(marker) {
+        &source[pos + marker.len()..]
+    } else if let Some(stripped) = source.strip_prefix("__DATA__\n") {
+        stripped
+    } else {
+        return Vec::new();
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(data.trim()) else {
+        return Vec::new();
+    };
+    let Some(deps) = json.get("dependencies").and_then(|v| v.as_object()) else {
+        return Vec::new();
+    };
+    deps.iter()
+        .filter_map(|(name, lib)| Some((name.clone(), lib.as_str()?.to_string())))
+        .collect()
+}
+
 pub fn extract_world_from_data_section(
     source: &str,
     no_data_default: Option<&str>,

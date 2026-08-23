@@ -1,0 +1,8 @@
+//! A re-export cannot grant more reach than the item it names: `pub use` of
+//! an `internal` trait is an error at the facade, not a silent promotion.
+use { Hidden } from "./sub/vis_reexport_widening.wado";
+
+export fn run() {}
+
+__DATA__
+{ "compile_error": "reaches further than" }

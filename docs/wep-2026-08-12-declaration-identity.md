@@ -98,7 +98,9 @@ table is seeded rather than rebuilt — `DefTable::build_seeded` continues the
 snapshot's table, keeping every declaration it already identified at its `DefId`
 and minting only what it never saw, and `TypeTable` is seeded the same way. What
 makes that sound is that the stdlib AST is parsed once per process and shared, so
-an `AstId` means the same node in both tables.
+an `AstId` means the same node in both tables, bundled wasm assets included. It
+is checked, not assumed: an entry naming itself `#![stdlib("core:…")]` re-parses
+a cached module, and drops the snapshot.
 
 The rule binds every cached declaration fact, not just this one: a `DefId` in a
 `ResolvedType` or a registry key crosses the same boundary.

@@ -43,18 +43,39 @@ traps.
 
 ## Decision
 
-### Two resource kinds
+### Three resource kinds
 
 | Kind                 | Backed by                                              | Ownership           | Cleanup                  |
 | -------------------- | ------------------------------------------------------ | ------------------- | ------------------------ |
 | Affine resource      | a CM `own`/`borrow` or waitable handle, or a guest one | Move-only + a check | `resource.drop` / `dtor` |
 | Host-object resource | a Wasm GC reference to a host object (no `dtor`)       | Value semantics     | Wasm GC                  |
+| Non-owning token     | an index naming something owned elsewhere (no `dtor`)  | Value semantics     | none of its own          |
 
-An affine resource holds a one-shot, destructor-bearing thing, so copying it
-would alias it — a double-drop, a use-after-transfer, or a double free. A
-host-object resource is a GC reference with no `dtor`, so aliasing is safe. The
-`i32`-vs-`externref` representation is orthogonal; the kind decides the model.
-`Waitable` (from `join`) has no `drop` and is a copyable newtype, not affine.
+The `dtor` decides the kind, not the representation. A handle that owns one must
+be move-only, because copying it aliases a destructor; without one there is
+nothing to free, so the handle is an ordinary value. `i32`-vs-`externref` is
+orthogonal to all three rows.
+
+### Non-owning tokens
+
+A non-owning token names something whose lifetime another party already
+guarantees. Two backings qualify:
+
+- **An affine resource owns the referent.** `Waitable` is this: `Subtask::join`
+  returns the subtask's own handle number as the identity to match a `WaitEvent`
+  against, and the `Subtask` owns the drop.
+- **An immortal table in a statically composed component.** `core:icu`'s
+  interned handles are this: the component interns each object whose
+  configuration the program bounds at compile time, so the table is finite by
+  construction and never freed.
+
+A CM `borrow<R>` cannot stand in for either: it must be dropped before the call
+returns, where a token is compared long after, is copied across comparisons, and
+travels inside a struct by value (`WaitEvent.handle`).
+
+A referent with neither backing — allocated per call from unbounded runtime
+input — is affine instead: a copyable index would leak it.
+
 The rest of this WEP concerns affine resources.
 
 ### Move-only resources
@@ -342,8 +363,9 @@ untouched even with the cloned array provably unread.
 
 ## Consequences
 
-- One story: move-only affine resources, GC value semantics for host-object
-  ones. Double-drop / use-after-transfer / leaked borrow become compile errors.
+- One story: move-only affine resources, value semantics for the two kinds that
+  own nothing. Double-drop / use-after-transfer / leaked borrow become compile
+  errors.
 - No lifetimes, no annotations, no keyword. The cleanup heuristic and
   `optimize::escape` + `optimize::value_copy_elide` shrink or disappear.
 - Move-only is a new concept for one type category; an element cannot be moved
@@ -464,4 +486,6 @@ client.
 - [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [`core:icu`](./wep-2026-08-09-core-icu.md) — the non-owning token's second
+  backing.
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

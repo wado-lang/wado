@@ -12,7 +12,7 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 
 1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. Empty right now.
 2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-08-21 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
-3. **Stage C**, starting with the parser side of superClass: the largest block, and the gate for drop-in ANTLR4 replacement.
+3. **Stage C**: the largest block, and the gate for drop-in ANTLR4 replacement. What is left is the paths that still warn and the surface gaps below.
 4. Everything else, in whatever order a live case surfaces it.
 
 The two LL-prediction gaps are deliberately parked, not queued — see below.
@@ -37,18 +37,9 @@ Empty right now.
 
 Design in [`action.md`](./action.md). The largest remaining block, and a hard prerequisite for treating Gale as a drop-in ANTLR4 replacement, for any lexer-level optimization (a fast tokenizer is meaningless if it tokenizes incorrectly), and for `superClass` / `tokenVocab`. It also unblocks composite-descriptor output comparison and parser descriptors whose output is purely action-print stdout.
 
-Gale still silently discards action / predicate contents on the **parser** side of the real-world grammars (`RustParser`, `TypeScriptParser`): they load cleanly, but the generated parser behaves as if every predicate were `true` and every action a no-op. That is wrong for:
+The SuperClass mechanism is in place for both recognizers — `action.md` ("SuperClass — an effect interface") is its design — so `RustParser`'s `{this.NextGT()}?` runs against a hand-written base. `TypeScriptParser` does not: its predicates pass arguments (`{this.p("of")}?`), which leaves the base unwired with a diagnostic, since the rewrite drops them and the interface has no type to declare them with. Wiring one needs an explicit signature source (see `action.md`, open questions).
 
-- Rust's `>>` / `>>=` token splitting in generics (`{this.NextGT()}?`); without it Gale mis-parses nested generics.
-- TypeScript's context-sensitive parser rules.
-
-Both call `this.<method>()` against a hand-written `superClass` base that lives outside the `.g4` — executing them needs the SuperClass mechanism, not just action translation.
-
-The lexer half of that mechanism is in place — `action.md` ("SuperClass — an effect interface") is its design. What is left:
-
-- **The parser side**: parser-rule superClass predicates like `{this.NextGT()}?` are still discarded.
-
-Then the paths that still warn — each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong:
+The paths that still warn — each surfaces `UnsupportedAction`, so a grammar that needs one is never silently wrong:
 
 - Parser actions on a non-transparent group's alternatives (the transparent path inlines its actions with its elements), an LR suffix, and a multi-alt prequel.
 - Lexer actions under a `Repeat`. The action replay places each action at the cursor it was written at, covering mid-element and nested-group placement, but a `Repeat` matches an unknown number of times and the non-greedy / lookahead-aware emitters restructure the sequence around it. An alt carrying one keeps the flat emit: top-level actions run at the end of the match, anything nested inside warns.

@@ -1,0 +1,13 @@
+//! A default naming `Cfg::make` means the callee's `Cfg`, not the same-named
+//! one the caller declares — whose `make` is file-private.
+use { plus_default } from "./sub/same_named_receiver_lib.wado";
+
+struct Cfg { v: i32 }
+
+impl Cfg {
+  fn make() -> i32 { return 99 }
+}
+
+test "the default keys to the callee's receiver" {
+    assert plus_default(1) == 11;
+}

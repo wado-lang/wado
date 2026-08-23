@@ -1,0 +1,12 @@
+//! An `internal` associated constant reaches its own package, not another.
+use { Gadget } from "xpkg";
+
+export fn run() {
+    assert Gadget::PKG_INTERNAL_C == 200;
+}
+
+__DATA__
+{
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" },
+  "compile_error": "is `internal` to its package and cannot be read from another package"
+}

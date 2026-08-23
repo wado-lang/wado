@@ -945,12 +945,7 @@ fn break_tag_value(body: &Body, elements: &[Operand]) -> Option<i128> {
 /// The slots `op` reads off `local_idx`, or `None` if it reads the local any
 /// other way — the fused block has no aggregate left to hand such a read.
 fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec<SlotRead>> {
-    let mut v = SlotReadCollector {
-        local_idx,
-        slots: IndexMap::default(),
-        direct_uses: 0,
-        slot_uses: 0,
-    };
+    let mut v = SlotReadCollector::in_operand(local_idx);
     match op {
         Operand::Expr(e) => v.visit_node(body, NodeRef::Expr(e)),
         // The operand itself is the read: no `FieldAccess` slot to hand it.
@@ -978,31 +973,80 @@ fn slot_reads_in_operand(body: &Body, op: Operand, local_idx: u32) -> Option<Vec
 /// and pool alike, and `slot_uses` counts those that are a `FieldAccess`
 /// receiver. Equal tallies mean every read is a slot read, which is the only
 /// shape the fused block can serve.
+///
+/// `lets` counts the `let`s declaring the temp, riding along because the
+/// whole-body census already runs the traversal that answers it.
+#[derive(Default)]
 struct SlotReadCollector {
     local_idx: u32,
     slots: IndexMap<u32, TypeId>,
     direct_uses: usize,
     slot_uses: usize,
+    lets: usize,
+    /// Stop once a non-slot read is proven to exist. A `FieldAccess` is visited
+    /// before the `Local` it reads, so `direct_uses - slot_uses` is the non-slot
+    /// reads seen minus the receivers still to be descended into: above zero,
+    /// one exists and the final tallies cannot match.
+    stop_on_excess: bool,
+    stopped: bool,
+}
+
+impl SlotReadCollector {
+    /// Census of the whole body, which may stop early: its verdict is a
+    /// yes/no, so partial tallies past a proven mismatch decide nothing.
+    fn whole_body(local_idx: u32) -> Self {
+        SlotReadCollector {
+            local_idx,
+            stop_on_excess: true,
+            ..Self::default()
+        }
+    }
+
+    /// Tally within one operand, which runs to completion — the caller needs
+    /// the exact slot list, not just the verdict.
+    fn in_operand(local_idx: u32) -> Self {
+        SlotReadCollector {
+            local_idx,
+            ..Self::default()
+        }
+    }
 }
 
 impl NirRefVisitor for SlotReadCollector {
     fn visit_node(&mut self, body: &Body, node: NodeRef) {
-        if let NodeRef::Expr(e) = node {
-            if is_local(body, e, self.local_idx) {
-                self.direct_uses += 1;
+        if self.stopped {
+            return;
+        }
+        match node {
+            NodeRef::Expr(e) => {
+                if is_local(body, e, self.local_idx) {
+                    self.direct_uses += 1;
+                }
+                if let ExprKind::FieldAccess {
+                    expr: inner,
+                    field_index,
+                    ..
+                } = &body.exprs[e].kind
+                    && is_local_operand(body, *inner, self.local_idx)
+                {
+                    self.slot_uses += 1;
+                    self.slots.insert(*field_index, body.exprs[e].type_id);
+                }
             }
-            if let ExprKind::FieldAccess {
-                expr: inner,
-                field_index,
-                ..
-            } = &body.exprs[e].kind
-                && is_local_operand(body, *inner, self.local_idx)
-            {
-                self.slot_uses += 1;
-                self.slots.insert(*field_index, body.exprs[e].type_id);
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+                    && *local_index == self.local_idx
+                {
+                    self.lets += 1;
+                }
             }
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
         self.direct_uses += promoted_read_count_at(body, node, self.local_idx);
+        if self.stop_on_excess && self.direct_uses > self.slot_uses {
+            self.stopped = true;
+            return;
+        }
         self.walk_node(body, node);
     }
 }
@@ -2516,14 +2560,6 @@ fn plan_slot_temp_sroa(
     };
     let (label, lb_block) = (label.clone(), *lb_block);
 
-    // One `let` for the temp, or the rewrite is unsound: `clone_block` (fusion's
-    // own duplication) copies `local_index` verbatim, and a second copy's
-    // `temp.k` reads would be rewritten to slot locals that only the first
-    // copy's exits declare and assign.
-    if declaration_count(body, temp_local) != 1 {
-        return None;
-    }
-
     // The block's value must arrive through `break L:` exits the transform can
     // reach, so the tail has to terminate rather than fall through with one.
     // Checked before the read census below, which walks the whole body.
@@ -2535,16 +2571,22 @@ fn plan_slot_temp_sroa(
         return None;
     }
 
-    // Every read of the temp, anywhere in the body, must be a `temp.k`
-    // projection: the block has no aggregate left to hand any other read.
-    let mut reads = SlotReadCollector {
-        local_idx: temp_local,
-        slots: IndexMap::default(),
-        direct_uses: 0,
-        slot_uses: 0,
-    };
+    // Every read of the temp must be a `temp.k` projection — the block has no
+    // aggregate left to hand any other — and exactly one `let` may declare it:
+    // `clone_block` copies `local_index` verbatim, and a second copy's reads
+    // would be rewritten to slot locals only the first copy's exits assign.
+    let mut reads = SlotReadCollector::whole_body(temp_local);
     reads.visit_node(body, NodeRef::Block(body.root));
-    if reads.slot_uses == 0 || reads.direct_uses != reads.slot_uses {
+    assert!(
+        reads.stopped || reads.slot_uses <= reads.direct_uses,
+        "every slot read is also a direct read, so a completed census cannot \
+         count more slot reads than direct ones"
+    );
+    if reads.stopped
+        || reads.slot_uses == 0
+        || reads.direct_uses != reads.slot_uses
+        || reads.lets != 1
+    {
         return None;
     }
     let mut fields: Vec<(u32, TypeId)> = reads.slots.into_iter().collect();
@@ -2684,26 +2726,6 @@ fn perform_slot_temp_sroa(
     kept.extend_from_slice(&stmts[i + 1..]);
     engine.set_block_stmts(outer_block, kept);
     engine.note_elided_local(plan.temp_local);
-}
-
-/// How many `let` statements declare `idx`, capped at two — the callers only
-/// need to tell "exactly one" from "more".
-fn declaration_count(body: &Body, idx: u32) -> usize {
-    let mut count = 0;
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Stmt(s) = node
-            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
-            && *local_index == idx
-        {
-            count += 1;
-            if count > 1 {
-                return count;
-            }
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    count
 }
 
 /// Replace each `break L: [e0, …]` with the slot assignments the projections

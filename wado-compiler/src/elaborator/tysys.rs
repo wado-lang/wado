@@ -314,8 +314,54 @@ impl TypeSystem {
         self.type_table.borrow().fq_base_type_name(type_id)
     }
 
-    /// For newtypes, get the base type name and ID for trait impl lookup fallback.
-    /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
+    /// The first link at or below `type_id` — itself included — writing its own
+    /// impl of `trait_`, stopping above a scalar base: a primitive's operator
+    /// impl *is* the instruction, not one a newtype inherits.
+    pub(crate) fn own_impl_link(
+        &self,
+        type_id: TypeId,
+        trait_: crate::defs::DefId,
+    ) -> Option<TypeId> {
+        let mut tid = type_id;
+        loop {
+            let key = self.type_table.borrow().impl_receiver_key(tid);
+            if self
+                .trait_env
+                .has_any_methodful_impl_by_receiver(&key, trait_)
+            {
+                return Some(tid);
+            }
+            let base = self.type_table.borrow().get_newtype_base(tid)?;
+            if !matches!(
+                self.type_table.borrow().get(base),
+                ResolvedType::Newtype { .. }
+                    | ResolvedType::Struct { .. }
+                    | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Variant { .. }
+            ) {
+                return None;
+            }
+            tid = base;
+        }
+    }
+
+    /// [`Self::newtype_base_lookup`] for a trait dispatch: an impl a link below
+    /// the receiver wrote still answers for it, so stop at that link rather
+    /// than one peel down, where a longer chain carries none.
+    pub(crate) fn trait_impl_base_lookup(
+        &self,
+        name: &str,
+        type_id: TypeId,
+        trait_: crate::defs::DefId,
+    ) -> (String, TypeId) {
+        match self.own_impl_link(type_id, trait_) {
+            Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
+            _ => self.newtype_base_lookup(name, type_id),
+        }
+    }
+
+    /// A newtype's base name and `TypeId` for a trait-impl lookup fallback,
+    /// else the name and id given.
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if let Some(base_id) = tt.get_newtype_base(type_id) {

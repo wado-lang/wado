@@ -673,3 +673,50 @@ export fn run() {
 
     crate::common::compile_source(source).expect("a non-scalar &mut binding compiles");
 }
+
+#[test]
+fn stdlib_identity_attribute_is_checked_in_an_imported_module_too() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("dep.wado"),
+        "#![stdlib]\npub fn helper() -> i32 { return 1 }\n",
+    )
+    .expect("write dep");
+    let entry = "use { helper } from \"./dep.wado\";\ntest \"x\" { assert helper() == 1; }\n";
+
+    let options = wado_compiler::CompilerOptions {
+        target_world: Some("test".to_string()),
+        ..Default::default()
+    };
+    let Err(err) = crate::common::compile_source_with_compiler_options(
+        &dir.path().join("main_test.wado"),
+        entry,
+        options,
+    ) else {
+        panic!("an imported module's malformed `#![stdlib]` must be rejected");
+    };
+    assert!(
+        err.to_string().contains("#![stdlib] takes the name of"),
+        "unexpected message: {err}"
+    );
+}
+
+#[test]
+fn stdlib_identity_attribute_naming_no_bundled_module_is_an_error() {
+    // Any file can write the attribute, so this is a diagnostic, never a panic.
+    let source = "#![stdlib(\"core:bogus.wado\")]\nfn main() {}\n";
+
+    let Err(err) = crate::common::compile_source(source) else {
+        panic!("an unregistered stdlib identity must be rejected");
+    };
+    match err {
+        CompileError::Analyzer { message, line, .. } => {
+            assert!(
+                message.contains("does not name a bundled stdlib module"),
+                "unexpected message: {message}"
+            );
+            assert_eq!(line, 1, "the attribute's own line");
+        }
+        other => panic!("Expected Analyzer error, got: {other}"),
+    }
+}

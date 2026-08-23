@@ -1,0 +1,7 @@
+//! Defaults whose bodies are re-walked at each call site.
+
+pub struct Inner { n: i32 }
+
+pub fn with_scalar_default(a: i32, b: i32 = a + 1) -> i32 { return a + b }
+
+pub fn with_literal_default(a: i32, b: Inner = Inner { n: 1 }) -> i32 { return a + b.n }

@@ -512,6 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults,
             param_names,
             consumes_self,
+            inherent_visibility,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -539,8 +540,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_defaults: vec![],
                 param_names: vec![],
                 consumes_self: false,
+                inherent_visibility: None,
             }
         };
+
+        self.check_inherent_member_visibility(
+            inherent_visibility,
+            inherent_impl_module.as_ref(),
+            super::expr::MemberOwner::Type(base_type_id),
+            method_name,
+            super::types::ImplMemberKind::Method,
+            call_id,
+            span,
+        );
 
         // Tuple.len() is a compile-time constant — return immediately without a function call.
         if method_name == "len" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
@@ -719,8 +731,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let expected_type = expected_param_types[i];
                     let mut default_expr = default_ast.clone();
+                    let vantage = Some((callee_module.clone(), default_expr.id().space()));
                     default_expr.substitute_idents(&subs);
-                    let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                    let resolved = s.with_foreign_vantage(vantage, |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    });
                     args.push(placeholder(resolved, default_expr.span()));
                     if let Some(name) = param_names.get(i) {
                         subs.insert(name.clone(), default_expr);
@@ -1447,6 +1462,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (struct_name_for_lookup, struct_key_for_lookup) =
             self.static_receiver_struct_key(target_type_id);
 
+        // `Type::<T>::method()` parses as a static-method call and never
+        // reaches `resolve_call`, which checks the bare spelling. The receiver
+        // key comes from the resolved target type, as every lookup below does.
+        let static_receiver = struct_name_for_lookup.as_ref().map(|name| {
+            struct_key_for_lookup
+                .clone()
+                .unwrap_or_else(|| self.impl_target(name))
+        });
+        if let (Some(name), Some(receiver)) = (&struct_name_for_lookup, &static_receiver) {
+            self.check_static_call_visibility(
+                receiver,
+                &format!("{name}::{}", static_call.method),
+                Some(static_call.id),
+                static_call.span,
+            );
+        }
+
         // Look up parameter types for coercion. Thread the canonical
         // receiver key (from the resolved target type) so that two
         // modules' same-named structs each route to their own impl.
@@ -1491,6 +1523,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .unwrap_or_default();
+        // The module those defaults were written in, so their bodies answer to
+        // it rather than to this call site.
+        let static_method_module = static_receiver.as_ref().and_then(|receiver| {
+            self.static_method_entry(receiver, &static_call.method)
+                .map(|e| e.module.clone())
+        });
 
         // For generic variant constructors (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
@@ -1595,8 +1633,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let expected_type = param_types[i];
                 let mut default_expr = default_ast.clone();
+                let vantage = static_method_module
+                    .clone()
+                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
-                let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+                let resolved = self.with_default_scope_module(static_method_module.clone(), |s| {
+                    s.with_foreign_vantage(vantage, |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    })
+                });
                 args.push(placeholder(resolved, default_expr.span()));
                 subs.insert(pname.clone(), default_expr);
             }

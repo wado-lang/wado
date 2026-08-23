@@ -1,0 +1,9 @@
+//! A file-private associated constant is not reachable from another file.
+use { Item } from "./sub/impl_member_lib.wado";
+
+export fn run() {
+    assert Item::FILE_PRIVATE_C == 10;
+}
+
+__DATA__
+{"compile_error": "is private to"}

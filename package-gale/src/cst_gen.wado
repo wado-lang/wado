@@ -11,7 +11,6 @@ use { LitToken } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { to_pascal_case, escape_ident, rule_alts_labeled } from "./gen_util.wado";
-use { should_emit_actions } from "./java2wado.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -155,7 +154,7 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 /// Emit a `to_string_tree(result)` convenience that supplies the grammar's name
 /// tables (rules from `RULE_NAMES`, tokens via the generated
 /// `token_kind_name`). Used by driver tests; never called by the parser.
-pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>, emit_actions: bool) {
     let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
     // The renderers run from driver tests and build the table on demand;
     // `$ctx.toStringTree()` runs inside a parse, so it caches one.
@@ -167,7 +166,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.line(&"return v;");
     w.end();
     w.blank();
-    if should_emit_actions(grammar) {
+    if emit_actions {
         w.line(&"global CTX_TOKEN_NAMES: List<String> = _token_names();");
         w.blank();
     }
