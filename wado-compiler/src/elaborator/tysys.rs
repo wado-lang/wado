@@ -311,8 +311,6 @@ impl TypeSystem {
         self.type_table.borrow().fq_base_type_name(type_id)
     }
 
-    /// For newtypes, get the base type name and ID for trait impl lookup fallback.
-    /// Returns (`base_name`, `base_type_id`) if the type is a newtype; otherwise returns the same name/id.
     /// The first link at or below `type_id` — itself included — writing its own
     /// impl of `trait_`, stopping above a scalar base: a primitive's operator
     /// impl *is* the instruction, not one a newtype inherits.
@@ -359,6 +357,8 @@ impl TypeSystem {
         }
     }
 
+    /// A newtype's base name and `TypeId` for a trait-impl lookup fallback,
+    /// else the name and id given.
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if let Some(base_id) = tt.get_newtype_base(type_id) {
