@@ -1431,11 +1431,15 @@ impl TypeError {
                     let verb = member_kind.verb();
                     match visibility {
                         crate::ast::Visibility::Internal => format!(
-                            "{kind} `{member_name}` of `{type_name}` is `internal` to its package                              and cannot be {verb} from another package; mark it `pub` to expose it                              across packages"
+                            "{kind} `{member_name}` of `{type_name}` is `internal` to its package \
+                             and cannot be {verb} from another package; mark it `pub` to \
+                             expose it across packages"
                         ),
                         crate::ast::Visibility::Private | crate::ast::Visibility::Public => {
                             format!(
-                                "{kind} `{member_name}` of `{type_name}` is private to its                                  defining file; mark it `internal` (same package) or `pub` (cross                                  package) to widen access"
+                                "{kind} `{member_name}` of `{type_name}` is private to its defining \
+                                 file; mark it `internal` (same package) or `pub` (cross \
+                                 package) to widen access"
                             )
                         }
                     }
