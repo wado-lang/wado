@@ -35,6 +35,9 @@ use super::tysys::TypeSystem;
 struct PendingExtends {
     child: crate::defs::DefId,
     child_name: String,
+    /// Whether the child itself takes type parameters. A generic resource has
+    /// no `extends` support yet.
+    child_is_generic: bool,
     parent: Type,
     module: ModuleSource,
     span: crate::token::Span,
@@ -53,6 +56,7 @@ type ResourceMethodNames = IndexMap<crate::defs::DefId, Vec<(String, crate::toke
 fn resolve_resource_extends<H: CompilerHost>(
     pending: &[PendingExtends],
     method_names: &ResourceMethodNames,
+    generic_resources: &IndexSet<crate::defs::DefId>,
     resolutions: &crate::resolve::Resolutions,
     type_table: &RefCell<TypeTable>,
     logger: &Logger<'_, H>,
@@ -69,16 +73,6 @@ fn resolve_resource_extends<H: CompilerHost>(
 
     let mut links: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
     for clause in pending {
-        if matches!(clause.parent, Type::Generic(_) | Type::NamespacedGeneric(_)) {
-            reject(
-                clause,
-                format!(
-                    "`{}` extends a parent with generic arguments; not supported in v1",
-                    clause.child_name
-                ),
-            );
-            continue;
-        }
         let Some(site) = crate::resolve::head_site(&clause.parent) else {
             reject(
                 clause,
@@ -88,13 +82,47 @@ fn resolve_resource_extends<H: CompilerHost>(
         };
         let parent = match resolutions.get(site) {
             crate::resolve::Resolution::Def(def) => def,
-            // An unresolved name is already reported as such; saying it twice
-            // helps no one.
-            crate::resolve::Resolution::Binder(_) | crate::resolve::Resolution::Unresolved => {
+            crate::resolve::Resolution::Binder(_) => {
+                reject(
+                    clause,
+                    format!(
+                        "`{}` extends a type parameter; a parent must be a resource declaration",
+                        clause.child_name
+                    ),
+                );
+                continue;
+            }
+            crate::resolve::Resolution::Unresolved => {
+                let mut spelled = String::new();
+                crate::unparse::unparse_type_into(&clause.parent, &mut spelled);
+                reject(
+                    clause,
+                    format!(
+                        "`{}` extends `{spelled}`, which names nothing",
+                        clause.child_name
+                    ),
+                );
                 continue;
             }
         };
         let defs = resolutions.defs();
+        // A generic resource takes no part in `extends` yet — nothing asks for
+        // it. The written shape is not the question: `Base` and `Base<i32>`
+        // name one declaration, and only the declaration knows its arity.
+        if clause.child_is_generic || generic_resources.contains(&parent) {
+            let generic = if clause.child_is_generic {
+                clause.child_name.clone()
+            } else {
+                defs.name(parent).to_string()
+            };
+            reject(
+                clause,
+                format!(
+                    "`{generic}` is generic; `extends` does not support generic resources yet"
+                ),
+            );
+            continue;
+        }
         if defs.kind(parent) != crate::defs::DefKind::Resource {
             reject(
                 clause,
@@ -337,6 +365,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut pending_extends: Vec<PendingExtends> = Vec::new();
         let mut resource_method_names: ResourceMethodNames = IndexMap::default();
+        let mut generic_resources: IndexSet<crate::defs::DefId> = IndexSet::default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -479,11 +508,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }) {
                                 type_table.borrow_mut().mark_extern_ref_resource(def);
                             }
+                            let is_generic =
+                                resource_decl.type_params.iter().any(|p| !p.is_effect);
+                            if is_generic {
+                                generic_resources.insert(def);
+                            }
+                            // Instance methods only: a static is not inherited,
+                            // so a child declaring one of the same name shadows
+                            // nothing.
                             resource_method_names.insert(
                                 def,
                                 resource_decl
                                     .methods
                                     .iter()
+                                    .filter(|m| {
+                                        m.params
+                                            .iter()
+                                            .any(|p| p.self_kind != ast::SelfKind::None)
+                                    })
                                     .map(|m| (m.name.clone(), m.span))
                                     .collect(),
                             );
@@ -491,6 +533,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 pending_extends.push(PendingExtends {
                                     child: def,
                                     child_name: resource_decl.name.clone(),
+                                    child_is_generic: is_generic,
                                     parent: parent.clone(),
                                     module: module_source.clone(),
                                     span: resource_decl.span,
@@ -1107,6 +1150,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         resolve_resource_extends(
             &pending_extends,
             &resource_method_names,
+            &generic_resources,
             &resolutions,
             &type_table,
             logger,

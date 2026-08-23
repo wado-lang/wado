@@ -1250,8 +1250,12 @@ impl Attribute {
     }
 
     /// The backing `#[cm(..., type="extern-ref" | "i32")]` declares, if any.
-    /// The parser has already rejected any other spelling.
+    /// The parser has already rejected any other spelling. Another attribute's
+    /// `type` field is its own business: only `#[cm]` names a backing.
     pub fn cm_resource_backing(&self) -> Option<CmResourceBacking> {
+        if self.name != "cm" {
+            return None;
+        }
         self.kv_value("type").and_then(CmResourceBacking::parse)
     }
 

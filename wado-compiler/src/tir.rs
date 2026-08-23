@@ -1137,11 +1137,17 @@ impl TypeTable {
         self.resource_parents.get(&def).copied()
     }
 
-    /// The type two branches agree on when one resource extends the other:
-    /// the ancestor. `None` when neither reaches the other, which is a
-    /// mismatch like any other.
-    #[must_use]
-    pub fn resource_join(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+    /// The type two branches agree on when one resource extends the other: the
+    /// ancestor, under the same shared reference the branches were written
+    /// with. `None` when neither reaches the other — a mismatch like any
+    /// other — and for `&mut`, which is invariant.
+    pub fn resource_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if let (ResolvedType::Ref(a_inner), ResolvedType::Ref(b_inner)) = (self.get(a), self.get(b))
+        {
+            let (a_inner, b_inner) = (*a_inner, *b_inner);
+            let joined = self.resource_join(a_inner, b_inner)?;
+            return Some(self.intern(ResolvedType::Ref(joined)));
+        }
         let (ResolvedType::Resource { def: a_def }, ResolvedType::Resource { def: b_def }) =
             (self.get(a), self.get(b))
         else {

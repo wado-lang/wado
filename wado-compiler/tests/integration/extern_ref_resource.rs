@@ -132,7 +132,7 @@ fn extends_rejects_a_cycle() {
 }
 
 #[test]
-fn extends_rejects_a_generic_parent_in_v1() {
+fn extends_rejects_a_generic_parent_written_with_arguments() {
     let source = "#[cm(\"web:dom/base\", type = \"extern-ref\")]
          resource Base<T> {}
          #[cm(\"web:dom/leaf\", type = \"extern-ref\")]
@@ -141,8 +141,8 @@ fn extends_rejects_a_generic_parent_in_v1() {
 ";
     let d = diagnostics(source);
     assert!(
-        d.iter().any(|e| e.contains("generic arguments")),
-        "a generic parent is out of scope in v1 and must be reported, got {d:?}"
+        d.iter().any(|e| e.contains("generic")),
+        "a generic parent must be reported, got {d:?}"
     );
 }
 
@@ -427,4 +427,133 @@ fn the_qualified_form_reaches_an_inherited_method() {
         d.is_empty(),
         "the child qualifies an inherited method, got {d:?}"
     );
+}
+
+// --- The rules the WEP states, each against every construct that can reach
+// --- them. Derived from the spec, not from the implementation.
+
+#[test]
+fn extends_rejects_an_unknown_parent() {
+    let source = "#[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends Nope {}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("Nope")),
+        "an unknown parent must be reported, got {d:?}"
+    );
+}
+
+#[test]
+fn extends_rejects_a_type_parameter_as_parent() {
+    let source = "#[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node<T> extends T {}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(!d.is_empty(), "a type parameter is not a resource");
+}
+
+#[test]
+fn extends_rejects_a_generic_parent_named_without_arguments() {
+    let source = "#[cm(\"web:dom/base\", type = \"extern-ref\")]\n\
+         resource Base<T> {\n    fn get(&self) -> T;\n}\n\
+         #[cm(\"web:dom/leaf\", type = \"extern-ref\")]\n\
+         resource Leaf extends Base {}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("generic")),
+        "the declaration's arity decides, not the spelling, got {d:?}"
+    );
+}
+
+#[test]
+fn extends_rejects_a_generic_child() {
+    let source = "#[cm(\"web:dom/parent\", type = \"extern-ref\")]\n\
+         resource Parent {}\n\
+         #[cm(\"web:dom/child\", type = \"extern-ref\")]\n\
+         resource Child<T> extends Parent {}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("generic")),
+        "a generic child has no subtype relation to give, got {d:?}"
+    );
+}
+
+#[test]
+fn another_attributes_type_field_is_its_own_business() {
+    let source = "#[wire(type = \"i32\")]\n\
+         struct Wrapper { a: i32 }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        !d.iter().any(|e| e.contains("resource")),
+        "only #[cm] names a backing, got {d:?}"
+    );
+}
+
+#[test]
+fn a_child_may_declare_a_static_the_parent_also_declares() {
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {\n    fn make() -> EventTarget;\n}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {\n    fn make() -> Node;\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.is_empty(),
+        "a static is not inherited, so it shadows nothing, got {d:?}"
+    );
+}
+
+/// `&Child` / `&Parent` branches, in both orders, through every construct that
+/// unifies branches.
+fn ref_branches(body: &str) -> String {
+    format!(
+        "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {{}}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {{}}\n\
+         fn pick(flag: bool, n: &Node, t: &EventTarget) -> i32 {{\n{body}\n}}\n\
+         fn size(e: &EventTarget) -> i32 {{ return 1; }}\n\
+         export fn run() {{}}\n"
+    )
+}
+
+#[test]
+fn shared_reference_branches_join_in_both_orders() {
+    for body in [
+        "    let x = if flag { n } else { t };\n    return size(x);",
+        "    let x = if flag { t } else { n };\n    return size(x);",
+    ] {
+        let d = diagnostics(&ref_branches(body));
+        assert!(d.is_empty(), "`if` joins &Child with &Parent, got {d:?}");
+    }
+}
+
+#[test]
+fn shared_reference_match_arms_join_in_both_orders() {
+    for body in [
+        "    let x = match flag { true => n, false => t };\n    return size(x);",
+        "    let x = match flag { true => t, false => n };\n    return size(x);",
+    ] {
+        let d = diagnostics(&ref_branches(body));
+        assert!(d.is_empty(), "`match` joins &Child with &Parent, got {d:?}");
+    }
+}
+
+#[test]
+fn if_let_branches_join_on_the_ancestor() {
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {}\n\
+         fn pick(maybe: Option<Node>, t: EventTarget) -> EventTarget {\n\
+         \x20   let x = if let Option::Some(n) = maybe { n } else { t };\n\
+         \x20   return x;\n\
+         }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "`if let` joins on the ancestor, got {d:?}");
 }

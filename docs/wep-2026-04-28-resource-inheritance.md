@@ -102,7 +102,7 @@ Rules:
 
 - `extends` introduces a new keyword. Existing identifiers named `extends` (none in the standard library) become reserved.
 - Only one parent type is permitted (single inheritance). The parent must be a `resource`, not a trait, struct, or enum.
-- The parent expression may include generic arguments: `resource Child<T> extends Parent<T> { ... }`. Generic arity does not have to match between child and parent.
+- Neither side may be generic: a generic resource takes no part in `extends` yet. Not a rejection of the idea — no consumer asks for it (WebIDL has no generics), so it is unbuilt rather than out of scope. The check reads the declaration's arity, not the written shape, so `Base` and `Base<i32>` are one answer.
 - `extends` is permitted only when both the declaring resource and its parent declare `type = "extern-ref"` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).
 - Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private, **provided `Y` is visible at every use site of `X`**. The compiler enforces this; it is not a special rule for `extends`.
 - Cycles are rejected (`A extends B`, `B extends A`).
@@ -142,7 +142,9 @@ The `&T` covariance rule applies when references are used, but `&` on resources 
 
 #### Function types
 
-`fn(A) -> B` (with or without `with` effects) is **contravariant in `A`** and **covariant in `B`**. Effects do not interact with subtyping for resources; they follow their own rules.
+**v1 is invariant in both**, and the rest of this section is the direction, not the state. Invariance only rejects programs subtyping would accept, and no consumer writes a resource-typed function parameter yet: Tide's callbacks reach the host through a key, not a Wado function type ([Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks)).
+
+The direction: `fn(A) -> B` (with or without `with` effects) is **contravariant in `A`** and **covariant in `B`**. Effects do not interact with subtyping for resources; they follow their own rules.
 
 ```wado
 let f: fn(Element) -> i32 = ...;
@@ -575,7 +577,7 @@ v1 has no release path. Wasm GC offers no finalization, so a handle the host tab
 
 ### Implementation Roadmap
 
-This is the full feature. The minimum subset Tide's MVP needs, and the order to land it in, is [Tide § Minimum Implementation Roadmap](./wep-2026-04-01-tide.md#minimum-implementation-roadmap); generic parents and the stdlib-wide `type=` migration sit outside it.
+This is the full feature. The minimum subset Tide's MVP needs, and the order to land it in, is [Tide § Minimum Implementation Roadmap](./wep-2026-04-01-tide.md#minimum-implementation-roadmap); generic resources and the stdlib-wide `type=` migration sit outside it.
 
 #### M1: Language core + `#[cm(...)]` extension + minimal lowering (single landing)
 
