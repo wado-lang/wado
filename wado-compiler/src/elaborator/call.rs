@@ -1332,6 +1332,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, effective_name.to_string())
             }
         }
+        // Check for prelude functions (panic, unreachable). These are
+        // defined in core:rt and re-exported by core:prelude, and reach
+        // codegen by name rather than as an ordinary callee, so they answer
+        // ahead of the site below.
+        else if matches!(effective_name, "panic" | "unreachable") {
+            (
+                Some(CalleeRef::rt_prelude(effective_name)),
+                effective_name.to_string(),
+            )
+        }
+        // The call's own reference site, answered by the module that wrote it
+        // (WEP 2026-08-12). This is what makes a parameter default name the
+        // callee module's function: the default is written in the declaring
+        // module and walked from the call site, so a tier order over the
+        // *walking* module's names answers with the caller's same-named
+        // declaration instead.
+        else if let Some(callee) = self
+            .tysys
+            .resolutions
+            .declared_if_walked(ident.id)
+            .filter(|def| self.tysys.resolutions.defs().kind(*def) == crate::defs::DefKind::Function)
+        {
+            self.record_reference_to_decl(ident.id, callee);
+            let defs = self.tysys.resolutions.defs();
+            (
+                Some(CalleeRef::new(
+                    defs.module(callee).clone(),
+                    defs.name(callee).to_string(),
+                )),
+                effective_name.to_string(),
+            )
+        }
         // Check if it's a local function (defined in this module) or
         // a built-in type constructor (Ok, Err, Some, None).
         // The four constructor names flow through the
@@ -1361,14 +1393,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &self.current_module_source,
                     effective_name.to_string(),
                 )),
-                effective_name.to_string(),
-            )
-        }
-        // Check for prelude functions (panic, unreachable)
-        // These are defined in core:rt and re-exported by core:prelude
-        else if matches!(effective_name, "panic" | "unreachable") {
-            (
-                Some(CalleeRef::rt_prelude(effective_name)),
                 effective_name.to_string(),
             )
         }

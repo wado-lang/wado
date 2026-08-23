@@ -1,0 +1,14 @@
+// A parameter default is written in the callee's module and resolved at the
+// call site, so the function it names is the *callee's* — even where the
+// caller declares one under the same spelling.
+
+use { labelled } from "./sub/cross_module_same_name_default_fn_a.wado";
+
+fn tag() -> i32 {
+    return 2;
+}
+
+test "a parameter default names the callee module's function" {
+    assert labelled() == 1;
+    assert tag() == 2;
+}
