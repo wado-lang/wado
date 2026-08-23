@@ -147,16 +147,12 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
     analysis
 }
 
-/// The callee [`FunctionRef`] descriptor for every function, indexed by
-/// `func_id.index()` (== store position). Used so a call site's identity is read
-/// by its stamped `func_id` rather than the call node's own `FunctionRef`.
-/// The descriptor table, reused across the fixed-point loop's rounds. Inside the
-/// loop a function's identity is fixed and the store only grows — `dce`, the one
-/// pass that removes and renumbers functions, runs outside it — so a round
-/// appends the newcomers instead of rebuilding all of them. Rebuilding cost the
-/// gale compile ~3% of its wall clock: `inline` and `value_copy_demote` each
-/// rebuilt every round, cloning a name, a `MonomorphInfo` and a
-/// `LocalMethodName` per function.
+/// The table of [`build_callee_descriptors`], reused across the fixed-point
+/// loop's rounds. Inside the loop a function's identity is fixed and the store
+/// only grows — `dce`, the one pass that removes and renumbers functions, runs
+/// outside it — so a round appends the newcomers instead of rebuilding every
+/// entry, each of which clones a name, a `MonomorphInfo` and a
+/// `LocalMethodName`.
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
@@ -186,6 +182,9 @@ impl DescriptorCache {
     }
 }
 
+/// The callee [`FunctionRef`] descriptor for every function, indexed by
+/// `func_id.index()` (== store position). Used so a call site's identity is read
+/// by its stamped `func_id` rather than the call node's own `FunctionRef`.
 pub(super) fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
     project
         .functions

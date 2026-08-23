@@ -1094,7 +1094,7 @@ pub fn inline_functions(
             &recursive_functions,
             &type_table,
             inline_threshold,
-            &descriptors,
+            descriptors,
             &foldable,
             &loopy,
         );
@@ -1178,7 +1178,7 @@ pub fn inline_functions(
                     body,
                     root,
                     &inline_candidates,
-                    &descriptors,
+                    descriptors,
                     &mut frame,
                     &project.type_table.borrow(),
                     &mut inlined_funcs,

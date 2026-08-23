@@ -66,12 +66,12 @@ pub fn demote_value_copies(
     let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
     {
         let type_table = project.type_table.borrow();
-        let variant_reaching = helpers_reaching_variant_copies(project, &descriptors, &type_table);
+        let variant_reaching = helpers_reaching_variant_copies(project, descriptors, &type_table);
         for f in &project.functions {
             let f = f.borrow();
             if f.value_copy_type().is_some()
                 && let Some(body) = &f.body
-                && body_is_list_wrapper_copy(body, &descriptors)
+                && body_is_list_wrapper_copy(body, descriptors)
                 && let Some(id) = f.id
                 && !variant_reaching.contains(&id)
             {
@@ -91,7 +91,7 @@ pub fn demote_value_copies(
     let type_table = project.type_table.clone();
     let mut analyzer = Analyzer {
         funcs: &project.functions,
-        descriptors: &descriptors,
+        descriptors,
         type_table: &type_table,
         eimm_memo: IndexMap::default(),
     };
@@ -172,7 +172,7 @@ pub fn demote_value_copies(
         next += 1;
         shallow.id = Some(id);
         if let Some(body) = &mut shallow.body {
-            rewrite_array_clone_to_shallow(body, array_clone_shallow_id, &descriptors);
+            rewrite_array_clone_to_shallow(body, array_clone_shallow_id, descriptors);
         }
         let key = FunctionRef::from_resolved(&shallow, shallow.module_source.clone()).function_id();
         project.func_index.insert(key, id);
