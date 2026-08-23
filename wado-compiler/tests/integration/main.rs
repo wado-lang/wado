@@ -45,6 +45,7 @@ mod remarks;
 mod scalar_read_move;
 mod semantics;
 mod serde_positional;
+mod stdlib_module_as_entry;
 mod stores_check_sem;
 mod stream_canonical_options;
 mod string_templates;

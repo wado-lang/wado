@@ -359,16 +359,9 @@ fn write_flat_reexport_file(
     Ok(())
 }
 
-/// Build the `#![stdlib("...")]` identity string for a generated file, or
-/// `None` when the file lives outside the bundled stdlib namespaces and
-/// therefore must not declare an identity.
-///
-/// `wado-compiler::loader::parse_stdlib_identity_attribute` panics when an
-/// identity does not match any registered stdlib path; `wasmtime:wasi-http`
-/// and other wrapper packages never get registered, so emitting an identity
-/// for them would turn an LSP "open file" into a panic. The bundled stdlib
-/// is the union of `wasi:*` and `core:*` modules — restrict identity
-/// emission to those namespaces.
+/// Build the `#![stdlib("...")]` identity string for a generated file, `None`
+/// outside the bundled stdlib namespaces (`core:` / `wasi:`) — a wrapper
+/// package is never registered, and the loader rejects an unregistered identity.
 fn stdlib_identity_for(namespace: &str, pkg_name: &str, file: Option<&str>) -> Option<String> {
     if namespace != "wasi" && namespace != "core" {
         return None;
