@@ -1,6 +1,5 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
-use super::sig::AssocConstSig;
 use crate::ast::{
     self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
     ForOfStmt, ForStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt, Stmt,
@@ -1589,18 +1588,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some(AssocConstSig {
-                        ty: type_id,
-                        value: const_expr,
-                        ..
-                    }) =
+                    if let Some(assoc) =
                         self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
+                        // A pattern reaches the constant exactly as an
+                        // expression does, so it answers to the same ladder.
+                        let owner = variant_qualifier
+                            .as_ref()
+                            .map_or_else(|| variant_name.clone(), |q| self.get_type_name(q));
+                        self.check_inherent_member_visibility(
+                            assoc.inherent_visibility,
+                            Some(&assoc.module),
+                            &owner,
+                            variant_name,
+                            super::types::ImplMemberKind::AssociatedConstant,
+                            *span,
+                        );
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal
                         // or an opaque constant-value pattern — so return none
                         // either way.
-                        self.resolve_expr(&const_expr, ctx, Some(type_id));
+                        self.resolve_expr(&assoc.value, ctx, Some(assoc.ty));
                         return Vec::new();
                     }
 

@@ -1,0 +1,11 @@
+//! An `internal` associated constant is reachable in pattern position from the
+//! same package.
+use { Item, make_item } from "./sub/impl_member_lib.wado";
+
+test "internal associated constant in a pattern" {
+    let v = make_item().v + 20;
+    match v {
+        Item::PKG_INTERNAL_C => { assert true }
+        _ => { assert false }
+    }
+}

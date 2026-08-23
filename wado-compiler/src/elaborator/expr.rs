@@ -614,10 +614,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
         if let Some(assoc) = self.associated_constant_of_path(ident) {
+            let owner = assoc_const_owner_segment(ident);
             self.check_inherent_member_visibility(
                 assoc.inherent_visibility,
                 Some(&assoc.module),
-                assoc.ty,
+                owner,
                 ident.segments.last().map_or(&ident.name, |s| &s.name),
                 super::types::ImplMemberKind::AssociatedConstant,
                 ident.span,
@@ -1344,6 +1345,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Enforce an inherent impl member's rung of the visibility ladder.
     ///
+    /// `owner_name` is the type the member is declared on — for a constant that
+    /// is its owner, never its own declared type.
+    ///
     /// `visibility` is `None` for members whose reach the member does not
     /// decide — a trait impl's methods reach as far as the trait, and resource
     /// methods and builtins have no ladder of their own.
@@ -1351,7 +1355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         visibility: Option<crate::ast::Visibility>,
         impl_module: Option<&ModuleSource>,
-        receiver_type: TypeId,
+        owner_name: &str,
         member_name: &str,
         member_kind: super::types::ImplMemberKind,
         span: Span,
@@ -1367,7 +1371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let _ = self.emit(TypeError::PrivateMemberAccess {
-            type_name: self.tysys.type_id_to_string(receiver_type),
+            type_name: owner_name.to_string(),
             member_name: member_name.to_string(),
             member_kind,
             visibility,
@@ -5252,4 +5256,15 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             _ => ast::walk_expr(self, expr),
         }
     }
+}
+
+/// The segment naming the owner of an associated constant path — `K` in
+/// `K::SECRET`, `K` in `ns::K::SECRET`. Falls back to the fused spelling when
+/// the path carries no owner segment.
+fn assoc_const_owner_segment(ident: &ast::IdentExpr) -> &str {
+    ident
+        .segments
+        .len()
+        .checked_sub(2)
+        .map_or(ident.name.as_str(), |i| ident.segments[i].name.as_str())
 }
