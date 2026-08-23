@@ -471,7 +471,10 @@ impl AstVisitor for Resolver<'_> {
     fn visit_block(&mut self, block: &ast::Block) {
         let mut scope = IndexMap::default();
         for stmt in &block.stmts {
+            // A local `impl` block writes no name for the scope to hold — its
+            // methods reach their receiver's type, never this map.
             if let ast::Stmt::Item(item) = stmt
+                && !matches!(**item, ast::Item::Impl(_))
                 && let Some(def) = self.defs.of_ast_id(item.id())
             {
                 scope.insert(self.defs.name(def).to_string(), def);

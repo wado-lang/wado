@@ -83,7 +83,12 @@ pub enum DefKind {
     VariantCase,
     /// A `flags` member.
     FlagsMember,
-    /// A method declared by a trait, a resource, or an effect interface.
+    /// An `impl` block. It writes no name, so nothing can import it and no
+    /// scope answers for it; its identity exists so the methods it declares
+    /// have an owner and its own facts have a key.
+    Impl,
+    /// A method declared by a trait, a resource, an effect interface, or an
+    /// `impl` block.
     Method,
 }
 
@@ -206,20 +211,24 @@ impl DefTable {
             // it would otherwise be the one type in the language with no
             // declaration to name it.
             for item in &ast.items {
-                if let Item::TupleTypeDecl(decl) = item
-                    && !table.by_ast_id.contains_key(&decl.id)
-                {
-                    table.declare(Def {
-                        ast_id: decl.id,
-                        module: module.clone(),
-                        name: crate::name::TUPLE_TYPE_NAME.to_string(),
-                        kind: DefKind::BuiltinType,
-                        visibility: decl.visibility,
-                        span: Some(decl.span),
-                        parent: None,
-                        function_local: false,
-                        members: Vec::new(),
-                    });
+                match item {
+                    Item::TupleTypeDecl(decl) if !table.by_ast_id.contains_key(&decl.id) => {
+                        table.declare(Def {
+                            ast_id: decl.id,
+                            module: module.clone(),
+                            name: crate::name::TUPLE_TYPE_NAME.to_string(),
+                            kind: DefKind::BuiltinType,
+                            visibility: decl.visibility,
+                            span: Some(decl.span),
+                            parent: None,
+                            function_local: false,
+                            members: Vec::new(),
+                        });
+                    }
+                    // An `impl` block is a declaration the symbol table never
+                    // collected, since it writes no name to collect it under.
+                    Item::Impl(block) => table.declare_impl_block(module, block, false),
+                    _ => {}
                 }
             }
             table.declare_members(module, ast);
@@ -256,12 +265,45 @@ impl DefTable {
         }
     }
 
+    /// Identify an `impl` block, which no symbol table row names.
+    ///
+    /// Its name is empty because it writes none: `name` is a rendering, and an
+    /// `impl` block has nothing to render. That is also what keeps it out of
+    /// every scope — a name-keyed layer can only be reached by a spelling, and
+    /// no spelling reaches this.
+    fn declare_impl_block(
+        &mut self,
+        module: &ModuleSource,
+        block: &crate::ast::ImplBlock,
+        function_local: bool,
+    ) {
+        if self.by_ast_id.contains_key(&block.id) {
+            return;
+        }
+        self.declare(Def {
+            ast_id: block.id,
+            module: module.clone(),
+            name: String::new(),
+            kind: DefKind::Impl,
+            visibility: Visibility::Private,
+            span: Some(block.span),
+            parent: None,
+            function_local,
+            members: Vec::new(),
+        });
+    }
+
     /// Identify a function-local item (`Stmt::Item`) and its members.
     ///
     /// A local `struct` is a declaration like any other — two functions writing
     /// the same spelling declare two of them — so it gets an identity rather
     /// than a mangled storage name standing in for one.
     fn declare_local_item(&mut self, module: &ModuleSource, item: &Item) {
+        if let Item::Impl(block) = item {
+            self.declare_impl_block(module, block, true);
+            self.declare_item_members(module, item);
+            return;
+        }
         let (kind, name) = match item {
             Item::Struct(d) => (DefKind::Struct, &d.name),
             Item::Enum(d) => (DefKind::Enum, &d.name),
@@ -341,6 +383,15 @@ impl DefTable {
                 members(
                     DefKind::Method,
                     i.methods.iter().map(|m| (m.id, &m.name, None, m.span)),
+                ),
+            ),
+            Item::Impl(b) => (
+                b.id,
+                members(
+                    DefKind::Method,
+                    b.methods
+                        .iter()
+                        .map(|m| (m.id, &m.name, Some(m.visibility), m.span)),
                 ),
             ),
             _ => return,
@@ -635,6 +686,61 @@ mod tests {
             |d: DefId| -> Vec<&str> { defs.members(d).iter().map(|m| defs.name(*m)).collect() };
         assert_eq!(field_names(widgets[0]), ["a"]);
         assert_eq!(field_names(widgets[1]), ["b"]);
+    }
+
+    /// An `impl` block is a declaration: two blocks writing the same method
+    /// name declare two methods, and each block owns its own.
+    #[test]
+    fn an_impl_block_and_its_methods_are_declarations() {
+        let source = r#"
+            pub struct Point { x: i32 }
+            pub struct Line { a: i32 }
+            impl Point { pub fn len(&self) -> i32 { return self.x; } }
+            impl Line { pub fn len(&self) -> i32 { return self.a; } }
+        "#;
+        let (defs, module) = build_from_source(source);
+        let blocks: Vec<DefId> = defs.iter().filter(|d| defs.kind(*d) == DefKind::Impl).collect();
+        assert_eq!(blocks.len(), 2);
+        assert_ne!(blocks[0], blocks[1]);
+        // No spelling reaches an `impl` block, so it renders none.
+        assert_eq!(defs.name(blocks[0]), "");
+        assert_eq!(defs.module(blocks[0]), &module);
+
+        for block in &blocks {
+            assert_eq!(defs.members(*block).len(), 1);
+            let method = defs.members(*block)[0];
+            assert_eq!(defs.name(method), "len");
+            assert_eq!(defs.kind(method), DefKind::Method);
+            assert_eq!(defs.parent(method), Some(*block));
+        }
+        assert_ne!(defs.members(blocks[0])[0], defs.members(blocks[1])[0]);
+    }
+
+    /// A local `impl` block is declared by the function that writes it, so its
+    /// methods are identified like any other block's.
+    #[test]
+    fn a_function_local_impl_block_is_a_declaration_of_its_own() {
+        let source = r#"
+            pub fn run() -> i32 {
+                struct Widget { a: i32 }
+                impl Widget { fn get(&self) -> i32 { return self.a; } }
+                let w = Widget { a: 1 };
+                return w.get();
+            }
+        "#;
+        let (defs, _) = build_from_source(source);
+        let block = defs
+            .iter()
+            .find(|d| defs.kind(*d) == DefKind::Impl)
+            .expect("the local impl block is a declaration");
+        assert!(defs.is_function_local(block));
+        assert_eq!(
+            defs.members(block)
+                .iter()
+                .map(|m| defs.name(*m))
+                .collect::<Vec<_>>(),
+            ["get"]
+        );
     }
 
     /// A cached declaration fact carries a [`DefId`], so a later compile that
