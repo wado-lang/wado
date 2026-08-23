@@ -93,9 +93,15 @@ the two components' host imports without hand-written forwarding.
 - [ ] Resources and handles. A component exporting a `resource` — with its
       methods, static constructors, and `borrow<T>` parameters — is rejected
       when its type is decoded. Wado has resources; what is missing is the
-      consuming direction of the mapping. A bundled ICU surface
-      ([`core:icu`](./wep-2026-08-09-core-icu.md))
-      rests on this.
+      consuming direction of the mapping. It splits: a `dtor`-less exported
+      handle decodes to a copyable
+      [token](./wep-2026-05-21-resource-ownership.md) with no ownership analysis
+      to consume, where a `dtor`-bearing one needs the full affine mapping.
+      Nothing in a component's type distinguishes an interned referent from one
+      minted per call, so omitting the `dtor` is the exporter's assertion that
+      its referents have a backing, and the importer takes it at its word. The
+      compile-time-bounded half of a bundled ICU surface
+      ([`core:icu`](./wep-2026-08-09-core-icu.md)) rests on the token alone.
 - [ ] Async value types (`stream<T>` / `future<T>`) in an imported signature.
       This is the async import surface of
       [Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md).
