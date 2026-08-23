@@ -389,12 +389,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                let lookup_type_id = match comparison_impl_link {
-                    Some(link) => link,
-                    None => {
-                        let tt = self.tysys.type_table.borrow();
-                        tt.get_newtype_base(left.type_id).unwrap_or(left.type_id)
-                    }
+                let lookup_type_id = if let Some(link) = comparison_impl_link {
+                    link
+                } else {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.get_newtype_base(left.type_id).unwrap_or(left.type_id)
                 };
 
                 // Handle Eq trait (== and !=)
