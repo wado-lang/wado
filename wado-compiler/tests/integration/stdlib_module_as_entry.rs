@@ -9,29 +9,36 @@ fn core_dir() -> PathBuf {
 }
 
 /// Every bundled `core:` module — the ones an editor opens like any other file.
-/// `*_test.wado` siblings are ordinary entry points, and a `#![wasm_module("…")]`
-/// module is not compilable as an entry at all.
 fn core_modules() -> Vec<PathBuf> {
-    let mut paths: Vec<PathBuf> = [core_dir(), core_dir().join("prelude")]
-        .into_iter()
-        .flat_map(|dir| {
-            std::fs::read_dir(dir)
-                .expect("core dir should be readable")
-                .map(|e| e.expect("dir entry").path())
-        })
-        .filter(|p| {
-            p.extension().is_some_and(|e| e == "wado")
-                && !p
-                    .file_stem()
-                    .is_some_and(|s| s.to_string_lossy().ends_with("_test"))
-                && !std::fs::read_to_string(p)
-                    .expect("module should be readable")
-                    .contains("#![wasm_module(")
-        })
-        .collect();
+    let mut paths = Vec::new();
+    collect_modules(&core_dir(), &mut paths);
     paths.sort();
     assert!(paths.len() > 20, "core modules should be discoverable");
     paths
+}
+
+/// The whole `dir` tree's entry-point modules: a `*_test.wado` is an ordinary
+/// entry point, and a `#![wasm_module("…")]` module is not compilable as one at
+/// all (see `a_wasm_module_entry_is_rejected`).
+fn collect_modules(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(dir).expect("core dir should be readable") {
+        let path = entry.expect("dir entry").path();
+        if path.is_dir() {
+            collect_modules(&path, out);
+        } else if is_entry_point_module(&path) {
+            out.push(path);
+        }
+    }
+}
+
+fn is_entry_point_module(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e == "wado")
+        && !path
+            .file_stem()
+            .is_some_and(|s| s.to_string_lossy().ends_with("_test"))
+        && !std::fs::read_to_string(path)
+            .expect("module should be readable")
+            .contains("#![wasm_module(")
 }
 
 fn compile_as_test_world_entry(
