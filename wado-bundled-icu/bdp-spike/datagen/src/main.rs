@@ -1,6 +1,6 @@
 //! Generate sliced ICU4X postcard *blobs* for the BDP separation experiment.
 //!
-//! Usage: `cargo run --release -- <set> <out.blob>`
+//! Usage: `cargo run --release -- <set> <out.blob> [locales] [dedup]`
 //!
 //! Marker sets:
 //!   casemap   casemap markers
@@ -9,6 +9,10 @@
 //!             (root collation only) — i.e. exactly what a collator feature loads
 //!   shared    collator markers + ALL normalizer markers (root collation) —
 //!             one blob serving both a collator feature and a normalizer feature
+//!   coll-loc  collator markers alone — the locale axis
+//!   fmt-loc   datetime + decimal + list + plurals, same arguments
+//!
+//! `[locales]` is `und,ja,…` or `FULL`; `[dedup]` is `none` or `maximal`.
 //!
 //! Comparing sizes of `coll`, `norm` and `shared` quantifies the marker dedup:
 //! `size(coll) + size(norm) - size(shared)` is the normalization data that
@@ -50,14 +54,6 @@ fn main() -> Result<()> {
 
     let provider = SourceDataProvider::new();
 
-    // Collation data is locale-bearing; restrict it to root ("und") so the blob
-    // stays focused on the normalization-dedup story. Normalizer/casemap data is
-    // locale-agnostic, so FULL there is just the root payload.
-    // `coll-loc`: collator markers only (no normalizer), with the locale set and
-    // dedup strategy given on the command line — the locale-axis measurement.
-    //   cargo run -- coll-loc <out.blob> <und,ja,... | FULL> [none|maximal]
-    // `fmt-loc`: the formatting surface (datetime + decimal + list + plurals),
-    // same locale/dedup CLI — does CLDR pattern data dwarf collation?
     if set == "coll-loc" || set == "fmt-loc" {
         let locales = std::env::args().nth(3).unwrap_or_else(|| "und".into());
         let dedup = std::env::args().nth(4).unwrap_or_else(|| "none".into());
@@ -104,6 +100,9 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Collation data is locale-bearing; restrict it to root ("und") so the blob
+    // stays focused on the normalization-dedup story. Normalizer/casemap data is
+    // locale-agnostic, so FULL there is just the root payload.
     let (markers, family): (Vec<DataMarkerInfo>, DataLocaleFamily) = match set.as_str() {
         "casemap" => (icu_casemap::provider::MARKERS.to_vec(), DataLocaleFamily::FULL),
         "norm" => (icu_normalizer::provider::MARKERS.to_vec(), DataLocaleFamily::FULL),
