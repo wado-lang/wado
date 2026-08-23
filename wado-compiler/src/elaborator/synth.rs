@@ -625,7 +625,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.class_of_type(sig.return_type);
         }
-        let Some(callee) = self.synth_callee_ref(&ident.name) else {
+        let Some(callee) = self.synth_callee_ref(ident) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         if !self.lookup_function_type_params(&callee).is_empty() {
@@ -635,19 +635,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.class_of_type(return_type)
     }
 
-    /// The callee identity of a plain `name(…)` call — a function the module
-    /// declares or imports. Anything else (a variant constructor, a static
-    /// path, an effect operation) is left to the expected type.
-    fn synth_callee_ref(&self, name: &str) -> Option<CalleeRef> {
-        if name.contains("::") {
+    /// The callee identity of a plain `name(…)` call, read off its own
+    /// reference site. Anything else (a variant constructor, a static path, an
+    /// effect operation) names no function there and is left to the expected
+    /// type.
+    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
+        if ident.name.contains("::") {
             return None;
         }
-        if self.sem.decls.function_return_types.contains_key(name) {
-            return Some(CalleeRef::local(&self.current_module_source, name));
-        }
-        let symbol = self.symbol_named(&self.current_module_source, name)?;
-        matches!(symbol.kind, crate::symbol::SymbolKind::Function(_))
-            .then(|| CalleeRef::from_imported_symbol(symbol))
+        let def = self.free_function_at(ident.id)?;
+        Some(CalleeRef::declared(self.tysys.resolutions.defs(), def))
     }
 
     fn synth_method_call(

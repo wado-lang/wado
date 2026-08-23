@@ -688,7 +688,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and functions (issue #1486).
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
-            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
+            && let Some(result) = self.resolve_ident_in_fallback_module(ident, &fallback)
         {
             return result;
         }
@@ -705,17 +705,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// default-expression resolution. Supports globals and function refs.
     fn resolve_ident_in_fallback_module(
         &mut self,
-        name: &str,
+        ident: &ast::IdentExpr,
         fallback: &ModuleSource,
     ) -> Option<TypeId> {
         // Reify resolves the fallback-module global / `FuncRef` its own
         // way; project the type only. This default-expr path is never an
         // assignment target, so no place is recorded.
-        let (owner, name) = self.declaring_module_of_ident(name, fallback);
+        let (owner, name) = self.declaring_module_of_ident(&ident.name, fallback);
         if let Some((ty, _)) = self.tysys.signatures.global(&owner, &name) {
             return Some(ty);
         }
-        let sig = self.tysys.signatures.function_sig(&owner, &name)?.clone();
+        let sig = self.free_function_sig_at(ident.id)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
@@ -731,7 +731,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         fallback: &ModuleSource,
     ) -> (ModuleSource, String) {
         if self.tysys.signatures.global(fallback, name).is_some()
-            || self.tysys.signatures.function_sig(fallback, name).is_some()
+            || self
+                .decl_in_module(fallback, name)
+                .is_some_and(|def| self.tysys.signatures.function_sig(def).is_some())
         {
             return (fallback.clone(), name.to_string());
         }
@@ -951,7 +953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(&ident.name)
+        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident)
         else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream
@@ -1069,24 +1071,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// key space.
     fn lookup_func_sig_for_ref(
         &self,
-        name: &str,
+        ident: &ast::IdentExpr,
     ) -> Option<(super::sem::decls::FunctionSig, ModuleSource, String)> {
-        if let Some(sig) = self
-            .tysys
-            .signatures
-            .function_sig(&self.current_module_source, name)
-        {
-            return Some((
-                sig.clone(),
-                self.current_module_source.clone(),
-                name.to_string(),
-            ));
-        }
-        let symbol = self.symbol_named(&self.current_module_source, name)?;
-        let src = symbol.module_source().clone();
-        let original = symbol.name.clone();
-        let sig = self.tysys.signatures.function_sig(&src, &original)?.clone();
-        Some((sig, src, original))
+        let def = self.free_function_at(ident.id)?;
+        let sig = self.tysys.signatures.function_sig(def)?.clone();
+        let defs = self.tysys.resolutions.defs();
+        Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
     }
 
     /// Derive type arguments for a generic function reference from an expected

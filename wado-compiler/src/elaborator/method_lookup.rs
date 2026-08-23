@@ -3135,8 +3135,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         callee: &super::callee::CalleeRef,
     ) -> Vec<ast::GenericParam> {
-        let callee_module = &callee.module;
-        let func_name = callee.name.as_str();
+        let callee_module = callee.module();
+        let func_name = callee.name();
         let fn_type_params = &self.tysys.trait_env.function_type_params;
         // Entry-point callees are looked up in the current module's functions first.
         if callee_module.is_entry_point()

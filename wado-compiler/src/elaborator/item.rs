@@ -2217,11 +2217,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-resolution. Returns the declared return type for callers that
     /// need it (`resolve_function`'s `task_return_type`).
     fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+        let def = self
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(func.id)
+            .expect("every free function is a declaration");
         let sig = self
             .sem
             .decls
             .function_sigs
-            .get(&func.name)
+            .get(&def)
             .expect("decl pass records every free function's canonical signature");
         let type_param_list = sig.decl.type_params.clone();
         let resolved_param_types = sig.decl.param_types.clone();

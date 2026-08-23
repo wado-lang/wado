@@ -265,16 +265,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
-    /// The symbol row behind a reference site.
-    ///
-    /// The walk answered for the site, so the declaration — and with it the
-    /// row — comes from what the name means where it was *written*, with no
-    /// second scope run beside the first.
-    pub(crate) fn symbol_at(&self, site: crate::ast::AstId) -> Option<&'a crate::symbol::Symbol> {
-        let def = self.tysys.resolutions.declared_if_walked(site)?;
-        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
-    }
-
     /// Construct a [`TypeLookup`] view over the elaborator's current import
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
@@ -442,6 +432,40 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         def_id: crate::ast::AstId,
     ) {
         self.insert_reference(use_id, def_id);
+    }
+
+    /// The free function the reference site `site` names, or `None` where it
+    /// names something else — a binder, a variant case, a node no walk saw.
+    ///
+    /// One read replaces the "this module, then the import, then the callee's
+    /// scope" tier order each caller used to spell for itself: the site was
+    /// answered once, by the module that wrote it (WEP 2026-08-12).
+    pub(super) fn free_function_at(&self, site: crate::ast::AstId) -> Option<crate::defs::DefId> {
+        let def = self.tysys.resolutions.declared_if_walked(site)?;
+        (self.tysys.resolutions.defs().kind(def) == crate::defs::DefKind::Function).then_some(def)
+    }
+
+    /// The canonical signature of the free function the site names.
+    pub(super) fn free_function_sig_at(
+        &self,
+        site: crate::ast::AstId,
+    ) -> Option<&sem::decls::FunctionSig> {
+        self.tysys.signatures.function_sig(self.free_function_at(site)?)
+    }
+
+    /// The declaration `module` declares under `name`.
+    ///
+    /// The module is named rather than searched for: a qualified path spelled
+    /// it. For the two positions no reference site answers — `builtin::f`, and
+    /// a member of a namespace import.
+    pub(super) fn decl_in_module(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+    ) -> Option<crate::defs::DefId> {
+        self.symbols
+            .lookup_in_module(module, name)
+            .and_then(|sym| self.tysys.resolutions.defs().of_ast_id(sym.defined_at))
     }
 
     /// Record a use→def edge naming the declaration `def`.
@@ -1771,11 +1795,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later in the file) to infer type arguments at the call site
         // during body resolution, without relying on a later
         // monomorphization-time fallback.
-        let mut function_sigs: IndexMap<String, sem::decls::FunctionSig> = IndexMap::default();
+        let mut function_sigs: IndexMap<crate::defs::DefId, sem::decls::FunctionSig> =
+            IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
+                let def = self
+                    .tysys
+                    .resolutions
+                    .defs()
+                    .of_ast_id(func.id)
+                    .expect("every free function is a declaration");
                 let sig = self.record_function_sig(func);
-                function_sigs.insert(func.name.clone(), sig);
+                function_sigs.insert(def, sig);
             }
         }
         for item in &module.items {

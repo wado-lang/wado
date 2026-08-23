@@ -13,7 +13,6 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::scope::Scope;
-use super::sem::decls::FunctionSig;
 use super::sig::MethodSig;
 use super::trait_env;
 use super::types::{FunctionContext, TypeError};
@@ -141,6 +140,16 @@ impl CalleeIdentKind<'_> {
     /// Two segments exactly: consumers pair this with the prefix they split off
     /// `effective_name`, and only here are the two the same segment. A namespace
     /// prefix, an unqualified call and `Rewritten` all answer `None`.
+    fn callee_site(&self) -> Option<ast::AstId> {
+        match self {
+            Self::AsIs(ident) => Some(ident.id),
+            // A rewritten `Self::m` spelling names no node the walk answered
+            // for; the qualified paths above it resolve through their own
+            // segments instead.
+            Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+        }
+    }
+
     fn receiver_site(&self) -> Option<ast::AstId> {
         match self {
             Self::AsIs(ident) => match ident.segments.as_slice() {
@@ -490,7 +499,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, determine expected parameter types to handle coercion.
         let (mut param_types, callee_slots) =
-            self.lookup_function_signature(effective_name, receiver_site);
+            self.lookup_function_signature(effective_name, receiver_site, callee_kind.callee_site());
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -644,6 +653,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatches on `effective_name` (after any `Self::` / `T::`
         // prefix rewriting) while `ident` is kept around for LSP
         // segment-edge recording and other AST-id needs.
+        let is_result_or_option_case = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            [
+                crate::compiler_item::CompilerItem::ResultOk,
+                crate::compiler_item::CompilerItem::ResultErr,
+                crate::compiler_item::CompilerItem::OptionSome,
+                crate::compiler_item::CompilerItem::OptionNone,
+            ]
+            .into_iter()
+            .any(|item| effective_name == items.variant_case_name(item))
+        };
         let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(pos) =
             effective_name.find("::")
         {
@@ -653,7 +674,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Builtin functions: resolve through core:builtin module
             if prefix == "builtin" {
                 (
-                    Some(CalleeRef::new(ModuleSource::builtin(), suffix)),
+                    self.decl_in_module(&ModuleSource::builtin(), suffix)
+                        .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
                     effective_name.to_string(),
                 )
             }
@@ -1302,7 +1324,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 (
-                    Some(CalleeRef::new(ns_source, suffix)),
+                    self.decl_in_module(&ns_source, suffix)
+                        .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
                     effective_name.to_string(),
                 )
             }
@@ -1337,8 +1360,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // codegen by name rather than as an ordinary callee, so they answer
         // ahead of the site below.
         else if matches!(effective_name, "panic" | "unreachable") {
+            // Declarations of `core:rt`, named by the module rather than
+            // searched for: codegen keys them on that module, and their `!`
+            // return type is a signature fact like any other.
             (
-                Some(CalleeRef::rt_prelude(effective_name)),
+                self.decl_in_module(&ModuleSource::rt(), effective_name)
+                    .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
                 effective_name.to_string(),
             )
         }
@@ -1355,88 +1382,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|def| self.tysys.resolutions.defs().kind(*def) == crate::defs::DefKind::Function)
         {
             self.record_reference_to_decl(ident.id, callee);
-            let defs = self.tysys.resolutions.defs();
             (
-                Some(CalleeRef::new(
-                    defs.module(callee).clone(),
-                    defs.name(callee).to_string(),
-                )),
+                Some(CalleeRef::declared(self.tysys.resolutions.defs(), callee)),
                 effective_name.to_string(),
             )
         }
-        // Check if it's a local function (defined in this module) or
-        // a built-in type constructor (Ok, Err, Some, None).
-        // The four constructor names flow through the
-        // `CompilerItem` registry so a stdlib rename of any of
-        // them is picked up here without re-editing the literal set.
-        else if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(effective_name)
-            || {
-                let tt = self.tysys.type_table.borrow();
-                let items = tt.compiler_items();
-                effective_name
-                    == items.variant_case_name(crate::compiler_item::CompilerItem::ResultOk)
-                    || effective_name
-                        == items.variant_case_name(crate::compiler_item::CompilerItem::ResultErr)
-                    || effective_name
-                        == items.variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
-                    || effective_name
-                        == items.variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
-            }
-        {
+        // A built-in type constructor (Ok, Err, Some, None) — a variant case,
+        // not a function, so the site above declines it. The four names flow
+        // through the `CompilerItem` registry so a stdlib rename is picked up
+        // here without re-editing the literal set.
+        else if is_result_or_option_case {
             self.record_item_reference_by_name(ident.id, effective_name);
             (
-                Some(CalleeRef::local(
-                    &self.current_module_source,
-                    effective_name.to_string(),
+                Some(CalleeRef::rendered(
+                    self.current_module_source.clone(),
+                    effective_name,
                 )),
-                effective_name.to_string(),
-            )
-        }
-        // Check if this is an imported function (per-module imports).
-        // We go through the `Symbol` directly so both the use→def edge
-        // and the `CalleeRef` come from the same resolution — this is
-        // the single place the alias→defining-name translation happens.
-        else if self.sem.decls.imported_functions.contains(effective_name) {
-            if let Some(symbol) = self.symbol_named(&self.current_module_source, effective_name) {
-                self.record_reference_to_def(ident.id, symbol.defined_at);
-                (
-                    Some(CalleeRef::from_imported_symbol(symbol)),
-                    effective_name.to_string(),
-                )
-            } else {
-                // Imported but not in symbols - shouldn't happen but allow
-                (
-                    Some(CalleeRef::local(
-                        &self.current_module_source,
-                        effective_name.to_string(),
-                    )),
-                    effective_name.to_string(),
-                )
-            }
-        }
-        // Fallback: when resolving a default expression, a free-function
-        // call may target a private function of the callee's declaring
-        // module (see `default_scope_module`). `resolve_ident` already
-        // consults this fallback for bare identifiers / function refs;
-        // mirror it here for the *call* case so `helper()` in a default
-        // resolves in the defining module instead of erroring at the use
-        // site. The `CalleeRef`'s module drives `lookup_function_return_type`
-        // / `lookup_function_signature`, so the signature resolves in the
-        // defining module too.
-        else if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
-            && fallback != self.current_module_source
-            && self
-                .tysys
-                .signatures
-                .function_sig(&fallback, effective_name)
-                .is_some()
-        {
-            (
-                Some(CalleeRef::new(fallback, effective_name.to_string())),
                 effective_name.to_string(),
             )
         } else {
@@ -1454,7 +1415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: display_name.clone(),
                 span: call.span,
             });
-            CalleeRef::local(&self.current_module_source, display_name)
+            CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
 
         // Resolve explicit type arguments (`_` resolves to UNKNOWN).
@@ -1586,8 +1547,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let param_is_mut = self.lookup_function_param_is_mut(&call.callee);
         let func_ref = FunctionRef {
-            module_source: callee.module,
-            name: callee.name,
+            module_source: callee.module().clone(),
+            name: callee.name().to_string(),
             monomorph_info: None,
             method_info: None, // Free function call,
         };
@@ -1681,8 +1642,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &CalleeRef,
         receiver_site: Option<ast::AstId>,
     ) -> TypeId {
-        let callee_module = &callee.module;
-        let func_name = callee.name.as_str();
+        let callee_module = callee.module();
+        let func_name = callee.name();
         // Handle builtin functions
         if callee_module.is_core_builtin() {
             return self.get_builtin_return_type(func_name);
@@ -1708,8 +1669,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return return_type;
         }
 
-        if !callee_module.is_entry_point()
-            && let Some(sig) = self.tysys.signatures.function_sig(callee_module, func_name)
+        if let Some(def) = callee.def()
+            && let Some(sig) = self.tysys.signatures.function_sig(def)
             && let Some(return_type) = sig.decl.return_type
         {
             return return_type;
@@ -1767,6 +1728,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         name: &str,
         receiver_site: Option<ast::AstId>,
+        callee_site: Option<ast::AstId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
@@ -1787,10 +1749,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Builtin functions: look up param types from core:builtin module
             if prefix == "builtin"
-                && let Some(sig) = self
-                    .tysys
-                    .signatures
-                    .function_sig(&ModuleSource::builtin(), suffix)
+                && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
+                && let Some(sig) = self.tysys.signatures.function_sig(def)
             {
                 return (sig.decl.param_types.clone(), Vec::new());
             }
@@ -1807,7 +1767,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // parameter and reaches codegen mismatched.
             if self.sem.imports.namespace_imports.contains_key(prefix) {
                 let ns_source = self.sem.imports.namespace_imports[prefix].clone();
-                if let Some(sig) = self.tysys.signatures.function_sig(&ns_source, suffix) {
+                if let Some(def) = self.decl_in_module(&ns_source, suffix)
+                    && let Some(sig) = self.tysys.signatures.function_sig(def)
+                {
                     return (
                         sig.decl.param_types.clone(),
                         sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
@@ -1834,37 +1796,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return (Vec::new(), Vec::new());
         }
 
-        let slots = |sig: &FunctionSig| sig.decl.type_params.iter().map(|(_, id)| *id).collect();
-
-        if let Some(sig) = self
-            .tysys
-            .signatures
-            .function_sig(&self.current_module_source, name)
-        {
-            return (sig.decl.param_types.clone(), slots(sig));
-        }
-
-        // Imported functions: the canonical signature resolved in the
-        // definition module's perspective, so same-named types from
-        // different modules can't be confused.
-        if let Some(symbol) = self.symbol_named(&self.current_module_source, name) {
-            let src = symbol.module_source().clone();
-            let sym_name = symbol.name.clone();
-            if let Some(sig) = self.tysys.signatures.function_sig(&src, &sym_name) {
-                return (sig.decl.param_types.clone(), slots(sig));
-            }
-        }
-
-        // A default expression may call a private free function of its
-        // declaring module (`default_scope_module`).
-        if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
-            && fallback != self.current_module_source
-            && let Some(sig) = self.tysys.signatures.function_sig(&fallback, name)
-        {
-            return (sig.decl.param_types.clone(), slots(sig));
-        }
-
-        (Vec::new(), Vec::new())
+        // The callee's own site, answered by the module that wrote it — which
+        // covers this module's functions, its imports under either spelling,
+        // and a default expression's callee scope, all at once.
+        let Some(sig) = callee_site.and_then(|site| self.free_function_sig_at(site)) else {
+            return (Vec::new(), Vec::new());
+        };
+        (
+            sig.decl.param_types.clone(),
+            sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
+        )
     }
 
     /// Fill missing trailing arguments from the callee's declared defaults,
@@ -1941,30 +1882,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
-        // A qualified name is never a function of the writing module, so only
-        // the site below can answer for one — `ns::f` included.
-        if !ident.name.contains("::")
-            && let Some(sig) = self
-                .tysys
-                .signatures
-                .function_sig(&self.current_module_source, &ident.name)
-        {
-            return (
-                crate::elaborator::sig::Param::named_defaults(&sig.params),
-                Some(self.current_module_source.clone()),
-            );
-        }
-        if let Some(symbol) = self.symbol_at(ident.id) {
-            let src = symbol.module_source().clone();
-            let name = symbol.name.clone();
-            if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
-                return (
-                    crate::elaborator::sig::Param::named_defaults(&sig.params),
-                    Some(src),
-                );
-            }
-        }
-        (Vec::new(), None)
+        let Some(def) = self.free_function_at(ident.id) else {
+            return (Vec::new(), None);
+        };
+        let Some(sig) = self.tysys.signatures.function_sig(def) else {
+            return (Vec::new(), None);
+        };
+        // A default resolves in the declaring module's scope, which is the
+        // callee's own — never the caller's, even under the same spelling.
+        (
+            crate::elaborator::sig::Param::named_defaults(&sig.params),
+            Some(self.tysys.resolutions.defs().module(def).clone()),
+        )
     }
 
     /// Look up whether each parameter of a free function is `mut`.
@@ -1979,24 +1908,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         }
 
-        if let Some(sig) = self
-            .tysys
-            .signatures
-            .function_sig(&self.current_module_source, &ident.name)
-        {
-            return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
-        }
-
-        // Imported function
-        if let Some(symbol) = self.symbol_at(ident.id) {
-            let src = symbol.module_source().clone();
-            let name = symbol.name.clone();
-            if let Some(sig) = self.tysys.signatures.function_sig(&src, &name) {
-                return crate::elaborator::sig::Param::is_mut_flags(&sig.params);
-            }
-        }
-
-        Vec::new()
+        self.free_function_sig_at(ident.id)
+            .map(|sig| crate::elaborator::sig::Param::is_mut_flags(&sig.params))
+            .unwrap_or_default()
     }
 
     /// Infer a generic call's type arguments from its actual argument types, in
@@ -2012,7 +1926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         span: crate::token::Span,
     ) -> Vec<TypeId> {
-        let func_name = callee.name.as_str();
+        let func_name = callee.name();
         // Builtin functions: pull type-param / param / return info from the
         // BuiltinRegistry so that calls like `builtin::select(a, b, c)` and
         // `builtin::array_new(n)` infer their generic type parameters from
@@ -2246,7 +2160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|n| format!("`{n}`"))
             .collect::<Vec<_>>()
             .join(", ");
-        let func_name = callee.name.as_str();
+        let func_name = callee.name();
         let _ = self.emit(TypeError::CannotInferType {
             message: format!(
                 "cannot infer type parameter {names} of function `{func_name}`; \
@@ -2341,7 +2255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let n = space.len();
 
         let defaults: Vec<Option<TypeId>> =
-            self.with_default_scope_module(Some(callee.module.clone()), |s| {
+            self.with_default_scope_module(Some(callee.module().clone()), |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&params, 0);
@@ -2460,7 +2374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let func_name = callee.name.as_str();
+        let func_name = callee.name();
         let message = format!(
             "cannot infer type parameter {} of function `{func_name}`; \
              add a turbofish (`{func_name}::<...>()`) or a type annotation",
@@ -2606,10 +2520,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         callee: &CalleeRef,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
-        let sig = self
-            .tysys
-            .signatures
-            .function_sig(&callee.module, &callee.name)?;
+        let sig = self.tysys.signatures.function_sig(callee.def()?)?;
         if sig.type_param_ids.is_empty() {
             return Some((vec![], vec![], None));
         }
@@ -2648,7 +2559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         span: crate::token::Span,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
+        let probe = CalleeRef::rendered(self.current_module_source.clone(), suffix);
         let method_args = self.infer_fn_type_args(&probe, raw_args, args, expected_type, span);
         if !method_args.is_empty() {
             return (Vec::new(), method_args);
@@ -2745,30 +2656,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
 
-        let param_types: Vec<TypeId> = if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&ident.name)
-        {
-            match self
-                .tysys
-                .signatures
-                .function_sig(&self.current_module_source, &ident.name)
-            {
-                Some(sig) => sig.decl.param_types.clone(),
-                None => return Vec::new(),
-            }
-        } else if let Some(symbol) = self.symbol_at(ident.id) {
-            let src = symbol.module_source().clone();
-            let name = symbol.name.clone();
-            match self.tysys.signatures.function_sig(&src, &name) {
-                Some(sig) => sig.decl.param_types.clone(),
-                None => return Vec::new(),
-            }
-        } else {
+        let Some(sig) = self.free_function_sig_at(ident.id) else {
             return Vec::new();
         };
+        let param_types: Vec<TypeId> = sig.decl.param_types.clone();
 
         // Substitute type params with explicit type args
         param_types

@@ -16,8 +16,8 @@ use super::sem::decls::FunctionSig;
 /// associated-const values, `__DATA__`. Assembled from `ModuleDecls` digests.
 #[derive(Default)]
 pub(crate) struct Signatures {
-    /// Canonical free-function signatures, declaring module → name.
-    pub(crate) function_sigs: IndexMap<ModuleSource, Rc<IndexMap<String, FunctionSig>>>,
+    /// Canonical free-function signatures, keyed by the declaration.
+    pub(crate) function_sigs: IndexMap<crate::defs::DefId, FunctionSig>,
 
     /// Canonical method signatures, keyed by the method's [`crate::defs::DefId`]
     /// — `impl`-block methods and `interface` / `resource` operations alike.
@@ -54,9 +54,9 @@ pub(crate) struct Signatures {
 }
 
 impl Signatures {
-    /// Canonical signature of the free function `name` declared in `module`.
-    pub(crate) fn function_sig(&self, module: &ModuleSource, name: &str) -> Option<&FunctionSig> {
-        self.function_sigs.get(module)?.get(name)
+    /// Canonical signature of the free function `def` declares.
+    pub(crate) fn function_sig(&self, def: crate::defs::DefId) -> Option<&FunctionSig> {
+        self.function_sigs.get(&def)
     }
 
     /// Canonical signature of the method `def` declares.

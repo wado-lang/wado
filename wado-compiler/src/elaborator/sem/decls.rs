@@ -60,7 +60,7 @@ pub(crate) struct ModuleDecls {
     /// Canonical signatures of this module's own free functions, frozen
     /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
     /// seeding share the map instead of deep-cloning every signature.
-    pub(crate) function_sigs: std::rc::Rc<IndexMap<String, FunctionSig>>,
+    pub(crate) function_sigs: std::rc::Rc<IndexMap<crate::defs::DefId, FunctionSig>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
