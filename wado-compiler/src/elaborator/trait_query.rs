@@ -204,14 +204,13 @@ fn mentions_self(ty: &ast::Type) -> bool {
 /// AST, and answers `None` for a declaration that is no trait.
 pub(crate) fn trait_sig_of_with<'a>(
     decl: crate::defs::DefId,
-    resolutions: &crate::resolve::Resolutions,
     trait_env: &super::trait_env::TraitEnv,
     signatures: &'a super::sig::Signatures,
 ) -> Option<&'a super::sig::TraitSig> {
     if !trait_env.decl_index.contains(&decl) {
         return None;
     }
-    signatures.trait_sig(resolutions.defs().ast_id(decl))
+    signatures.trait_sig(decl)
 }
 
 /// The structural-conformance rule's answer for one type: whether every member
@@ -371,12 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::trait_sig_of`] for a caller still holding a trait's spelling.
     pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&TraitSig> {
         let decl = self.decl_key_or_local(trait_name)?;
-        trait_sig_of_with(
-            decl,
-            &self.tysys.resolutions,
-            &self.tysys.trait_env,
-            &self.tysys.signatures,
-        )
+        trait_sig_of_with(decl, &self.tysys.trait_env, &self.tysys.signatures)
     }
 
     /// The declaration header of the trait `trait_name` names in this frame.
@@ -1067,7 +1061,7 @@ impl TypeSystem {
         // A receiverless method has no receiver to deref, so `&T` inherits it
         // by forwarding — which works only where `Self` is absent from the
         // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
-        trait_sig_of_with(trait_, &self.resolutions, &self.trait_env, &self.signatures).is_some_and(
+        trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(
             |sig| {
                 sig.methods.values().any(|m| {
                     m.sig.self_kind == crate::ast::SelfKind::None
@@ -1751,9 +1745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.trait_env.decl_index.contains(key) {
             return None;
         }
-        self.tysys
-            .signatures
-            .trait_sig(self.tysys.resolutions.defs().ast_id(*key))
+        self.tysys.signatures.trait_sig(*key)
     }
 
     /// What `Self::X` means for a receiver reached through a trait bound, for
@@ -1934,7 +1926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((
             fq_trait_name,
             MethodInfo {
-                method_ast_id: Some(sig.ast_id),
+                method_def: Some(sig.def),
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
                 param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -2625,7 +2617,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
-            method_ast_id: None,
+            method_def: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],

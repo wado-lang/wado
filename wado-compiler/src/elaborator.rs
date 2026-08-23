@@ -444,6 +444,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
+    /// Record a use→def edge naming the declaration `def`.
+    ///
+    /// The edge map is keyed by node on both sides — navigation recovers a
+    /// def's module from its id space — so the declaring node is read off the
+    /// identity here rather than carried beside it.
+    pub(super) fn record_reference_to_decl(
+        &mut self,
+        use_id: crate::ast::AstId,
+        def: crate::defs::DefId,
+    ) {
+        let node = self.tysys.resolutions.defs().ast_id(def);
+        self.insert_reference(use_id, node);
+    }
+
     /// Record that an identifier resolved to a declared symbol reachable from
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
@@ -530,7 +544,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> Option<crate::ast::AstId> {
+    ) -> Option<crate::defs::DefId> {
         self.tysys
             .trait_env
             .static_method_index
@@ -1735,11 +1749,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .then(|| self.tysys.resolutions.defs().of_ast_id(decl_id))
                 .flatten();
             let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
+            let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
+            let owner = defs
+                .of_ast_id(decl_id)
+                .expect("every interface / resource declaration is a declaration");
             for method in &methods {
+                let op = defs
+                    .of_ast_id(method.id)
+                    .expect("every declared operation is a declaration");
                 self.sem
                     .decls
                     .resource_method_ids
-                    .insert((decl_id, method.name.clone()), method.id);
+                    .insert((owner, method.name.clone()), op);
             }
             self.sem.decls.effect_ops.insert(decl_id, ops);
         }
@@ -2035,10 +2056,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.
+            let method_def = scope
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(method.id)
+                .expect("every impl method is a declaration");
             let recorded_sig = scope
                 .tysys
                 .signatures
-                .method_sig(method.id)
+                .method_sig(method_def)
                 .cloned()
                 .expect("the decl pass records every impl-declared method's canonical signature");
             scope.resolve_method(

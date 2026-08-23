@@ -89,21 +89,20 @@ pub(crate) struct ModuleDecls {
     /// to the impl target. An `interface` / `resource` operation is resolved
     /// in the declaration's frame. Either way a use site instantiates
     /// instead of re-resolving the method AST.
-    pub(crate) method_sigs: IndexMap<crate::ast::AstId, MethodSig>,
-    /// A declaration's `AstId` paired with an operation name → the
-    /// `AstId`, so a caller holding only a name reaches its `method_sigs`
-    /// entry.
-    pub(crate) resource_method_ids: IndexMap<(crate::ast::AstId, String), crate::ast::AstId>,
+    pub(crate) method_sigs: IndexMap<crate::defs::DefId, MethodSig>,
+    /// A declaration paired with an operation name → the operation, so a
+    /// caller holding only a name reaches its `method_sigs` entry.
+    pub(crate) resource_method_ids:
+        IndexMap<(crate::defs::DefId, String), crate::defs::DefId>,
     /// Facts of this module's `impl` blocks that belong to the block rather
     /// than to one method — its target and trait type arguments and its
     /// associated-type bindings — resolved once in the block's own frame and
     /// keyed by the block's [`crate::defs::DefId`].
     pub(crate) impl_sigs: IndexMap<crate::defs::DefId, super::super::sig::ImplSig>,
     /// Facts of this module's `trait` declarations, resolved once in each
-    /// trait's own frame (`Self` at slot 0) and keyed by the declaration's
-    /// `AstId`, so a use site instantiates instead of re-resolving the trait
-    /// method AST.
-    pub(crate) trait_sigs: IndexMap<crate::ast::AstId, super::super::sig::TraitSig>,
+    /// trait's own frame (`Self` at slot 0) and keyed by the declaration, so
+    /// a use site instantiates instead of re-resolving the trait method AST.
+    pub(crate) trait_sigs: IndexMap<crate::defs::DefId, super::super::sig::TraitSig>,
     /// Resolved operation signatures of this module's `interface` and
     /// `resource` declarations, keyed by the declaration's `AstId`.
     ///

@@ -705,7 +705,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
-                            method_ast_id: None,
+                            method_def: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -747,7 +747,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
-                            method_ast_id: None,
+                            method_def: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -994,7 +994,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let signatures = Rc::clone(&self.tysys.signatures);
         let header = impl_header(&trait_env, impl_ref);
         let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-        let sig = signatures.method_sig(method_header.ast_id)?;
+        let sig = signatures.method_sig(method_header.def)?;
         let impl_sig = signatures
             .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts");
@@ -1004,7 +1004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
 
         Some(MethodInfo {
-            method_ast_id: Some(sig.ast_id),
+            method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -1033,11 +1033,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
         let sig = self
             .tysys
             .signatures
-            .resource_method_sig(decl_id, method_name)?
+            .resource_method_sig(def, method_name)?
             .clone();
         if sig.self_kind == ast::SelfKind::None {
             return None;
@@ -1050,7 +1049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
-            method_ast_id: Some(sig.ast_id),
+            method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -2151,7 +2150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let sig = scope
                     .tysys
                     .signatures
-                    .method_sig(m.ast_id)
+                    .method_sig(m.def)
                     .expect("the decl pass records every impl-declared method's signature")
                     .clone();
                 (sig, m.type_params.clone())
@@ -2283,7 +2282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
-                    method_ast_id: Some(method_sig.ast_id),
+                    method_def: Some(method_sig.def),
                     return_type,
                     self_kind,
                     param_types,
@@ -2344,7 +2343,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
-                        method_ast_id: Some(default_method.sig.ast_id),
+                        method_def: Some(default_method.sig.def),
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -3064,7 +3063,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-                let method_sig = s.tysys.signatures.method_sig(method_header.ast_id)?;
+                let method_sig = s.tysys.signatures.method_sig(method_header.def)?;
                 let self_kind = method_sig.self_kind;
                 let rhs_index = usize::from(self_kind != ast::SelfKind::None);
                 let rhs_type = method_sig
@@ -3227,7 +3226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = s
                     .tysys
                     .signatures
-                    .method_sig(method_header.ast_id)?
+                    .method_sig(method_header.def)?
                     .self_kind;
                 let impl_source = s.impl_block_module_source(impl_ref);
 
@@ -3357,7 +3356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let MethodInfo {
-            method_ast_id: _,
+            method_def: _,
             return_type,
             self_kind,
             param_types,

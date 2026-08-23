@@ -1457,7 +1457,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let Some(trait_sig) = super::trait_query::trait_sig_of_with(
             trait_decl,
-            &self.tysys.resolutions,
             &self.tysys.trait_env,
             &self.tysys.signatures,
         ) else {

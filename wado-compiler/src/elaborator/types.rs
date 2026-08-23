@@ -1676,12 +1676,12 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// The declaring node of the method this lookup selected, taken from its
+    /// The method this lookup selected, taken from its
     /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
     /// recorded from here, so it names the impl dispatch actually chose.
     /// `None` where no declaration backs the signature: the tuple builtins,
     /// an auto-derived `Eq` / `Ord`, and the error-recovery placeholder.
-    pub(super) method_ast_id: Option<ast::AstId>,
+    pub(super) method_def: Option<crate::defs::DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)

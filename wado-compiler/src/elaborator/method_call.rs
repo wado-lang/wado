@@ -466,7 +466,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reify would try to lower a call to a function that does not exist.
         let method_found = method_info.is_some();
         let MethodInfo {
-            method_ast_id: dispatched_method_ast_id,
+            method_def: dispatched_method_def,
             mut return_type,
             self_kind,
             param_types,
@@ -493,7 +493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Default to Unknown type for error recovery
             MethodInfo {
-                method_ast_id: None,
+                method_def: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
@@ -1078,8 +1078,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The target is the declaration dispatch selected, carried on its
         // signature. A name scan cannot stand in: two impls on one type can
         // declare the same method, and only dispatch knows which answered.
-        if let (Some(method_id), Some(def_id)) = (method_id, dispatched_method_ast_id) {
-            self.record_reference_to_def(method_id, def_id);
+        if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def) {
+            self.record_reference_to_decl(method_id, def);
         }
 
         let func = FunctionRef {
@@ -2169,12 +2169,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The selection covers trait impls only; an inherent static has none
         // and reaches the index instead.
-        if let Some(method_ast_id) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
+        if let Some(method_def) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
             let receiver =
                 self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
             self.static_method_decl_id(&receiver, &static_call.method)
         }) {
-            self.record_reference_to_def(static_call.method_id, method_ast_id);
+            self.record_reference_to_decl(static_call.method_id, method_def);
         }
 
         let func_ref = FunctionRef {
@@ -2440,7 +2440,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_some_and(|entries| {
                         entries.iter().any(|e| {
                             e.name == method_name
-                                && header.methods.iter().any(|m| m.ast_id == e.method_id)
+                                && header.methods.iter().any(|m| m.def == e.method_id)
                         })
                     })
             })
@@ -2798,7 +2798,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let sig = self
                     .tysys
                     .signatures
-                    .method_sig(method.ast_id)
+                    .method_sig(method.def)
                     .expect("the decl pass records every impl-declared method's signature");
                 if *self.tysys.resolutions.defs().module(*key) == self.current_module_source {
                     current.push(sig);
@@ -3052,7 +3052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && self
                             .tysys
                             .signatures
-                            .method_sig(m.ast_id)
+                            .method_sig(m.def)
                             .is_some_and(|sig| sig.self_kind == ast::SelfKind::None)
                 })
         })
@@ -3287,13 +3287,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !is_from_or_try_from(&base)
         };
 
-        // Returns the trait the impl names and the node declaring the method
-        // there — the identity of what this selection picked, so a caller
-        // recording a use→def edge names the impl the argument chose rather
-        // than the receiver's first same-named method.
+        // Returns the trait the impl names and the method it declares there —
+        // the identity of what this selection picked, so a caller recording a
+        // use→def edge names the impl the argument chose rather than the
+        // receiver's first same-named method.
         let check_impl = |header: &super::trait_env::ImplHeader,
                           impl_module: &ModuleSource|
-         -> Option<(crate::name::FqTraitName, AstId)> {
+         -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
             if super::trait_env::get_type_name_static(&header.ty) != struct_name
                 || !matches_arg_type(trait_type, impl_module, &header.type_params)
@@ -3304,10 +3304,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let sig = self
                     .tysys
                     .signatures
-                    .method_sig(method.ast_id)
+                    .method_sig(method.def)
                     .expect("the decl pass records every impl-declared method's signature");
                 if sig.self_kind == ast::SelfKind::None {
-                    return Some((resolve_trait_name(header)?, method.ast_id));
+                    return Some((resolve_trait_name(header)?, method.def));
                 }
             }
             // Fall back to the trait declaration's default methods: when
@@ -3323,7 +3323,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && method.default_body.is_some()
                 && method.sig.self_kind == ast::SelfKind::None
             {
-                return Some((resolve_trait_name(header)?, method.sig.ast_id));
+                return Some((resolve_trait_name(header)?, method.sig.def));
             }
             None
         };
@@ -3670,7 +3670,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resource is reached through it rather than through its spelling.
         let cm_owner = method_ref
             .method_id
-            .and_then(|id| self.tysys.resolutions.defs().of_ast_id(id))
             .and_then(|method| self.tysys.resolutions.defs().parent(method))
             .or_else(|| self.decl_key_or_local(&actual_struct_name));
         let cm_name = self.lookup_resource_static_cm(cm_owner, method_name);

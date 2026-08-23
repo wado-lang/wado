@@ -63,9 +63,9 @@ pub(super) struct StaticMethodRef {
     pub type_name: String,
     pub method_name: String,
     pub trait_name: Option<crate::name::FqTraitName>,
-    /// The node declaring the method this selection picked. `None` when no
-    /// declaration backs it — the auto-derived `Default::default`.
-    pub method_id: Option<crate::ast::AstId>,
+    /// The method this selection picked. `None` when no declaration backs
+    /// it — the auto-derived `Default::default`.
+    pub method_id: Option<crate::defs::DefId>,
 }
 
 impl StaticMethodRef {
@@ -74,7 +74,7 @@ impl StaticMethodRef {
         type_name: impl Into<String>,
         method_name: impl Into<String>,
         trait_name: Option<crate::name::FqTraitName>,
-        method_id: Option<crate::ast::AstId>,
+        method_id: Option<crate::defs::DefId>,
     ) -> Self {
         Self {
             module,

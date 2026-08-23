@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::AstId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
@@ -20,24 +19,23 @@ pub(crate) struct Signatures {
     /// Canonical free-function signatures, declaring module → name.
     pub(crate) function_sigs: IndexMap<ModuleSource, Rc<IndexMap<String, FunctionSig>>>,
 
-    /// Canonical method signatures, keyed by the method's globally-unique
-    /// `AstId` — `impl`-block methods and `interface` / `resource`
-    /// operations alike. Dispatch goes index → signature, never AST.
-    pub(crate) method_sigs: IndexMap<AstId, MethodSig>,
+    /// Canonical method signatures, keyed by the method's [`crate::defs::DefId`]
+    /// — `impl`-block methods and `interface` / `resource` operations alike.
+    /// Dispatch goes index → signature, never AST.
+    pub(crate) method_sigs: IndexMap<crate::defs::DefId, MethodSig>,
 
     /// The name-keyed index over [`Self::method_sigs`] for `interface` /
     /// `resource` operations, which callers reach by name, not by node.
-    pub(crate) resource_method_ids: IndexMap<(AstId, String), AstId>,
+    pub(crate) resource_method_ids: IndexMap<(crate::defs::DefId, String), crate::defs::DefId>,
 
     /// Per-`impl`-block facts shared by the block's methods, keyed by the
     /// block's [`crate::defs::DefId`].
     pub(crate) impl_sigs: IndexMap<crate::defs::DefId, ImplSig>,
 
-    /// Per-`trait`-declaration facts, keyed by the declaration's `AstId`.
-    /// `TraitEnv::decl_index` maps a canonical trait name to that `AstId`,
-    /// so a query reaches a trait's methods by name without loading the
-    /// declaring module's AST.
-    pub(crate) trait_sigs: IndexMap<AstId, TraitSig>,
+    /// Per-`trait`-declaration facts, keyed by the declaration's
+    /// [`crate::defs::DefId`], so a query reaches a trait's methods without
+    /// loading the declaring module's AST.
+    pub(crate) trait_sigs: IndexMap<crate::defs::DefId, TraitSig>,
 
     /// Global-variable declarations, declaring module → name →
     /// `(declared type, is_mut)`.
@@ -61,16 +59,20 @@ impl Signatures {
         self.function_sigs.get(module)?.get(name)
     }
 
-    /// Canonical signature of the method declared at `ast_id`.
-    pub(crate) fn method_sig(&self, ast_id: AstId) -> Option<&MethodSig> {
-        self.method_sigs.get(&ast_id)
+    /// Canonical signature of the method `def` declares.
+    pub(crate) fn method_sig(&self, def: crate::defs::DefId) -> Option<&MethodSig> {
+        self.method_sigs.get(&def)
     }
 
     /// Canonical signature of the operation `name` on the `interface` /
-    /// `resource` declared at `decl_id`.
-    pub(crate) fn resource_method_sig(&self, decl_id: AstId, name: &str) -> Option<&MethodSig> {
-        let method_id = self.resource_method_ids.get(&(decl_id, name.to_string()))?;
-        self.method_sig(*method_id)
+    /// `resource` declaration `decl`.
+    pub(crate) fn resource_method_sig(
+        &self,
+        decl: crate::defs::DefId,
+        name: &str,
+    ) -> Option<&MethodSig> {
+        let method = self.resource_method_ids.get(&(decl, name.to_string()))?;
+        self.method_sig(*method)
     }
 
     /// Declaration facts of the `impl` block `def`.
@@ -78,9 +80,9 @@ impl Signatures {
         self.impl_sigs.get(&def)
     }
 
-    /// Declaration facts of the `trait` declared at `ast_id`.
-    pub(crate) fn trait_sig(&self, ast_id: AstId) -> Option<&TraitSig> {
-        self.trait_sigs.get(&ast_id)
+    /// Declaration facts of the `trait` `def` declares.
+    pub(crate) fn trait_sig(&self, def: crate::defs::DefId) -> Option<&TraitSig> {
+        self.trait_sigs.get(&def)
     }
 
     /// Declared type and mutability of the global `name` in `module`.
@@ -125,10 +127,10 @@ pub(crate) struct DeclSig {
 /// declaration's — because dispatch asks them the same questions.
 #[derive(Clone, Debug)]
 pub(crate) struct MethodSig {
-    /// The declaring node — the key this signature is filed under, carried
+    /// The declaration — the key this signature is filed under, carried
     /// inside so a consumer holding the signature holds the identity too.
     /// A use→def edge is recorded from here, never from a name re-scan.
-    pub(crate) ast_id: AstId,
+    pub(crate) def: crate::defs::DefId,
     pub(crate) decl: DeclSig,
     pub(crate) self_kind: crate::ast::SelfKind,
     /// The non-receiver parameters, in order. `decl.param_types` includes

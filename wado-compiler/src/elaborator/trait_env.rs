@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use crate::ast::{self, AstId, Item, Module, Type};
+use crate::ast::{self, Item, Module, Type};
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -199,7 +199,7 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &crate::defs::DefTable) -> Re
     for (key, entries) in index {
         out.entry(key.receiver(defs))
             .or_default()
-            .extend(entries.iter().cloned());
+            .extend(entries.iter().copied());
     }
     out
 }
@@ -386,9 +386,9 @@ fn blanket_param_sources(
 #[derive(Clone, Debug)]
 pub(super) struct ImplMethodHeader {
     pub(super) name: String,
-    /// The method's own `AstId` — the key into the canonical-signature
+    /// The method's own identity — the key into the canonical-signature
     /// digest, so a header lookup reaches the signature without the AST.
-    pub(super) ast_id: AstId,
+    pub(super) def: DefId,
     pub(super) type_params: Vec<ast::GenericParam>,
     /// Where the method is written, so a whole-program check reporting on it
     /// needs no second walk of the module AST to find the span.
@@ -399,6 +399,30 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
+}
+
+/// Digest each method a `trait` or `impl` block declares, for its header.
+///
+/// One producer, so a trait's methods and an impl's are digested the same way
+/// and cannot disagree about what a header says.
+fn method_headers(defs: &crate::defs::DefTable, methods: &[ast::Function]) -> Vec<ImplMethodHeader> {
+    methods
+        .iter()
+        .map(|m| ImplMethodHeader {
+            name: m.name.clone(),
+            def: defs
+                .of_ast_id(m.id)
+                .expect("every declared method is a declaration"),
+            type_params: m.type_params.clone(),
+            span: m.span,
+            name_span: m.name_span,
+            param_count: m
+                .params
+                .iter()
+                .filter(|p| p.self_kind == ast::SelfKind::None)
+                .count(),
+        })
+        .collect()
 }
 
 /// The receiver shape of a blanket impl.
@@ -547,7 +571,7 @@ pub(super) struct StaticMethodEntry {
     /// The method itself: the key into the signature digest, which carries
     /// everything a lookup needs — resolved in the impl's own frame and its
     /// own module's perspective.
-    pub(super) method_id: AstId,
+    pub(super) method_id: DefId,
 }
 
 /// Pre-built index of static methods, for O(1) lookup instead of a scan over
@@ -561,10 +585,10 @@ pub(super) type StaticMethodIndex = IndexMap<ImplTargetKey, Vec<StaticMethodEntr
 
 /// Pre-built index of static methods from resource declarations.
 /// Key: canonical receiver [`DefId`] → `[(method_name, ModuleSource,
-/// item_ast_id, method_index)]`. Same disambiguation rationale as
+/// declaration, method_index)]`. Same disambiguation rationale as
 /// [`StaticMethodIndex`].
 pub(super) type ResourceStaticMethodIndex =
-    IndexMap<ImplTargetKey, Vec<(String, ModuleSource, AstId, usize)>>;
+    IndexMap<ImplTargetKey, Vec<(String, ModuleSource, DefId, usize)>>;
 
 /// `(type_name, trait_name)` → modules holding that `impl` block. Keyed by bare
 /// names rather than [`DefId`]: the multi-value `Vec` plus the caller's
@@ -948,7 +972,7 @@ impl TraitEnv {
                                     .push((
                                         method.name.clone(),
                                         module_source.clone(),
-                                        resource.id,
+                                        resource_key,
                                         method_idx,
                                     ));
                             }
@@ -1070,22 +1094,7 @@ impl TraitEnv {
                             name: trait_decl.name.clone(),
                             type_params: trait_decl.type_params.clone(),
                             supertraits: trait_decl.supertraits.clone(),
-                            methods: trait_decl
-                                .methods
-                                .iter()
-                                .map(|m| ImplMethodHeader {
-                                    name: m.name.clone(),
-                                    ast_id: m.id,
-                                    type_params: m.type_params.clone(),
-                                    span: m.span,
-                                    name_span: m.name_span,
-                                    param_count: m
-                                        .params
-                                        .iter()
-                                        .filter(|p| p.self_kind == ast::SelfKind::None)
-                                        .count(),
-                                })
-                                .collect(),
+                            methods: method_headers(defs, &trait_decl.methods),
                             assoc_types: trait_decl.associated_types.clone(),
                             span: trait_decl.span,
                         },
@@ -1126,22 +1135,7 @@ impl TraitEnv {
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
-                        methods: impl_block
-                            .methods
-                            .iter()
-                            .map(|m| ImplMethodHeader {
-                                name: m.name.clone(),
-                                ast_id: m.id,
-                                type_params: m.type_params.clone(),
-                                span: m.span,
-                                name_span: m.name_span,
-                                param_count: m
-                                    .params
-                                    .iter()
-                                    .filter(|p| p.self_kind == ast::SelfKind::None)
-                                    .count(),
-                            })
-                            .collect(),
+                        methods: method_headers(defs, &impl_block.methods),
                         associated_types: impl_block.associated_types.clone(),
                         is_synthesize_request: impl_block.is_synthesize_request,
                         span: impl_block.span,
@@ -1212,7 +1206,9 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    method_id: method.id,
+                                    method_id: defs
+                                        .of_ast_id(method.id)
+                                        .expect("every impl method is a declaration"),
                                 });
                         }
                     }
@@ -1231,7 +1227,9 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
-                                    method_id: method.id,
+                                    method_id: defs
+                                        .of_ast_id(method.id)
+                                        .expect("every impl method is a declaration"),
                                 });
                         }
                     }
@@ -1379,7 +1377,7 @@ impl TraitEnv {
                             .get(*key)
                             .is_some_and(|h| h.trait_name.is_none())
                     })
-                    .cloned()
+                    .copied()
                     .collect()
             })
             .unwrap_or_default()

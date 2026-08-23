@@ -1264,10 +1264,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .first()
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
+            let method_def = frame_scope
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(method.id)
+                .expect("every impl method is a declaration");
             frame_scope.sem.decls.method_sigs.insert(
-                method.id,
+                method_def,
                 MethodSig {
-                    ast_id: method.id,
+                    def: method_def,
                     decl: DeclSig {
                         type_params,
                         param_types,
@@ -1618,11 +1624,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
 
+            let method_def = method_scope
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(method.id)
+                .expect("every trait method is a declaration");
             methods.insert(
                 method.name.clone(),
                 super::sig::TraitMethod {
                     sig: MethodSig {
-                        ast_id: method.id,
+                        def: method_def,
                         decl: DeclSig {
                             type_params,
                             param_types,
@@ -1660,11 +1672,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let module = scope.current_module_source.clone();
+        let trait_def = scope
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(trait_decl.id)
+            .expect("every trait declaration is a declaration");
         scope
             .sem
             .decls
             .trait_sigs
-            .insert(trait_decl.id, super::sig::TraitSig { module, methods });
+            .insert(trait_def, super::sig::TraitSig { module, methods });
     }
 
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s,
@@ -1830,10 +1848,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 SelfKind::None
             };
+            let method_def = scope
+                .tysys
+                .resolutions
+                .defs()
+                .of_ast_id(method.id)
+                .expect("every declared operation is a declaration");
             scope.sem.decls.method_sigs.insert(
-                method.id,
+                method_def,
                 MethodSig {
-                    ast_id: method.id,
+                    def: method_def,
                     decl: DeclSig {
                         type_params: decl_slots.clone(),
                         param_types: params.iter().map(|p| p.type_id).collect(),
@@ -2625,12 +2649,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, None) => (None, false),
             };
             let async_op = decl_ref
-                .map(|key| scope.tysys.resolutions.defs().ast_id(key))
-                .and_then(|decl_id| {
+                .and_then(|decl| {
                     scope
                         .tysys
                         .signatures
-                        .resource_method_sig(decl_id, &func.name)
+                        .resource_method_sig(decl, &func.name)
                         .filter(|op| op.is_async)
                         .map(|op| op.cm_name.is_some())
                 });

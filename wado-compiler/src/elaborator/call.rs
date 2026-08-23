@@ -681,7 +681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         None
                     };
-                    let method_ast_id = self
+                    let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref())
                         .and_then(|r| r.method_id)
                         .or_else(|| {
@@ -690,8 +690,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 suffix,
                             )
                         });
-                    if let Some(method_ast_id) = method_ast_id {
-                        self.record_reference_to_def(suffix_seg.id, method_ast_id);
+                    if let Some(method_def) = method_def {
+                        self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
                 }
                 // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
@@ -1158,7 +1158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `ns::Type::method`, so the method is its third segment —
                     // the position `record_namespaced_case` also reads.
                     if let Some(method_seg) = ident.segments.get(2)
-                        && let Some(method_ast_id) = method_ref.method_id.or_else(|| {
+                        && let Some(method_def) = method_ref.method_id.or_else(|| {
                             // The receiver is `ns::Type`, whose middle segment
                             // the resolve walk answered for under the `ns$Type`
                             // alias. No spelling is re-resolved from the call
@@ -1171,7 +1171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.static_method_decl_id(&receiver, method_name)
                         })
                     {
-                        self.record_reference_to_def(method_seg.id, method_ast_id);
+                        self.record_reference_to_decl(method_seg.id, method_def);
                     }
 
                     // Qualify by the module the impl was located in:
@@ -1706,11 +1706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect: crate::defs::DefId,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let decl_id = self.tysys.resolutions.defs().ast_id(effect);
-        let sig = self
-            .tysys
-            .signatures
-            .resource_method_sig(decl_id, operation)?;
+        let sig = self.tysys.signatures.resource_method_sig(effect, operation)?;
         Some((sig.decl.param_types.clone(), sig.decl.return_type))
     }
 
