@@ -483,11 +483,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let effective_name = callee_kind.effective_name();
-        self.check_static_call_visibility(effective_name, Some(call.id), call.span);
         // The receiver of `Type::method` is named at its own segment, and the
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
+        if let Some((struct_name, _)) = effective_name.rsplit_once("::") {
+            let receiver = self.impl_target_at(receiver_site, struct_name);
+            self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
+        }
 
         // First, determine expected parameter types to handle coercion.
         let (mut param_types, callee_slots) =
@@ -2694,8 +2697,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call,
     /// the spelling an associated function is reached by.
+    ///
+    /// `receiver` is the key the *neighbouring* lookups resolved the receiver
+    /// to. Re-deriving it from the spelling would key to whatever `Type` names
+    /// here, which is a different declaration once a default written elsewhere
+    /// is spliced into a caller that declares its own same-named type.
     pub(super) fn check_static_call_visibility(
         &mut self,
+        receiver: &super::trait_env::ImplTargetKey,
         effective_name: &str,
         node: Option<crate::ast::AstId>,
         span: crate::token::Span,
@@ -2703,7 +2712,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
         };
-        let Some(entry) = self.static_method_entry(struct_name, method_name) else {
+        let Some(entry) = self.static_method_entry(receiver, method_name) else {
             return;
         };
         let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
@@ -2719,19 +2728,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// The static-method index entry `Type::name` selects, for the questions
-    /// the signature alone cannot answer — which module declared it, and at
-    /// what visibility.
+    /// The static-method index entry `receiver::name` selects, for the
+    /// questions the signature alone cannot answer — which module declared it,
+    /// and at what visibility.
     pub(super) fn static_method_entry(
         &self,
-        struct_name: &str,
+        receiver: &super::trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<&super::trait_env::StaticMethodEntry> {
-        let key = self.impl_target(struct_name);
         self.tysys
             .trait_env
             .static_method_index
-            .get(&key)?
+            .get(receiver)?
             .iter()
             .find(|e| e.name == method_name)
     }

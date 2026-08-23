@@ -1432,9 +1432,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.static_receiver_struct_key(target_type_id);
 
         // `Type::<T>::method()` parses as a static-method call and never
-        // reaches `resolve_call`, which checks the bare spelling.
-        if let Some(name) = struct_name_for_lookup.clone() {
+        // reaches `resolve_call`, which checks the bare spelling. The receiver
+        // key comes from the resolved target type, as every lookup below does.
+        let static_receiver = struct_name_for_lookup.as_ref().map(|name| {
+            struct_key_for_lookup
+                .clone()
+                .unwrap_or_else(|| self.impl_target(name))
+        });
+        if let (Some(name), Some(receiver)) = (&struct_name_for_lookup, &static_receiver) {
             self.check_static_call_visibility(
+                receiver,
                 &format!("{name}::{}", static_call.method),
                 Some(static_call.id),
                 static_call.span,
@@ -1487,8 +1494,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default();
         // The module those defaults were written in, so their bodies answer to
         // it rather than to this call site.
-        let static_method_module = struct_name_for_lookup.as_ref().and_then(|name| {
-            self.static_method_entry(name, &static_call.method)
+        let static_method_module = static_receiver.as_ref().and_then(|receiver| {
+            self.static_method_entry(receiver, &static_call.method)
                 .map(|e| e.module.clone())
         });
 

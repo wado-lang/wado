@@ -1,0 +1,10 @@
+//! Declares its own `Cfg` and a default that names it, for the fixture that
+//! declares a different `Cfg` at the call site.
+
+pub struct Cfg { pub v: i32 }
+
+impl Cfg {
+  pub fn make() -> i32 { return 10 }
+}
+
+pub fn plus_default(a: i32, b: i32 = Cfg::make()) -> i32 { return a + b }
