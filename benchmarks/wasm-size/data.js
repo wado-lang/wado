@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787443847856,
+  "lastUpdate": 1787449510778,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50261,6 +50261,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/134d78193afce72094c7951c28f9b8d2929cbc2f"
         },
         "date": 1787443847341,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "29e43cbbe44b66fdad621608a015de239ac7c000",
+          "message": "Merge pull request #1878 from wado-lang/claude/sequence-family-wep-gaps-1owi0w\n\nfix(compiler): reach an inherited impl wherever the chain hides it",
+          "timestamp": "2026-08-23T10:30:36+09:00",
+          "tree_id": "3367d1cc09ebe9cc2c3b2d72095a8f6ef0941446",
+          "url": "https://github.com/wado-lang/wado/commit/29e43cbbe44b66fdad621608a015de239ac7c000"
+        },
+        "date": 1787449510044,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
