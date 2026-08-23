@@ -55,15 +55,15 @@ Concretely:
 
 - `#[cm(...)]` on a `resource` requires a `type=...` field. Allowed values in v1: `"extern-ref"` and `"i32"`. The CM-layer naming is used; the backing has no user-facing Wado type name.
   ```wado
-  #[cm("web:dom/element", type="extern-ref")]
+  #[cm("web:dom/element", type = "extern-ref")]
   pub resource Element { ... }
 
-  #[cm("wasi:http/types@0.3.0#request", type="i32")]
+  #[cm("wasi:http/types@0.3.0#request", type = "i32")]
   pub resource Request { ... }
   ```
 - A resource without `#[cm(...)]` is `i32`-backed and **cannot use `extends`** in v1. Hierarchies require explicit CM identity.
-- `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type="extern-ref"`. Mismatched backings in an `extends` family is a hard error, not a warning.
-- A resource declared with `type="extern-ref"` but without any `extends` relationship is allowed (a future-proof opt-in to the GC backing).
+- `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type = "extern-ref"`. Mismatched backings in an `extends` family is a hard error, not a warning.
+- A resource declared with `type = "extern-ref"` but without any `extends` relationship is allowed (a future-proof opt-in to the GC backing).
 
 ### Why mandatory + structural over namespace inference
 
@@ -88,13 +88,13 @@ pub resource Child extends Parent { ... }
 The `extends Parent` clause slots between the resource name (and any generic parameter list) and the body. It is optional; resources without `extends` behave as today.
 
 ```wado
-#[cm("web:dom/event-target", type="extern-ref")]
+#[cm("web:dom/event-target", type = "extern-ref")]
 pub resource EventTarget { ... }
 
-#[cm("web:dom/node", type="extern-ref")]
+#[cm("web:dom/node", type = "extern-ref")]
 pub resource Node extends EventTarget { ... }
 
-#[cm("web:dom/element", type="extern-ref")]
+#[cm("web:dom/element", type = "extern-ref")]
 pub resource Element extends Node { ... }
 ```
 
@@ -103,7 +103,7 @@ Rules:
 - `extends` introduces a new keyword. Existing identifiers named `extends` (none in the standard library) become reserved.
 - Only one parent type is permitted (single inheritance). The parent must be a `resource`, not a trait, struct, or enum.
 - The parent expression may include generic arguments: `resource Child<T> extends Parent<T> { ... }`. Generic arity does not have to match between child and parent.
-- `extends` is permitted only when both the declaring resource and its parent declare `type="extern-ref"` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).
+- `extends` is permitted only when both the declaring resource and its parent declare `type = "extern-ref"` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).
 - Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private, **provided `Y` is visible at every use site of `X`**. The compiler enforces this; it is not a special rule for `extends`.
 - Cycles are rejected (`A extends B`, `B extends A`).
 
@@ -363,7 +363,7 @@ The static type checker enforces, at the call site:
 | `T` and `Self` share an ancestor but neither extends the other (sibling) | compile error (statically cannot succeed)             |
 | `T` and `Self` are unrelated                                             | compile error                                         |
 
-Both `Self` and `T` must declare `type="extern-ref"` in `#[cm(...)]`. The check is redundant given the v1 gating (`extends` requires `externref`), but the compiler validates it defensively.
+Both `Self` and `T` must declare `type = "extern-ref"` in `#[cm(...)]`. The check is redundant given the v1 gating (`extends` requires `externref`), but the compiler validates it defensively.
 
 #### Generic targets are forbidden in v1
 
@@ -585,7 +585,7 @@ Lands as one milestone to avoid an intermediate "compiles but does not run" stat
 - [ ] Implicit upcast insertion at call args / return / annotated `let` / parent-typed field assignment / branch unify
 - [ ] Method resolution: walk extends chain + visible trait impls, ambiguity is an error
 - [ ] Corner cases: override forbidden / trait-vs-inherited collision error / static methods do not inherit / `Self` fixed at declaring resource / visibility judged at declaring module
-- [ ] `#[cm(..., type="extern-ref" | "i32")]` field made mandatory
+- [ ] `#[cm(..., type = "extern-ref" | "i32")]` field made mandatory
 - [ ] Backing-match structural validation across `extends` families
 - [ ] Minimal CM lowering: universal receiver, per-Wado-type WIT interfaces, upcast as no-op — enough to compile and run a basic `Child extends Parent` program
 

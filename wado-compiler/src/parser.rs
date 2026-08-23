@@ -1366,6 +1366,21 @@ impl Parser {
         // Parse optional generic type parameters: `resource Future<T> { ... }`
         let type_params = self.parse_generic_params()?;
 
+        let parent = if self.check(&TokenKind::Extends) {
+            self.advance();
+            let parent = self.parse_type()?;
+            if self.check(&TokenKind::Comma) {
+                let span = self.peek().span;
+                return Err(self.error_at_span(
+                    span,
+                    "a resource extends a single parent",
+                ));
+            }
+            Some(parent)
+        } else {
+            None
+        };
+
         // Either `resource Name;` (opaque) or `resource Name { ... }` (with methods)
         let (methods, end_span) = if self.check(&TokenKind::LBrace) {
             self.advance(); // consume '{'
@@ -1388,6 +1403,7 @@ impl Parser {
             name,
             visibility,
             type_params,
+            parent,
             attrs,
             methods,
             span: start_span.merge(&end_span),
@@ -6864,6 +6880,41 @@ mod tests {
         } else {
             panic!("expected interface declaration");
         }
+    }
+
+    #[test]
+    fn resource_declares_a_parent() {
+        let source = r#"
+            #[cm("web:dom/node", type="extern-ref")]
+            pub resource Node extends EventTarget {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        let Some(Type::Named(parent)) = &decl.parent else {
+            panic!("expected a named parent, got {:?}", decl.parent);
+        };
+        assert_eq!(parent.name, "EventTarget");
+    }
+
+    #[test]
+    fn resource_without_extends_has_no_parent() {
+        let module = parse("pub resource Node {}").unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert!(decl.parent.is_none());
+    }
+
+    #[test]
+    fn resource_takes_a_single_parent() {
+        let err = parse("resource Node extends A, B {}").unwrap_err();
+        assert!(
+            err.message.contains("single") || err.message.contains("one parent"),
+            "expected a single-parent error, got: {}",
+            err.message
+        );
     }
 
     #[test]
