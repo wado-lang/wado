@@ -1,0 +1,31 @@
+// `wit/world.wit` narrowed to the locale + casemap interfaces, so a slice
+// re-linked to those exports alone can be componentized and run.
+package wado:icu@0.1.0;
+
+interface locale {
+  /// A parsed BCP-47 locale (opaque handle).
+  resource locale {
+    /// Parse a BCP-47 language tag (e.g. "en-US", "ja", "tr-TR").
+    parse: static func(tag: string) -> result<locale, string>;
+    /// Canonical string form.
+    to-string: func() -> string;
+  }
+}
+
+interface casemap {
+  use locale.{locale};
+
+  /// Locale-aware full uppercase mapping.
+  uppercase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-aware full lowercase mapping.
+  lowercase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-aware titlecase of the first segment.
+  titlecase: func(text: string, loc: borrow<locale>) -> string;
+  /// Locale-independent full case folding (for caseless matching).
+  fold: func(text: string) -> string;
+}
+
+world icu-casemap {
+  export locale;
+  export casemap;
+}

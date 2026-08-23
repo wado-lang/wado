@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "== [1/5] datagen: slice casemap markers into a postcard blob =="
-( cd datagen && cargo run --release -- ../casemap.blob )
+( cd datagen && cargo run --release -- casemap ../casemap.blob )
 
 echo "== [2/5] build data-free casemap feature component =="
 ( cd casemap && cargo build --release )
