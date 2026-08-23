@@ -890,7 +890,7 @@ fn elab_block_entry(
 fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> Vec<TirStmt> {
     let span = synth_span();
     let inner = TirBlock { stmts, span };
-    let result_ty = crate::tir::block_result_type(&inner);
+    let result_ty = crate::tir::block_result_type(cx.tt, &inner);
     if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
         // The block yields nothing observable; the drops can simply run last.
         let mut out = inner.stmts;

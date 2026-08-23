@@ -5168,6 +5168,42 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 }
 ```
 
+#### Resource handle backing
+
+A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-ref"`, a handle to a host object. Omitting the field reads as `i32`.
+
+An extern-ref handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+
+### Resource Inheritance
+
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `type = "extern-ref"`; single inheritance only, and a cycle is an error.
+
+```wado
+#[cm("web:dom/event-target", type = "extern-ref")]
+resource EventTarget {
+    fn add_event_listener(&self, kind: String);
+}
+
+#[cm("web:dom/node", type = "extern-ref")]
+resource Node extends EventTarget {
+    fn text_content(&self) -> Option<String>;
+}
+
+fn use_it(n: Node) {
+    n.add_event_listener("click");   // inherited, no cast
+    let t: EventTarget = n;          // upcast is implicit
+}
+```
+
+Rules:
+
+- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant, and there is no implicit downcast.
+- A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+- Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
+- Generic resources take no part in `extends` yet.
+
+See [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
+
 ## Compiler Attributes
 
 Wado uses `#[...]` attributes (item-level) and `#![...]` inner attributes (module-level) to control compiler behavior.

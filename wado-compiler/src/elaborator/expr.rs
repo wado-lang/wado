@@ -2260,7 +2260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if b_unknown && !a_unknown {
             return Some(a);
         }
-        self.tysys.type_table.borrow_mut().resource_join(a, b)
+        self.tysys.type_table.borrow().resource_join(a, b)
     }
 
     pub(super) fn resolve_match_expr(

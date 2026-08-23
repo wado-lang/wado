@@ -1066,16 +1066,8 @@ impl Parser {
             return self.parse_test_decl(attrs).map(Item::Test);
         }
 
-        // The backing is a property of the handle type, so it has one home.
-        if !self.check(&TokenKind::Resource)
-            && let Some(attr) = attrs.iter().find(|a| a.cm_resource_backing().is_some())
-        {
-            return Err(ParseError {
-                message: "#[cm(..., type=...)] declares a resource's handle backing; \
-                    it belongs on a `resource` declaration"
-                    .to_string(),
-                span: attr.span,
-            });
+        if !self.check(&TokenKind::Resource) {
+            reject_resource_backing(&attrs)?;
         }
 
         match self.peek_kind() {
@@ -1711,6 +1703,7 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
@@ -6281,6 +6274,20 @@ fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
     )
 }
 
+/// The backing is a property of the handle type, so it has one home: the
+/// `resource` declaration. Anything else carrying it is rejected.
+fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
+    match attrs.iter().find(|a| a.cm_resource_backing().is_some()) {
+        Some(attr) => Err(ParseError {
+            message: "#[cm(..., type=...)] declares a resource's handle backing; \
+                it belongs on a `resource` declaration"
+                .to_string(),
+            span: attr.span,
+        }),
+        None => Ok(()),
+    }
+}
+
 /// Populate `Attribute::cm_boundary` from the attribute name:
 /// `#[canonical("namespace", "name")]` gives `Canonical`,
 /// `#[cm("ns:pkg/iface[@v][#fn]")]` gives `Import`, and a `#[cm(…)]` that does
@@ -6309,6 +6316,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
+        let mut seen_type = false;
         for field in fields {
             let AttrArg::KeyValue(key, value) = field else {
                 return Err(
@@ -6319,6 +6327,9 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
                 return Err(format!(
                     "unknown #[cm] field `{key}`; the only field is `type`"
                 ));
+            }
+            if std::mem::replace(&mut seen_type, true) {
+                return Err("#[cm] takes one `type` field".to_string());
             }
             if CmResourceBacking::parse(value).is_none() {
                 return Err(format!(
@@ -6955,6 +6966,20 @@ mod tests {
         assert!(
             err.message.contains("extern-ref") && err.message.contains("i32"),
             "expected the allowed values in the message, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_rejects_a_repeated_type_field() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref", type="i32")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("one `type` field"),
+            "a second value must not be silently dropped, got: {}",
             err.message
         );
     }

@@ -1133,12 +1133,14 @@ impl TypeTable {
 
     /// The ancestor two branches agree on when one resource extends the other,
     /// under the shared reference they were written with. `&mut` is invariant.
-    pub fn resource_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+    /// The answer is always one of `a` and `b`, so nothing new is interned.
+    #[must_use]
+    pub fn resource_join(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if let (ResolvedType::Ref(a_inner), ResolvedType::Ref(b_inner)) = (self.get(a), self.get(b))
         {
             let (a_inner, b_inner) = (*a_inner, *b_inner);
             let joined = self.resource_join(a_inner, b_inner)?;
-            return Some(self.intern(ResolvedType::Ref(joined)));
+            return Some(if joined == a_inner { a } else { b });
         }
         let (ResolvedType::Resource { def: a_def }, ResolvedType::Resource { def: b_def }) =
             (self.get(a), self.get(b))
@@ -4945,7 +4947,7 @@ impl TirBlock {
 /// and falls back to `Unit`, and a diverging `Return` / `Break` / `Continue`
 /// yields `Never`. The elaborator enforces the agreement rule while typing the
 /// surrounding expression, so a mismatch here is already reported.
-pub fn block_result_type(block: &TirBlock) -> TypeId {
+pub fn block_result_type(tt: &TypeTable, block: &TirBlock) -> TypeId {
     block
         .stmts
         .last()
@@ -4955,7 +4957,11 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
                 then_block,
                 else_block: Some(else_block),
                 ..
-            } => agree_branch_types(block_result_type(then_block), block_result_type(else_block)),
+            } => agree_branch_types(
+                tt,
+                block_result_type(tt, then_block),
+                block_result_type(tt, else_block),
+            ),
             TirStmtKind::Return { .. } | TirStmtKind::Break { .. } | TirStmtKind::Continue => {
                 Some(TypeTable::NEVER)
             }
@@ -4965,10 +4971,10 @@ pub fn block_result_type(block: &TirBlock) -> TypeId {
 }
 
 /// Combine two branch result types under the elaborator's rule:
-/// equal types agree; a `Never` branch defers to the other; an
-/// outright mismatch yields `None` so the caller falls back to
-/// `Unit`.
-pub(crate) fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
+/// equal types agree; a `Never` branch defers to the other; two
+/// `extends`-related resources agree on the ancestor; an outright
+/// mismatch yields `None` so the caller falls back to `Unit`.
+pub(crate) fn agree_branch_types(tt: &TypeTable, t: TypeId, e: TypeId) -> Option<TypeId> {
     if t == e {
         Some(t)
     } else if t == TypeTable::NEVER {
@@ -4976,7 +4982,7 @@ pub(crate) fn agree_branch_types(t: TypeId, e: TypeId) -> Option<TypeId> {
     } else if e == TypeTable::NEVER {
         Some(t)
     } else {
-        None
+        tt.resource_join(t, e)
     }
 }
 

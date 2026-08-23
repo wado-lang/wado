@@ -187,10 +187,8 @@ fn reject_overrides<H: CompilerHost>(
             return;
         }
         seen.push(current);
+        let inherited = method_names.get(&current).map_or(&[][..], Vec::as_slice);
         for (name, span) in own {
-            let Some(inherited) = method_names.get(&current) else {
-                continue;
-            };
             if inherited.iter().any(|(other, _)| other == name) {
                 let _ = logger.error_in(
                     &clause.module,

@@ -1045,8 +1045,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The resource that declares `method_name` for a receiver declared by
-    /// `def` — itself or the nearest ancestor.
+    /// The resource that declares `method_name` as an instance method for a
+    /// receiver declared by `def` — itself or the nearest ancestor. A static
+    /// is not reachable through a receiver, so the walk passes it by, exactly
+    /// as [`Self::find_resource_method_info`] does.
     pub(super) fn resource_declaring(
         &self,
         def: crate::defs::DefId,
@@ -1059,7 +1061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .signatures
                     .resource_method_sig(info.defined_at, method_name)
-                    .is_some()
+                    .is_some_and(|sig| sig.self_kind != ast::SelfKind::None)
             {
                 return Some(current);
             }
@@ -1076,11 +1078,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<String> {
         for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
-            let header = self
+            let Some(header) = self
                 .tysys
                 .trait_env
                 .impl_headers
-                .get(&(impl_ref.0.clone(), impl_ref.1))?;
+                .get(&(impl_ref.0.clone(), impl_ref.1))
+            else {
+                continue;
+            };
             if header.methods.iter().any(|m| m.name == method_name)
                 && let Some(trait_name) = &header.trait_name
             {

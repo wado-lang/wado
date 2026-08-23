@@ -558,3 +558,37 @@ fn if_let_branches_join_on_the_ancestor() {
     let d = diagnostics(source);
     assert!(d.is_empty(), "`if let` joins on the ancestor, got {d:?}");
 }
+
+#[test]
+fn a_block_tail_if_joins_on_the_ancestor() {
+    let source = chain(
+        "fn pick(flag: bool, n: Node, t: EventTarget) -> EventTarget {\n\
+         \x20   let x = blk: { if flag { n } else { t } };\n\
+         \x20   return x;\n\
+         }",
+    );
+    let d = diagnostics(&source);
+    assert!(
+        d.is_empty(),
+        "a block tail `if` joins on the ancestor, got {d:?}"
+    );
+}
+
+#[test]
+fn the_ambiguity_names_the_resource_declaring_the_instance_method() {
+    // `Node::id` is a static, so it is not what `n.id()` reaches; the
+    // colliding declaration is the one it inherits.
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {\n    fn id(&self) -> String;\n}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {\n    fn id() -> String;\n}\n\
+         trait Identified {\n    fn id(&self) -> String;\n}\n\
+         impl Identified for Node {\n    fn id(&self) -> String { return \"x\"; }\n}\n\
+         fn use_it(n: Node) -> String { return n.id(); }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("'EventTarget'")),
+        "expected the declaring resource named, got {d:?}"
+    );
+}
