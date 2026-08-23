@@ -53,6 +53,57 @@ fn main() -> Result<()> {
     // Collation data is locale-bearing; restrict it to root ("und") so the blob
     // stays focused on the normalization-dedup story. Normalizer/casemap data is
     // locale-agnostic, so FULL there is just the root payload.
+    // `coll-loc`: collator markers only (no normalizer), with the locale set and
+    // dedup strategy given on the command line — the locale-axis measurement.
+    //   cargo run -- coll-loc <out.blob> <und,ja,... | FULL> [none|maximal]
+    // `fmt-loc`: the formatting surface (datetime + decimal + list + plurals),
+    // same locale/dedup CLI — does CLDR pattern data dwarf collation?
+    if set == "coll-loc" || set == "fmt-loc" {
+        let locales = std::env::args().nth(3).unwrap_or_else(|| "und".into());
+        let dedup = std::env::args().nth(4).unwrap_or_else(|| "none".into());
+        let families: Vec<DataLocaleFamily> = if locales == "FULL" {
+            vec![DataLocaleFamily::FULL]
+        } else {
+            locales
+                .split(',')
+                .map(|l| DataLocaleFamily::single(l.parse().unwrap()))
+                .collect()
+        };
+        let strategy = match dedup.as_str() {
+            "none" => DeduplicationStrategy::None,
+            "maximal" => DeduplicationStrategy::Maximal,
+            other => anyhow::bail!("unknown dedup strategy: {other}"),
+        };
+        let markers: Vec<DataMarkerInfo> = if set == "fmt-loc" {
+            let mut m = icu_datetime::provider::MARKERS.to_vec();
+            m.extend_from_slice(icu_decimal::provider::MARKERS);
+            m.extend_from_slice(icu_list::provider::MARKERS);
+            m.extend_from_slice(icu_plurals::provider::MARKERS);
+            m
+        } else {
+            icu_collator::provider::MARKERS.to_vec()
+        };
+        ExportDriver::new(
+            families,
+            strategy.into(),
+            LocaleFallbacker::try_new_unstable(&provider).context("fallbacker")?,
+        )
+        .with_markers(markers.iter().copied())
+        .export(
+            &provider,
+            BlobExporter::new_with_sink(Box::new(
+                File::create(&out).with_context(|| format!("create {out}"))?,
+            )),
+        )
+        .context("export blob")?;
+        let bytes = std::fs::metadata(&out)?.len();
+        println!(
+            "wrote {out} ({bytes} bytes) — set={set}, locales={locales}, dedup={dedup}, {} markers",
+            markers.len()
+        );
+        return Ok(());
+    }
+
     let (markers, family): (Vec<DataMarkerInfo>, DataLocaleFamily) = match set.as_str() {
         "casemap" => (icu_casemap::provider::MARKERS.to_vec(), DataLocaleFamily::FULL),
         "norm" => (icu_normalizer::provider::MARKERS.to_vec(), DataLocaleFamily::FULL),
