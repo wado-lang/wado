@@ -104,12 +104,12 @@ pub(crate) struct ModuleDecls {
     /// a use site instantiates instead of re-resolving the trait method AST.
     pub(crate) trait_sigs: IndexMap<crate::defs::DefId, super::super::sig::TraitSig>,
     /// Resolved operation signatures of this module's `interface` and
-    /// `resource` declarations, keyed by the declaration's `AstId`.
+    /// `resource` declarations, keyed by the declaration.
     ///
     /// Resolved in the declaration's own frame — type params registered and
     /// `Self` constructed — which is why the body pass reads these back
     /// instead of resolving the same methods a second time.
-    pub(crate) effect_ops: IndexMap<crate::ast::AstId, Vec<crate::tir::TirEffectOp>>,
+    pub(crate) effect_ops: IndexMap<crate::defs::DefId, Vec<crate::tir::TirEffectOp>>,
 
     /// `func_name → type_params` for generic functions in this module.
     pub(crate) generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,

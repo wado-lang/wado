@@ -3094,6 +3094,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .unwrap_or(base_type_id);
 
                 Some(ArithmeticTraitInfo {
+                    impl_def: impl_ref.0,
                     output_type,
                     self_kind,
                     // The *full* spelling (`Add<Feet>`), not the operator's

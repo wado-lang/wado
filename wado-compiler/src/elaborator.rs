@@ -1786,7 +1786,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .resource_method_ids
                     .insert((owner, method.name.clone()), op);
             }
-            self.sem.decls.effect_ops.insert(decl_id, ops);
+            self.sem.decls.effect_ops.insert(
+                defs.of_ast_id(decl_id)
+                    .expect("every interface / resource declaration is a declaration"),
+                ops,
+            );
         }
 
         // Pre-populate the generic-function inference caches for every

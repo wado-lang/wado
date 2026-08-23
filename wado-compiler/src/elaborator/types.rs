@@ -2440,6 +2440,9 @@ pub(super) struct IndexValueTraitInfo {
 /// Info about an operator trait implementation
 #[derive(Clone)]
 pub(super) struct ArithmeticTraitInfo {
+    /// The `impl` block that matched. The module a dispatch is recorded
+    /// against is read off it, so no rendering is compared to find one.
+    pub(super) impl_def: crate::defs::DefId,
     /// The Output associated type
     pub(super) output_type: TypeId,
     /// Self kind for the method (&self)
@@ -2462,6 +2465,11 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
+    /// The `impl` block dispatch selected, where one was matched. `None`
+    /// where no block is named: an auto-derived `Eq` / `Ord`, and a method
+    /// reached through a type parameter's bound, whose block monomorphization
+    /// picks.
+    pub(super) impl_def: Option<crate::defs::DefId>,
     /// Written name of the type whose impl matched — the impl-index key. For
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.

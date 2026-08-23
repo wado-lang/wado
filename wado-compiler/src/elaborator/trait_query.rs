@@ -2545,12 +2545,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `output_type` to the receiver type absent a `type Output`. The set and
         // the types come from `TypeSystem::auto_derive_by_trait`.
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
-        let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
+        let (info_trait_name, self_kind, param_types, return_type, impl_def) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_, method_name, None)
         {
             let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
-            (info.trait_name, info.self_kind, param_types, return_type)
+            (
+                info.trait_name,
+                info.self_kind,
+                param_types,
+                return_type,
+                Some(info.impl_def),
+            )
         } else if let Some((item, return_type)) = auto_derive
             && let Some(trait_) = self.tysys.compiler_trait_def(item)
             && self.tysys.type_implements_trait(
@@ -2565,11 +2571,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
+            // Auto-derived: no `impl` block is written, so none is named.
             (
                 self.tysys.type_table.borrow().compiler_trait_fq(item),
                 ast::SelfKind::Ref,
                 vec![ref_self_ty],
                 return_type,
+                None,
             )
         } else {
             return None;
@@ -2577,6 +2585,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(ResolvedTraitMethod {
             trait_name: info_trait_name,
             method_name: method_name.to_string(),
+            impl_def,
             impl_name: struct_name.to_string(),
             impl_type_id: (!is_type_param).then_some(lookup_type_id),
             self_kind,

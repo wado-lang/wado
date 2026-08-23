@@ -1516,12 +1516,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Operation signatures the decl pass recorded for `decl_id`.
+    /// Operation signatures the decl pass recorded for the declaration at
+    /// `decl_id`.
     fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
+        let decl = self
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(decl_id)
+            .expect("every interface / resource declaration is a declaration");
         self.sem
             .decls
             .effect_ops
-            .get(&decl_id)
+            .get(&decl)
             .cloned()
             .expect("the decl pass records every interface / resource declaration's operations")
     }
