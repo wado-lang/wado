@@ -38,7 +38,11 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 /// Returns whether anything changed (a binding was retargeted or a shallow
 /// specialization was added), so the optimizer's dirty-set gate can re-examine
 /// the touched functions and accommodate the new ones.
-pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+pub fn demote_value_copies(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    descriptor_cache: &mut super::dce::DescriptorCache,
+) -> bool {
     // Intern the `array_clone_shallow` builtin the synthesized twins call, so
     // those calls are born resolved. One id serves all instantiations (the key
     // ignores type args, which ride the node).
@@ -54,7 +58,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     // stamped `func_id`, not the call node's `FunctionRef`. Built after the
     // `array_clone_shallow` intern so it includes that stub; the later synthesis
     // (Phase 2a) appends shallow twins, but no recognizer reads those by id.
-    let descriptors = super::dce::build_callee_descriptors(project);
+    let descriptors = descriptor_cache.descriptors(project);
 
     // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
     // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`,

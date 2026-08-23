@@ -150,6 +150,42 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
 /// The callee [`FunctionRef`] descriptor for every function, indexed by
 /// `func_id.index()` (== store position). Used so a call site's identity is read
 /// by its stamped `func_id` rather than the call node's own `FunctionRef`.
+/// The descriptor table, reused across the fixed-point loop's rounds. Inside the
+/// loop a function's identity is fixed and the store only grows — `dce`, the one
+/// pass that removes and renumbers functions, runs outside it — so a round
+/// appends the newcomers instead of rebuilding all of them. Rebuilding cost the
+/// gale compile ~3% of its wall clock: `inline` and `value_copy_demote` each
+/// rebuilt every round, cloning a name, a `MonomorphInfo` and a
+/// `LocalMethodName` per function.
+#[derive(Default)]
+pub(super) struct DescriptorCache {
+    refs: Vec<FunctionRef>,
+}
+
+impl DescriptorCache {
+    pub(super) fn descriptors(&mut self, project: &NirPackage) -> &[FunctionRef] {
+        debug_assert!(
+            self.refs.len() <= project.functions.len(),
+            "descriptor cache outlived a function removal"
+        );
+        for func_rc in &project.functions[self.refs.len()..] {
+            let f = func_rc.borrow();
+            self.refs
+                .push(FunctionRef::from_resolved(&f, f.module_source.clone()));
+        }
+        debug_assert!(
+            self.refs.iter().zip(&project.functions).all(|(d, f)| {
+                let f = f.borrow();
+                d.name == f.name
+                    && d.method_info.as_ref().map(|i| &i.method_name)
+                        == f.method_info.as_ref().map(|i| &i.method_name)
+            }),
+            "a cached descriptor went stale: a function was renamed in place"
+        );
+        &self.refs
+    }
+}
+
 pub(super) fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
     project
         .functions

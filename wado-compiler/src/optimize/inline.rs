@@ -1036,11 +1036,12 @@ pub fn inline_functions(
     project: &mut NirPackage,
     inline_threshold: usize,
     gate: &mut FunctionGate,
+    descriptor_cache: &mut super::dce::DescriptorCache,
 ) -> bool {
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
-    let descriptors = super::dce::build_callee_descriptors(project);
+    let descriptors = descriptor_cache.descriptors(project);
     let recursive_functions = find_recursive_functions(&project.functions);
 
     // Collect inline candidates from all modules, keyed by `FuncId` (the

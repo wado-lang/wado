@@ -801,7 +801,16 @@ pub(super) fn compute_fn_effects(
     use cranelift_entity::EntityRef;
 
     let mut effects = vec![FnEffect::default(); funcs.len()];
-    let mut callees: Vec<IndexSet<usize>> = vec![IndexSet::default(); funcs.len()];
+    // Callee edges as one flat run per function (`callee_edges[range_of[i]]`)
+    // rather than a per-function `IndexSet`: this runs three times per
+    // fixed-point round over every function in the package, and an owned set
+    // each would be tens of thousands of allocations per call. `last_seen`
+    // dedups within a run — a repeat would only re-merge a summary already
+    // absorbed.
+    let mut callee_edges: Vec<usize> = Vec::new();
+    let mut edge_ranges: Vec<(usize, usize)> = vec![(0, 0); funcs.len()];
+    let mut last_seen: Vec<usize> = vec![usize::MAX; funcs.len()];
+    let mut stack: Vec<NodeRef> = Vec::new();
 
     for (i, f) in funcs.iter().enumerate() {
         let f = f.borrow();
@@ -810,7 +819,9 @@ pub(super) fn compute_fn_effects(
             continue;
         };
         let mut own = FnEffect::default();
-        let mut stack = vec![NodeRef::Block(body.root)];
+        let edge_start = callee_edges.len();
+        stack.clear();
+        stack.push(NodeRef::Block(body.root));
         while let Some(node) = stack.pop() {
             if let NodeRef::Expr(id) = node {
                 match &body.exprs[id].kind {
@@ -822,7 +833,11 @@ pub(super) fn compute_fn_effects(
                     }
                     // A direct call's trap arrives with its callee's summary.
                     ExprKind::Call { func_id, .. } => {
-                        callees[i].insert(func_id.index());
+                        let callee = func_id.index();
+                        if last_seen.get(callee).is_some_and(|&run| run != i) {
+                            last_seen[callee] = i;
+                            callee_edges.push(callee);
+                        }
                     }
                     _ => own.may_trap |= super::arena_query::expr_node_may_trap(body, id),
                 }
@@ -835,12 +850,14 @@ pub(super) fn compute_fn_effects(
             own.opaque = true;
         }
         effects[i] = own;
+        edge_ranges[i] = (edge_start, callee_edges.len());
     }
 
     loop {
         let mut changed = false;
         for i in 0..effects.len() {
-            let merged = callees[i]
+            let (lo, hi) = edge_ranges[i];
+            let merged = callee_edges[lo..hi]
                 .iter()
                 .filter_map(|&c| effects.get(c).copied())
                 .fold(effects[i], |mut acc, e| {

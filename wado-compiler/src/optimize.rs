@@ -473,6 +473,9 @@ fn run_optimization_passes(
     // changes; see `ConstFoldCache`.
     let mut const_fold_cache: Option<ConstFoldCache> = None;
     let mut param_spec_state = param_spec::ParamSpecState::default();
+    // Callee descriptors, appended to rather than rebuilt each round; see
+    // `DescriptorCache`.
+    let mut descriptor_cache = dce::DescriptorCache::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -531,7 +534,11 @@ fn run_optimization_passes(
         // it. Runs before `nir/inline`, where the `$value_copy$T(arg)` shape it
         // matches disappears. (Copies are inserted precisely at the lower phase,
         // so there is no elision pass to sequence against.)
-        gate_only!("nir/value_copy_demote", demote_value_copies);
+        gate_only!("nir/value_copy_demote", |p, g| demote_value_copies(
+            p,
+            g,
+            &mut descriptor_cache
+        ));
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -551,7 +558,7 @@ fn run_optimization_passes(
         // re-examine just those (and their neighbours).
         {
             let c = run_pass("nir/inline", project, profiler, |p| {
-                inline_functions(p, threshold, &mut gate)
+                inline_functions(p, threshold, &mut gate, &mut descriptor_cache)
             });
             if c {
                 changed = true;
