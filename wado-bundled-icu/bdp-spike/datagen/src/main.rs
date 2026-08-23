@@ -62,8 +62,13 @@ fn main() -> Result<()> {
         } else {
             locales
                 .split(',')
-                .map(|l| DataLocaleFamily::single(l.parse().unwrap()))
-                .collect()
+                .map(|l| {
+                    let langid = l
+                        .parse()
+                        .with_context(|| format!("locale {l:?} in {locales:?}"))?;
+                    Ok(DataLocaleFamily::single(langid))
+                })
+                .collect::<Result<_>>()?
         };
         let strategy = match dedup.as_str() {
             "none" => DeduplicationStrategy::None,
