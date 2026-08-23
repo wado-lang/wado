@@ -62,12 +62,12 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
-    /// `#![stdlib("…")]` names no bundled stdlib module. The attribute takes
-    /// over the entry's module identity, so accepting a name nothing answers to
-    /// would invent a stdlib module for the rest of the compile to resolve
-    /// against.
+    /// `#![stdlib("…")]` names no bundled stdlib module, or names nothing at
+    /// all. The attribute takes over the entry's module identity, so accepting
+    /// a name nothing answers to would invent a stdlib module for the rest of
+    /// the compile to resolve against.
     StdlibIdentity {
-        path: String,
+        path: Option<String>,
         file: String,
         line: usize,
         column: usize,
@@ -154,20 +154,33 @@ impl std::fmt::Display for LoadError {
             } => {
                 write!(f, "wasm import error in {module_source}: {message}")
             }
-            LoadError::StdlibIdentity { path, .. } => {
-                write!(f, "{}", stdlib_identity_message(path))
+            LoadError::StdlibIdentity {
+                path,
+                file,
+                line,
+                column,
+            } => {
+                write!(
+                    f,
+                    "{file}: line {line}, column {column}: {}",
+                    stdlib_identity_message(path.as_deref())
+                )
             }
         }
     }
 }
 
 /// The one wording both the [`LoadError::StdlibIdentity`] display and its
-/// diagnostic use.
-fn stdlib_identity_message(path: &str) -> String {
+/// diagnostic use. `None` is the argument-less form, which names nothing to
+/// quote back.
+fn stdlib_identity_message(path: Option<&str>) -> String {
+    let lead = match path {
+        Some(path) => format!("#![stdlib({path:?})] does not name a bundled stdlib module"),
+        None => "#![stdlib] names no bundled stdlib module".to_string(),
+    };
     format!(
-        "#![stdlib({path:?})] does not name a bundled stdlib module; \
-         the attribute declares the identity of a module bundled in the compiler \
-         and is not for use outside it"
+        "{lead}; the attribute declares the identity of a module bundled in the \
+         compiler and is not for use outside it"
     )
 }
 
@@ -237,7 +250,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
             } => Self {
                 severity: Severity::Error,
                 code: Code::ModuleNotFound,
-                message: stdlib_identity_message(path),
+                message: stdlib_identity_message(path.as_deref()),
                 span: Some(DiagnosticSpan {
                     file: file.clone(),
                     line,
@@ -983,17 +996,17 @@ fn parse_stdlib_identity_attribute(
     let Some(attribute) = module.stdlib_identity_attribute() else {
         return Ok(None);
     };
-    let path = module.stdlib_identity().unwrap_or_default();
+    let path = module.stdlib_identity();
     let reject = || LoadError::StdlibIdentity {
-        path: path.to_string(),
+        path: path.map(str::to_string),
         file: file.to_string(),
         line: attribute.span.line,
         column: attribute.span.column,
     };
 
-    if stdlib::get_stdlib_module(path).is_none() {
+    let Some(path) = path.filter(|p| stdlib::get_stdlib_module(p).is_some()) else {
         return Err(reject());
-    }
+    };
     if let Some(name) = path.strip_prefix("core:") {
         Ok(Some(interner.core(name)))
     } else if let Some(interface) = path.strip_prefix("wasi:") {
