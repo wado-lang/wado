@@ -1244,15 +1244,15 @@ impl Parser {
     fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
-            let arg = match self.peek_kind().clone() {
-                TokenKind::StringLit(raw) => {
+            // `as_ident_name`, so a contextual keyword can be a key:
+            // `#[cm(..., type="extern-ref")]`.
+            let key = self.peek_kind().as_ident_name().map(str::to_string);
+            let arg = match (key, self.peek_kind().clone()) {
+                (_, TokenKind::StringLit(raw)) => {
                     self.advance();
                     AttrArg::Str(raw)
                 }
-                // `as_ident_name` so a contextual keyword can be a key:
-                // `#[cm(..., type="extern-ref")]`.
-                kind if kind.as_ident_name().is_some() => {
-                    let value = kind.as_ident_name().unwrap_or_else(|| unreachable!()).to_string();
+                (Some(value), _) => {
                     self.advance();
                     // Check if this identifier is followed by '=' making it a key=value pair
                     if self.check(&TokenKind::Eq) {
@@ -1297,11 +1297,11 @@ impl Parser {
                         AttrArg::Ident(value)
                     }
                 }
-                TokenKind::NumberLit(value) => {
+                (None, TokenKind::NumberLit(value)) => {
                     self.advance();
                     AttrArg::Number(value)
                 }
-                _ => break,
+                (None, _) => break,
             };
             args.push(arg);
             if self.check(&TokenKind::Comma) {
