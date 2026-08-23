@@ -147,12 +147,8 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
     analysis
 }
 
-/// The table of [`build_callee_descriptors`], reused across the fixed-point
-/// loop's rounds. Inside the loop a function's identity is fixed and the store
-/// only grows — `dce`, the one pass that removes and renumbers functions, runs
-/// outside it — so a round appends the newcomers instead of rebuilding every
-/// entry, each of which clones a name, a `MonomorphInfo` and a
-/// `LocalMethodName`.
+/// The table of [`build_callee_descriptors`], appended to across the fixed-point
+/// loop's rounds rather than rebuilt.
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,

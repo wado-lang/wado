@@ -473,8 +473,6 @@ fn run_optimization_passes(
     // changes; see `ConstFoldCache`.
     let mut const_fold_cache: Option<ConstFoldCache> = None;
     let mut param_spec_state = param_spec::ParamSpecState::default();
-    // Callee descriptors, appended to rather than rebuilt each round; see
-    // `DescriptorCache`.
     let mut descriptor_cache = dce::DescriptorCache::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the

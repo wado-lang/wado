@@ -114,9 +114,7 @@ pub struct EngineBuffers {
     /// `IndexMap` here would pay a hash + probe for every read/def recorded by
     /// `build_indices`, run on every one of the tens-of-thousands of sessions.
     uses: Vec<LocalUses>,
-    /// How many leading `uses` entries the last session may have written.
-    /// [`EngineBuffers::reset_for`] resets exactly those, so a small body does
-    /// not pay for the largest one seen.
+    /// Every `uses` entry at or past this index is already reset.
     dirty_uses: usize,
     worklist: VecDeque<NodeRef>,
     /// Traversal scratch for [`Engine::build_indices`], owned here for the same
@@ -161,12 +159,9 @@ impl EngineBuffers {
         fill_bit(&mut self.stmt_queued, body.stmts.len());
         fill_bit(&mut self.block_queued, body.blocks.len());
         fill_bit(&mut self.pat_queued, body.pats.len());
-        // Reset in place rather than `clear()`: dropping the entries frees every
-        // `reads` Vec, which `build_indices` then allocates all over again.
-        // Entries past `local_count` stay reset, reading the same as absent —
-        // every access is a bounds-checked `get`. Pre-sizing to `local_count`
-        // keeps `build_indices`, which visits locals in body order, from growing
-        // `uses` through several reallocations.
+        // Not `clear()`: that frees every `reads` Vec `build_indices` then
+        // reallocates. Entries past `local_count` stay reset, which every
+        // `uses.get` reads as absent.
         for entry in &mut self.uses[..self.dirty_uses] {
             let mut reads = std::mem::take(&mut entry.reads);
             reads.clear();

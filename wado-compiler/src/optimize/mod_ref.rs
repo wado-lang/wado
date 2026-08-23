@@ -801,12 +801,8 @@ pub(super) fn compute_fn_effects(
     use cranelift_entity::EntityRef;
 
     let mut effects = vec![FnEffect::default(); funcs.len()];
-    // Callee edges as one flat run per function (`callee_edges[range_of[i]]`)
-    // rather than a per-function `IndexSet`: this runs three times per
-    // fixed-point round over every function in the package, and an owned set
-    // each would be tens of thousands of allocations per call. `last_seen`
-    // dedups within a run — a repeat would only re-merge a summary already
-    // absorbed.
+    // Callee edges as one flat run per function rather than an `IndexSet` each:
+    // this walks every function in the package three times per fixed-point round.
     let mut callee_edges: Vec<usize> = Vec::new();
     let mut edge_ranges: Vec<(usize, usize)> = vec![(0, 0); funcs.len()];
     let mut last_seen: Vec<usize> = vec![usize::MAX; funcs.len()];

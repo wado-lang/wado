@@ -1,9 +1,6 @@
 //! The NIR fixed-point loop must converge, not run to its iteration cap.
-//!
-//! `sroa_variant_return` reported a change on every round for a call site it
-//! had already rewritten, so the loop ran the full cap (10 rounds at `-O2`,
-//! 30 at `-O3`) on any program with a scalarized variant return — and every
-//! other gated pass re-scanned the functions it re-dirtied.
+//! `sroa_variant_return` reported a change every round for a call site it had
+//! already rewritten, which held the loop open to the cap.
 
 use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity};
 
@@ -36,7 +33,6 @@ export fn run() {
 }
 "#;
 
-/// How many `nir/iteration N` spans the optimizer opened.
 fn iterations_run(opt_level: OptLevel) -> usize {
     let host = crate::common::InMemoryHost::new();
     let options = CompilerOptions {

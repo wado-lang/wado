@@ -182,8 +182,7 @@ fn rebox_stragglers(
         let Some(mut body) = func.body.take() else {
             continue;
         };
-        // Every step below keys on a call to a scalarized callee; without one
-        // they all walk the body to find nothing.
+        // Every step below keys on a call to a scalarized callee.
         if !calls_any(&body, scalarized) {
             func.body = Some(body);
             continue;
@@ -213,9 +212,8 @@ fn rebox_stragglers(
     changed
 }
 
-/// Whether `body` calls any function in `targets` — an arena scan that decides
-/// in one pass whether the tree walks keyed on such a call have anything to
-/// find. Nearly every function in a package calls none of them.
+/// Whether `body` calls any function in `targets` — one arena scan, far cheaper
+/// than the tree walks it gates.
 fn calls_any<V>(body: &Body, targets: &IndexMap<FuncId, V>) -> bool {
     body.exprs.values().any(|node| {
         matches!(&node.kind, ExprKind::Call { func_id, .. } if targets.contains_key(func_id))
@@ -2062,8 +2060,7 @@ fn rewrite_call_sites(
         let Some(mut body) = func.body.take() else {
             continue;
         };
-        // Every step below keys on a call to a candidate; without one they all
-        // walk the body to find nothing.
+        // Every step below keys on a call to a candidate.
         if !calls_any(&body, candidates) {
             func.body = Some(body);
             continue;
