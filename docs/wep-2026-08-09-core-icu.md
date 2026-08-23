@@ -42,33 +42,53 @@ identifiers.
 
 The user-visible module is deliberately not the unit of code splitting.
 
-### Two API shapes, chosen by what the thing is
+### Three API shapes, chosen by what the thing is
 
-A free function, when the operation is a pure function of its arguments with no
-construction worth keeping: normalization, case folding, `is_nfc`, character
+| Shape                                | When                                                               |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| Free function                        | pure in its arguments, no construction worth keeping               |
+| Constructed handle, non-owning token | construction worth hoisting, configuration bounded at compile time |
+| Constructed handle, affine resource  | built from unbounded runtime input, or stateful                    |
+
+A free function covers normalization, case folding, `is_nfc`, character
 properties, and one-shot locale-sensitive casing.
 
-A resource, when the object is expensive to construct, is compiled from runtime
-input, or is itself stateful: collators, the formatters (date/time, number, list,
-relative time, message), plural rules, transliterators, and segmentation
-iterators.
+Everything else is constructed, and construction is what makes the cost visible:
+a constructor says where the expensive thing happens, where a call that is
+expensive only the first time reads as free at every call site. What separates
+the two handle shapes is not that — it is who ends the object's life.
 
-The test is whether the object is a pure function of a key the program bounds at
-compile time. If it is, a free function costs nothing and keeps the value
-semantics the rest of `core:*` has. If it is not, a handle is the honest model —
-and across full ICU it frequently is not:
+**Non-owning token.** A collator over a declared locale, plural rules, a
+formatter over a fixed skeleton, a segmenter: immutable, and configured only
+from what `with { locales: [...] }` and the program's own types already bound at
+compile time. The implementation component interns these, so the set is finite
+by construction and never needs freeing, and the handle is a copyable newtype
+under the [non-owning token](./wep-2026-05-21-resource-ownership.md) rule. It
+keeps the value semantics the rest of `core:*` has: it sits in a global, and a
+closure captures it by copy, so `list.sort_by(|a, b| c.compare(a, b))` is
+written the obvious way.
 
-- Collator options are a combinatorial space (strength, alternate handling, case
-  level, case first, numeric ordering, backward second level), and a tailored
-  collator is compiled from user-supplied rules.
-- A formatter is compiled from a skeleton or a message pattern, which is runtime
-  data.
-- A segmentation iterator over a large document is state by definition; forcing
-  it into a `list<u32>` of every boundary is pathological when the caller wants
-  the first few.
+**Affine resource.** A collator tailored from user-supplied rules, a formatter
+compiled from a runtime skeleton or message pattern, anything keyed by an
+`Accept-Language` string, a lazy segmentation iterator. Here the far side
+allocates per call from input the program does not bound, so the object has an
+end and something must reach it: the handle carries a `dtor` and is move-only.
+
+The line between them is the one the slicer already draws — whether the object
+is a pure function of a key the program bounds at compile time. It is the same
+test that decides whether a capability's data can be sliced, so a program that
+stays inside the compile-time-bounded surface meets no move-only handle at all.
+
+Statefulness forces the affine shape for a second, independent reason. Copying a
+token aliases its referent, which is unobservable for an immutable object and
+observable for a stateful one: two copies of a lazy iterator would advance each
+other. So the segmenter is a token and the iteration is not — a full pass
+returns a `List<u32>` of boundaries and needs no handle of its own, while lazy
+iteration over a large document is affine. Forcing the lazy case into an eager
+list is pathological when the caller wants the first few.
 
 Where a capability serves both a one-shot and a loop, the facade offers both: a
-convenience function that constructs and discards, and the resource for when the
+convenience function that constructs and discards, and the handle for when the
 construction should be hoisted. The facade makes the cost visible where it is
 paid.
 
@@ -204,9 +224,28 @@ compile-time-bounded key. A design that holds for case mapping and breaks at dat
 formatting is not a design for `core:icu`.
 
 The counterargument — that move-only resources clash with Wado's value semantics
-— is real but narrow. It bites only when a resource is treated as a copyable
-value, which none of these need to be, and Wado users already meet resources
-throughout the WASI standard library.
+— is real, and the three-shape split above is the answer to it rather than a
+concession: the objects that want to be copyable values are copyable values.
+What stays move-only is what genuinely has an end.
+
+### One handle shape for everything
+
+Two collapses were considered, and each loses what the split keeps.
+
+Making every handle affine is uniform and adds no kind, but move-only on an
+immutable interned object is a discipline with no safety payoff — nothing can be
+double-freed because nothing is freed — and it costs exactly what the hot paths
+need: a collator in a global for a long-running service, and a collator captured
+by a comparison closure. It would also put the entire surface behind CM resource
+import rather than only the part that owns a `dtor`.
+
+Making every handle a bare index is the mirror error. It reintroduces what sank
+the memoizing surface above: an object built per request from `Accept-Language`
+accumulates in the far side's table with no eviction and no visibility — a leak
+rather than a cache, since nothing is even reused. And it breaks value semantics
+wherever the object is stateful, because copying the handle silently shares the
+state. The representation was never the question. A CM handle is already an
+index into a per-instance table; ownership is what differs.
 
 ### Three user-visible modules
 
@@ -248,18 +287,24 @@ runtime data dependencies, not taxonomy.
 - Runtime-loaded data loses zero-copy-from-static and adds a fixed per-capability
   deserialization cost. For a single capability this is roughly size-neutral
   against baking; the win is across capabilities and from per-program slicing.
-- Resources in the surface make this depend on CM resource import, which is not
-  implemented. The cost is shared: the same gap blocks every resource-bearing
-  third-party component, and WASI's own surface is resource-heavy.
+- The CM import blocker is split rather than shared. The compile-time-bounded
+  surface needs only a `dtor`-less imported handle, which is strictly less than
+  resource import; only the tailored and runtime-configured surface waits on the
+  full thing. That gap is still shared with every resource-bearing third-party
+  component, and WASI's own surface is resource-heavy.
 
 ## Open questions
 
-- [ ] Can a resource be held in a global? An HTTP service wants one collator
-      across requests, so the answer shapes how usable the resource form is.
-- [ ] Can a borrow be captured by a closure — `list.sort_by(|a, b| c.compare(a, b))`
-      — under the ownership analysis
-      ([resource ownership](./wep-2026-05-21-resource-ownership.md))? If not, the
-      sorting path needs a different shape.
+- [ ] What proves a construction site's configuration compile-time bounded, so
+      the facade may offer the token form there. A combinatorial option space is
+      not the obstacle — a constant at the site is what bounds the interned set —
+      but whether that is expressed as a distinct type, or as a const-argument
+      requirement whose failure diagnoses toward the affine form, is undecided.
+- [ ] Holding an affine handle in a global, and capturing one in a closure
+      ([resource ownership](./wep-2026-05-21-resource-ownership.md)). The token
+      form needs neither, so this bounds only the tailored and
+      runtime-configured surface — but a service caching a collator built from
+      `Accept-Language` wants precisely that.
 - [ ] Does ICU4X expose collation sort keys? A bulk key-extraction call would let
       a sort cross the boundary once instead of per comparison, which dominates
       any handle-versus-lookup difference.
@@ -273,10 +318,14 @@ runtime data dependencies, not taxonomy.
 
 ## Implementation
 
-- [ ] Resource and handle support in CM component import
-      ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)).
-      A prerequisite: the facade's resource-bearing components cannot be consumed
-      without it.
+- [ ] Non-owning token support in CM component import
+      ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
+      a `dtor`-less imported handle decoded as a copyable newtype. This is all
+      the first slice needs — normalization, case mapping, character properties,
+      collation over the declared locales, grapheme segmentation.
+- [ ] Affine resource support in the same path — methods, static constructors,
+      `borrow<T>` parameters, `resource.drop`. It gates the tailored and
+      runtime-configured surface, not the package.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
       itself.
 - [ ] Promote the spike's data-free components into first-party prebuilt
@@ -298,5 +347,6 @@ runtime data dependencies, not taxonomy.
   the implementation components are consumed and composed.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API
   need no longer be CM-representable.
-- [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the discipline
-  the facade's resources carry.
+- [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the three
+  handle kinds the facade draws on, and the non-owning token rule the
+  compile-time-bounded surface rests on.
