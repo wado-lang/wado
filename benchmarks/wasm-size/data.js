@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787488397451,
+  "lastUpdate": 1787523526809,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50525,6 +50525,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/effa03c1de27a2e9eaa37d6740756eadfcad1b51"
         },
         "date": 1787488397156,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e31a460de5f9063c04b0b1cf277ebd5e37de55a",
+          "message": "Merge pull request #1884 from wado-lang/claude/internal-roadmap-biv1rw\n\nfix(visibility): enforce `internal` across package and impl-member boundaries",
+          "timestamp": "2026-08-24T07:07:34+09:00",
+          "tree_id": "8941a676a75cf7112cb64d78b23355f08093e2b3",
+          "url": "https://github.com/wado-lang/wado/commit/0e31a460de5f9063c04b0b1cf277ebd5e37de55a"
+        },
+        "date": 1787523526345,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
