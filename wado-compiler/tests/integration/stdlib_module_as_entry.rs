@@ -8,11 +8,9 @@ fn core_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("lib/core")
 }
 
-/// Every bundled `core:` module — the ones carrying `#![stdlib("core:…")]`,
-/// which an editor opens like any other file. `*_test.wado` siblings are
-/// ordinary entry points already covered by `mise run test-wado`, and a
-/// `#![wasm_module("…")]` module is not compilable as an entry at all (see
-/// `a_wasm_module_entry_is_rejected`).
+/// Every bundled `core:` module — the ones an editor opens like any other file.
+/// `*_test.wado` siblings are ordinary entry points, and a `#![wasm_module("…")]`
+/// module is not compilable as an entry at all.
 fn core_modules() -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = [core_dir(), core_dir().join("prelude")]
         .into_iter()
@@ -66,9 +64,8 @@ fn every_bundled_core_module_compiles_as_the_entry_point() {
     }
 }
 
-/// A `#![wasm_module("mem")]` module's code is emitted into that separate core
-/// module, leaving the program's own module empty — there is no component to
-/// compile, and saying so beats the WIR-emit panic it used to hit.
+/// Its code is emitted into that separate core module, leaving the program's
+/// own module empty — there is no component to compile.
 #[test]
 fn a_wasm_module_entry_is_rejected() {
     let path = core_dir().join("allocator.wado");
@@ -81,8 +78,7 @@ fn a_wasm_module_entry_is_rejected() {
     );
 }
 
-/// The entry's own source is what gets compiled — never the snapshot's copy of
-/// the module whose identity it claims.
+/// The entry's own source is what gets compiled, never the snapshot's copy.
 #[test]
 fn a_stdlib_entry_is_compiled_from_its_source() {
     let path = core_dir().join("prelude/string.wado");

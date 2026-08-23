@@ -676,8 +676,6 @@ export fn run() {
 
 #[test]
 fn stdlib_identity_attribute_is_checked_in_an_imported_module_too() {
-    // Only the entry's identity is consulted, but a file does not become
-    // well-formed by being imported rather than compiled.
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(
         dir.path().join("dep.wado"),
@@ -705,8 +703,7 @@ fn stdlib_identity_attribute_is_checked_in_an_imported_module_too() {
 
 #[test]
 fn stdlib_identity_attribute_naming_no_bundled_module_is_an_error() {
-    // `#![stdlib("…")]` pins the entry's module identity; any file can write
-    // it, so an unregistered name is a diagnostic, never a panic.
+    // Any file can write the attribute, so this is a diagnostic, never a panic.
     let source = "#![stdlib(\"core:bogus.wado\")]\nfn main() {}\n";
 
     let Err(err) = crate::common::compile_source(source) else {

@@ -952,8 +952,7 @@ impl Module {
             .map(AttrArg::as_str)
     }
 
-    /// The `#![wasm_module("…")]` attribute itself — the span a diagnostic
-    /// about the separate core module points at.
+    /// The attribute itself, for a diagnostic's span.
     #[must_use]
     pub fn wasm_module_attribute(&self) -> Option<&InnerAttribute> {
         self.inner_attributes
@@ -976,8 +975,7 @@ impl Module {
             .map(AttrArg::as_str)
     }
 
-    /// The `#![stdlib("…")]` attribute itself — the form a diagnostic needs,
-    /// since a malformed one has no identity to report but does have a span.
+    /// The attribute itself: a malformed one has no identity, but has a span.
     #[must_use]
     pub fn stdlib_identity_attribute(&self) -> Option<&InnerAttribute> {
         self.inner_attributes.iter().find(|a| a.name == "stdlib")

@@ -1460,12 +1460,8 @@ fn compile_after_load<H: CompilerHost>(
         link::link(package)
     };
 
-    // A `#![wasm_module("…")]` module's code is emitted into that separate core
-    // module, which the component links beside the program rather than as it.
-    // Nothing would be left in the main module for the world to export, and the
-    // separated code cannot call back into it — so an entry that declares one
-    // has no component to compile to. Rejected here rather than at emit, where
-    // the split leaves a call to a function the separated module never holds.
+    // Rejected here rather than at emit, where the split leaves a call to a
+    // function the separated module never holds.
     if let Some(name) = flat.wasm_module_sources.get(&flat.entry_module_source) {
         let _ = logger.error_in(
             &flat.entry_module_source,

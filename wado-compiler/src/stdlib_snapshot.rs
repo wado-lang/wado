@@ -151,15 +151,9 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
         .collect()
 }
 
-/// The first module `snap` cached that `modules` carries as a different parse,
-/// if any — the condition that decides whether the snapshot may seed a compile.
-///
-/// Restoring a cached module skips its decl pass, so its facts are read back
-/// against `DefId`s minted from the snapshot's own parse; that is sound only
-/// while an `AstId` means the same node in both tables (WEP 2026-08-12 §1).
-/// Every stdlib module is parsed once per process and shared, so the sets agree
-/// — until an entry names itself `#![stdlib("core:…")]` and its own file becomes
-/// a second parse of a cached identity. Such a compile elaborates from source.
+/// The first module `snap` cached that `modules` carries as a different parse —
+/// the condition the snapshot may seed a compile under, its facts keying on
+/// `DefId`s only that parse mints (WEP 2026-08-12 §1).
 pub(crate) fn reparsed_snapshot_module<'a>(
     snap: &Semantics,
     modules: &'a IndexMap<ModuleSource, crate::ast::Module>,
@@ -299,10 +293,8 @@ mod tests {
         );
     }
 
-    /// The precondition `semantics_with_logger` gates the snapshot on must hold
-    /// for an ordinary compile, or every compile silently re-elaborates the
-    /// stdlib. It fails the moment a module the snapshot caches starts being
-    /// parsed per compile again.
+    /// The precondition must hold for an ordinary compile, or every compile
+    /// silently re-elaborates the stdlib.
     #[test]
     fn a_plain_compile_carries_the_snapshot_parses() {
         let snap = get_or_init_snapshot().expect("not re-entering the builder");

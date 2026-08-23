@@ -62,10 +62,7 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
-    /// `#![stdlib("…")]` names no bundled stdlib module, or names nothing at
-    /// all. The attribute takes over the entry's module identity, so accepting
-    /// a name nothing answers to would invent a stdlib module for the rest of
-    /// the compile to resolve against.
+    /// `#![stdlib("…")]` names no bundled stdlib module, or names nothing.
     StdlibIdentity {
         path: Option<String>,
         file: String,
@@ -170,9 +167,7 @@ impl std::fmt::Display for LoadError {
     }
 }
 
-/// The one wording both the [`LoadError::StdlibIdentity`] display and its
-/// diagnostic use. `None` is the argument-less form, which names nothing to
-/// quote back.
+/// The one wording the display and the diagnostic share.
 fn stdlib_identity_message(path: Option<&str>) -> String {
     match path {
         Some(path) => format!(
@@ -983,14 +978,8 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
 }
 
 /// The bundled-stdlib identity `module` declares, `Ok(None)` when it declares
-/// none. `file` is the module's path, for the diagnostic.
-///
-/// The attribute names one of the modules bundled in the compiler, and every
-/// spelling that names nothing — an omitted name, a name no bundled module
-/// answers to — is an error wherever it is written. Only the entry's identity
-/// is consulted, but a file does not become well-formed by being imported
-/// rather than compiled, so [`ModuleLoader::check_stdlib_identities`] holds
-/// every loaded module to the same rule.
+/// none. Naming nothing is an error wherever it is written — a file does not
+/// become well-formed by being imported rather than compiled.
 fn stdlib_identity_of<'a>(module: &'a Module, file: &str) -> Result<Option<&'a str>, LoadError> {
     let Some(attribute) = module.stdlib_identity_attribute() else {
         return Ok(None);
@@ -1008,11 +997,8 @@ fn stdlib_identity_of<'a>(module: &'a Module, file: &str) -> Result<Option<&'a s
 }
 
 /// Resolve `module`'s `#![stdlib("…")]` declaration to a canonical
-/// `ModuleSource`, `Ok(None)` when it declares none.
-///
-/// The identity pins the entry's `ModuleSource`, which the rest of the compile
-/// resolves against — hence [`stdlib_identity_of`]'s rejection rather than a
-/// silent degrade to `EntryPoint`.
+/// `ModuleSource`: it pins the entry's, which the rest of the compile resolves
+/// against.
 fn parse_stdlib_identity_attribute(
     interner: &mut ModuleSourceInterner,
     module: &Module,
@@ -1149,12 +1135,9 @@ fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
     )
 }
 
-/// The same slot table for the bindings synthesized from a *bundled* wasm asset
-/// (`core:libm.wat`). Its bytes are fixed at build time, so its synthesized
-/// module is as stable as a bundled source and must be parsed once per process
-/// too: an `AstId` has to mean the same node in every compile for the stdlib
-/// snapshot to seed one (WEP 2026-08-12 §1). A host-loaded asset can change
-/// between compiles and is parsed each time.
+/// [`stdlib_slots`] for a *bundled* wasm asset's synthesized bindings: its bytes
+/// are fixed at build time, so it is parsed once per process too — an `AstId`
+/// must mean the same node in every compile (WEP 2026-08-12 §1).
 fn wasm_binding_slots()
 -> &'static crate::hashmap::IndexMap<&'static str, std::sync::OnceLock<Module>> {
     use std::sync::OnceLock;
@@ -1169,8 +1152,8 @@ fn wasm_binding_slots()
     })
 }
 
-/// Return the cached bindings AST for a bundled wasm asset, parsing `source` on
-/// first access. `None` for a host-loaded asset.
+/// The cached bindings AST for a bundled wasm asset; `None` for a host-loaded
+/// one, whose bytes can change between compiles.
 fn cached_wasm_binding_module(import_path: &str, source: &str) -> Option<&'static Module> {
     let (key, slot) = wasm_binding_slots().get_key_value(import_path)?;
     Some(slot.get_or_init(|| parse_bind_stdlib(key, source)))
@@ -1478,9 +1461,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         })
     }
 
-    /// Hold every loaded module's `#![stdlib("…")]` declaration to the rule
-    /// [`stdlib_identity_of`] states. The entry's is resolved before its
-    /// imports load; this reaches the rest.
+    /// Hold every loaded module to [`stdlib_identity_of`]'s rule. The entry's
+    /// is resolved before its imports load; this reaches the rest.
     fn check_stdlib_identities(&self) -> Result<(), LoadError> {
         for (module_source, module) in &self.loaded {
             stdlib_identity_of(module, &module_source.source_path())?;
