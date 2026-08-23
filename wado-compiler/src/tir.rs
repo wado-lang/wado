@@ -637,11 +637,6 @@ impl TypeSet {
         self.words[word] |= mask;
         newly
     }
-
-    pub(crate) fn contains(&self, id: TypeId) -> bool {
-        let (word, mask) = Self::slot(id);
-        self.words.get(word).is_some_and(|w| w & mask != 0)
-    }
 }
 
 /// A trait at the arguments it was instantiated at (WEP 2026-08-12): `Combine`
@@ -780,11 +775,10 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
-    /// The wrapper `TypeId`s the boxing pass redefined from a *shared* `&T`.
-    /// `&T` and `&mut T` get the same `Box<T>` content, so this is the only
-    /// surviving record of which boxed handles cannot be written through — see
-    /// [`Self::is_mut_box`].
-    shared_box_type_ids: TypeSet,
+    /// The wrapper `TypeId`s the boxing pass redefined from a reference, each
+    /// mapped to whether that reference was shared — the only surviving record
+    /// of how one was spelled, `&T` and `&mut T` sharing a `Box<T>`.
+    boxed_ref_shared: TypeMap<bool>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -940,7 +934,7 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
-            shared_box_type_ids: TypeSet::default(),
+            boxed_ref_shared: TypeMap::default(),
             struct_name_index: IndexMap::default(),
             decl_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -1597,6 +1591,10 @@ impl TypeTable {
         self.box_payload_types.retain(|id, &payload| {
             effective_keep.contains(&id) && effective_keep.contains(&payload)
         });
+        // Kept in step with `box_payload_types`: `fq_type_name_unboxed` reads a
+        // payload for every id this still marks.
+        self.boxed_ref_shared
+            .retain(|id, _| self.box_payload_types.get(id).is_some());
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -2369,10 +2367,10 @@ impl TypeTable {
             || self.box_payload_of(type_id).is_some()
     }
 
-    /// Record that `wrapper` was redefined from a shared `&T`, so it cannot be
-    /// written through. Called by the boxing pass; see [`Self::is_mut_box`].
-    pub fn register_shared_box(&mut self, wrapper: TypeId) {
-        self.shared_box_type_ids.insert(wrapper);
+    /// Record that `wrapper` was redefined from a reference, shared or not.
+    /// Called by the boxing pass; see [`Self::is_mut_box`].
+    pub fn register_boxed_ref(&mut self, wrapper: TypeId, is_shared: bool) {
+        self.boxed_ref_shared.set_growing(wrapper, is_shared);
     }
 
     /// Whether `wrapper` is a boxed reference that can be written through: a
@@ -2380,7 +2378,8 @@ impl TypeTable {
     /// caller still holds. Only ids known to come from a shared `&T` answer
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
-        self.box_payload_types.get(wrapper).is_some() && !self.shared_box_type_ids.contains(wrapper)
+        self.box_payload_types.get(wrapper).is_some()
+            && self.boxed_ref_shared.get(wrapper) != Some(&true)
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
@@ -3879,6 +3878,13 @@ impl TypeTable {
         }
     }
 
+    /// [`Self::mangle_type_arg_for_generic`] as the type read *before*
+    /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
+    /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
+    pub fn mangle_type_arg_unboxed(&self, id: TypeId) -> String {
+        self.fq_type_name_unboxed(id).to_mangled()
+    }
+
     /// The base type name without type arguments: the head's own name, so
     /// `Option<String>` and a monomorphized `Option<String>` both answer
     /// `"Option"`. Everything else falls back to `mangle_type_name`.
@@ -4051,9 +4057,36 @@ impl TypeTable {
     /// the name stays structured all the way to its consumers.
     #[must_use]
     pub fn fq_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+        self.fq_type_name_spelled(id, false)
+    }
+
+    /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
+    /// redefined every borrowed `TypeId` into `Box<T>`. Every shape recurses,
+    /// so a borrow nested anywhere in the spelling comes back as one.
+    pub fn fq_type_name_unboxed(&self, id: TypeId) -> crate::name::FqTypeName {
+        self.fq_type_name_spelled(id, true)
+    }
+
+    fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> crate::name::FqTypeName {
         use crate::name::FqTypeName;
+        if unboxed && let Some(&is_shared) = self.boxed_ref_shared.get(id) {
+            let payload = self
+                .box_payload_of(id)
+                .expect("boxing registers a payload with every reference it redefines");
+            let kind = if is_shared {
+                crate::name::RefKind::Shared
+            } else {
+                crate::name::RefKind::Mut
+            };
+            return self
+                .fq_type_name_spelled(payload, unboxed)
+                .with_reference(kind);
+        }
         let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
-            type_args.iter().map(|t| self.fq_type_name(*t)).collect()
+            type_args
+                .iter()
+                .map(|t| self.fq_type_name_spelled(*t, unboxed))
+                .collect()
         };
         match self.get(id) {
             ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
@@ -4086,14 +4119,13 @@ impl TypeTable {
             ResolvedType::GenericResource { def, type_args } => {
                 FqTypeName::builtin(self.def_name(*def)).with_args(args_of(type_args))
             }
-            ResolvedType::BuiltinArray(elem) => {
-                FqTypeName::builtin(Self::ARRAY_TYPE_NAME).with_args(vec![self.fq_type_name(*elem)])
-            }
+            ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME)
+                .with_args(vec![self.fq_type_name_spelled(*elem, unboxed)]),
             ResolvedType::Ref(inner) => self
-                .fq_type_name(*inner)
+                .fq_type_name_spelled(*inner, unboxed)
                 .with_reference(crate::name::RefKind::Shared),
             ResolvedType::MutRef(inner) => self
-                .fq_type_name(*inner)
+                .fq_type_name_spelled(*inner, unboxed)
                 .with_reference(crate::name::RefKind::Mut),
             // Shapes that name no declaration — assoc-type projections, packs,
             // `Unknown`. They carry no module, so the rendered spelling is

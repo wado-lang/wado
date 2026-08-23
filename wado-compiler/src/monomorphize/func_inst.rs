@@ -1647,12 +1647,9 @@ impl Monomorphizer {
             .map(|(_, &tid)| tid)
     }
 
-    /// Resolve the dispatch receiver for a `T^Trait::method` type-param static
-    /// call. A `newtype` inherits its base's trait impl and a reference
-    /// forwards to its pointee's — a receiverless method has no receiver to
-    /// deref — so peel to that impl unless the receiver has one of its own, or
-    /// a value blanket it is not disqualified from: a blanket is not
-    /// inherited, and only the reflection bounds are decidable here.
+    /// Resolve a `T^Trait::method` static call's dispatch receiver, in order:
+    /// the receiver's own impl, the newtype or reference link it inherits one
+    /// from, a value blanket serving it — never inherited — then the base.
     fn type_param_dispatch_tid(
         &self,
         tid: TypeId,
@@ -1670,13 +1667,13 @@ impl Monomorphizer {
         let Some(trait_name) = &info.trait_name else {
             return tid;
         };
-        if self
-            .functions
-            .trait_env
-            .trait_def_of_fq(trait_name)
-            .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_))
-        {
-            return tid;
+        if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
+            if self.has_own_trait_impl(type_table, tid, decl) {
+                return tid;
+            }
+            if let Some(link) = self.newtype_link_with_trait_impl(tid, type_table, decl) {
+                return link;
+            }
         }
         if trait_name
             .canonical()
@@ -1685,6 +1682,26 @@ impl Monomorphizer {
             return tid;
         }
         base
+    }
+
+    /// Where the impl serving `tid` lives. A newtype that wrote its own homes
+    /// it in its own module; only an inherited impl lives with the base, which
+    /// is the convention [`module_source_for_trait_impl`] peels to.
+    fn impl_module_of_receiver(
+        &self,
+        type_table: &TypeTable,
+        tid: TypeId,
+        info: &LocalMethodName,
+    ) -> Option<ModuleSource> {
+        let link = info
+            .trait_name
+            .as_ref()
+            .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
+            .and_then(|trait_| self.newtype_link_with_trait_impl(tid, type_table, trait_));
+        match link {
+            Some(link) => type_table.nominal_head(link).map(|(_, m)| m),
+            None => module_source_for_trait_impl(type_table, tid),
+        }
     }
 
     /// Whether an operator on `id` lowers to a scalar instruction rather than
@@ -1705,10 +1722,13 @@ impl Monomorphizer {
         let Some(trait_) = trait_decl else {
             return true;
         };
-        // The receiver only: keeping the call for an impl a link *below* it
-        // wrote leaves the dispatch asking the erased base, which carries no
-        // user impl. `newtype_link_impl_unreached.wado` pins the cost.
+        // `enum` and `flags` erase to a scalar without being a newtype link,
+        // and an impl a link below the receiver wrote is still inherited.
+        // Relowering over either takes the primitive's instruction instead.
         !self.has_own_trait_impl(type_table, id, trait_)
+            && self
+                .newtype_link_with_trait_impl(id, type_table, trait_)
+                .is_none()
     }
 
     fn value_blanket_serves(
@@ -2225,8 +2245,11 @@ impl Monomorphizer {
                         if receiver_is_concrete {
                             let concrete_type_id = receiver_tid
                                 .expect("receiver_is_concrete implies a resolved receiver");
-                            let receiver_module =
-                                module_source_for_trait_impl(type_table, concrete_type_id);
+                            let receiver_module = self.impl_module_of_receiver(
+                                type_table,
+                                concrete_type_id,
+                                &new_info,
+                            );
                             // Consult `concrete_impl_module_for` only: letting a
                             // generic `impl<T> Trait for Foo<T>` in would route
                             // `&List<i32>^Inspect` to List's impl instead of the
@@ -2276,8 +2299,19 @@ impl Monomorphizer {
                             } else {
                                 Vec::new()
                             };
+                            // A generic newtype dispatching to its own impl is
+                            // keyed on the arguments it carries, which
+                            // `generic_type_args` reports only for other shapes.
                             let impl_type_arg_tids: Vec<TypeId> = type_table
                                 .generic_type_args(concrete_type_id)
+                                .or_else(|| match type_table.get(concrete_type_id) {
+                                    ResolvedType::Newtype { type_args, .. }
+                                        if !type_args.is_empty() =>
+                                    {
+                                        Some(type_args.clone())
+                                    }
+                                    _ => None,
+                                })
                                 .unwrap_or_default();
                             // A generic-instance receiver
                             // (`List<i32>^Default::default`) must queue its impl
@@ -3185,6 +3219,13 @@ impl Monomorphizer {
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
                 candidate
+            } else if let Some(link) = info
+                .trait_name
+                .as_ref()
+                .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
+                .and_then(|trait_| self.newtype_link_with_trait_impl(inner, type_table, trait_))
+            {
+                info.with_substituted_struct_name(&type_table.fq_type_name(link))
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
@@ -3295,7 +3336,7 @@ impl Monomorphizer {
         } = call;
         let receiver_module = {
             let inner = type_table.peel_refs(receiver_type_id);
-            module_source_for_trait_impl(type_table, inner)
+            self.impl_module_of_receiver(type_table, inner, &new_info)
         };
         // Consult `concrete_impl_module_for` only: a broader `impl_module_for`
         // would route `&List<i32>^Inspect` to List's generic impl instead of the
