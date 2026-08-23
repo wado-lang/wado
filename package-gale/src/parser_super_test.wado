@@ -84,6 +84,10 @@ A : 'a' ;
     assert unsupported_count(src) == 1, "the refusal is reported once";
     let out = gen_source(src);
     assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    // The recognizer surface turns public only for a base that is wired, so it
+    // and the interface emit cannot drift apart.
+    assert !out.contains("pub struct Parser"), out;
+    assert !out.contains("pub fn la("), out;
     // The rewrite never ran, so the body still names `this`.
     assert !out.contains("this."), out;
 }
@@ -223,4 +227,21 @@ GT : '>' ;
     let src = generate(&mut g, &opts).source;
     assert src.contains("fn _recover_try_descend(p: &mut Parser) with PsBase"), src;
     assert src.contains("fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 with PsBase"), src;
+}
+
+test "a this field read with no parser base is reported, not emitted" {
+    let src = &"grammar C;
+options { language = Wado; }
+r : A { this.flag }? A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "a receiver-less `this` is reported whatever follows it";
+    assert !gen_source(src).contains("this"), gen_source(src);
+}
+
+test "parse wado_prs_super.g4" {
+    let g = parse(#include_str("../tests/grammars/wado_prs_super.g4")).unwrap();
+    assert g.name == "WadoPrsSuper";
+    assert g.parser_superclass == "PsBase";
+    assert g.lexer_superclass.is_empty(), "a combined grammar's superClass is the parser's";
 }

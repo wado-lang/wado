@@ -34,7 +34,7 @@ use {
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { body_is_base_calls_only, find_this_calls } from "./superclass.wado";
+use { body_is_base_calls_only, body_names_this } from "./superclass.wado";
 use { escape_ident } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -547,7 +547,7 @@ fn pred_fn_name(id: i32) -> String {
 /// Whether a Wado body names `this` with no parser base wired to receive it.
 /// A Java body's `this` is java2wado's, resolved over `@parser::members`.
 fn body_names_unwired_base(text: &String, ctx: &GenContext) -> bool {
-    return ctx.action_language() matches { Wado } && !ctx.has_parser_superclass() && !find_this_calls(text).is_empty();
+    return ctx.action_language() matches { Wado } && !ctx.has_parser_superclass() && body_names_this(text);
 }
 
 /// Whether a body is already Wado — written in it, or turned into base calls by
@@ -867,7 +867,7 @@ fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut Ge
             ctx.warn(
                 &action_owner(src.action_id, ctx),
                 DiagnosticKind::UnsupportedAction,
-                `action ${src.action_id} calls a method on 'this', but the grammar declares no parser superClass to receive it`,
+                `action ${src.action_id} names 'this', but the grammar declares no parser superClass to receive it`,
             );
         }
         return null;

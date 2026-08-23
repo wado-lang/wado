@@ -306,6 +306,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 /// Wire each declared `superClass` base to its effect interface, or refuse it
 /// with a diagnostic naming what Gale cannot represent.
 fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
+    let mut lexer_refused = false;
     if let Some(sc) = lexer_superclass_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
         let refusal = lexer_super_refusal(&ops);
@@ -316,13 +317,15 @@ fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
             rewrite_lexer_superclass_calls(grammar, &sc);
         } else {
             warn_superclass_refused(ctx, &sc, &refusal);
+            lexer_refused = true;
         }
-    } else if lexer_bodies_name_unwired_base(grammar) {
-        // A refused base already reported the cause; an undeclared one has not.
+    }
+    // A refusal already reported the cause; anything `this` left over has not.
+    if !lexer_refused && lexer_bodies_name_unwired_base(grammar) {
         ctx.warn(
             &DiagnosticOwner::host(&"superClass"),
             DiagnosticKind::UnsupportedAction,
-            "a lexer action or predicate calls a method on 'this', but the grammar declares no lexer superClass to receive it (a combined grammar's superClass is the parser's)",
+            "a lexer action or predicate names 'this' with nothing to receive it; only a `this.m()` call under a lexer superClass lowers to a base operation, and a combined grammar's superClass is the parser's",
         );
     }
     wire_parser_superclass(grammar, ctx);

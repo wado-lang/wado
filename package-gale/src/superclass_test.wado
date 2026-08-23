@@ -5,6 +5,7 @@ use {
     SuperSite,
     add_super_op,
     body_is_base_calls_only,
+    body_names_this,
     gen_super_interface,
     super_call_expr,
     super_ops_with_args,
@@ -264,4 +265,12 @@ test "rewrite_this_calls rewrites inside a template interpolation" {
 
 test "a call after a template interpolation is still rewritten" {
     assert rewrite_this_calls(&"p.emit(`${1}`); this.z()", &"B", SuperSite::ParserPredicate) == "p.emit(`${1}`); B::z(p)";
+}
+
+test "body_names_this sees a field read and a bare receiver" {
+    assert body_names_this(&"this.flag");
+    assert body_names_this(&"x && this");
+    assert body_names_this(&"p.emit(`${this.n}`)");
+    assert !body_names_this(&"other.this_thing() + \"this\"");
+    assert !body_names_this(&"// this\np.emit(`this`)");
 }

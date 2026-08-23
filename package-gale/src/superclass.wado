@@ -173,29 +173,61 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let mut out: List<SuperCall> = [];
     let mut i = 0;
     while i < n {
-        i = match chars[i] {
-            '"' | '\'' => scan_string(&chars, i),
-            '`' => {
-                let [end, spans] = scan_template(&chars, i, n);
-                for let s of &spans {
-                    for let c of &find_this_calls(&collect_range(&chars, s.0, s.1)) {
-                        out.push(*c);
-                    }
+        let [end, spans] = inert_at(&chars, i, n);
+        if end > i {
+            for let s of &spans {
+                for let c of &find_this_calls(&collect_range(&chars, s.0, s.1)) {
+                    out.push(*c);
                 }
-                end;
+            }
+            i = end;
+            continue;
+        }
+        i = match this_call_at(&chars, i, n) {
+            Some([name, close]) => {
+                out.push(SuperCall { name, has_args: call_has_args(&chars, i, close) });
+                close;
             },
-            '/' && i + 1 < n && chars[i + 1] == '/' => scan_line_comment(&chars, i),
-            '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
-            _ => match this_call_at(&chars, i, n) {
-                Some([name, close]) => {
-                    out.push(SuperCall { name, has_args: call_has_args(&chars, i, close) });
-                    close;
-                },
-                None => i + 1,
-            },
+            None => i + 1,
         };
     }
     return out;
+}
+
+/// Whether the body names `this` at all — a call, a field read, or the bare
+/// word. Wado has no such name, so nothing here can be emitted as written.
+pub fn body_names_this(body: &String) -> bool {
+    let chars: List<char> = body.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        let [end, spans] = inert_at(&chars, i, n);
+        if end > i {
+            if spans.iter_ref().any(|s: &[i32, i32]| body_names_this(&collect_range(&chars, s.0, s.1))) {
+                return true;
+            }
+            i = end;
+            continue;
+        }
+        if word_at(&chars, i, n, &THIS_WORD) {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+/// The end of the inert span starting at `i` — a string, a comment, or a
+/// template's literal text — with the `${ ... }` code spans inside it.
+fn inert_at(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    let none: List<[i32, i32]> = [];
+    return match chars[i] {
+        '"' | '\'' => [scan_string(chars, i), none],
+        '`' => scan_template(chars, i, n),
+        '/' && i + 1 < n && chars[i + 1] == '/' => [scan_line_comment(chars, i), none],
+        '/' && i + 1 < n && chars[i + 1] == '*' => [scan_block_comment(chars, i), none],
+        _ => [i, none],
+    };
 }
 
 /// Split a template literal at `i` into `[end, spans]`: past the closing
@@ -459,10 +491,10 @@ pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String)
         || body_is_base_calls_only(&b.text, base_name));
 }
 
-/// Whether a lexer body still names `this` after wiring — no lexer base was
-/// declared (a combined grammar's is the parser's), or it was refused.
+/// Whether a lexer body still names `this` after wiring. Only a `this.m()` call
+/// under a lexer base lowers to an operation; anything else has no receiver.
 pub fn lexer_bodies_name_unwired_base(grammar: &Grammar) -> bool {
-    return lexer_bodies(grammar).iter_ref().any(|b: &SuperBody| !find_this_calls(&b.text).is_empty());
+    return lexer_bodies(grammar).iter_ref().any(|b: &SuperBody| body_names_this(&b.text));
 }
 
 /// Why a lexer base cannot be wired, or empty when it can. The message names
@@ -771,29 +803,26 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
     let mut out = String::with_capacity(n + 8);
     let mut i = 0;
     while i < n {
-        i = match chars[i] {
-            '"' | '\'' => copy_span(&mut out, &chars, i, scan_string(&chars, i)),
-            '`' => {
-                let [end, spans] = scan_template(&chars, i, n);
-                let mut cur = i;
-                for let s of &spans {
-                    copy_span(&mut out, &chars, cur, s.0);
-                    out.push_str(&rewrite_this_calls(&collect_range(&chars, s.0, s.1), base_name, site));
-                    cur = s.1;
-                }
-                copy_span(&mut out, &chars, cur, end);
+        let [end, spans] = inert_at(&chars, i, n);
+        if end > i {
+            let mut cur = i;
+            for let s of &spans {
+                copy_span(&mut out, &chars, cur, s.0);
+                out.push_str(&rewrite_this_calls(&collect_range(&chars, s.0, s.1), base_name, site));
+                cur = s.1;
+            }
+            copy_span(&mut out, &chars, cur, end);
+            i = end;
+            continue;
+        }
+        i = match this_call_at(&chars, i, n) {
+            Some([method, close]) => {
+                out.push_str(&super_call_expr(base_name, &method, site));
+                close;
             },
-            '/' && i + 1 < n && chars[i + 1] == '/' => copy_span(&mut out, &chars, i, scan_line_comment(&chars, i)),
-            '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
-            _ => match this_call_at(&chars, i, n) {
-                Some([method, close]) => {
-                    out.push_str(&super_call_expr(base_name, &method, site));
-                    close;
-                },
-                None => {
-                    out.push(chars[i]);
-                    i + 1;
-                },
+            None => {
+                out.push(chars[i]);
+                i + 1;
             },
         };
     }
