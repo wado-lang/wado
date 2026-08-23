@@ -5,7 +5,7 @@ description: "Task-completion flow: `/code-review --fix` and `/cleanup` over the
 
 # Overview
 
-First, review the branch yourself, with:
+First, review the branch:
 
 1. `/code-review --fix`
 2. `/cleanup`
