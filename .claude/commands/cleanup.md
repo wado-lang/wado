@@ -28,8 +28,6 @@ Follow the `rust` skill for Rust and the `wado` skill for Wado.
   code to fix, not the comment.
 - Invariants: state them as `assert!`, never as a comment. An assert is checked;
   a comment goes stale.
-- Behaviour is fixed. A cleanup that changes what the code does is a separate
-  change — not this one.
 
 ### Comments
 
