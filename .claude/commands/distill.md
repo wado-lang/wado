@@ -14,11 +14,13 @@ git diff "$(git merge-base origin/main HEAD)" --stat
 git status --short
 ```
 
-Every file those report — Rust, Wado, Markdown — plus any doc it made stale. The
-pass often runs before the commit, so staged, unstaged, and untracked files
-count. Whatever you notice on the way in is in scope too, pre-existing or not.
-Generated files and WEPs defer to their directory's `AGENTS.md`: don't touch a
-generated corpus, and don't cut a WEP's required sections.
+Every file those report, whatever its type, plus any doc it made stale. The pass
+often runs before the commit, so staged, unstaged, and untracked files count.
+Whatever you notice on the way in is in scope too, pre-existing or not.
+
+Generated files are the one exclusion; `.gitattributes` marks them, and
+`git check-attr linguist-generated -- PATH` answers for one. Otherwise follow the
+`AGENTS.md` of the directory you are in — a WEP keeps the sections it requires.
 
 ## Rules
 
