@@ -11,6 +11,9 @@ pub struct FilesystemCompilerHost {
     print_diagnostics: bool,
     log_level: LogLevel,
     start_time: Instant,
+    /// Stubbed `[dependencies]`: name → the dependency's `[package].lib`,
+    /// relative to `base_path`.
+    dependencies: Vec<(String, String)>,
 }
 
 impl FilesystemCompilerHost {
@@ -22,7 +25,15 @@ impl FilesystemCompilerHost {
             print_diagnostics: false,
             log_level: LogLevel::Off,
             start_time: Instant::now(),
+            dependencies: Vec::new(),
         }
+    }
+
+    /// Seed the `[dependencies]` a bare `use ... from "name"` binds to.
+    #[must_use]
+    pub fn with_dependencies(mut self, dependencies: Vec<(String, String)>) -> Self {
+        self.dependencies = dependencies;
+        self
     }
 
     /// Snapshot the diagnostics emitted since this host was created.
@@ -87,6 +98,14 @@ impl FilesystemCompilerHost {
 }
 
 impl CompilerHost for FilesystemCompilerHost {
+    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
+        let mut index = wado_compiler::DependencyIndex::default();
+        for (name, lib) in &self.dependencies {
+            index.resolved.insert(name.clone(), lib.clone());
+        }
+        index
+    }
+
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         let full_path = self.base_path.join(path);
         std::fs::read(&full_path).map_err(|e| SourceError::IoError {

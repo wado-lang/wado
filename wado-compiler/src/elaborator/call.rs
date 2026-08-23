@@ -487,6 +487,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
+        if let Some((struct_name, _)) = effective_name.rsplit_once("::") {
+            let receiver = self.impl_target_at(receiver_site, struct_name);
+            self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
+        }
 
         // First, determine expected parameter types to handle coercion.
         let (mut param_types, callee_slots) =
@@ -1132,6 +1136,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|ty| self.resolve_type(ty))
                         .collect();
+
+                    // `ns::Type::method` never reaches the bare-spelling check,
+                    // so the ladder is enforced here. The receiver is named at
+                    // its own segment, which the walk answered for.
+                    {
+                        let receiver_site = ident
+                            .segments
+                            .len()
+                            .checked_sub(2)
+                            .map(|i| ident.segments[i].id);
+                        let receiver = self.impl_target_at(receiver_site, type_name);
+                        let qualified = format!("{type_name}::{method_name}");
+                        self.check_static_call_visibility(
+                            &receiver,
+                            &qualified,
+                            Some(call.id),
+                            call.span,
+                        );
+                    }
 
                     // Find the impl module via the trait env (global index)
                     let arg_type_hint = if (method_name == "from" || method_name == "try_from")
@@ -1877,9 +1900,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => break,
                 };
                 let mut default_expr = default_ast;
+                let vantage = s
+                    .annotate_ctx
+                    .default_scope_module
+                    .clone()
+                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
                 let expected_type = param_types[i];
-                let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                let resolved = s.with_foreign_vantage(vantage, |s| {
+                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                });
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
@@ -2682,6 +2712,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let split = sig.declaring_split();
         (inferred[..split].to_vec(), inferred[split..].to_vec())
+    }
+
+    /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
+    /// `receiver` is the key the neighbouring lookups resolved, not one
+    /// re-derived from the spelling, which a splice can make mean another type.
+    pub(super) fn check_static_call_visibility(
+        &mut self,
+        receiver: &super::trait_env::ImplTargetKey,
+        effective_name: &str,
+        node: Option<crate::ast::AstId>,
+        span: crate::token::Span,
+    ) {
+        let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
+            return;
+        };
+        let Some(entry) = self.static_method_entry(receiver, method_name) else {
+            return;
+        };
+        let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
+        let owner = struct_name.to_string();
+        self.check_inherent_member_visibility(
+            visibility,
+            Some(&module),
+            super::expr::MemberOwner::Named(&owner),
+            method_name,
+            super::types::ImplMemberKind::Method,
+            node,
+            span,
+        );
+    }
+
+    /// The static-method index entry `receiver::name` selects, for the
+    /// questions the signature alone cannot answer — which module declared it,
+    /// and at what visibility.
+    pub(super) fn static_method_entry(
+        &self,
+        receiver: &super::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<&super::trait_env::StaticMethodEntry> {
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(receiver)?
+            .iter()
+            .find(|e| e.name == method_name)
     }
 
     /// The canonical signature of the receiver-less method `method_name` on

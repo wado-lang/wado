@@ -1,6 +1,7 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
+use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
@@ -612,12 +613,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
-        {
+        if let Some(assoc) = self.associated_constant_of_path(ident) {
+            self.check_inherent_member_visibility(
+                assoc.inherent_visibility,
+                Some(&assoc.module),
+                MemberOwner::Named(assoc_const_owner_segment(ident)),
+                ident.segments.last().map_or(&ident.name, |s| &s.name),
+                super::types::ImplMemberKind::AssociatedConstant,
+                Some(ident.id),
+                ident.span,
+            );
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
-            self.resolve_expr(&const_expr, ctx, Some(type_id));
-            return type_id;
+            let vantage = (assoc.module.clone(), assoc.value.id().space());
+            let const_module = assoc.module.clone();
+            self.with_default_scope_module(Some(const_module), |s| {
+                s.with_foreign_vantage(Some(vantage), |s| {
+                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                })
+            });
+            return assoc.ty;
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -1165,7 +1180,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_field_type(expr_type, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
-        self.check_field_visibility(expr_type, &field_access.field, field_access.span);
+        self.check_field_visibility(
+            expr_type,
+            &field_access.field,
+            Some(field_access.id),
+            field_access.span,
+        );
 
         field_type
     }
@@ -1334,10 +1354,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
+    /// The module that wrote `node`, per [`super::scope::Scope::foreign_vantage`].
+    /// `None` judges here, for a site carrying no id.
+    pub(super) fn visibility_vantage(&self, node: Option<ast::AstId>) -> ModuleSource {
+        match (&self.annotate_ctx.foreign_vantage, node) {
+            (Some((module, space)), Some(id)) if id.space() == *space => module.clone(),
+            _ => self.current_module_source.clone(),
+        }
+    }
+
+    /// Enforce an inherent impl member's rung of the visibility ladder.
+    /// `owner` names the declaring type, resolved only to fill a diagnostic.
+    /// `visibility` is `None` where the member does not decide its own reach.
+    pub(super) fn check_inherent_member_visibility(
+        &mut self,
+        visibility: Option<crate::ast::Visibility>,
+        impl_module: Option<&ModuleSource>,
+        owner: MemberOwner<'_>,
+        member_name: &str,
+        member_kind: super::types::ImplMemberKind,
+        node: Option<ast::AstId>,
+        span: Span,
+    ) {
+        let (Some(visibility), Some(impl_module)) = (visibility, impl_module) else {
+            return;
+        };
+        let vantage = self.visibility_vantage(node);
+        if *impl_module == vantage {
+            return;
+        }
+        let same_package = impl_module.same_package(&vantage);
+        if visibility.reachable_from(same_package) {
+            return;
+        }
+        let type_name = match owner {
+            MemberOwner::Type(id) => self.tysys.type_id_to_string(id),
+            MemberOwner::Named(name) => name.to_string(),
+            MemberOwner::Written(Some(ty)) => self.get_type_name(ty),
+            MemberOwner::Written(None) => member_name.to_string(),
+        };
+        let _ = self.emit_in(
+            &vantage,
+            TypeError::PrivateMemberAccess {
+                type_name,
+                member_name: member_name.to_string(),
+                member_kind,
+                visibility,
+                span,
+            },
+        );
+    }
+
     pub(super) fn check_field_visibility(
         &mut self,
         struct_type: TypeId,
         field_name: &str,
+        node: Option<ast::AstId>,
         span: Span,
     ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
@@ -1349,22 +1421,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .nominal_head(struct_type)
                 .expect("a nominal type names a declaration"),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.check_field_visibility(inner, field_name, span);
+                self.check_field_visibility(inner, field_name, node, span);
                 return;
             }
             ResolvedType::Newtype { base_type, .. } => {
-                self.check_field_visibility(base_type, field_name, span);
+                self.check_field_visibility(base_type, field_name, node, span);
                 return;
             }
             _ => return,
         };
 
         // Same module — always allowed
-        if module_source == self.current_module_source {
+        let vantage = self.visibility_vantage(node);
+        if module_source == vantage {
             return;
         }
 
-        let same_package = module_source.same_package(&self.current_module_source);
+        let same_package = module_source.same_package(&vantage);
         if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
@@ -2668,8 +2741,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            if let Some((_m, _type_id, const_expr)) =
-                self.associated_constant_qualified(variant_qualifier, variant_name)
+            if let Some(AssocConstSig {
+                value: const_expr, ..
+            }) = self.associated_constant_qualified(variant_qualifier, variant_name)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {
@@ -3700,10 +3774,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the default is evaluated in the defining module, so encapsulation is
         // preserved — so only flag fields the user explicitly provided, not the
         // defaults synthesized above.
-        if struct_module_source != self.current_module_source
+        let vantage = self.visibility_vantage(Some(struct_lit.id));
+        if struct_module_source != vantage
             && let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl)
         {
-            let same_package = struct_module_source.same_package(&self.current_module_source);
+            let same_package = struct_module_source.same_package(&vantage);
             for (fname, _, vis) in &struct_info.fields {
                 // Flagged when explicitly set, or read from `base` via a spread.
                 let set_explicitly = provided_names.contains(fname);
@@ -4006,10 +4081,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some((module, fields)) = &base_info[base_idx].1 else {
                 continue;
             };
-            if *module == self.current_module_source {
+            let vantage = self.visibility_vantage(Some(struct_lit.id));
+            if *module == vantage {
                 continue;
             }
-            let same_package = module.same_package(&self.current_module_source);
+            let same_package = module.same_package(&vantage);
             let Some((.., vis)) = fields.iter().find(|(n, ..)| n == name) else {
                 continue;
             };
@@ -5210,4 +5286,21 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             _ => ast::walk_expr(self, expr),
         }
     }
+}
+
+/// How to name the type an impl member is declared on.
+pub(super) enum MemberOwner<'a> {
+    Type(TypeId),
+    Named(&'a str),
+    Written(Option<&'a ast::Type>),
+}
+
+/// The segment naming an associated constant's owner — `K` in `K::SECRET` and
+/// in `ns::K::SECRET`.
+fn assoc_const_owner_segment(ident: &ast::IdentExpr) -> &str {
+    ident
+        .segments
+        .len()
+        .checked_sub(2)
+        .map_or(ident.name.as_str(), |i| ident.segments[i].name.as_str())
 }

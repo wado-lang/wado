@@ -4,6 +4,7 @@
 //! only reads them — never re-running inference, resolution, or dispatch. Its
 //! `FunctionContext` must land the same locals, at the same indices, annotate did.
 
+use super::sig::AssocConstSig;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -348,7 +349,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         owner: crate::defs::DefId,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<super::sig::AssocConstSig> {
         self.tysys
             .signatures
             .associated_constant(owner, name)
@@ -360,7 +361,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn associated_constant_of_path(
         &self,
         ident: &ast::IdentExpr,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<super::sig::AssocConstSig> {
         let owner = super::trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
@@ -372,7 +373,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         qualifier: Option<&ast::Type>,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<super::sig::AssocConstSig> {
         let owner = super::trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
         self.associated_constant_of(owner, name)
     }
@@ -9151,7 +9152,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)`.
-        if let Some((const_module, type_id, const_expr)) = self.associated_constant_of_path(ident) {
+        if let Some(AssocConstSig {
+            module: const_module,
+            ty: type_id,
+            value: const_expr,
+            ..
+        }) = self.associated_constant_of_path(ident)
+        {
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
             // `AstId`s index that module's `ModuleSemantics`, not the use
@@ -9161,8 +9168,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // literal (e.g. `i32::MAX`'s `2147483647` as an f64). Reify the
             // body under the defining module's perspective so every
             // annotation lookup hits the right module's records.
-            let resolved = self.with_const_module_perspective(&const_module, |this| {
-                this.reify_expr(&const_expr, ctx, Some(type_id))
+            let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                self.with_const_module_perspective(&const_module, |this| {
+                    this.reify_expr(&const_expr, ctx, Some(type_id))
+                })
             });
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
@@ -9977,8 +9986,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<TirPattern> {
         use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirLiteralPattern};
 
-        let (const_module, type_id, const_expr) =
-            self.associated_constant_qualified(variant_qualifier, variant_name)?;
+        let AssocConstSig {
+            module: const_module,
+            ty: type_id,
+            value: const_expr,
+            ..
+        } = self.associated_constant_qualified(variant_qualifier, variant_name)?;
 
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
@@ -10047,8 +10060,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             {
                 return v;
             }
-            if let Some((const_module, type_id, const_expr)) =
-                self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+            if let Some(AssocConstSig {
+                module: const_module,
+                ty: type_id,
+                value: const_expr,
+                ..
+            }) = self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
             {
                 let resolved = self.with_const_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))

@@ -21,7 +21,7 @@ internal struct Box<T> {
 
 /// Optional value - either Some(T) or None
 #[compiler_item("option")]
-internal variant Option<T> {
+pub variant Option<T> {
     #[compiler_item("option_some")]
     Some(T),
     #[compiler_item("option_none")]
@@ -30,7 +30,7 @@ internal variant Option<T> {
 
 /// Result type - either Ok(T) or Err(E)
 #[compiler_item("result")]
-internal variant Result<T, E> {
+pub variant Result<T, E> {
     #[compiler_item("result_ok")]
     Ok(T),
     #[compiler_item("result_err")]
@@ -152,7 +152,7 @@ impl Default for Option<T> {
 /// Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
 /// The readable end is passed to consumers; the writable end fulfills the future.
 #[compiler_item("future")]
-internal resource Future<T> {
+pub resource Future<T> {
     /// Create a new future pair: [Future<T>, FutureWritable<T>].
     #[cm("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
@@ -174,7 +174,7 @@ internal resource Future<T> {
 /// Writable end of an async value (WASI Component Model future).
 /// Opaque i32 handle managed by the runtime.
 #[compiler_item("future_writable")]
-internal resource FutureWritable<T> {
+pub resource FutureWritable<T> {
     /// Fulfill the future with a value.
     #[cm("future-write")]
     fn write(&self, value: T);
@@ -193,7 +193,7 @@ internal resource FutureWritable<T> {
 ///
 /// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
 #[compiler_item("stream")]
-internal resource Stream<T> {
+pub resource Stream<T> {
     /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
     #[cm("stream-new")]
     fn new() -> [Stream<T>, StreamWritable<T>];
@@ -216,7 +216,7 @@ internal resource Stream<T> {
 /// Writable end of an async sequence (WASI Component Model stream).
 /// Opaque i32 handle managed by the runtime.
 #[compiler_item("stream_writable")]
-internal resource StreamWritable<T> {
+pub resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
     #[cm("stream-write")]
     fn write(&self, data: List<T>);
@@ -243,10 +243,10 @@ internal resource StreamWritable<T> {
 /// A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
 /// `i32`. It is an identity token with no lifecycle of its own — the joined
 /// `Subtask` / `AsyncCall` owns the actual handle lifecycle.
-internal type Waitable = i32;
+pub type Waitable = i32;
 
 /// Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
-internal struct WaitEvent {
+pub struct WaitEvent {
     /// CM event code:
     ///   1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
     pub code: i32,
@@ -281,7 +281,7 @@ internal fn cm_subtask_settled(event: WaitEvent) -> bool {
 /// children — `Subtask::drop()` automatically removes the subtask from its
 /// joined set (via the CM spec's `Waitable.join(None)` semantics), so always
 /// drop subtasks before dropping the set.
-internal resource WaitableSet {
+pub resource WaitableSet {
     /// Create a new waitable set.
     #[cm("waitable-set-new")]
     fn new() -> WaitableSet;
@@ -299,8 +299,8 @@ internal resource WaitableSet {
     fn drop(self);
 }
 
-/// A raw CM subtask handle. Internal — most users should hold `AsyncCall<T>`
-/// (see below) which pairs the handle with its result buffer.
+/// A raw CM subtask handle. Prefer `AsyncCall<T>` (see below), which pairs the
+/// handle with its result buffer.
 ///
 /// `Subtask` extends `Waitable` in the CM spec. When dropped, it
 /// automatically removes itself from any joined `WaitableSet` (the CM
@@ -313,7 +313,7 @@ internal resource WaitableSet {
 ///   ws.wait();
 ///   subtask.drop();  // removes from ws
 ///   ws.drop();       // safe — no children
-internal resource Subtask {
+pub resource Subtask {
     /// Drop a completed subtask. Automatically unjoins from its WaitableSet.
     /// Traps if the subtask has not yet resolved.
     #[cm("subtask-drop")]
@@ -352,7 +352,7 @@ internal resource Subtask {
 /// let resp = task.wait();             // block for response
 /// ```
 #[compiler_item("async_call")]
-internal struct AsyncCall<T> {
+pub struct AsyncCall<T> {
     // CM-ABI plumbing populated by the synthesised `__cm_binding__*`
     // adapter via a TIR-level `StructLiteral` (which bypasses field
     // visibility); kept non-`pub` so user code cannot peek or forge.
@@ -421,7 +421,7 @@ impl AsyncCall<T> {
 }
 
 /// An error context carrying a debug message across component boundaries.
-internal resource ErrorContext {
+pub resource ErrorContext {
     /// Create a new error context with the given message.
     #[cm("error-context-new")]
     fn new(message: String) -> ErrorContext;
@@ -471,7 +471,7 @@ internal resource Context {
 /// The current async task handle.
 ///
 /// Provides operations that apply to the currently executing async task.
-internal resource Task {
+pub resource Task {
     /// Acknowledge cancellation of the current task.
     ///
     /// Call this in response to a cancellation signal (e.g. after receiving
