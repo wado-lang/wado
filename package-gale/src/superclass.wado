@@ -76,8 +76,8 @@ fn non_empty(s: &String) -> Option<String> {
 }
 
 /// The `this.<method>(` call sites in a body, in source order, skipping string
-/// literals and comments so host text never yields a false hit. Only the
-/// `this.` receiver is a superClass call; a bare `m()` or `other.m()` is not.
+/// and template literals and comments so text never yields a false hit. Only
+/// the `this.` receiver is a superClass call; `m()` or `other.m()` is not.
 pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
@@ -85,7 +85,7 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let mut i = 0;
     while i < n {
         i = match chars[i] {
-            '"' | '\'' => scan_string(&chars, i),
+            '"' | '\'' | '`' => scan_string(&chars, i),
             '/' && i + 1 < n && chars[i + 1] == '/' => scan_line_comment(&chars, i),
             '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
             _ => match this_call_at(&chars, i, n) {
@@ -345,15 +345,35 @@ fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool 
     };
 }
 
-/// Whether the grammar declares a lexer `superClass` Gale refuses to wire,
-/// because an operation is unrepresentable. Nothing reaching the base can then
-/// be emitted — not the interface, and not a body still naming `this`, which
-/// the rewrite would have replaced — so the lexer's actions and predicates stay
-/// unexecuted, each reported.
-pub fn superclass_is_refused(grammar: &Grammar) -> bool {
-    return match lexer_superclass_name(grammar) {
-        Some(_) => !lexer_super_refusal(&collect_lexer_super_ops(grammar)).is_empty(),
-        None => false,
+/// Whether a lexer body still names `this` after wiring — no base was declared
+/// for the lexer (a combined grammar's `superClass` is the parser's), or the
+/// one declared was refused. No translator has a receiver for the name.
+pub fn lexer_bodies_name_unwired_base(grammar: &Grammar) -> bool {
+    for let rule of &grammar.lexer_rules {
+        for let alt of &rule.body {
+            if lexer_alt_names_this(alt) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn lexer_alt_names_this(alt: &LexerAlternative) -> bool {
+    for let a of &alt.actions {
+        if !find_this_calls(&a.source.text).is_empty() {
+            return true;
+        }
+    }
+    return alt.elements.iter_ref().any(|e| lexer_elem_names_this(e));
+}
+
+fn lexer_elem_names_this(elem: &LexerElement) -> bool {
+    return match elem {
+        Group(alts) => alts.iter_ref().any(|a| lexer_alt_names_this(a)),
+        Repeat(rep) => lexer_elem_names_this(&rep.element),
+        Not(nn) => lexer_elem_names_this(&nn.element),
+        _ => false,
     };
 }
 
@@ -756,7 +776,7 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
     let mut i = 0;
     while i < n {
         i = match chars[i] {
-            '"' | '\'' => copy_span(&mut out, &chars, i, scan_string(&chars, i)),
+            '"' | '\'' | '`' => copy_span(&mut out, &chars, i, scan_string(&chars, i)),
             '/' && i + 1 < n && chars[i + 1] == '/' => copy_span(&mut out, &chars, i, scan_line_comment(&chars, i)),
             '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
             _ => match this_call_at(&chars, i, n) {

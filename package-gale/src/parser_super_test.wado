@@ -180,3 +180,31 @@ A : 'a' ;
     assert unsupported_count(src) == 1, "the stray receiver is reported";
     assert !gen_source(src).contains("this."), gen_source(src);
 }
+
+test "a lexer this-call in a combined grammar is reported, not emitted" {
+    // A combined grammar's `superClass` is the parser's, so a lexer body naming
+    // `this` has no receiver at all.
+    let src = &"grammar C;
+options { superClass = B; language = Wado; }
+r : X ;
+X : { this.ok() }? [a-z]+ ;
+";
+    assert unsupported_count(src) == 1, "the stray lexer receiver is reported";
+    assert !gen_source(src).contains("this."), gen_source(src);
+}
+
+test "a wired parser base does not un-carve java members" {
+    // `language = Java` under a `superClass` is java2wado's carve-out: the base
+    // rewrite runs the bodies, but `@parser::members` still has no translator.
+    let src = gen_source(&"grammar C;
+options { superClass = PBase; }
+@parser::members {
+    int calls = 0;
+    void bump() { this.calls += 1; }
+}
+shr : GT { this.NextGT() }? GT ;
+GT : '>' ;
+");
+    assert src.contains("PBase::next_gt(p)"), "the base predicate still runs";
+    assert !src.contains("fn bump"), src;
+}

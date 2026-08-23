@@ -241,3 +241,12 @@ test "superclass_bases keeps a dotted base's last component" {
     ];
     assert superclass_bases(&GrammarKind::Parser, &opts) == ["", "BaseParser"];
 }
+
+test "find_this_calls skips a template string" {
+    assert find_this_calls(&"p.emit(`this.tag()`)").is_empty();
+    assert find_this_calls(&"p.emit(`x`); this.tag()").len() == 1;
+}
+
+test "rewrite_this_calls leaves a template string untouched" {
+    assert rewrite_this_calls(&"p.emit(`this.x()`)", &"B", SuperSite::LexerPredicate) == "p.emit(`this.x()`)";
+}

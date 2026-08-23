@@ -25,7 +25,13 @@ use {
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
-use { is_parser_members, translate_action, translate_members, translate_predicate } from "./java2wado.wado";
+use {
+    action_language_is_emittable,
+    is_parser_members,
+    translate_action,
+    translate_members,
+    translate_predicate,
+} from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, find_this_calls } from "./superclass.wado";
@@ -318,7 +324,9 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
 pub fn collect_parser_members(grammar: &Grammar, ctx: &mut GenContext) -> MemberDecls {
     let mut fields: List<MemberField> = [];
     let mut methods: List<String> = [];
-    if !ctx.emit_actions() {
+    // Members are a java2wado product, so a wired parser base — which turns
+    // `emit_actions` on for a carved-out host language — must not un-carve them.
+    if !ctx.emit_actions() || !action_language_is_emittable(grammar) {
         return MemberDecls { fields, methods };
     }
     let lang = ctx.action_language();

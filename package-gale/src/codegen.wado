@@ -44,6 +44,7 @@ use {
     parser_superclass_name,
     collect_lexer_super_ops,
     collect_parser_super_ops,
+    lexer_bodies_name_unwired_base,
     lexer_super_refusal,
     parser_super_refusal,
     parser_bodies_are_base_calls,
@@ -317,7 +318,18 @@ fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
         } else {
             warn_superclass_refused(ctx, &sc, &refusal);
         }
+    } else if lexer_bodies_name_unwired_base(grammar) {
+        // A refused base already reported the cause; an undeclared one has not.
+        ctx.warn(
+            &DiagnosticOwner::host(&"superClass"),
+            DiagnosticKind::UnsupportedAction,
+            "a lexer action or predicate calls a method on 'this', but the grammar declares no lexer superClass to receive it (a combined grammar's superClass is the parser's)",
+        );
     }
+    wire_parser_superclass(grammar, ctx);
+}
+
+fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
     if let Some(sc) = parser_superclass_name(grammar) {
         ctx.set_parser_superclass_declared();
         let ops = collect_parser_super_ops(grammar);

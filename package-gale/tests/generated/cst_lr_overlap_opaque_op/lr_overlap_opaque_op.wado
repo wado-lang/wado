@@ -1467,10 +1467,11 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         let _lr_pos0 = pos;
         if _kind_set_0(suffix_kind) {
             if suffix_kind == TK_LIT_GT {
-                if scan_e_lr_0(tokens, pos) >= 0 {
+                let _lr_scan_0 = scan_e_lr_0(tokens, pos);
+                if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
                         let lr_saved_pos = pos;
-                        pos = scan_e_lr_0(tokens, pos);
+                        pos = _lr_scan_0;
                         if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
@@ -1485,10 +1486,11 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                     }
                 }
             } else if suffix_kind == TK_LIT_LT {
-                if scan_e_lr_0(tokens, pos) >= 0 {
+                let _lr_scan_0 = scan_e_lr_0(tokens, pos);
+                if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
                         let lr_saved_pos = pos;
-                        pos = scan_e_lr_0(tokens, pos);
+                        pos = _lr_scan_0;
                         if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
@@ -1577,9 +1579,10 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sk = p.peek_kind();
         if _kind_set_0(_sk) {
             if _sk == TK_LIT_GT {
-                if scan_e_lr_0(&p.kinds, p.pos) >= 0 {
+                let _lr_scan_0 = scan_e_lr_0(&p.kinds, p.pos);
+                if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
-                        if scan_e_lr_0(&p.kinds, p.pos) < 0 {
+                        if _lr_scan_0 < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
@@ -1603,9 +1606,10 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                     }
                 }
             } else if _sk == TK_LIT_LT {
-                if scan_e_lr_0(&p.kinds, p.pos) >= 0 {
+                let _lr_scan_0 = scan_e_lr_0(&p.kinds, p.pos);
+                if _lr_scan_0 >= 0 {
                     if 2 >= min_prec {
-                        if scan_e_lr_0(&p.kinds, p.pos) < 0 {
+                        if _lr_scan_0 < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
