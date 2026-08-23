@@ -208,3 +208,20 @@ GT : '>' ;
     assert src.contains("PBase::next_gt(p)"), "the base predicate still runs";
     assert !src.contains("fn bump"), src;
 }
+
+test "fragment recovery reaches the base through expect" {
+    // `expect` calls `_recover_try_descend`, which descends into rule entries,
+    // so it must declare the effect those entries carry.
+    let mut g = parse("grammar C;
+options { superClass = PsBase; language = Wado; }
+prog : shr ;
+shr : GT { this.next_gt() }? GT ;
+GT : '>' ;
+").unwrap();
+    let opts = GenerateOptions {
+        fragment_entries: ["shr"],
+    };
+    let src = generate(&mut g, &opts).source;
+    assert src.contains("fn _recover_try_descend(p: &mut Parser) with PsBase"), src;
+    assert src.contains("fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 with PsBase"), src;
+}

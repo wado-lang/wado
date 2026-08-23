@@ -617,10 +617,13 @@ relevant sites.
     `expression (shl | shr) expression` puts a two-token rule inside the group
     (`shr : GT GT`), and answering with the operand's FIRST made every
     `a > b` take the shift alternative, whose scan then failed and broke the
-    loop — so no Rust `<` / `>` comparison parsed at all. A shape neither
-    K-prefix walk measures falls back to the candidate's own suffix scan, which
-    lets the next candidate try instead of committing to a miss. Fixtures
-    `lr_overlap_multi_token.g4`, `lr_overlap_opaque_op.g4`.
+    loop — so no Rust `<` / `>` comparison parsed at all. This holds for a
+    nullable carrier too: `('>' '>')?` is only measurable from the element after
+    it when the optional is one token wide, and a `*` can come round again. A
+    shape no K-prefix walk measures falls back to the candidate's own suffix
+    scan, which lets the next candidate try instead of committing to a miss.
+    Fixtures `lr_overlap_multi_token.g4`, `lr_overlap_opaque_op.g4`,
+    `lr_overlap_nullable_carrier.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

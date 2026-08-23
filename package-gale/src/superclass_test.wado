@@ -250,3 +250,18 @@ test "find_this_calls skips a template string" {
 test "rewrite_this_calls leaves a template string untouched" {
     assert rewrite_this_calls(&"p.emit(`this.x()`)", &"B", SuperSite::LexerPredicate) == "p.emit(`this.x()`)";
 }
+
+test "a template interpolation is code, so its calls are call sites" {
+    let calls = find_this_calls(&"p.emit(`a${this.tag()}b${this.n(1)}`)");
+    assert calls.len() == 2;
+    assert calls[0].name == "tag" && !calls[0].has_args;
+    assert calls[1].name == "n" && calls[1].has_args;
+}
+
+test "rewrite_this_calls rewrites inside a template interpolation" {
+    assert rewrite_this_calls(&"p.emit(`a${this.x()}this.y()`)", &"B", SuperSite::ParserPredicate) == "p.emit(`a${B::x(p)}this.y()`)";
+}
+
+test "a call after a template interpolation is still rewritten" {
+    assert rewrite_this_calls(&"p.emit(`${1}`); this.z()", &"B", SuperSite::ParserPredicate) == "p.emit(`${1}`); B::z(p)";
+}

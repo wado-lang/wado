@@ -76,8 +76,8 @@ fn non_empty(s: &String) -> Option<String> {
 }
 
 /// The `this.<method>(` call sites in a body, in source order, skipping string
-/// and template literals and comments so text never yields a false hit. Only
-/// the `this.` receiver is a superClass call; `m()` or `other.m()` is not.
+/// and comment text — but not a template's `${ ... }`, which is code. Only the
+/// `this.` receiver is a superClass call; `m()` or `other.m()` is not.
 pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
@@ -85,7 +85,16 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
     let mut i = 0;
     while i < n {
         i = match chars[i] {
-            '"' | '\'' | '`' => scan_string(&chars, i),
+            '"' | '\'' => scan_string(&chars, i),
+            '`' => {
+                let [end, spans] = scan_template(&chars, i, n);
+                for let s of &spans {
+                    for let c of &find_this_calls(&collect_range(&chars, s.0, s.1)) {
+                        out.push(*c);
+                    }
+                }
+                end;
+            },
             '/' && i + 1 < n && chars[i + 1] == '/' => scan_line_comment(&chars, i),
             '/' && i + 1 < n && chars[i + 1] == '*' => scan_block_comment(&chars, i),
             _ => match this_call_at(&chars, i, n) {
@@ -98,6 +107,56 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
         };
     }
     return out;
+}
+
+/// Split a template literal starting at `i` (a backtick) into `[end, spans]`:
+/// the index just past the closing backtick, and the `${ ... }` bodies. Only
+/// the literal text between them is inert.
+fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    let mut spans: List<[i32, i32]> = [];
+    let mut k = i + 1;
+    while k < n {
+        if chars[k] == '\\' && k + 1 < n {
+            k += 2;
+            continue;
+        }
+        if chars[k] == '`' {
+            return [k + 1, spans];
+        }
+        if chars[k] == '$' && k + 1 < n && chars[k + 1] == '{' {
+            let close = match_brace(chars, k + 1, n);
+            assert close > k + 1, "match_brace never returns before the brace it opened";
+            spans.push([k + 2, close - 1]);
+            k = close;
+            continue;
+        }
+        k += 1;
+    }
+    return [n, spans];
+}
+
+/// The index just past the `}` matching the `{` at `open`.
+fn match_brace(chars: &List<char>, open: i32, n: i32) -> i32 {
+    let mut depth = 0;
+    for let mut i = open; i < n; i += 1 {
+        match chars[i] {
+            '"' | '\'' => i = scan_string(chars, i) - 1,
+            '`' => {
+                let [end, _] = scan_template(chars, i, n);
+                i = end - 1;
+            },
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            },
+            _ => {
+            },
+        }
+    }
+    return n;
 }
 
 /// Whether the call spanning `[start, close)` passes anything between its
@@ -767,8 +826,8 @@ fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
 
 /// Replace each `this.<method>(...)` call in `body` with the ambient operation
 /// call for `site`, copying everything else verbatim and skipping string /
-/// comment spans so a `this.` inside host text is never rewritten. Call
-/// arguments are dropped (zero-argument today).
+/// template-text / comment spans so a `this.` inside host text is never
+/// rewritten. Call arguments are dropped (zero-argument today).
 pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) -> String {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
@@ -776,7 +835,17 @@ pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) ->
     let mut i = 0;
     while i < n {
         i = match chars[i] {
-            '"' | '\'' | '`' => copy_span(&mut out, &chars, i, scan_string(&chars, i)),
+            '"' | '\'' => copy_span(&mut out, &chars, i, scan_string(&chars, i)),
+            '`' => {
+                let [end, spans] = scan_template(&chars, i, n);
+                let mut cur = i;
+                for let s of &spans {
+                    copy_span(&mut out, &chars, cur, s.0);
+                    out.push_str(&rewrite_this_calls(&collect_range(&chars, s.0, s.1), base_name, site));
+                    cur = s.1;
+                }
+                copy_span(&mut out, &chars, cur, end);
+            },
             '/' && i + 1 < n && chars[i + 1] == '/' => copy_span(&mut out, &chars, i, scan_line_comment(&chars, i)),
             '/' && i + 1 < n && chars[i + 1] == '*' => copy_span(&mut out, &chars, i, scan_block_comment(&chars, i)),
             _ => match this_call_at(&chars, i, n) {

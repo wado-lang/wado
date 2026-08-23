@@ -255,8 +255,9 @@ pub fn gen_parser_struct(
     emit_actions: bool,
     fragment_recovery: bool,
     members: &MemberDecls,
-    base_api: bool,
+    parser_base: &String,
 ) {
+    let base_api = !parser_base.is_empty();
     // A parser base handler names the recognizer in its operation signature.
     let mut s = StructSpec::new(&"Parser", if base_api { Vis::Pub } else { Vis::Private });
     s.add_field(&"tokens", &"TokenStream");
@@ -746,6 +747,11 @@ pub fn gen_parser_struct(
     f7.add_param(&"kind", &"i32");
     f7.add_param(&"sync", &"&List<i32>");
     f7.set_return_type(&"i32");
+    // Fragment recovery descends into rule entries, so `expect` reaches the
+    // parse fns and must carry the base effect they declare.
+    if fragment_recovery && base_api {
+        f7.add_effect(parser_base);
+    }
     f7.emit_begin(w);
     w.line(&"if self.recovering { return self.pos; }");
     w.begin(&"if self.kinds[self.pos] == kind");

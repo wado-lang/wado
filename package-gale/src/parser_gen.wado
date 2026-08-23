@@ -193,7 +193,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
         ctx.emit_actions(),
         !ctx.fragment_entries().is_empty(),
         &members,
-        ctx.has_parser_superclass(),
+        ctx.parser_superclass_name(),
     );
     gen_member_methods(w, &members);
     if ctx.emit_actions() {
@@ -6228,8 +6228,12 @@ fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx:
             continue;
         }
         // The shared token sits inside an optional (`K_NOT?`), so whatever
-        // follows the optional stands at offset 1.
-        if is_nullable(elem) && i + 1 < elements.len() {
+        // follows stands at offset 1 — but only when the optional is exactly
+        // that token wide; a wider or repeatable one carries offset 1 itself.
+        if is_nullable(elem) {
+            if !optional_body_is_single_token(elem, ctx) || i + 1 >= elements.len() {
+                return [];
+            }
             return ctx.first_of_elements_from(elements, i + 1);
         }
         if let Group(g) = elem {
@@ -6238,6 +6242,17 @@ fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx:
         return suffix_second_token(elements, i, ctx);
     }
     return [];
+}
+
+/// Whether a nullable carrier contributes exactly one token once taken: a `?`
+/// over a single token. A `*` can come round again, so even a one-token body
+/// leaves offset 1 unknown.
+fn optional_body_is_single_token(elem: &Element, ctx: &mut GenContext) -> bool {
+    let mut visiting: List<String> = [];
+    return match elem {
+        Repeat(rep) => rep.kind matches { Optional } && ctx.element_is_single_token(&rep.element, &mut visiting),
+        _ => false,
+    };
 }
 
 /// `compute_lr_second_token` for a group: the union over the alternatives that
