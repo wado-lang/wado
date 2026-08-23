@@ -38,7 +38,11 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 /// Returns whether anything changed (a binding was retargeted or a shallow
 /// specialization was added), so the optimizer's dirty-set gate can re-examine
 /// the touched functions and accommodate the new ones.
-pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+pub fn demote_value_copies(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    descriptor_cache: &mut super::dce::DescriptorCache,
+) -> bool {
     // Intern the `array_clone_shallow` builtin the synthesized twins call, so
     // those calls are born resolved. One id serves all instantiations (the key
     // ignores type args, which ride the node).
@@ -54,7 +58,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     // stamped `func_id`, not the call node's `FunctionRef`. Built after the
     // `array_clone_shallow` intern so it includes that stub; the later synthesis
     // (Phase 2a) appends shallow twins, but no recognizer reads those by id.
-    let descriptors = super::dce::build_callee_descriptors(project);
+    let descriptors = descriptor_cache.descriptors(project);
 
     // Identify `$value_copy$T` helpers whose body is an `List<E>` wrapper
     // copy: `return StructLiteral { repr: array_clone(v.repr), used: ... }`,
@@ -62,12 +66,12 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let mut list_wrapper_copies: IndexSet<FuncKey> = IndexSet::default();
     {
         let type_table = project.type_table.borrow();
-        let variant_reaching = helpers_reaching_variant_copies(project, &descriptors, &type_table);
+        let variant_reaching = helpers_reaching_variant_copies(project, descriptors, &type_table);
         for f in &project.functions {
             let f = f.borrow();
             if f.value_copy_type().is_some()
                 && let Some(body) = &f.body
-                && body_is_list_wrapper_copy(body, &descriptors)
+                && body_is_list_wrapper_copy(body, descriptors)
                 && let Some(id) = f.id
                 && !variant_reaching.contains(&id)
             {
@@ -87,7 +91,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     let type_table = project.type_table.clone();
     let mut analyzer = Analyzer {
         funcs: &project.functions,
-        descriptors: &descriptors,
+        descriptors,
         type_table: &type_table,
         eimm_memo: IndexMap::default(),
     };
@@ -168,7 +172,7 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
         next += 1;
         shallow.id = Some(id);
         if let Some(body) = &mut shallow.body {
-            rewrite_array_clone_to_shallow(body, array_clone_shallow_id, &descriptors);
+            rewrite_array_clone_to_shallow(body, array_clone_shallow_id, descriptors);
         }
         let key = FunctionRef::from_resolved(&shallow, shallow.module_source.clone()).function_id();
         project.func_index.insert(key, id);

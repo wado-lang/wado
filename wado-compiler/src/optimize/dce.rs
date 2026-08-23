@@ -147,6 +147,37 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
     analysis
 }
 
+/// The table of [`build_callee_descriptors`], appended to across the fixed-point
+/// loop's rounds rather than rebuilt.
+#[derive(Default)]
+pub(super) struct DescriptorCache {
+    refs: Vec<FunctionRef>,
+}
+
+impl DescriptorCache {
+    pub(super) fn descriptors(&mut self, project: &NirPackage) -> &[FunctionRef] {
+        debug_assert!(
+            self.refs.len() <= project.functions.len(),
+            "descriptor cache outlived a function removal"
+        );
+        for func_rc in &project.functions[self.refs.len()..] {
+            let f = func_rc.borrow();
+            self.refs
+                .push(FunctionRef::from_resolved(&f, f.module_source.clone()));
+        }
+        debug_assert!(
+            self.refs.iter().zip(&project.functions).all(|(d, f)| {
+                let f = f.borrow();
+                d.name == f.name
+                    && d.method_info.as_ref().map(|i| &i.method_name)
+                        == f.method_info.as_ref().map(|i| &i.method_name)
+            }),
+            "a cached descriptor went stale: a function was renamed in place"
+        );
+        &self.refs
+    }
+}
+
 /// The callee [`FunctionRef`] descriptor for every function, indexed by
 /// `func_id.index()` (== store position). Used so a call site's identity is read
 /// by its stamped `func_id` rather than the call node's own `FunctionRef`.
