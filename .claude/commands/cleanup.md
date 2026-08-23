@@ -15,6 +15,8 @@ git diff origin/main...HEAD --stat
 
 Every file in that diff — Rust, Wado, Markdown — plus any doc it made stale.
 Whatever you notice on the way in is in scope too, pre-existing or not.
+Generated files and WEPs defer to their directory's `AGENTS.md`: don't touch a
+generated corpus, and don't cut a WEP's required sections.
 
 ## Rules
 
@@ -25,8 +27,7 @@ Whatever you notice on the way in is in scope too, pre-existing or not.
   abstract a single use.
 - Naming and structure: a comment explaining _what_ the code does marks the code
   to fix. Rename and decompose until it is redundant, then delete it.
-- Invariants: state them as `assert!`, never as a comment. An assert is checked;
-  a comment goes stale.
+- Invariants: state them as `assert!`, never as a comment.
 
 ### Comments
 
@@ -36,7 +37,7 @@ Whatever you notice on the way in is in scope too, pre-existing or not.
 
 ### Markdown
 
-- Correct, fresh, concise. 3 lines max per topic.
+- Correct and fresh. Cut the narration; keep the facts.
 
 ## Cycle
 
