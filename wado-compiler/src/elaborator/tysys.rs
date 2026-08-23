@@ -137,7 +137,10 @@ impl TypeSystem {
         }
         visited.push(base);
         let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
-            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
+            ResolvedType::Resource { def } => {
+                return !self.type_table.borrow().is_extern_ref_resource(def);
+            }
+            ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
             ResolvedType::Struct { .. } => self.struct_field_type_ids_of(base).unwrap_or_default(),
             ResolvedType::GenericInstance { type_args, .. }

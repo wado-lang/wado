@@ -5,7 +5,8 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement,
     ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
     IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
@@ -1066,6 +1067,20 @@ impl Parser {
             return self.parse_test_decl(attrs).map(Item::Test);
         }
 
+        // The backing is a property of the handle type, so it has one home.
+        if !self.check(&TokenKind::Resource)
+            && let Some(attr) = attrs
+                .iter()
+                .find(|a| a.cm_resource_backing().is_some())
+        {
+            return Err(ParseError {
+                message: "#[cm(..., type=...)] declares a resource's handle backing; \
+                    it belongs on a `resource` declaration"
+                    .to_string(),
+                span: attr.span,
+            });
+        }
+
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(visibility).map(Item::Use),
             TokenKind::Fn => self
@@ -1234,7 +1249,10 @@ impl Parser {
                     self.advance();
                     AttrArg::Str(raw)
                 }
-                TokenKind::Ident(value) => {
+                // `as_ident_name` so a contextual keyword can be a key:
+                // `#[cm(..., type="extern-ref")]`.
+                kind if kind.as_ident_name().is_some() => {
+                    let value = kind.as_ident_name().unwrap_or_else(|| unreachable!()).to_string();
                     self.advance();
                     // Check if this identifier is followed by '=' making it a key=value pair
                     if self.check(&TokenKind::Eq) {
@@ -6275,15 +6293,27 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         }));
     }
     if name == "cm" {
-        let [arg] = args else {
-            return Err(format!(
-                "#[cm] expects exactly 1 string argument, got {}",
-                args.len()
-            ));
+        let [path, fields @ ..] = args else {
+            return Err("#[cm] expects a string argument".to_string());
         };
-        let AttrArg::Str(s) = arg else {
+        let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
+        for field in fields {
+            let AttrArg::KeyValue(key, value) = field else {
+                return Err(
+                    "#[cm] takes a path string followed by `key = \"value\"` fields".to_string(),
+                );
+            };
+            if key != "type" {
+                return Err(format!("unknown #[cm] field `{key}`; the only field is `type`"));
+            }
+            if CmResourceBacking::parse(value).is_none() {
+                return Err(format!(
+                    "unknown #[cm] type `{value}`; expected \"extern-ref\" or \"i32\""
+                ));
+            }
+        }
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
             None => CmBoundary::Name(s.clone()),
@@ -6837,6 +6867,80 @@ mod tests {
     }
 
     #[test]
+    fn cm_attribute_carries_a_resource_backing() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref")]
+            pub resource Element {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        let attr = &decl.attrs[0];
+        assert_eq!(
+            attr.cm_resource_backing(),
+            Some(CmResourceBacking::ExternRef)
+        );
+        let cm = attr.as_cm_import().expect("cm boundary import");
+        assert_eq!(cm.interface, "element");
+    }
+
+    #[test]
+    fn cm_attribute_backing_defaults_to_none() {
+        let source = r#"
+            #[cm("wasi:http/types@0.3.0#request")]
+            pub resource Request {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert_eq!(decl.attrs[0].cm_resource_backing(), None);
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_backing() {
+        let source = r#"
+            #[cm("web:dom/element", type="handle")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("extern-ref") && err.message.contains("i32"),
+            "expected the allowed values in the message, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_field() {
+        let source = r#"
+            #[cm("web:dom/element", backing="extern-ref")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("backing"),
+            "expected the unknown field named, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_backing_belongs_on_a_resource() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref")]
+            pub struct Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("`resource` declaration"),
+            "expected a placement error, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
     fn test_canonical_attribute_populates_cm_boundary() {
         let source = r#"
             #[canonical("wasi", "stream-new")]
@@ -6903,8 +7007,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message
-                .contains("#[cm] expects exactly 1 string argument"),
+            err.message.contains("#[cm] expects a string argument"),
             "unexpected error: {}",
             err.message
         );
@@ -6922,8 +7025,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message
-                .contains("#[cm] expects exactly 1 string argument"),
+            err.message.contains("followed by `key = \"value\"` fields"),
             "unexpected error: {}",
             err.message
         );

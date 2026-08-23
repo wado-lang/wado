@@ -1246,6 +1246,12 @@ impl Attribute {
         })
     }
 
+    /// The backing `#[cm(..., type="extern-ref" | "i32")]` declares, if any.
+    /// The parser has already rejected any other spelling.
+    pub fn cm_resource_backing(&self) -> Option<CmResourceBacking> {
+        self.kv_value("type").and_then(CmResourceBacking::parse)
+    }
+
     /// Returns the parsed CM interface import (`namespace:package/interface[@v][#fn]`)
     /// carried by this attribute, if any. Returns `None` for `#[canonical(...)]`,
     /// for `#[cm("simple-name")]`, and for non-CM attributes.
@@ -1282,6 +1288,26 @@ pub enum CmBoundary {
     /// `docs/wep-2026-06-26-wasm-cm-component-import.md`.
     WorldImport(String),
     Name(String),
+}
+
+/// How a `#[cm(..., type=...)]` resource is represented at the CM boundary.
+/// `ExternRef` is a host-object handle: copyable, outside the affine resource
+/// discipline. See `docs/wep-2026-04-28-resource-inheritance.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmResourceBacking {
+    ExternRef,
+    I32,
+}
+
+impl CmResourceBacking {
+    /// The spelling `#[cm(..., type="...")]` accepts.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "extern-ref" => Some(Self::ExternRef),
+            "i32" => Some(Self::I32),
+            _ => None,
+        }
+    }
 }
 
 impl CmBoundary {

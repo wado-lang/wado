@@ -826,6 +826,11 @@ pub struct TypeTable {
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
+    /// Resources declared `#[cm(..., type="extern-ref")]`: a handle to a host
+    /// object, copyable and outside the affine resource discipline. Recorded
+    /// where the declaration's attributes are still in hand, and read by every
+    /// predicate that asks whether a type owns a resource.
+    extern_ref_resources: IndexSet<crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
     /// A name comes out of an identity and never goes back in. Attached where
@@ -950,6 +955,7 @@ impl TypeTable {
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             decl_index: IndexMap::default(),
+            extern_ref_resources: IndexSet::default(),
             defs: std::sync::Arc::default(),
         };
 
@@ -1110,6 +1116,18 @@ impl TypeTable {
     /// `symbol_by_type[type_id] = key`.
     /// Attach the program's declarations, so a nominal type can render its
     /// head once it carries one instead of a spelling.
+    /// Record that `def` declares an extern-ref-backed resource.
+    pub fn mark_extern_ref_resource(&mut self, def: crate::defs::DefId) {
+        self.extern_ref_resources.insert(def);
+    }
+
+    /// Whether `def` declares an extern-ref-backed resource — a copyable host
+    /// handle, which no affine check and no cleanup pass owns.
+    #[must_use]
+    pub fn is_extern_ref_resource(&self, def: crate::defs::DefId) -> bool {
+        self.extern_ref_resources.contains(&def)
+    }
+
     pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {
         // A module-level declaration is entered first and kept: a
         // function-local item shares its module, and a spelling that reaches

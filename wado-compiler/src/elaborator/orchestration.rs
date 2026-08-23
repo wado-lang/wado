@@ -288,6 +288,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
+                            if resource_decl.attrs.iter().any(|a| {
+                                a.cm_resource_backing()
+                                    == Some(crate::ast::CmResourceBacking::ExternRef)
+                            }) {
+                                type_table.borrow_mut().mark_extern_ref_resource(def);
+                            }
                         }
                         super::item::register_resource_compiler_item(
                             &type_table,
