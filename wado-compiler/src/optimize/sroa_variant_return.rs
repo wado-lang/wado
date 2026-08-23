@@ -2107,15 +2107,16 @@ fn rewrite_call_sites(
     }
 }
 
-/// Retype every call to a rewritten callee. The node's own `type_id` is what
-/// downstream passes and `wir_build` read; leaving the variant there would make
-/// a tuple-returning call claim to produce a boxed variant.
-/// Reports `changed` only when a type actually moved. Reporting the write
-/// itself re-dirties every caller of every scalarized function on each round,
-/// and the gate then never quiesces.
+/// Retype every reachable call to a rewritten callee. The node's own `type_id`
+/// is what downstream passes and `wir_build` read; leaving the variant there
+/// would make a tuple-returning call claim to produce a boxed variant. Reports
+/// `changed` only when a type actually moved, and only over the nodes that run
+/// — retyping one an earlier rewrite orphaned re-dirties the caller for a node
+/// no consumer reads.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
     let mut changed = false;
-    for node in body.exprs.values_mut() {
+    for e in crate::nir_visitor::reachable_exprs(body) {
+        let node = &mut body.exprs[e];
         if let ExprKind::Call { func_id, .. } = &node.kind
             && let Some(cand) = candidates.get(func_id)
             && node.type_id != cand.layout.tuple_type

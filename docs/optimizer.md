@@ -22,7 +22,7 @@ All levels run DCE on functions, types, and globals.
 
 The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights.
 
-The fixed-point loop exits early on convergence — which holds only while each pass reports a change when it changed something, not when it merely found work to look at. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
+The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at; a `gate_only!` pass reports to the dirty-set gate alone and never extends the loop. The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
 
 ## Architecture
 
