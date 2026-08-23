@@ -242,8 +242,20 @@ function main(): void {
   const inclBy = new Map<string, number>();
   const libSelf = new Map<string, number>();
   const attr = new Map<string, number>(); // syscall/alloc leaf -> nearest Rust caller
+  const allocBy = new Map<string, number>(); // allocation cost -> requesting caller
+  let allocTotal = 0.0;
   let total = 0.0;
   let usedWallclock = false;
+
+  // Entry into the allocator: every frame below one is allocation cost.
+  const ALLOC_ENTRY =
+    /mimalloc|MiMalloc|GlobalAlloc|__rust_(alloc|dealloc|realloc)|alloc::alloc::(alloc|dealloc|realloc)|__libc_(malloc|free|calloc|realloc)/;
+  // Plumbing between the request and the entry: the container whose growth
+  // allocated names its element type but not the site, so credit the frame
+  // above it. mimalloc's own internals carry no DWARF and surface as bare
+  // `[bin]+0x…`.
+  const ALLOC_PLUMBING =
+    /alloc::alloc::|alloc::vec::|alloc::raw_vec::|RawVec|RawTable|hashbrown::|indexmap::|::reserve|finish_grow|\+0x/;
 
   const add = (m: Map<string, number>, k: string, w: number) =>
     m.set(k, (m.get(k) ?? 0) + w);
@@ -288,6 +300,27 @@ function main(): void {
           add(inclBy, n, w);
         }
         cur = stPrefix[cur];
+      }
+      // Every sample crossing an allocator entry, credited above the outermost
+      // one — the code that asked for the memory, not the plumbing between.
+      {
+        let node: number | null = leaf;
+        let requester: string | null = null;
+        let sawEntry = false;
+        while (node != null) {
+          const n = name(node);
+          if (ALLOC_ENTRY.test(n)) {
+            sawEntry = true;
+            requester = null; // outermost entry wins
+          } else if (sawEntry && requester == null && !ALLOC_PLUMBING.test(n)) {
+            requester = n;
+          }
+          node = stPrefix[node];
+        }
+        if (sawEntry) {
+          add(allocBy, requester ?? "[no caller above allocator]", w);
+          allocTotal += w;
+        }
       }
       // attribute non-main-binary leaf CPU to nearest main-binary caller
       if (libName(leaf) !== binary) {
@@ -347,6 +380,9 @@ function main(): void {
   show(
     "Syscall/alloc CPU attributed to nearest Rust caller", attr,
     (n) => n.includes(inBin),
+  );
+  show(
+    `Allocation cost by requesting caller (${pct(allocTotal)} of total)`, allocBy,
   );
 }
 
