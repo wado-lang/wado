@@ -11,12 +11,15 @@ $ARGUMENTS
 
 ```sh
 git diff origin/main...HEAD --stat
+git diff HEAD --stat
 ```
 
-Every file in that diff — Rust, Wado, Markdown — plus any doc it made stale.
-Whatever you notice on the way in is in scope too, pre-existing or not.
-Generated files and WEPs defer to their directory's `AGENTS.md`: don't touch a
-generated corpus, and don't cut a WEP's required sections.
+Every file in those diffs — Rust, Wado, Markdown — plus any doc it made stale.
+The pass often runs before the commit, so the working tree counts. Whatever you
+notice on the way in is in scope too, pre-existing or not; an argument adds
+instructions and never narrows this. Generated files and WEPs defer to their
+directory's `AGENTS.md`: don't touch a generated corpus, and don't cut a WEP's
+required sections.
 
 ## Rules
 
