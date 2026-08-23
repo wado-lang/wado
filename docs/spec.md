@@ -3824,7 +3824,7 @@ The ladder applies to top-level items, to struct fields, and to members of an
 `impl` block (methods, associated constants). `export` on a member is a compile
 error — a method has no Component Model boundary. Calling a method or reading an
 associated constant beyond its reach is a compile error, as it is for a field.
-Only an *inherent* member carries a ladder of its own; a trait impl's members
+Only an _inherent_ member carries a ladder of its own; a trait impl's members
 reach as far as the trait does.
 
 ```wado

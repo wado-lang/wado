@@ -1653,7 +1653,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // same-named types. Lookups canonicalize the queried prefix the
         // same way ([`Self::lookup_associated_constant`]).
         self.sem.decls.associated_constants.clear();
-        type AssocConstInput = (String, String, ast::Type, ast::Expr, Option<ast::Visibility>);
+        type AssocConstInput = (
+            String,
+            String,
+            ast::Type,
+            ast::Expr,
+            Option<ast::Visibility>,
+        );
         let assoc_const_inputs: Vec<AssocConstInput> = module
             .items
             .iter()

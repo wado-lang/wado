@@ -1593,7 +1593,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ty: type_id,
                         value: const_expr,
                         ..
-                    }) = self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                    }) =
+                        self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal

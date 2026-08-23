@@ -1667,7 +1667,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.to_string(),
+            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                path.to_string()
+            }
             ModuleSource::EntryPoint { filename } => filename.to_string(),
             ModuleSource::Redirected { uri } => uri.to_string(),
             _ => String::new(),
@@ -1700,7 +1702,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
             let decl_file = match from_module_source {
-                ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
+                ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
+                    path.as_str()
+                }
                 ModuleSource::EntryPoint { filename } => filename.as_str(),
                 ModuleSource::Redirected { uri } => uri.as_str(),
                 _ => "",
@@ -1742,11 +1746,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 }
                 return Ok(self.interner.local(&resolved));
             }
-            if let ModuleSource::Remote {
-                pkg,
-                url: from_url,
-            } = from_module_source
-            {
+            if let ModuleSource::Remote { pkg, url: from_url } = from_module_source {
                 let resolved = resolve_module_path(from_url, import_source);
                 let pkg = pkg.to_string();
                 return Ok(self.interner.remote_module(&pkg, &resolved));

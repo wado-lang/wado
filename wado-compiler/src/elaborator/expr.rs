@@ -2709,8 +2709,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            if let Some(AssocConstSig { value: const_expr, .. }) =
-                self.associated_constant_qualified(variant_qualifier, variant_name)
+            if let Some(AssocConstSig {
+                value: const_expr, ..
+            }) = self.associated_constant_qualified(variant_qualifier, variant_name)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {

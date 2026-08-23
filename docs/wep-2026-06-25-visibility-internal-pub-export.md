@@ -150,7 +150,7 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
       compile error with a targeted diagnostic — a method has no CM boundary.
       Calling or reading a member beyond its reach is a `PRIVATE_SYMBOL` error,
       checked through the same `Visibility::reachable_from(same_package)`
-      predicate as fields and item imports. Only *inherent* members carry a
+      predicate as fields and item imports. Only _inherent_ members carry a
       ladder of their own; a trait impl's members reach as far as the trait
       does, so their declared visibility is not consulted.
 - The bundled `core:internal` module was renamed to `core:rt` so the module
