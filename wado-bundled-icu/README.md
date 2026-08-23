@@ -43,6 +43,55 @@ attribution (measured by building with interfaces removed):
 So segmenter+collator are ~93% of the bytes; dropping word/line segmentation
 (the `auto` dictionary) or collation shrinks the bundle dramatically.
 
+## Post-hoc slicing: one asset, sliced per program
+
+The per-interface table above comes from rebuilding with interfaces removed. The
+same slicing is reachable **without rebuilding**, which is what lets a toolchain
+carry one ICU asset and give each program only what it reaches.
+
+wasm-ld's `--gc-sections` (its default) collects over the symbol graph the
+`linking` and `reloc.*` sections carry. Keeping that graph in the asset lets the
+collection run again later against a narrower root set:
+
+```sh
+# Ship the asset as a relocatable object (keeps linking + reloc.*)
+RUSTFLAGS="-C link-arg=--relocatable -C link-arg=--no-gc-sections" \
+  CARGO_PROFILE_RELEASE_STRIP=none cargo build --release   # 4.05 MB
+
+# Collect it against the exports one program actually reaches
+rust-lld -flavor wasm --no-entry --gc-sections --strip-all \
+  --export=cabi_realloc_wit_bindgen_0_58_0 --export=__wasm_call_ctors \
+  --export='wado:icu/casemap@0.1.0#uppercase' ... \
+  -o casemap.wasm wado_bundled_icu.wasm                    # 89 KB
+```
+
+Measured against the 4.05 MB relocatable object:
+
+| roots kept         |      size | rebuild equivalent       |
+| ------------------ | --------: | ------------------------ |
+| locale             |     35 KB | —                        |
+| locale + casemap   |     89 KB | ~92 KB                   |
+| properties         |     67 KB | —                        |
+| normalizer         |    134 KB | ~125 KB                  |
+| collator           |   1.17 MB | ~1.12 MB                 |
+| segmenter (all 4)  |   2.31 MB | ~2.35 MB                 |
+| **graphemes only** | **23 KB** | not reachable by rebuild |
+| every export       |   3.63 MB | ~3.7 MB                  |
+
+Each slice lands on its from-source rebuild, so the graph carries everything the
+collection needs, data included. And the root set can be finer than a rebuild
+can express: `graphemes only` would need the WIT surface split first.
+
+Correctness is checked, not inferred. `runtime-check` passes against the
+all-exports re-link, and its `casemap-only` binary asserts Turkish, German and
+en-US casing against the 93 KB component built from the re-linked slice
+(`wit-casemap/` narrows the world) — locale-aware data that survived the
+collection.
+
+```sh
+cd runtime-check && cargo run --release --bin casemap-only -- <component.wasm>
+```
+
 ## Build (no_std, zero-import, self-contained — the libm model)
 
 The crate is `#![no_std]`, supplies its own global allocator (dlmalloc), and

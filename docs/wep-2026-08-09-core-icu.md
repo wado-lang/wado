@@ -314,12 +314,22 @@ runtime data dependencies, not taxonomy.
 
   Closing it means giving the prune a symbol graph where it has a wasm index
   graph. The `linking` and `reloc.*` sections carry exactly that — which
-  function references which data symbol — so an asset kept relocatable could be
-  collected from the live exports the way a linker's `--gc-sections` does. Worth
-  ~2.35 MB where one component serves both a grapheme pass and word
-  segmentation and a program reaches only the first, and it would let a
-  component bake its locale-independent data again. Unverified: whether those
-  sections survive the ICU asset's build with the edges intact.
+  function references which data symbol — and wasm-ld already collects over it,
+  `--gc-sections` being its default. Measured on the ICU asset kept relocatable,
+  collecting against one program's exports reproduces the from-source rebuild
+  across every capability — 89 KB for locale + casemap against a ~92 KB rebuild
+  — and the slices are runtime-checked, Turkish casing included, so the graph
+  carries the data edges and not only the code.
+
+  Two things follow. Slicing needs no rebuild, so one asset can serve every
+  program; and the root set can be finer than a rebuild can express, grapheme
+  boundaries alone being 23 KB where segmentation's four operations are 2.31 MB.
+  What remains is implementing the collection in `wado-wasm-embed`, which today
+  reads the wasm index space rather than the symbol table.
+
+  This closes the capability axis only. A locale is reached through the same
+  symbol whatever the program declares, so no collection separates `ja` from the
+  rest — that stays the data image's job.
 
 ## Open questions
 
