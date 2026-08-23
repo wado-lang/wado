@@ -100,36 +100,35 @@ lazy segmentation iterator. The far side allocates these per call from input the
 program does not bound, so the object has an end and something must reach it: the
 handle carries a `dtor` and is move-only.
 
-### The capability axis is DCE's, the locale axis is the package's
+### One implementation asset, collected per program
 
-Nothing in `core:icu` decides which capabilities a program links: reachability
-does, and `wado-wasm-embed` drops what the exports it keeps cannot reach. What
-that prune cannot reach is baked data (Known gaps), which is why the
-implementation components carry none and the package supplies it instead.
+Underneath the facade sits a single prebuilt ICU asset, not a partition. It is
+shipped relocatable, so the `linking` and `reloc.*` sections survive and the
+collection that produced it can run again against the exports one program
+reaches (Known gaps). Measured, that reproduces what rebuilding the asset with a
+narrower WIT surface would produce, and reaches granularity a rebuild cannot: a
+grapheme pass is 23 KB where segmentation's four operations are 2.31 MB.
 
-### The code partition is invisible
-
-Underneath the facade sit several prebuilt, data-free implementation components,
-partitioned so that an unused capability contributes no code. Users never name
-them, and the partition can be re-cut without touching a single source file.
-
-Which components a program links follows from reachability, not from what the
-user imported: a capability with no live symbol is dropped whole, its code and
-its data both absent.
+So the capability axis is reachability's, end to end: code, and the data that
+does not vary by locale, which is baked into the asset and collected away when
+unreached. What no collection separates is locales, which a constructor reaches
+through the same symbol whatever the program declares. That axis alone is the
+package's.
 
 ### Reachability granularity
 
 The facade carries the coarse split in its types. Where two operations differ in
 data by orders of magnitude — a grapheme pass needs kilobytes where word
 segmentation pulls a multi-megabyte dictionary — they belong to different types,
-so naming a type selects a component and the cheap user never mentions the
-expensive one. That works with reachability as it stands.
+so naming a type is already a data decision and the cheap user never mentions
+the expensive one.
 
-Method granularity is the refinement on top, for the residue that type splitting
-would fragment absurdly. It is not available yet: the `liveness` pass seeds every
-method as a live root by design, so a live type implies every one of its methods.
-Depending on it before that changes would silently over-bundle, which is why the
-type-level split is the load-bearing half.
+That split stays load-bearing, because the collection's root set is not free of
+Wado's own liveness: the roots are the asset's exports that surviving Wado code
+calls, and the `liveness` pass seeds every method of a live type as a live root
+by design. A single `Segmenter` type carrying all four operations would keep all
+four exports rooted and collect nothing, whatever the program called. Method
+granularity is the refinement that would lift that.
 
 ### Locales are a compile-time declaration
 
@@ -139,8 +138,8 @@ use icu from "core:icu" with { locales: ["ja", "en-US"] };
 
 - Omitted means root only — collation's root UCA, no tailorings. Minimal by
   default.
-- The declared set is the union across all use sites. The provider expands it
-  with likely-subtags and the fallback chain.
+- The declared set is the union across all use sites, expanded with
+  likely-subtags and the fallback chain.
 - A runtime langid outside the set falls back per ICU, to the nearest available
   and ultimately to root. A literal langid outside the set is a compile-time
   diagnostic.
@@ -163,54 +162,51 @@ where the package comes from and nothing about how it works.
 Its three parts:
 
 - The facade — the Wado source above.
-- Implementation components — the spike's data-free components, promoted to
-  first-party artifacts. Each carries the marker set it loads, fixed when the
-  component is built.
-- Data assets — the image below, keyed by (component, locale).
+- The implementation asset — the spike's ICU component, promoted to a
+  first-party artifact and shipped relocatable. Its locale-independent data is
+  baked in; its locale-bearing capabilities take a buffer provider.
+- Data assets — the image below, keyed by (capability, locale).
 
-Assembling a program's data is a lookup: the live components name their marker
-sets, the declared locales expand through likely-subtags and the fallback chain,
-and the entries at those keys are handed over as blobs. ICU4X's fork provider
-lets one component read several blobs, so nothing merges or re-encodes them.
+Assembling a program's data is a lookup: the reached locale-bearing capabilities
+name their marker sets, the declared locales expand through likely-subtags and
+the fallback chain, and the entries at those keys are handed over as blobs.
+ICU4X's fork provider lets the asset read several blobs, so nothing merges or
+re-encodes them.
 
-Marker granularity finer than the component is deliberately not pursued. For a
+Marker granularity finer than the capability is deliberately not pursued. For a
 program declaring `ja` and formatting dates, the locale declaration is worth
 4.3 MB where choosing within datetime's 57 markers is worth tens of KB inside
-the 47 KB that remains. Fixing the marker set per component is what removes the
+the 47 KB that remains. Fixing the marker set per capability is what removes the
 ICU-version-specific symbol-to-marker map, and with it the recording test that
 would have had to catch the map drifting on every ICU upgrade.
 
 ### The data image
 
-One compressed, indexed archive, which keeps `wado` a self-contained binary while
-letting the provider extract only what a build needs.
+One compressed, indexed archive of the locale-bearing data, which keeps `wado` a
+self-contained binary while letting a build extract only the entries it needs.
 
-- Entries are per (component, locale), and one per component where the data is
-  locale-independent. An entry is exactly what one component loads for one
-  locale, so a build concatenates entries instead of slicing inside them. The
-  index stays small because components are tens, where a per-(marker, locale)
-  key would run to tens of thousands.
+- An entry is exactly what one capability loads for one locale, so a build
+  concatenates entries instead of slicing inside them. The index stays small
+  because capabilities are tens, where a per-(marker, locale) key would run to
+  tens of thousands.
 - The index maps entry name to offset and length. Random access is required for
   selective extraction, so a streamed archive format does not qualify.
 - A locale's entry is stored deduplicated against its fallback parent, which the
   runtime fallbacker undoes. Measured, that is 5.16 MB down to 4.34 MB on
   formatting and 23 bytes on collation — CLDR patterns inherit heavily where
   collation tailorings are genuinely distinct.
-- Compression is per-entry zlib, reversed host-side, so the provider links no
-  decompressor. zlib is chosen over zstd deliberately: it is already a compiler
-  dependency and pure Rust, where zstd would add a C dependency to an otherwise
-  runtime-free compiler. Measured on the ICU blobs, zstd-19 beats zlib-9 by ~9%
-  on the dominant, near-incompressible segmentation data and ~8% on the small
-  feature blobs, with its best case ~24% on mid-size locale data — not enough to
-  buy the dependency. Compression happens once at toolchain-build so its speed is
-  irrelevant; decompression is ~2–3× faster with zstd but already negligible (the
-  largest 4 MB entry takes ~24 ms, and a build pulls few entries). zlib runs at
-  its default level: higher levels bought no measurable ratio on this data.
+- Compression is per-entry zlib, reversed host-side, so nothing the program
+  carries links a decompressor. zlib is chosen over zstd deliberately: it is
+  already a compiler dependency and pure Rust, where zstd would add a C
+  dependency to an otherwise runtime-free compiler. Measured on the ICU blobs,
+  zstd-19's best case is ~24% on mid-size locale data and less elsewhere — not
+  enough to buy that. Compression happens once at toolchain-build so its speed
+  is irrelevant, and decompression is already negligible against a build that
+  pulls a handful of entries.
 
-Collation's dependency on the normalizer's NFD markers — ~37 KB, the one real
-cross-capability data dependency measured — is satisfied by including them in
-collation's own slice. At that size a shared data component is not worth its
-composition cost.
+Collation's runtime dependency on the normalizer's NFD markers — ~37 KB, the one
+real cross-capability data dependency measured — needs nothing here: NFD does
+not vary by locale, so it is baked into the asset and collation reads it there.
 
 ## Alternatives considered
 
@@ -262,12 +258,11 @@ per-instance table.
 
 An earlier plan split the surface into `core:text`, `core:collation`, and
 `core:segmentation` so that unused capabilities linked nothing. Rejected: it
-conflated a code partition with a naming decision. Data slicing is per-symbol
-regardless of module and reachability already selects components, so the split
-bought nothing reachability does not — while costing users a memorized map from
-capability to module, spreading the locale declaration across three `use` sites
-to be unioned, and freezing an internal partition into the public API where
-re-cutting it becomes a breaking change.
+conflated a code partition with a naming decision. Reachability already decides
+what a program carries, so the split bought nothing — while costing users a
+memorized map from capability to module, spreading the locale declaration across
+three `use` sites to be unioned, and freezing an internal boundary into the
+public API where moving it becomes a breaking change.
 
 ### Baking the data into each component
 
@@ -277,20 +272,25 @@ locales still carries every locale CLDR ships. Survivable for casing and
 normalization; for formatting it is 4.34 MB where the declared locales need
 47 KB.
 
-### A shared data component
+### Splitting the asset into components
 
-Data common to several capabilities could live in one component the others
-import. Measured, the sharing is not there: the collator/normalizer overlap is
-~37 KB and the casemap, properties, and segmenter sets overlap by essentially
-nothing, against a ~10 KB floor per additional component. Dedup follows genuine
-runtime data dependencies, not taxonomy.
+Several prebuilt components, one per capability, so an unused one is never
+composed. Rejected: it coarsens what the collection already does. A partition
+is guessed when the artifacts are built and then freezes each capability's
+granularity at that guess, where the collection's root set is whatever the
+program reached; it also costs a ~10 KB floor per line drawn.
+
+It would additionally need a shared data component to recover what one asset
+shares for free — measured, that sharing is ~37 KB between collator and
+normalizer and essentially nothing between casemap, properties and segmenter,
+dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Consequences
 
-- Users learn one module and no partition. The capability-to-component map is an
-  implementation detail that can change without a source change.
-- Per-program data is bounded by the live components and the declared locales;
-  an unreachable capability contributes nothing.
+- Users learn one module, and there is no partition to learn or to maintain: one
+  asset serves every program.
+- Per-program data is bounded by what the program reached and the locales it
+  declared; an unreached capability contributes nothing, code and data alike.
 - The API tells the truth about cost. A constructed object is visibly
   constructed, and the one-shot helpers beside it are visibly one-shot.
 - Toolchain size grows by the bundled ICU package, in exchange for a
@@ -322,10 +322,9 @@ runtime data dependencies, not taxonomy.
   carries the data edges and not only the code.
 
   Two things follow. Slicing needs no rebuild, so one asset can serve every
-  program; and the root set can be finer than a rebuild can express, grapheme
-  boundaries alone being 23 KB where segmentation's four operations are 2.31 MB.
-  What remains is implementing the collection in `wado-wasm-embed`, which today
-  reads the wasm index space rather than the symbol table.
+  program; and the root set can be finer than any WIT surface a rebuild could
+  express. What remains is implementing the collection in `wado-wasm-embed`,
+  which today reads the wasm index space rather than the symbol table.
 
   This closes the capability axis only. A locale is reached through the same
   symbol whatever the program declares, so no collection separates `ja` from the
@@ -350,10 +349,10 @@ runtime data dependencies, not taxonomy.
 - [ ] Where the facade's date/time formatting meets
       [`core:temporal`](./wep-2026-06-05-core-temporal.md), and how its
       time-zone view relates to the WASI-provided one.
-- [ ] The full capability inventory and its component partition. The first cut
-      covers what the spikes measured — locale identity, normalization, case
-      mapping, character properties, segmentation, collation — with formatting,
-      plural rules, and transliteration following.
+- [ ] The full capability inventory, and which of its data is locale-bearing.
+      The first cut covers what the spikes measured — locale identity,
+      normalization, case mapping, character properties, segmentation,
+      collation — with formatting, plural rules, and transliteration following.
 
 ## Implementation
 
@@ -369,8 +368,9 @@ runtime data dependencies, not taxonomy.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
       itself, reduced here to an archive lookup: `core:icu` runs no provider
       component and needs no compile-time execution.
-- [ ] Promote the spike's data-free components into first-party prebuilt
-      artifacts with their WIT surfaces, partitioned per the inventory.
+- [ ] Promote the spike's ICU component into a first-party prebuilt artifact,
+      shipped relocatable, with the locale-bearing capabilities moved onto a
+      buffer provider and the rest left baked.
 - [ ] Write the facade over them: re-exports, the Wado-native shapes (`Ord`,
       iterators, `Display`), and the one-shot helpers.
 - [ ] Build the data image — per-(component, locale) zlib entries plus index,
@@ -386,7 +386,7 @@ runtime data dependencies, not taxonomy.
   capability-axis measurements. The locale-axis table in Context comes from
   `bdp-spike/datagen`'s `coll-loc` and `fmt-loc` sets, which reproduce it.
 - [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) — how
-  the implementation components are consumed and composed.
+  the implementation asset is consumed and composed.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API
   need no longer be CM-representable.
 - [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the token and
