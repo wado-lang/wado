@@ -5151,6 +5151,7 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
+            reject_resource_backing(&attrs)?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let visibility = if self.check(&TokenKind::Pub) {
@@ -5242,6 +5243,7 @@ impl Parser {
     }
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -5353,6 +5355,7 @@ impl Parser {
     }
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -6968,6 +6971,23 @@ mod tests {
             "expected the allowed values in the message, got: {}",
             err.message
         );
+    }
+
+    #[test]
+    fn cm_attribute_backing_is_rejected_on_every_other_site() {
+        for source in [
+            "struct S { #[cm(\"a:b/c\", type=\"i32\")] f: i32 }",
+            "enum E { #[cm(\"a:b/c\", type=\"i32\")] Case }",
+            "variant V { #[cm(\"a:b/c\", type=\"i32\")] Case(i32) }",
+            "resource R { #[cm(\"a:b/c\", type=\"i32\")] fn m(&self); }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(
+                err.message.contains("`resource` declaration"),
+                "expected a placement error for {source}, got: {}",
+                err.message
+            );
+        }
     }
 
     #[test]

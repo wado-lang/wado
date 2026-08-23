@@ -329,28 +329,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // Reachable through both the `extends` chain and a trait impl: picking
+        // either side rebinds call sites when the other grows the name. Asked
+        // of the receiver alone, so no resolution order can hide one of them —
+        // a `&T` impl resolves first, and is keyed by its reference kind
+        // rather than by the receiver's declaration, so both keys are asked.
+        // The qualified forms have returned above.
+        let colliding_trait = |this: &Self| {
+            let value_key =
+                this.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name));
+            this.trait_impl_declaring(&value_key, method_name)
+                .or_else(|| {
+                    let kind = RefKind::from_resolved(
+                        &this.tysys.type_table.borrow().get(receiver.type_id).clone(),
+                    )?;
+                    this.trait_impl_declaring(&ImplTargetKey::Ref(kind), method_name)
+                })
+        };
+        if required_trait.is_none()
+            && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
+            && self.tysys.type_table.borrow().is_extern_ref_resource(def)
+            && let Some(declaring) = self.resource_declaring(def, method_name)
+            && let Some(trait_name) = colliding_trait(self)
+        {
+            let _ = self.emit(TypeError::AmbiguousResourceMethod {
+                method: method_name.to_string(),
+                resource: self.tysys.resolutions.defs().name(declaring).to_string(),
+                trait_name,
+                span,
+            });
+        }
+
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver.type_id, method_name);
-            // Reachable through both the `extends` chain and a trait impl:
-            // picking either side rebinds call sites when the other grows the
-            // name. The qualified forms have returned above.
-            if method_info.is_some()
-                && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
-                && self.tysys.type_table.borrow().is_extern_ref_resource(def)
-                && let Some(declaring) = self.resource_declaring(def, method_name)
-                && let Some(trait_name) = self.trait_impl_declaring(
-                    &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
-                    method_name,
-                )
-            {
-                let _ = self.emit(TypeError::AmbiguousResourceMethod {
-                    method: method_name.to_string(),
-                    resource: self.tysys.resolutions.defs().name(declaring).to_string(),
-                    trait_name,
-                    span,
-                });
-            }
         }
 
         // Fall back to base type trait methods
@@ -2705,13 +2717,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // imports, not the caller's.
         // Static methods take no receiver, so the digest's canonical form —
         // impl type params left abstract — is already the answer.
-        let indexed = self
-            .unique_static_method_sig(&static_key, method_name)
-            .map(|sig| sig.decl.param_types[sig.first_value_param()..].to_vec());
-        if let Some(param_types) = indexed {
-            return param_types;
+        // Value parameters only: every caller keeps a receiver of its own,
+        // separate from this list.
+        if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
+            return sig.decl.param_types[sig.first_value_param()..].to_vec();
         }
-
+        // The index holds only the declaring resource's own methods, so an
+        // inherited one is reached by walking the chain. Instance methods
+        // only: a static is not inherited, and answering for one here would
+        // newly type-check calls this lookup has always left alone.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
+            && sig.self_kind != ast::SelfKind::None
+        {
+            return sig.decl.param_types[sig.first_value_param()..].to_vec();
+        }
         Vec::new()
     }
 

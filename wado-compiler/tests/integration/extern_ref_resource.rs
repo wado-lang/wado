@@ -616,3 +616,53 @@ fn an_ancestor_qualified_call_needs_no_extra_resource() {
         "a child holds its ancestors' capability, got {d:?}"
     );
 }
+
+#[test]
+fn the_qualified_form_checks_its_arguments() {
+    let cases = [
+        ("EventTarget::tag()", "expected 1 arguments, found 0"),
+        ("EventTarget::tag(&n, 1)", "expected 1 arguments, found 2"),
+        ("EventTarget::tag(1)", "type mismatch"),
+    ];
+    for (call, expected) in cases {
+        let source = chain_with_method(
+            "    fn tag(&self) -> String;",
+            &format!("fn bad(n: Node) -> String {{ return {call}; }}"),
+        );
+        let d = diagnostics(&source);
+        assert!(
+            d.iter().any(|e| e.contains(expected)),
+            "`{call}` must report `{expected}`, got {d:?}"
+        );
+    }
+}
+
+#[test]
+fn a_ref_trait_impl_does_not_hide_the_ambiguity() {
+    let source = chain_with_method(
+        "    fn id(&self) -> String;",
+        "trait Identified { fn id(&self) -> String; }\n\
+         impl Identified for &Node { fn id(&self) -> String { return \"x\"; } }\n\
+         fn use_it(n: &Node) -> String { return n.id(); }",
+    );
+    let d = diagnostics(&source);
+    assert!(
+        d.iter()
+            .any(|e| e.contains("Ambiguous") || e.contains("ambiguous")),
+        "a `&T` impl resolves first, which must not hide the collision, got {d:?}"
+    );
+}
+
+#[test]
+fn the_backing_is_confined_to_the_bindings_it_lowers_for() {
+    // On a resource the compiler does lower, the backing would keep the
+    // own-handle surface while turning off the drop and the move check.
+    let source = "#[cm(\"wasi:cli/terminal-output@0.3.0\", type = \"extern-ref\")]\n\
+         resource TerminalOutput {}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("not built yet")),
+        "expected the unbuilt-lowering error, got {d:?}"
+    );
+}

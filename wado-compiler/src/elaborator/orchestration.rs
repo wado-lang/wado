@@ -115,6 +115,19 @@ fn resolve_resource_extends<H: CompilerHost>(
             );
             continue;
         }
+        // The head is what names the parent, and `head_site` reaches it
+        // through a reference and through a generic application — so the
+        // shape around it has to be rejected here or it is silently dropped.
+        if !matches!(clause.parent, Type::Named(_)) {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends a shape that is not a plain resource name",
+                    clause.child_name
+                ),
+            );
+            continue;
+        }
         if defs.kind(parent) != crate::defs::DefKind::Resource {
             reject(
                 clause,
@@ -509,11 +522,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
-                            if resource_decl.attrs.iter().any(|a| {
+                            if let Some(attr) = resource_decl.attrs.iter().find(|a| {
                                 a.cm_resource_backing()
                                     == Some(crate::ast::CmResourceBacking::ExternRef)
                             }) {
-                                type_table.borrow_mut().mark_extern_ref_resource(def);
+                                // The extern-ref lowering is unbuilt, so a
+                                // resource the compiler does lower would keep
+                                // its own-handle surface while losing the drop
+                                // and the move check the backing turns off —
+                                // a leak and a double use. Until Tide M3, the
+                                // backing is confined to the bindings it was
+                                // introduced for.
+                                let host_binding =
+                                    attr.as_cm_import().is_some_and(|cm| cm.namespace == "web");
+                                if host_binding {
+                                    type_table.borrow_mut().mark_extern_ref_resource(def);
+                                } else {
+                                    let _ = logger.error_in(
+                                        module_source,
+                                        TypeError::ResourceBacking {
+                                            message: format!(
+                                                "`{}` declares `type = \"extern-ref\"` outside `web:*`; that lowering is not built yet",
+                                                resource_decl.name
+                                            ),
+                                            span: resource_decl.span,
+                                        },
+                                    );
+                                }
                             }
                             let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
                             if is_generic {

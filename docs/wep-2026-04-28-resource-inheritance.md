@@ -64,6 +64,7 @@ Concretely:
 - A resource without `#[cm(...)]` is `i32`-backed and **cannot use `extends`** in v1. Hierarchies require explicit CM identity.
 - `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type = "extern-ref"`. Mismatched backings in an `extends` family is a hard error, not a warning.
 - A resource declared with `type = "extern-ref"` but without any `extends` relationship is allowed (a future-proof opt-in to the GC backing).
+- Until the lowering lands (Tide M3), the backing is accepted only under `web:*`. On a resource the compiler already lowers, it would keep the CM own-handle surface while turning off the drop and the move check the backing exempts — a leaked handle and a double use. Not inference: the backing is still declared, and this gate goes away with M3.
 
 ### Why mandatory + structural over namespace inference
 
