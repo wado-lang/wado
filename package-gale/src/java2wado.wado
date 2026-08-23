@@ -201,15 +201,11 @@ pub fn collect_member_method_names(grammar: &Grammar) -> List<String> {
 /// a hand-written base class outside the `.g4` that Gale cannot see — Phase 4,
 /// carved out of the Java emit-actions rollout. See `action.md`.
 pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
-    return grammar.options.iter_ref().any(|o| o.name == "superClass");
+    return !grammar.lexer_superclass.is_empty() || !grammar.parser_superclass.is_empty();
 }
 
 /// Whether java2wado can emit the grammar's non-superClass action bodies:
-/// `Wado` always, `Java` unless the grammar declares `superClass`. A
-/// superClass grammar's lexer `this.m()` calls lower to the base effect
-/// interface independently (see `superclass.wado` and `emit_actions` in
-/// codegen); its parser-side actions stay carved out here (parser superClass
-/// is not wired yet). Other languages stay discarded.
+/// `Wado` always, `Java` unless the grammar declares `superClass`.
 pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
     return grammar.action_language matches { Wado }
         || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);

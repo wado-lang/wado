@@ -15,7 +15,7 @@ use rust from "./grammars/RustLexer.g4"
         },
     };
 use { normalize_tree } from "./support/tree_compare.wado";
-use { RustLexerBase, LexerView } from "./grammars/RustLexer.g4";
+use { RustLexerBase, RustParserBase, LexerView, Parser } from "./grammars/RustLexer.g4";
 
 // A representative hand-written RustLexerBase port (the real base class is Java,
 // outside the .g4; the user ports it to Wado). Stateless here — the predicates
@@ -46,6 +46,22 @@ impl RustLexerBase for RustBase {
     }
 }
 
+// The parser base, likewise a port. The lexer emits `<` and `>` one character
+// at a time so nested generics close cleanly, so `shl` / `shr` reassemble a
+// shift only for a pair one start offset apart — what `NextLT` / `NextGT` ask.
+struct RustPBase {
+}
+
+impl RustParserBase for RustPBase {
+    fn next_lt(&self, p: &Parser) -> bool {
+        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
+    }
+
+    fn next_gt(&self, p: &Parser) -> bool {
+        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
+    }
+}
+
 fn rlex_tok(input: &String) -> rust::TokenStream {
     let mut base = RustBase {};
     with RustLexerBase => &mut base do {
@@ -55,7 +71,8 @@ fn rlex_tok(input: &String) -> rust::TokenStream {
 
 fn rlex_prs(input: &String) -> rust::ParseResult {
     let mut base = RustBase {};
-    with RustLexerBase => &mut base do {
+    let mut pbase = RustPBase {};
+    with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
         return rust::parse(input);
     };
 }
@@ -725,4 +742,27 @@ test "tree: nested generics" {
             })))))
     ",
     );
+}
+
+// `shl` / `shr` are the parser reassembling a shift from the single-character
+// `<` / `>` the lexer emits, and only the base can tell `a >> b` from
+// `a > > b`.
+test "shift: an adjacent pair is one operator" {
+    let r = rlex_prs(&"const X: i32 = 1 >> 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "shift: a separated pair is not a shift" {
+    let r = rlex_prs(&"const X: i32 = 1 > > 2;");
+    assert !r.ok(), "a gap between the two `>` fails the base predicate";
+}
+
+test "comparison: a bare > is not a shift" {
+    let r = rlex_prs(&"const X: bool = 1 > 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "comparison: a bare < is not a shift" {
+    let r = rlex_prs(&"const X: bool = 1 < 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }

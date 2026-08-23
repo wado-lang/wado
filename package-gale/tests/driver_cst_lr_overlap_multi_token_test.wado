@@ -1,0 +1,55 @@
+//! An overlapping LR suffix whose shared first token is followed by a
+//! *multi-token* rule reference — Rust's `shr : GT {NextGT}? GT` shape.
+
+use lr from "./grammars/lr_overlap_multi_token.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_overlap_multi_token" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = lr::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = lr::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "lr-overlap-multi: a single > is a comparison" {
+    assert_tree(&"1 > 2", &"(e (e 1) (cmp >) (e 2))");
+}
+
+test "lr-overlap-multi: a doubled > is a shift" {
+    assert_tree(&"1 >> 2", &"(e (e 1) (shr > >) (e 2))");
+}
+
+test "lr-overlap-multi: a single < is a comparison" {
+    assert_tree(&"1 < 2", &"(e (e 1) (cmp <) (e 2))");
+}
+
+test "lr-overlap-multi: a doubled < is a shift" {
+    assert_tree(&"1 << 2", &"(e (e 1) (shl < <) (e 2))");
+}
+
+test "lr-overlap-multi: a token outside the group still dispatches" {
+    assert_tree(&"1 == 2", &"(e (e 1) (cmp ==) (e 2))");
+}
+
+use opaque from "./grammars/lr_overlap_opaque_op.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_overlap_opaque_op" },
+    };
+
+fn assert_opaque_tree(input: &String, expected: &String) {
+    let result = opaque::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = opaque::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// Neither walk can measure `op`, so the sub-dispatch runs its scan instead —
+// a vacuous condition would commit to `op` and lose the comparison.
+test "lr-overlap-opaque: the scan fallback still separates the operators" {
+    assert_opaque_tree(&"1 > 2", &"(e (e 1) (cmp >) (e 2))");
+    assert_opaque_tree(&"1 >> 2", &"(e (e 1) (op > >) (e 2))");
+    assert_opaque_tree(&"1 < 2", &"(e (e 1) (cmp <) (e 2))");
+    assert_opaque_tree(&"1 << 2", &"(e (e 1) (op < <) (e 2))");
+}

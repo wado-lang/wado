@@ -30,6 +30,7 @@ use { gen_parser, grammar_has_at_end_conflict } from "./parser_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use {
+    action_language_is_emittable,
     should_emit_actions,
     collect_member_method_names,
     rewrite_lexer_java_bodies,
@@ -39,14 +40,16 @@ use {
 } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use {
-    superclass_base_name,
+    lexer_superclass_name,
+    parser_superclass_name,
     collect_lexer_super_ops,
-    super_ops_with_args,
-    super_ops_mixed_role,
-    super_ops_reserved,
-    rewrite_superclass_calls,
-    gen_super_interface,
-    SuperOp,
+    collect_parser_super_ops,
+    lexer_bodies_name_unwired_base,
+    lexer_super_refusal,
+    parser_super_refusal,
+    parser_bodies_are_base_calls,
+    rewrite_lexer_superclass_calls,
+    rewrite_parser_superclass_calls,
 } from "./superclass.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
@@ -161,43 +164,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ctx.set_token_kinds(token_kinds);
     ctx.set_trace(options.trace);
     ctx.set_fragment_entries(options.fragment_entries);
-    ctx.set_emit_actions(should_emit_actions(grammar));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_action_grammar(&grammar.name, collect_member_method_names(grammar));
-    // A lexer `superClass` becomes an effect interface, independent of
-    // `emit_actions` (which gates the java2wado parser path).
-    if let Some(sc) = superclass_base_name(grammar) {
-        let ops = collect_lexer_super_ops(grammar);
-        let with_args = super_ops_with_args(&ops);
-        let mixed = super_ops_mixed_role(&ops);
-        let reserved = super_ops_reserved(&ops);
-        if !with_args.is_empty() {
-            // Wiring the base would run the operation with its argument lost,
-            // so refuse it and name what forced that.
-            ctx.warn(
-                &DiagnosticOwner::host(&"superClass"),
-                DiagnosticKind::UnsupportedAction,
-                `superClass '${sc}' is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them, so the base is not wired`,
-            );
-        } else if !mixed.is_empty() {
-            ctx.warn(
-                &DiagnosticOwner::host(&"superClass"),
-                DiagnosticKind::UnsupportedAction,
-                `superClass '${sc}' calls (${mixed.join(", ")}) from both a predicate and an action; an operation is one or the other, so the base is not wired`,
-            );
-        } else if !reserved.is_empty() {
-            ctx.warn(
-                &DiagnosticOwner::host(&"superClass"),
-                DiagnosticKind::UnsupportedAction,
-                `superClass '${sc}' calls (${reserved.join(", ")}), which name a lifecycle hook the interface already declares, so the base is not wired`,
-            );
-        } else {
-            // Wired even with no ops: a base may override only a hook.
-            ctx.set_superclass(&sc, ops);
-            // Must follow op collection, which scans the original `this.` sites.
-            rewrite_superclass_calls(grammar, &sc);
-        }
-    }
+    wire_superclasses(grammar, &mut ctx);
+    // A wired parser base's bodies are Wado once the rewrite has run, so they
+    // execute even under a host language java2wado carves out.
+    ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
     if should_emit_actions(grammar) && grammar.action_language matches { Java } {
         // A Java lexer gets no members (see `collect_lexer_members`), so nothing
         // resolves against them and a reference is reported.
@@ -270,7 +242,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // A superClass grammar can't be highlighted: the `highlight` / exported
     // `run` entries call `tokenize` / `parse` (base effect) but can't install
     // the handler. Skip it (warned below) instead of emitting uncompilable code.
-    let emit_highlight = options.highlight_query matches { Some(_) } && !ctx.has_superclass();
+    let any_base = ctx.has_superclass() || ctx.has_parser_superclass();
+    let emit_highlight = options.highlight_query matches { Some(_) } && !any_base;
     gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, emit_highlight, ctx.has_superclass());
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
@@ -290,13 +263,14 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     warn_unhandled_lexer_actions(grammar, &mut ctx);
-    gen_string_tree_helper(&mut w, grammar, &lit_tokens);
+    gen_string_tree_helper(&mut w, grammar, &lit_tokens, ctx.emit_actions());
     if let Some(query) = &options.highlight_query {
-        if ctx.has_superclass() {
+        if any_base {
+            let base = if ctx.has_superclass() { *ctx.superclass_name() } else { *ctx.parser_superclass_name() };
             ctx.warn(
                 &DiagnosticOwner::host(&"highlight"),
                 DiagnosticKind::UnsupportedAction,
-                `a highlight query with superClass '${*ctx.superclass_name()}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
+                `a highlight query with superClass '${base}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
             );
         } else {
             gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
@@ -327,6 +301,75 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         source: w.to_string(),
         diagnostics: ctx.copy_diagnostics(),
     };
+}
+
+/// Wire each declared `superClass` base to its effect interface, or refuse it
+/// with a diagnostic naming what Gale cannot represent.
+fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
+    let mut lexer_refused = false;
+    if let Some(sc) = lexer_superclass_name(grammar) {
+        let ops = collect_lexer_super_ops(grammar);
+        let refusal = lexer_super_refusal(&ops);
+        if refusal.is_empty() {
+            // Wired even with no ops: a base may override only a hook.
+            ctx.set_superclass(&sc, ops);
+            // Must follow op collection, which scans the original `this.` sites.
+            rewrite_lexer_superclass_calls(grammar, &sc);
+        } else {
+            warn_superclass_refused(ctx, &sc, &refusal);
+            lexer_refused = true;
+        }
+    }
+    // A refusal already reported the cause; anything `this` left over has not.
+    if !lexer_refused && lexer_bodies_name_unwired_base(grammar) {
+        ctx.warn(
+            &DiagnosticOwner::host(&"superClass"),
+            DiagnosticKind::UnsupportedAction,
+            "a lexer action or predicate names 'this' with nothing to receive it; only a `this.m()` call under a lexer superClass lowers to a base operation, and a combined grammar's superClass is the parser's",
+        );
+    }
+    wire_parser_superclass(grammar, ctx);
+}
+
+fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
+    if let Some(sc) = parser_superclass_name(grammar) {
+        ctx.set_parser_superclass_declared();
+        let ops = collect_parser_super_ops(grammar);
+        // The parser interface declares no lifecycle hook, so a base nothing
+        // calls has no operation to wire.
+        if ops.is_empty() {
+            return;
+        }
+        let refusal = parser_super_refusal(&ops);
+        if !refusal.is_empty() {
+            warn_superclass_refused(ctx, &sc, &refusal);
+        } else if !parser_bodies_execute(grammar, &sc) {
+            // Wiring would demand a handler for operations no emitted body
+            // calls, so refuse and say which translator is missing.
+            warn_superclass_refused(
+                ctx,
+                &sc,
+                &"is called from a body carrying host code the grammar's action language has no translator for",
+            );
+        } else {
+            ctx.set_parser_superclass(&sc, ops);
+            rewrite_parser_superclass_calls(grammar, &sc);
+        }
+    }
+}
+
+/// Whether codegen runs the grammar's parser action bodies: java2wado emits the
+/// language, or every body is base calls, which the rewrite makes Wado.
+fn parser_bodies_execute(grammar: &Grammar, base: &String) -> bool {
+    return action_language_is_emittable(grammar) || parser_bodies_are_base_calls(grammar, base);
+}
+
+fn warn_superclass_refused(ctx: &mut GenContext, base: &String, refusal: &String) {
+    ctx.warn(
+        &DiagnosticOwner::host(&"superClass"),
+        DiagnosticKind::UnsupportedAction,
+        `superClass '${*base}' ${*refusal}, so the base is not wired`,
+    );
 }
 
 /// Loud safety net for lexer `{ ... }` actions codegen does not execute:
@@ -684,7 +727,17 @@ fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
         return;
     }
     w.line(&"// Grammar metadata from source .g4 prequels:");
+    // Two bases do not fit one `options` list — read the resolved slots.
+    if !grammar.lexer_superclass.is_empty() {
+        w.line(&`//   option superClass = ${grammar.lexer_superclass} (lexer)`);
+    }
+    if !grammar.parser_superclass.is_empty() {
+        w.line(&`//   option superClass = ${grammar.parser_superclass} (parser)`);
+    }
     for let opt of &grammar.options {
+        if opt.name == "superClass" {
+            continue;
+        }
         w.line(&`//   option ${opt.name} = ${format_option_value(&opt.value)}`);
     }
     for let act of &grammar.named_actions {

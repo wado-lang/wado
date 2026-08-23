@@ -8,8 +8,8 @@ use { Grammar } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
 use { GenContext } from "./gen_context.wado";
 use { join_kinds } from "./gen_util.wado";
-use { CodeWriter, FnSpec, ImplSpec, StructSpec } from "./wadopoet.wado";
-use { entry_emits_vals } from "./action_gen.wado";
+use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "./wadopoet.wado";
+use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 
 struct RecoverFragmentEntry {
@@ -53,7 +53,7 @@ pub fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List
     return result;
 }
 
-pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>) {
+pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &GenContext) {
     for let mut i = 0; i < entries.len(); i += 1 {
         w.line(&`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&entries[i].first_names)}];`);
     }
@@ -63,6 +63,7 @@ pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEnt
 
     let mut d = FnSpec::new(&"_recover_fragment");
     d.add_param(&"p", &"&mut Parser");
+    add_parser_super_effect(&mut d, ctx);
     d.set_return_type(&"bool");
     d.emit_begin(w);
     if entries.is_empty() {
@@ -82,6 +83,7 @@ pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEnt
 
     let mut s = FnSpec::new(&"_recover_try_descend");
     s.add_param(&"p", &"&mut Parser");
+    add_parser_super_effect(&mut s, ctx);
     s.emit_begin(w);
     w.line(&"let _before = p.pos;");
     w.line(&"let _was = p.recovering;");
@@ -97,14 +99,30 @@ pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEnt
     w.blank();
 }
 
-/// The ` with Foo` clause a parse-entry fn carries when the lexer declares a
-/// `superClass` — the entry calls `tokenize` (which carries the base effect),
-/// so it must propagate it. Empty when there is no superClass.
-fn superclass_clause(ctx: &GenContext) -> String {
-    if ctx.has_superclass() {
-        return ` with ${*ctx.superclass_name()}`;
+/// The same clause in function-type position, for the rule entry
+/// `_run_parse_entry` takes as a value.
+fn parser_super_fn_clause(ctx: &GenContext) -> String {
+    if ctx.has_parser_superclass() {
+        return ` with ${*ctx.parser_superclass_name()}`;
     }
     return "";
+}
+
+/// The ` with Foo` clause a parse-entry fn carries: the lexer's base (it
+/// tokenizes) and the parser's (its rules evaluate predicates).
+fn superclass_clause(ctx: &GenContext) -> String {
+    let mut bases: List<String> = [];
+    if ctx.has_superclass() {
+        bases.push(*ctx.superclass_name());
+    }
+    if ctx.has_parser_superclass() {
+        bases.push(*ctx.parser_superclass_name());
+    }
+    return match bases.len() {
+        0 => "",
+        1 => ` with ${bases[0]}`,
+        _ => ` with (${bases.join(", ")})`,
+    };
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
@@ -141,7 +159,7 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenCo
 /// propagated error and `p.pending`).
 fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(
-        &`fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult${superclass_clause(
+        &`fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(ctx)}) -> ParseResult${superclass_clause(
             ctx,
         )}`,
     );
@@ -236,8 +254,11 @@ pub fn gen_parser_struct(
     emit_actions: bool,
     fragment_recovery: bool,
     members: &MemberDecls,
+    parser_base: &String,
 ) {
-    let mut s = StructSpec::new(&"Parser");
+    let base_api = !parser_base.is_empty();
+    // A parser base handler names the recognizer in its operation signature.
+    let mut s = StructSpec::new(&"Parser", if base_api { Vis::Pub } else { Vis::Private });
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
     // array (not the `List<i32>` wrapper) so reading `kinds[pos]` is a single
@@ -344,7 +365,10 @@ pub fn gen_parser_struct(
     w.blank();
 
     if emit_actions {
-        let mut fem = FnSpec::new(&"emit");
+        // A parser base handler lives in the user's module, so this
+        // action-context API is the recognizer surface it reads — ANTLR's `this`.
+        let api = if base_api { Vis::Pub } else { Vis::Private };
+        let mut fem = FnSpec::new(&"emit", api);
         fem.set_receiver(&"&mut self");
         fem.add_param(&"s", &"String");
         fem.emit_begin(w);
@@ -352,7 +376,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut ftt = FnSpec::new(&"token_text");
+        let mut ftt = FnSpec::new(&"token_text", api);
         ftt.set_receiver(&"&self");
         ftt.add_param(&"i", &"i32");
         ftt.set_return_type(&"String");
@@ -361,7 +385,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut fk = FnSpec::new(&"token_kind");
+        let mut fk = FnSpec::new(&"token_kind", api);
         fk.set_receiver(&"&self");
         fk.add_param(&"i", &"i32");
         fk.set_return_type(&"i32");
@@ -373,7 +397,7 @@ pub fn gen_parser_struct(
         // `$X.int` mirrors ANTLR's `Integer.parseInt`: a 32-bit value, so
         // `token_int` returns `i32` (matching a `returns [int v]` field, which
         // java2wado maps to `i32`).
-        let mut fint = FnSpec::new(&"token_int");
+        let mut fint = FnSpec::new(&"token_int", api);
         fint.set_receiver(&"&self");
         fint.add_param(&"i", &"i32");
         fint.set_return_type(&"i32");
@@ -397,7 +421,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut fln = FnSpec::new(&"token_line");
+        let mut fln = FnSpec::new(&"token_line", api);
         fln.set_receiver(&"&self");
         fln.add_param(&"i", &"i32");
         fln.set_return_type(&"i32");
@@ -406,7 +430,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut fcol = FnSpec::new(&"token_col");
+        let mut fcol = FnSpec::new(&"token_col", api);
         fcol.set_receiver(&"&self");
         fcol.add_param(&"i", &"i32");
         fcol.set_return_type(&"i32");
@@ -417,7 +441,7 @@ pub fn gen_parser_struct(
 
         // Byte offset where token `i` begins — backs `$text` (span from the
         // rule's first token) and `$start`-derived spans.
-        let mut fts0 = FnSpec::new(&"token_start");
+        let mut fts0 = FnSpec::new(&"token_start", api);
         fts0.set_receiver(&"&self");
         fts0.add_param(&"i", &"i32");
         fts0.set_return_type(&"i32");
@@ -427,7 +451,7 @@ pub fn gen_parser_struct(
         w.blank();
 
         // `_input.LA(k)` — the token kind k positions ahead (k=1 is current).
-        let mut fla = FnSpec::new(&"la");
+        let mut fla = FnSpec::new(&"la", api);
         fla.set_receiver(&"&self");
         fla.add_param(&"k", &"i32");
         fla.set_return_type(&"i32");
@@ -438,7 +462,7 @@ pub fn gen_parser_struct(
 
         // `_input.LT(k)` — the stream index k positions ahead, clamped to the
         // final (EOF) token so a lookahead past end stays in bounds.
-        let mut flt = FnSpec::new(&"lt");
+        let mut flt = FnSpec::new(&"lt", api);
         flt.set_receiver(&"&self");
         flt.add_param(&"k", &"i32");
         flt.set_return_type(&"i32");
@@ -452,7 +476,7 @@ pub fn gen_parser_struct(
 
         // Source text of the half-open byte range `[start, end)` — backs `$text`
         // (the current rule's consumed input) and `_input.getText()`.
-        let mut fts = FnSpec::new(&"text_span");
+        let mut fts = FnSpec::new(&"text_span", api);
         fts.set_receiver(&"&self");
         fts.add_param(&"start", &"i32");
         fts.add_param(&"end", &"i32");
@@ -474,7 +498,7 @@ pub fn gen_parser_struct(
         // range is the rule's first token (`start_tok`) through the last
         // consumed token (`self.pos - 1`).
         // `$<label>.text` — the text of one labeled rule call's own token range.
-        let mut ftb = FnSpec::new(&"text_between");
+        let mut ftb = FnSpec::new(&"text_between", api);
         ftb.set_receiver(&"&self");
         ftb.add_param(&"lo", &"i32");
         ftb.add_param(&"hi", &"i32");
@@ -484,7 +508,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut frt = FnSpec::new(&"rule_text");
+        let mut frt = FnSpec::new(&"rule_text", api);
         frt.set_receiver(&"&self");
         frt.add_param(&"start_tok", &"i32");
         frt.set_return_type(&"String");
@@ -494,7 +518,7 @@ pub fn gen_parser_struct(
         w.blank();
 
         // `_input.getText()` — the entire input.
-        let mut fit = FnSpec::new(&"input_text");
+        let mut fit = FnSpec::new(&"input_text", api);
         fit.set_receiver(&"&self");
         fit.set_return_type(&"String");
         fit.emit_begin(w);
@@ -507,7 +531,7 @@ pub fn gen_parser_struct(
         // (`render_open`); a left-recursive rule's level is already folded shut
         // by then, so its `@after` reads the just-finished node
         // (`rule_string_tree_final` / `render_last_finished`).
-        let mut frst = FnSpec::new(&"rule_string_tree");
+        let mut frst = FnSpec::new(&"rule_string_tree", api);
         frst.set_receiver(&"&self");
         frst.set_return_type(&"String");
         frst.emit_begin(w);
@@ -515,7 +539,7 @@ pub fn gen_parser_struct(
         w.end();
         w.blank();
 
-        let mut frstf = FnSpec::new(&"rule_string_tree_final");
+        let mut frstf = FnSpec::new(&"rule_string_tree_final", api);
         frstf.set_receiver(&"&self");
         frstf.set_return_type(&"String");
         frstf.emit_begin(w);
@@ -722,6 +746,11 @@ pub fn gen_parser_struct(
     f7.add_param(&"kind", &"i32");
     f7.add_param(&"sync", &"&List<i32>");
     f7.set_return_type(&"i32");
+    // Fragment recovery descends into rule entries, so `expect` reaches the
+    // parse fns and must carry the base effect they declare.
+    if fragment_recovery && base_api {
+        f7.add_effect(parser_base);
+    }
     f7.emit_begin(w);
     w.line(&"if self.recovering { return self.pos; }");
     w.begin(&"if self.kinds[self.pos] == kind");

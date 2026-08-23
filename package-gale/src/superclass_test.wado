@@ -1,8 +1,11 @@
 use {
     find_this_calls,
-    superclass_base_name,
+    lexer_superclass_name,
+    parser_superclass_name,
+    SuperSite,
     add_super_op,
     body_is_base_calls_only,
+    body_names_this,
     gen_super_interface,
     super_call_expr,
     super_ops_with_args,
@@ -12,7 +15,7 @@ use {
     SuperCall,
     SuperOp,
 } from "./superclass.wado";
-use { Grammar, GrammarKind, GrammarOption, OptionValue, ActionKind } from "./ir.wado";
+use { Grammar, GrammarKind, GrammarOption, OptionValue, ActionKind, superclass_bases } from "./ir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 test "find_this_calls picks up this.method( sites" {
@@ -46,25 +49,26 @@ test "find_this_calls does not match a longer identifier" {
     assert calls.is_empty();
 }
 
-test "superclass_base_name reads the option" {
+test "each recognizer's base is read from its own slot" {
     let g = Grammar {
         name: "T",
-        kind: GrammarKind::Lexer,
+        kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
         mode_names: [],
         channels: [],
-        options: [
-            GrammarOption { name: "superClass", value: OptionValue::Ident("LexerBase") },
-        ],
+        options: [],
         named_actions: [],
         pending_refs: [],
         source_files: [],
+        lexer_superclass: "LexerBase",
+        parser_superclass: "ParserBase",
     };
-    assert superclass_base_name(&g) matches { Some(n) && n == "LexerBase" };
+    assert lexer_superclass_name(&g) matches { Some(n) && n == "LexerBase" };
+    assert parser_superclass_name(&g) matches { Some(n) && n == "ParserBase" };
 }
 
-test "superclass_base_name is null without the option" {
+test "a base is null when the grammar declares none" {
     let g = Grammar {
         name: "T",
         kind: GrammarKind::Lexer,
@@ -77,7 +81,8 @@ test "superclass_base_name is null without the option" {
         pending_refs: [],
         source_files: [],
     };
-    assert superclass_base_name(&g) matches { None };
+    assert lexer_superclass_name(&g) matches { None };
+    assert parser_superclass_name(&g) matches { None };
 }
 
 test "add_super_op dedups and fixes the first role" {
@@ -126,7 +131,7 @@ test "super_ops_with_args is empty for the zero-argument ops a base can take" {
 test "body_is_base_calls_only accepts both the source and the rewritten call form" {
     assert body_is_base_calls_only(&"this.processOpenBrace();", &"B");
     assert body_is_base_calls_only(&" this.a(); this.b() ", &"B");
-    // The same body after `rewrite_superclass_calls` — the answer must not move.
+    // The same body after `rewrite_lexer_superclass_calls` — the answer must not move.
     assert body_is_base_calls_only(&"B::process_open_brace(LexerView { chars, start, pos });", &"B");
 }
 
@@ -196,26 +201,76 @@ test "an action op receives the lexer, a predicate op does not" {
 }
 
 test "super_call_expr passes a LexerView built from the match-fn locals" {
-    assert super_call_expr(&"LexerBase", &"isRegexPossible", false) == "LexerBase::is_regex_possible(LexerView { chars, start, pos })";
+    assert super_call_expr(&"LexerBase", &"isRegexPossible", SuperSite::LexerPredicate) == "LexerBase::is_regex_possible(LexerView { chars, start, pos })";
 }
 
 test "super_call_expr hands an action op the lexer alongside the view" {
-    assert super_call_expr(&"LexerAdaptor", &"handleEndArgument", true) == "LexerAdaptor::handle_end_argument(LexerView { chars, start, pos }, lx)";
+    assert super_call_expr(&"LexerAdaptor", &"handleEndArgument", SuperSite::LexerAction) == "LexerAdaptor::handle_end_argument(LexerView { chars, start, pos }, lx)";
 }
 
 test "rewrite_this_calls maps this.m() to the ambient op with a view" {
-    assert rewrite_this_calls(&"this.isOk()", &"B", false) == "B::is_ok(LexerView { chars, start, pos })";
-    assert rewrite_this_calls(&"this.a() && x > 0", &"B", false) == "B::a(LexerView { chars, start, pos }) && x > 0";
+    assert rewrite_this_calls(&"this.isOk()", &"B", SuperSite::LexerPredicate) == "B::is_ok(LexerView { chars, start, pos })";
+    assert rewrite_this_calls(&"this.a() && x > 0", &"B", SuperSite::LexerPredicate) == "B::a(LexerView { chars, start, pos }) && x > 0";
 }
 
 test "rewrite_this_calls threads the lexer through an action body" {
-    assert rewrite_this_calls(&"this.hit();", &"B", true) == "B::hit(LexerView { chars, start, pos }, lx);";
+    assert rewrite_this_calls(&"this.hit();", &"B", SuperSite::LexerAction) == "B::hit(LexerView { chars, start, pos }, lx);";
 }
 
 test "rewrite_this_calls drops the original arguments" {
-    assert rewrite_this_calls(&"this.check(1, 2)", &"B", false) == "B::check(LexerView { chars, start, pos })";
+    assert rewrite_this_calls(&"this.check(1, 2)", &"B", SuperSite::LexerPredicate) == "B::check(LexerView { chars, start, pos })";
 }
 
 test "rewrite_this_calls leaves strings and non-this text untouched" {
-    assert rewrite_this_calls(&"\"this.x()\" other.y()", &"B", false) == "\"this.x()\" other.y()";
+    assert rewrite_this_calls(&"\"this.x()\" other.y()", &"B", SuperSite::LexerPredicate) == "\"this.x()\" other.y()";
+}
+
+test "superclass_bases routes the option by grammar kind" {
+    let opts: List<GrammarOption> = [
+        GrammarOption { name: "superClass", value: OptionValue::Ident("Base") },
+    ];
+    assert superclass_bases(&GrammarKind::Lexer, &opts) == ["Base", ""];
+    assert superclass_bases(&GrammarKind::Parser, &opts) == ["", "Base"];
+    // `vendor/antlr4/doc/options.md`: for a combined grammar it sets the
+    // parser's superclass.
+    assert superclass_bases(&GrammarKind::Combined, &opts) == ["", "Base"];
+}
+
+test "superclass_bases keeps a dotted base's last component" {
+    let opts: List<GrammarOption> = [
+        GrammarOption { name: "superClass", value: OptionValue::Qualified(["my", "pkg", "BaseParser"]) },
+    ];
+    assert superclass_bases(&GrammarKind::Parser, &opts) == ["", "BaseParser"];
+}
+
+test "find_this_calls skips a template string" {
+    assert find_this_calls(&"p.emit(`this.tag()`)").is_empty();
+    assert find_this_calls(&"p.emit(`x`); this.tag()").len() == 1;
+}
+
+test "rewrite_this_calls leaves a template string untouched" {
+    assert rewrite_this_calls(&"p.emit(`this.x()`)", &"B", SuperSite::LexerPredicate) == "p.emit(`this.x()`)";
+}
+
+test "a template interpolation is code, so its calls are call sites" {
+    let calls = find_this_calls(&"p.emit(`a${this.tag()}b${this.n(1)}`)");
+    assert calls.len() == 2;
+    assert calls[0].name == "tag" && !calls[0].has_args;
+    assert calls[1].name == "n" && calls[1].has_args;
+}
+
+test "rewrite_this_calls rewrites inside a template interpolation" {
+    assert rewrite_this_calls(&"p.emit(`a${this.x()}this.y()`)", &"B", SuperSite::ParserPredicate) == "p.emit(`a${B::x(p)}this.y()`)";
+}
+
+test "a call after a template interpolation is still rewritten" {
+    assert rewrite_this_calls(&"p.emit(`${1}`); this.z()", &"B", SuperSite::ParserPredicate) == "p.emit(`${1}`); B::z(p)";
+}
+
+test "body_names_this sees a field read and a bare receiver" {
+    assert body_names_this(&"this.flag");
+    assert body_names_this(&"x && this");
+    assert body_names_this(&"p.emit(`${this.n}`)");
+    assert !body_names_this(&"other.this_thing() + \"this\"");
+    assert !body_names_this(&"// this\np.emit(`this`)");
 }
