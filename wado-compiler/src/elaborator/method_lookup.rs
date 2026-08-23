@@ -1032,6 +1032,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
+        // Walk the `extends` chain: the nearest declaration answers, and a
+        // parent's method keeps the parent's own signature — `Self` included.
+        // A generic parent is rejected at declaration, so only the receiver's
+        // own declaration takes type arguments.
+        let mut current = def;
+        let mut args = receiver_type_args;
+        loop {
+            if let Some(info) = self.resource_method_info_on(current, method_name, args) {
+                return Some(info);
+            }
+            current = self.tysys.type_table.borrow().resource_parent(current)?;
+            args = None;
+        }
+    }
+
+    /// [`Self::find_resource_method_info`] for one declaration, without the
+    /// `extends` walk.
+    fn resource_method_info_on(
+        &mut self,
+        def: crate::defs::DefId,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
         let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
         let sig = self
             .tysys

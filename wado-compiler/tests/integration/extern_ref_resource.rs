@@ -219,3 +219,83 @@ fn unrelated_resources_are_incomparable() {
     let d = diagnostics(&source);
     assert!(!d.is_empty(), "an unrelated resource is not a subtype");
 }
+
+/// A parent carrying one instance method, plus whatever the case needs.
+fn chain_with_method(parent_body: &str, rest: &str) -> String {
+    format!(
+        "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {{\n{parent_body}\n}}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {{}}\n\
+         {rest}\n\
+         export fn run() {{}}\n"
+    )
+}
+
+#[test]
+fn a_child_calls_an_inherited_method() {
+    let source = chain_with_method(
+        "    fn tag(&self) -> String;",
+        "fn use_it(n: Node) -> String { return n.tag(); }",
+    );
+    let d = diagnostics(&source);
+    assert!(d.is_empty(), "an inherited method is callable, got {d:?}");
+}
+
+#[test]
+fn a_static_method_does_not_inherit() {
+    let source = chain_with_method(
+        "    fn make() -> EventTarget;",
+        "fn use_it() -> EventTarget { return Node::make(); }",
+    );
+    let d = diagnostics(&source);
+    assert!(!d.is_empty(), "a static method is not inherited");
+}
+
+#[test]
+fn self_stays_the_declaring_resource() {
+    let source = chain_with_method(
+        "    fn me(&self) -> Self;",
+        "fn widen(n: Node) -> EventTarget { return n.me(); }",
+    );
+    let d = diagnostics(&source);
+    assert!(
+        d.is_empty(),
+        "an inherited `Self` is the declaring resource, got {d:?}"
+    );
+
+    let narrowed = chain_with_method(
+        "    fn me(&self) -> Self;",
+        "fn narrow(n: Node) -> Node { return n.me(); }",
+    );
+    let d = diagnostics(&narrowed);
+    assert!(!d.is_empty(), "`Self` does not follow the receiver's type");
+}
+
+/// `Self` on a resource method is the declaring resource, so a return typed
+/// `Self` is checked like any other — it used to resolve to `unknown`, which
+/// deferred every check against it.
+#[test]
+fn an_inherited_return_type_is_checked() {
+    let source = chain_with_method(
+        "    fn me(&self) -> EventTarget;",
+        "fn narrow(n: Node) -> Node { return n.me(); }",
+    );
+    let d = diagnostics(&source);
+    assert!(
+        !d.is_empty(),
+        "a parent's return type does not narrow to the child"
+    );
+}
+
+#[test]
+fn a_self_return_is_checked() {
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {\n    fn me(&self) -> Self;\n}\n\
+         #[cm(\"web:dom/other\", type = \"extern-ref\")]\n\
+         resource Other {}\n\
+         fn narrow(e: EventTarget) -> Other { return e.me(); }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(!d.is_empty(), "`Self` is the declaring resource, not `Other`");
+}
