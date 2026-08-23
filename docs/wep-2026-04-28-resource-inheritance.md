@@ -53,7 +53,7 @@ Backing is **always declared explicitly** on the resource, and **structurally ve
 
 Concretely:
 
-- `#[cm(...)]` on a `resource` requires a `type=...` field. Allowed values in v1: `"extern-ref"` and `"i32"`. The CM-layer naming is used; the backing has no user-facing Wado type name.
+- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-ref"` or `"i32"`. The CM-layer naming is used; the backing has no user-facing Wado type name. **Not yet mandatory**: requiring it means migrating every stdlib resource, which no consumer needs — omitting it reads as `i32`, and only `extends` demands the declaration.
   ```wado
   #[cm("web:dom/element", type = "extern-ref")]
   pub resource Element { ... }
@@ -104,7 +104,7 @@ Rules:
 - Only one parent type is permitted (single inheritance). The parent must be a `resource`, not a trait, struct, or enum.
 - Neither side may be generic: a generic resource takes no part in `extends` yet. Not a rejection of the idea — no consumer asks for it (WebIDL has no generics), so it is unbuilt rather than out of scope. The check reads the declaration's arity, not the written shape, so `Base` and `Base<i32>` are one answer.
 - `extends` is permitted only when both the declaring resource and its parent declare `type = "extern-ref"` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).
-- Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private, **provided `Y` is visible at every use site of `X`**. The compiler enforces this; it is not a special rule for `extends`.
+- Visibility is independent: a `pub resource X extends Y` is permitted whether `Y` is `pub` or module-private. **Unenforced**: nothing checks that `Y` is visible where `X` is used, so a public child currently reaches a private parent's methods from another module. Same gap as rule (5) below, and the same fix — resource methods need a visibility of their own first.
 - Cycles are rejected (`A extends B`, `B extends A`).
 
 `extends` does not appear in any other position. There is no `extends` clause on `struct`, `trait`, `enum`, `variant`, `flags`, `effect`, or function declarations in this WEP. (Trait supertraits use a separate syntax, `:` — see [Super Traits](./wep-2026-07-27-super-traits.md).)
@@ -575,43 +575,25 @@ v1 has no release path. Wasm GC offers no finalization, so a handle the host tab
 
 ## Consequences
 
-### Implementation Roadmap
+### Implementation Status
 
-This is the full feature. The minimum subset Tide's MVP needs, and the order to land it in, is [Tide § Minimum Implementation Roadmap](./wep-2026-04-01-tide.md#minimum-implementation-roadmap); generic resources and the stdlib-wide `type=` migration sit outside it.
+This WEP is the full feature. The order it lands in is [Tide § Minimum Implementation Roadmap](./wep-2026-04-01-tide.md#minimum-implementation-roadmap), the one place milestones are sequenced.
 
-#### M1: Language core + `#[cm(...)]` extension + minimal lowering (single landing)
+#### Status
 
-Lands as one milestone to avoid an intermediate "compiles but does not run" state.
+Implemented, with tests in `wado-compiler/tests/integration/extern_ref_resource.rs`:
 
-- [ ] `extends` keyword in lexer / AST / parser
-- [ ] Subtyping relation (reflexive, transitive, antisymmetric)
-- [ ] Variance rules: `&T` covariant, `&mut T` invariant, aggregates (`List`, `Option`, `TreeMap`, tuple, struct field) invariant
-- [ ] Implicit upcast insertion at call args / return / annotated `let` / parent-typed field assignment / branch unify
-- [ ] Method resolution: walk extends chain + visible trait impls, ambiguity is an error
-- [ ] Corner cases: override forbidden / trait-vs-inherited collision error / static methods do not inherit / `Self` fixed at declaring resource / visibility judged at declaring module
-- [ ] `#[cm(..., type = "extern-ref" | "i32")]` field made mandatory
-- [ ] Backing-match structural validation across `extends` families
-- [ ] Minimal CM lowering: universal receiver, per-Wado-type WIT interfaces, upcast as no-op — enough to compile and run a basic `Child extends Parent` program
+- `#[cm(..., type = "extern-ref" | "i32")]` — parsed, value and placement validated (`parser.rs`); an extern-ref resource is copyable and exempt from the affine analysis and the cleanup pass (`resource_move_check.rs`, `synthesis/resource_cleanup.rs`, both reading `TypeTable::is_extern_ref_resource`).
+- `extends` — keyword, AST, parser; the parent is resolved and validated in `elaborator/orchestration.rs::resolve_resource_extends` (parent is a resource, both sides extern-ref, no cycle, neither side generic), and the relation lives in `TypeTable::resource_parent` / `is_resource_subtype`.
+- Subtyping and implicit upcast — one rule in `elaborator/typecheck.rs::check_at`, gated by `Position`: value, `return` and a `&T` referent admit a subtype; `&mut T`, containers and function types do not. Branch agreement is `elaborator/expr.rs::agreed_branch_type`, which `if`, `if let` and `match` all route through.
+- Method resolution over the chain, and the corner cases: override forbidden, trait-vs-inherited ambiguity, statics do not inherit, `Self` fixed at the declaring resource.
 
-#### M2: Downcast
+Not built:
 
-- [ ] Synthesized `fn downcast<T>(&self) -> Option<T>` on extern-ref-backed resources
-- [ ] Static target check: strict subtype only, generic `T` rejected, backing match defensive check
-- [ ] Per-type `is-T` host import synthesis and CM emission
-- [ ] Lowering: branch on `is-T(self)` into `Option::Some(self)` / `Option::None`
-
-#### M3: Built-in trait integration via host imports
-
-- [ ] `Eq` auto-derived on extern-ref-backed resources, lowered through `is-same`
-- [ ] `Inspect`, `InspectAlt`, `Display` auto-derived through `inspect`, `inspect-alt`, `display` host imports
-- [ ] `Serialize` / `Deserialize` synthesis (`impl Trait for Type;`) is a compile error on resources and on types transitively containing one
-- [ ] `Ord` is **not** auto-derived for resources (explicit exclusion)
-
-#### M4: Bundled WIT consistency
-
-- [ ] Confirm bundled WIT for extends-participating resources emits the universal-receiver shape (per-Wado-type interface, receiver is `extern-ref`)
-- [ ] Verify no `extends` relation leaks into the bundled WIT
-- [ ] Adjust the existing emission path if needed
+- Lowering. Every extern-ref resource still lowers as an `i32` CM resource; the universal receiver below is unbuilt, so a program using `extends` type-checks but its CM surface is not yet the shape this WEP specifies.
+- `downcast`, and the `Eq` / `Inspect` / `Display` host imports.
+- Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
+- The stdlib-wide `type=` migration, and generic resources on either side of `extends`.
 
 ## See Also
 
