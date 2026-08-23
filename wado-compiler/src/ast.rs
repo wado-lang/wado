@@ -964,11 +964,16 @@ impl Module {
     /// `ModuleSource` and dedup against the bundled cache when an editor
     /// opens the file directly.
     pub fn stdlib_identity(&self) -> Option<&str> {
-        self.inner_attributes
-            .iter()
-            .find(|a| a.name == "stdlib")
+        self.stdlib_identity_attribute()
             .and_then(|a| a.args.first())
             .map(AttrArg::as_str)
+    }
+
+    /// The `#![stdlib("…")]` attribute itself — the form a diagnostic needs,
+    /// since a malformed one has no identity to report but does have a span.
+    #[must_use]
+    pub fn stdlib_identity_attribute(&self) -> Option<&InnerAttribute> {
+        self.inner_attributes.iter().find(|a| a.name == "stdlib")
     }
 
     /// Returns the value of a scalar `key = "value"` argument on any

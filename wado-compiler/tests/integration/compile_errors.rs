@@ -673,3 +673,24 @@ export fn run() {
 
     crate::common::compile_source(source).expect("a non-scalar &mut binding compiles");
 }
+
+#[test]
+fn stdlib_identity_attribute_naming_no_bundled_module_is_an_error() {
+    // `#![stdlib("…")]` pins the entry's module identity; any file can write
+    // it, so an unregistered name is a diagnostic, never a panic.
+    let source = "#![stdlib(\"core:bogus.wado\")]\nfn main() {}\n";
+
+    let Err(err) = crate::common::compile_source(source) else {
+        panic!("an unregistered stdlib identity must be rejected");
+    };
+    match err {
+        CompileError::Analyzer { message, line, .. } => {
+            assert!(
+                message.contains("does not name a bundled stdlib module"),
+                "unexpected message: {message}"
+            );
+            assert_eq!(line, 1, "the attribute's own line");
+        }
+        other => panic!("Expected Analyzer error, got: {other}"),
+    }
+}
