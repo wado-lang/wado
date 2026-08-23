@@ -2065,13 +2065,9 @@ impl FunctionContext {
         None
     }
 
-    /// Look up a variable, checking outer context for captures if in a closure.
-    /// Returns either a local variable reference or a capture reference.
-    /// Run `body` with the surrounding frame's bindings out of scope.
-    ///
-    /// A constant's body is closed over its own module: it resolves names
-    /// there, never against the frame reify inlines it into. Local allocation
-    /// stays on this context, because that frame is where its locals live.
+    /// Run `body` with the surrounding frame's bindings out of scope, keeping
+    /// local allocation on this context — an inlined constant body resolves
+    /// names in its own module, but its locals live in the frame it lands in.
     pub(super) fn with_caller_bindings_hidden<R>(
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
@@ -2088,6 +2084,8 @@ impl FunctionContext {
         result
     }
 
+    /// Look up a variable, checking outer context for captures if in a closure.
+    /// Returns either a local variable reference or a capture reference.
     pub(super) fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
         // First check local scopes
         for scope in self.scopes.iter().rev() {

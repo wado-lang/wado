@@ -3844,23 +3844,22 @@ as members of the importing module, at the modifier's reach:
 | `internal use { x } from "M"` | `x` is re-exported package-internal         |
 | `use { x } from "M"`          | file-private import; `x` is not re-exported |
 
-A re-export's reach is the re-export keyword's, not `x`'s own visibility. So
-a `pub use` publishes `x` even when `x` is `internal` in its defining module —
-the "internal implementation, public facade" pattern, where a package's entry
-module re-exports its internal submodules' items as the library API:
+A re-export cannot reach further than `x` itself, so `pub use { x }` requires
+`x` to be `pub`; claiming more is a compile error at the re-export. Narrowing is
+allowed, and the facade still names the API — a package's entry module publishes
+its items under its own names, so consumers never name the files behind them:
 
 ```wado
-// foo/impl.wado — package-internal implementation
-internal fn compute() -> i32 { ... }
+// foo/impl.wado — the implementation
+pub fn compute() -> i32 { ... }
 
-// foo.wado — the package's public entry module
-pub use { compute } from "./impl.wado";   // compute is now the library API
+// foo.wado — the package's entry module
+pub use { compute } from "./impl.wado";   // reached as foo's `compute`
 ```
 
-You may only re-export a name you can see: `pub use { x } from "M"` requires `x`
-to be importable here (`x` is `pub`, or `x` is `internal` and `M` is in this
-package). Re-exporting a file-private name is a visibility error, like any other
-import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
+You may also only re-export a name you can see: `x` must be importable here
+(`x` is `pub`, or `x` is `internal` and `M` is in this package). Re-exporting a
+file-private name is a visibility error, like any other import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 
 ### Module Source Types
 

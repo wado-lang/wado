@@ -1,6 +1,5 @@
-//! A constant's body is closed over the module that wrote it. Reify inlines it
-//! at every read, so the frame it lands in must neither shadow the names it
-//! resolves nor decide whether what it calls is live.
+//! A constant's body is closed over the module that wrote it: the frame it is
+//! inlined into neither shadows what it resolves nor decides what it calls.
 use { Box } from "./sub/assoc_const_closed_lib.wado";
 
 test "the body reads its own module's global, not a same-named local here" {

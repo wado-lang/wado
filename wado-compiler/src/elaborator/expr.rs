@@ -1364,8 +1364,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Enforce an inherent impl member's rung of the visibility ladder.
-    /// `owner` names the type the member is declared on, not its own type. It
-    /// is resolved only to fill a diagnostic, never on the reaching path.
+    /// `owner` names the declaring type, resolved only to fill a diagnostic.
     /// `visibility` is `None` where the member does not decide its own reach.
     pub(super) fn check_inherent_member_visibility(
         &mut self,

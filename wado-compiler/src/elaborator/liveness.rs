@@ -128,10 +128,9 @@ pub(crate) fn compute(
                         // Slice 1: methods are live production intermediaries.
                         graph.seed_export(key);
                     }
-                    // Reify materializes a constant's body at every read, the
-                    // way it does a struct field default, so whatever the body
-                    // names must stay live. Seeded as a root for the same
-                    // reason: whether any module reads it is not known here.
+                    // A constant's body is materialized at every read, like a
+                    // struct field default above, and seeded a root for the same
+                    // reason: no module here knows whether it is read.
                     for constant in &impl_block.constants {
                         let key = constant.id;
                         graph.add_expr_edges(&constant.value, references, &key);

@@ -89,17 +89,16 @@ visibility modifier, re-exporting the imported names at that reach:
 - `internal use { x } from "M"` — `x` is re-exported package-internal.
 - plain `use { x } from "M"` — a file-private import; nothing is re-exported.
 
-A re-export's reach is the re-export keyword's, **not** the original item's
-visibility. So a `pub use` of an `internal` symbol publishes it: this is the
-canonical "internal implementation, public facade" pattern, where a package's
-entry module re-exports its internal submodules' items as the library API
-(`core:prelude` and `core:kiln` are built this way — their submodule
-definitions are `internal`, surfaced as `pub` through the facade's `pub use`).
-The only constraint is that the re-export must itself be a legal import: you can
-`pub use { x }` only a name visible at the re-export site (`x` is `pub`, or `x`
-is `internal` and `M` is in this package). `wado doc` and the public-API query
-view present such re-exports at the re-export's visibility, so a `pub use`-d
-`internal` item appears as part of the facade module's public API.
+A re-export cannot reach further than the item it names, so `x` above must be
+declared at least as widely as the re-export claims; `pub use` of an `internal`
+item is a compile error at the re-export. A re-export may still narrow, and the
+name it publishes is its own, so the facade pattern holds: a package's entry
+module gives its API one set of names without its consumers naming the files
+behind them (`core:prelude` and `core:kiln` are built this way).
+
+Were widening allowed, `internal` would guarantee nothing — any module could
+publish another's internal item, and a declaration's modifier would stop
+describing its own reach.
 
 ## Consequences
 
@@ -137,6 +136,9 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
       collection so the two never disagree (a same-package `internal` global is
       reachable through `use ns from "..."; ns::FOO` as well as a named import).
 - [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
+- [x] A re-export may narrow but not widen: the effective reach of a name is the
+      narrowest hop on its re-export chain, and a `use` claiming more than the
+      item grants is a compile error where it is written.
 - [x] Struct fields carry the ladder too: reading, setting, or binding one
       beyond its reach — field access, struct literal, or destructuring
       pattern — is a `PRIVATE_SYMBOL` compile error.
