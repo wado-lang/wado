@@ -6232,7 +6232,13 @@ fn group_second_token(
         }
         let mut single: List<String> = [];
         if alt.elements.len() == 1 && ctx.element_is_single_token(&alt.elements[0], &mut single) {
-            dedup_append_arr(&mut out, &ctx.first_of_elements_from(elements, group_index + 1));
+            let after = ctx.first_of_elements_from(elements, group_index + 1);
+            // Nothing follows the group, or what does cannot be enumerated —
+            // appending nothing would drop this alternative from the union.
+            if after.is_empty() {
+                return [];
+            }
+            dedup_append_arr(&mut out, &after);
             continue;
         }
         return [];

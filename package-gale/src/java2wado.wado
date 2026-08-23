@@ -206,10 +206,10 @@ pub fn grammar_has_superclass(grammar: &Grammar) -> bool {
 
 /// Whether java2wado can emit the grammar's non-superClass action bodies:
 /// `Wado` always, `Java` unless the grammar declares `superClass`. A
-/// superClass grammar's lexer `this.m()` calls lower to the base effect
-/// interface independently (see `superclass.wado` and `emit_actions` in
-/// codegen); its parser-side actions stay carved out here (parser superClass
-/// is not wired yet). Other languages stay discarded.
+/// superClass grammar's `this.m()` calls lower to the base effect interface
+/// independently, on either recognizer (see `superclass.wado` and
+/// `emit_actions` in codegen); the host code around one stays carved out here.
+/// Other languages stay discarded.
 pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
     return grammar.action_language matches { Wado }
         || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);

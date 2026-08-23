@@ -321,6 +321,7 @@ fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
         }
     }
     if let Some(sc) = parser_superclass_name(grammar) {
+        ctx.set_parser_superclass_declared();
         let ops = collect_parser_super_ops(grammar);
         // The parser interface declares no lifecycle hook, so a base nothing
         // calls has no operation to wire.

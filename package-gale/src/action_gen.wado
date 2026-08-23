@@ -28,7 +28,7 @@ use {
 use { is_parser_members, translate_action, translate_members, translate_predicate } from "./java2wado.wado";
 use { MemberDecls, MemberField } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { body_is_base_calls_only } from "./superclass.wado";
+use { body_is_base_calls_only, find_this_calls } from "./superclass.wado";
 use { escape_ident } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -500,6 +500,9 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
     if a.kind matches { Action } {
         return null;
     }
+    if body_names_unwired_base(&a.source.text, ctx) {
+        return null;
+    }
     if body_needs_no_translator(&a.source.text, ctx) {
         // Extracted to a standalone `pred_<id>(p)` fn (`gen_predicate_fns`), so
         // the dispatch calls it rather than inlining the condition.
@@ -534,6 +537,16 @@ fn is_gateable_alt_initial_predicate(a: &AltAction, ctx: &GenContext) -> bool {
 /// The name of a predicate's standalone fn (`pred_<action_id>`).
 fn pred_fn_name(id: i32) -> String {
     return `pred_${id}`;
+}
+
+/// Whether a Wado body names `this` with no parser base wired to receive it —
+/// the grammar declares none, or declares one Gale refused. Wado has no such
+/// receiver, so passing the body through would emit `this.m()` into the
+/// generated module. A wired base leaves none behind: the rewrite replaced
+/// every call site, and a Java body's `this` is java2wado's to resolve against
+/// `@parser::members`.
+fn body_names_unwired_base(text: &String, ctx: &GenContext) -> bool {
+    return ctx.action_language() matches { Wado } && !ctx.has_parser_superclass() && !find_this_calls(text).is_empty();
 }
 
 /// Whether a body is already Wado, so no host translator is involved: written
@@ -851,8 +864,23 @@ pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
 
 /// Translate an action (`is_predicate = false`, a statement list) or a predicate
 /// condition (`is_predicate = true`, an expression) to Wado, warning (loud) and
-/// returning `null` on failure. A ref-free Wado body passes through verbatim.
+/// returning `null` on failure. A ref-free Wado body passes through verbatim; a
+/// body naming an unwired base is dropped, under the refusal's diagnostic when
+/// there was one.
 fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
+    if body_names_unwired_base(&src.text, ctx) {
+        // A declared base was refused with a diagnostic naming the operation;
+        // an undeclared one has had none, so this is where the stray receiver
+        // is reported.
+        if !ctx.parser_superclass_declared() {
+            ctx.warn(
+                &action_owner(src.action_id, ctx),
+                DiagnosticKind::UnsupportedAction,
+                `action ${src.action_id} calls a method on 'this', but the grammar declares no parser superClass to receive it`,
+            );
+        }
+        return null;
+    }
     if body_needs_no_translator(&src.text, ctx) {
         return Option::Some(src.text);
     }

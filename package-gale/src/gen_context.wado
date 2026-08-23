@@ -207,6 +207,10 @@ pub struct GenContext {
     /// a generated module can carry both interfaces.
     parser_superclass_name: String,
     parser_superclass_ops: List<SuperOp>,
+    /// The grammar declares a parser base, wired or refused. A refusal already
+    /// reported the grammar-level cause, so a body left naming `this` is
+    /// dropped under it rather than reported again.
+    parser_superclass_declared: bool,
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
     /// left unhandled, so an action on a not-yet-supported code path (nested
@@ -277,6 +281,7 @@ impl GenContext {
             superclass_ops: [],
             parser_superclass_name: "",
             parser_superclass_ops: [],
+            parser_superclass_declared: false,
             action_seen: [],
             predicate_gated: [],
             predicate_fns: [],
@@ -575,6 +580,14 @@ impl GenContext {
 
     pub fn parser_superclass_ops(&self) -> &List<SuperOp> with stores[self] {
         return &self.parser_superclass_ops;
+    }
+
+    pub fn set_parser_superclass_declared(&mut self) {
+        self.parser_superclass_declared = true;
+    }
+
+    pub fn parser_superclass_declared(&self) -> bool {
+        return self.parser_superclass_declared;
     }
 
     /// Record that codegen handled this action id (emitted or diagnosed).

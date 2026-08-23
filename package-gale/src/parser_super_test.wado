@@ -83,7 +83,11 @@ r : A { this.p(\"of\") }? A ;
 A : 'a' ;
 ";
     assert unsupported_count(src) == 1, "the refusal is reported once";
-    assert !gen_source(src).contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    let out = gen_source(src);
+    assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    // The rewrite never ran, so the body still names `this` — which no
+    // translator has a receiver for, and Wado has no such name at all.
+    assert !out.contains("this."), out;
 }
 
 test "a parser base reached from an action body is refused" {
@@ -95,7 +99,23 @@ r : A { this.mark() } A ;
 A : 'a' ;
 ";
     assert unsupported_count(src) == 1, "the refusal is reported once";
-    assert !gen_source(src).contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    let out = gen_source(src);
+    assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    assert !out.contains("this."), out;
+}
+
+test "an alt-initial predicate on a refused base is not extracted either" {
+    // The gate path has its own passthrough (`pred_<id>`), so it needs the
+    // same guard as the inline one.
+    let src = &"grammar C;
+options { superClass = PBase; language = Wado; }
+r : { this.p(\"of\") }? A | B ;
+A : 'a' ;
+B : 'b' ;
+";
+    // The refusal, then the un-gated predicate the alt dispatch is left with.
+    assert unsupported_count(src) == 2, "both the refusal and the dropped gate are reported";
+    assert !gen_source(src).contains("this."), gen_source(src);
 }
 
 test "a lexer and a parser split each keep their own base" {
@@ -149,4 +169,16 @@ shr : GT { this.next_gt() }? GT ;
     let src = generate(&mut merged, &OPTS).source;
     assert src.contains("//   option superClass = LBase (lexer)"), src;
     assert src.contains("//   option superClass = PBase (parser)"), src;
+}
+
+test "a this-call with no parser base declared is reported, not emitted" {
+    // Wado has no `this`, so a body naming one has no receiver whatever the
+    // action language. Without a `superClass` nothing else reports it.
+    let src = &"grammar C;
+options { language = Wado; }
+r : A { this.p() }? A ;
+A : 'a' ;
+";
+    assert unsupported_count(src) == 1, "the stray receiver is reported";
+    assert !gen_source(src).contains("this."), gen_source(src);
 }
