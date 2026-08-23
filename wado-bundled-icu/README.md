@@ -29,7 +29,7 @@ It exercises every marshalling shape Wado needs: `string` in/out, `list<u32>`,
 ## Size
 
 Import-free component, **~3.7 MB** with all six interfaces. Because Rust LTO
-slices ICU by reachability, the WIT surface is the size knob. Per-interface
+slices ICU by reachability, the WIT surface is the size knob when rebuilding. Per-interface
 attribution (measured by building with interfaces removed):
 
 | interface          | added size | notes                                                        |

@@ -30,11 +30,11 @@ archive rather than a slicing run — most of what
 offers goes unused here.
 
 Feasibility is settled. The spike established that full ICU4X compiles to wasm
-cleanly, that Rust LTO tree-shakes it by reachability so the WIT surface is the
-size knob, and that a `no_std` build yields a zero-import self-contained
-component. The `bdp-spike/` follow-up established the separation this design
-rests on: a data-free component loading a sliced postcard blob at run time, with
-the blob supplied either by the host or by a component composed in.
+cleanly, that it tree-shakes by reachability, and that a `no_std` build yields a
+zero-import self-contained component. The `bdp-spike/` follow-up established the
+other half this design rests on: a capability can take its data from a postcard
+blob at run time instead of baking it, with the blob supplied by a component
+composed in.
 
 ## Decision
 
@@ -53,8 +53,6 @@ for the boundary rather than for users. Concretely, the facade is where ICU
 capabilities acquire Wado shapes: a collator that satisfies `Ord`, segmentation
 exposed through the iterator traits, `Display` and `Inspect` on locale
 identifiers.
-
-The user-visible module is deliberately not the unit of code splitting.
 
 ### Three API shapes, chosen by what the thing is
 
@@ -87,7 +85,7 @@ paid.
 A collator over a declared locale, plural rules, a formatter over a fixed
 skeleton, a segmenter: immutable, and configured only from what
 `with { locales: [...] }` and the program's types already bound. The
-implementation component interns these, so the set is finite by construction and
+implementation asset interns these, so the set is finite by construction and
 never needs freeing, and the handle keeps the value semantics the rest of
 `core:*` has — it sits in a global, and a closure captures it by copy, so
 `list.sort_by(|a, b| c.compare(a, b))` is written the obvious way.
@@ -212,7 +210,7 @@ not vary by locale, so it is baked into the asset and collation reads it there.
 
 ### A resource-free surface keyed by (locale, options)
 
-Every ICU object could be a pure function of a key, with the component memoizing
+Every ICU object could be a pure function of a key, with the asset memoizing
 internally: `compare(locale, options, a, b)` instead of a constructed collator.
 Attractive because it keeps the surface value-semantic and needs no resource
 support in the CM import path. Rejected on four grounds.
@@ -258,19 +256,19 @@ per-instance table.
 
 An earlier plan split the surface into `core:text`, `core:collation`, and
 `core:segmentation` so that unused capabilities linked nothing. Rejected: it
-conflated a code partition with a naming decision. Reachability already decides
-what a program carries, so the split bought nothing — while costing users a
-memorized map from capability to module, spreading the locale declaration across
-three `use` sites to be unioned, and freezing an internal boundary into the
-public API where moving it becomes a breaking change.
+made a naming decision out of what reachability already decides, so the split
+bought nothing — while costing users a memorized map from capability to module,
+spreading the locale declaration across three `use` sites to be unioned, and
+freezing an internal boundary into the public API where moving it becomes a
+breaking change.
 
-### Baking the data into each component
+### Baking all of the data
 
-ICU4X's compiled-data mode, which the original spike used. Simpler, and needs no
-data assets at all, but it cannot slice by locale — a program declaring two
-locales still carries every locale CLDR ships. Survivable for casing and
-normalization; for formatting it is 4.34 MB where the declared locales need
-47 KB.
+ICU4X's compiled-data mode throughout, which the original spike used. Simpler,
+and needs no data assets at all, but it cannot slice by locale — a program
+declaring two locales still carries every locale CLDR ships. Survivable for
+casing and normalization; for formatting it is 4.34 MB where the declared
+locales need 47 KB. So baking stays, for the data that does not vary by locale.
 
 ### Splitting the asset into components
 
@@ -295,9 +293,9 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   constructed, and the one-shot helpers beside it are visibly one-shot.
 - Toolchain size grows by the bundled ICU package, in exchange for a
   zero-dependency `core:` experience.
-- Runtime-loaded data loses zero-copy-from-static and adds a fixed per-capability
-  deserialization cost. For a single capability this is roughly size-neutral
-  against baking; the win is the locale axis, which baking cannot reach at all.
+- Only locale-bearing data is runtime-loaded, and it pays for that in
+  zero-copy-from-static and a deserialization cost per capability. Baking is
+  otherwise preferred, being what the collection can reach.
 - No ICU code runs at build time, so the build has nothing to sandbox, cache by
   content, or keep deterministic beyond reading its own archive.
 - The CM import blocker splits. The compile-time-bounded surface needs only a
@@ -371,12 +369,12 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 - [ ] Promote the spike's ICU component into a first-party prebuilt artifact,
       shipped relocatable, with the locale-bearing capabilities moved onto a
       buffer provider and the rest left baked.
-- [ ] Write the facade over them: re-exports, the Wado-native shapes (`Ord`,
+- [ ] Write the facade over it: re-exports, the Wado-native shapes (`Ord`,
       iterators, `Display`), and the one-shot helpers.
-- [ ] Build the data image — per-(component, locale) zlib entries plus index,
+- [ ] Build the data image — per-(capability, locale) zlib entries plus index,
       deduplicated against the fallback parent — and bundle it with the
       toolchain.
-- [ ] Feed several blobs to one component through ICU4X's fork provider.
+- [ ] Feed several blobs to the asset through ICU4X's fork provider.
 
 ## References
 
