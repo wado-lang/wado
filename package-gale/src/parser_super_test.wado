@@ -85,8 +85,7 @@ A : 'a' ;
     assert unsupported_count(src) == 1, "the refusal is reported once";
     let out = gen_source(src);
     assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
-    // The rewrite never ran, so the body still names `this` — which no
-    // translator has a receiver for, and Wado has no such name at all.
+    // The rewrite never ran, so the body still names `this`.
     assert !out.contains("this."), out;
 }
 
@@ -172,8 +171,7 @@ shr : GT { this.next_gt() }? GT ;
 }
 
 test "a this-call with no parser base declared is reported, not emitted" {
-    // Wado has no `this`, so a body naming one has no receiver whatever the
-    // action language. Without a `superClass` nothing else reports it.
+    // Nothing else reports it: there is no base to refuse.
     let src = &"grammar C;
 options { language = Wado; }
 r : A { this.p() }? A ;

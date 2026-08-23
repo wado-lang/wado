@@ -184,10 +184,8 @@ fn split_top_level_commas(text: &String) -> List<String> {
 }
 
 /// Declare the parser's base effect on a generated parse function. Every one
-/// carries it: a `{this.m()}?` predicate can sit in any rule and an effect
-/// propagates to each caller, so the whole recognizer runs under the base the
-/// way an ANTLR recognizer *is* its base. Scan functions are exempt — they
-/// evaluate no action. A no-op without a parser `superClass`.
+/// carries it — a `{this.m()}?` predicate can sit in any rule, the way an ANTLR
+/// recognizer *is* its base. Scan functions are exempt: they evaluate no action.
 pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &GenContext) {
     if ctx.has_parser_superclass() {
         f.add_effect(ctx.parser_superclass_name());
@@ -539,23 +537,17 @@ fn pred_fn_name(id: i32) -> String {
     return `pred_${id}`;
 }
 
-/// Whether a Wado body names `this` with no parser base wired to receive it —
-/// the grammar declares none, or declares one Gale refused. Wado has no such
-/// receiver, so passing the body through would emit `this.m()` into the
-/// generated module. A wired base leaves none behind: the rewrite replaced
-/// every call site, and a Java body's `this` is java2wado's to resolve against
-/// `@parser::members`.
+/// Whether a Wado body names `this` with no parser base wired to receive it:
+/// the grammar declares none, or declares one Gale refused, and Wado has no
+/// such name. A Java body's `this` is java2wado's, over `@parser::members`.
 fn body_names_unwired_base(text: &String, ctx: &GenContext) -> bool {
     return ctx.action_language() matches { Wado } && !ctx.has_parser_superclass() && !find_this_calls(text).is_empty();
 }
 
 /// Whether a body is already Wado, so no host translator is involved: written
 /// in it (`language = Wado`), or turned into ambient base calls by the
-/// superClass rewrite — which is what runs `{this.m()}?` under a host language
-/// java2wado carves out. Such a body is also context-free (it reads only `p`
-/// and constants), so a gateable alt-initial predicate extracts to a standalone
-/// `pred_<id>(p)` fn; a `$`-reference needs the shared resolver either way, and
-/// stays folded into the dispatch where `vals` is in scope.
+/// superClass rewrite. Such a body reads only `p` and constants, so a gateable
+/// alt-initial predicate extracts to a standalone `pred_<id>(p)` fn.
 fn body_needs_no_translator(text: &String, ctx: &GenContext) -> bool {
     if find_attr_refs(text).len() != 0 {
         return false;
@@ -869,9 +861,7 @@ pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
 /// there was one.
 fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
     if body_names_unwired_base(&src.text, ctx) {
-        // A declared base was refused with a diagnostic naming the operation;
-        // an undeclared one has had none, so this is where the stray receiver
-        // is reported.
+        // A refused base already reported the cause; an undeclared one has not.
         if !ctx.parser_superclass_declared() {
             ctx.warn(
                 &action_owner(src.action_id, ctx),

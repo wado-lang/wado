@@ -617,12 +617,10 @@ relevant sites.
     `expression (shl | shr) expression` puts a two-token rule inside the group
     (`shr : GT GT`), and answering with the operand's FIRST made every
     `a > b` take the shift alternative, whose scan then failed and broke the
-    loop — so no Rust `<` / `>` comparison parsed at all. The two K-prefix
-    walks halt at different shapes (the deep one sees through a single-alt
-    rule, the shallow one reads a multi-alt rule's FIRST), so both are tried;
-    a shape neither measures falls back to the candidate's own suffix scan,
-    which lets the next candidate try instead of committing to a miss.
-    Fixture `tests/grammars/lr_overlap_multi_token.g4`.
+    loop — so no Rust `<` / `>` comparison parsed at all. A shape neither
+    K-prefix walk measures falls back to the candidate's own suffix scan, which
+    lets the next candidate try instead of committing to a miss. Fixtures
+    `lr_overlap_multi_token.g4`, `lr_overlap_opaque_op.g4`.
 
 Termination is a checked property, not only inline conservatism:
 `check_left_recursion` (grammar-check phase) rejects hidden (`a : x? a`, a

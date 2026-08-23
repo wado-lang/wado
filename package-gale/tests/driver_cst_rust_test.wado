@@ -47,10 +47,8 @@ impl RustLexerBase for RustBase {
 }
 
 // The parser base, likewise a port. The lexer emits `<` and `>` one character
-// at a time so nested generics close cleanly; `shl` / `shr` reassemble a shift
-// operator only when the pair is adjacent in the source, which is what
-// `NextLT` / `NextGT` answer. Both `<` and `>` are one character wide, so the
-// gap is the difference between the two start offsets.
+// at a time so nested generics close cleanly, so `shl` / `shr` reassemble a
+// shift only for a pair one start offset apart — what `NextLT` / `NextGT` ask.
 struct RustPBase {
 }
 

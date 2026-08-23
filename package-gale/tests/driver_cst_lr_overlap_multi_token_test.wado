@@ -1,8 +1,6 @@
 //! An overlapping LR suffix whose shared first token is followed by a
-//! *multi-token* rule reference: `e (shl | shr) e` and `e cmp e` both start at
-//! `>`, and only the second token tells a shift from a comparison. Reading the
-//! element after the group instead would answer with `FIRST(e)`, which every
-//! comparison operand matches — the shape Rust's `shr : GT {NextGT}? GT` has.
+//! *multi-token* rule reference — Rust's `shr : GT {NextGT}? GT` shape. Only
+//! the second token tells a shift from a comparison.
 
 use lr from "./grammars/lr_overlap_multi_token.g4"
     with {

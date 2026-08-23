@@ -6175,16 +6175,10 @@ fn gen_general_group_scan_dispatch(
     w.end();
 }
 
-/// The token kinds that can stand one position after `shared_token` when this
-/// LR alternative's suffix starts with it — the discriminator an overlap
-/// group's sub-dispatch branches on. Empty when the walk cannot name them,
-/// which the caller must read as "no discriminator", never as "anything".
-///
-/// The element carrying the shared token decides how far offset 1 is: reading
-/// the *next* element is right only when that one matches exactly one token.
-/// Rust's `expression (shl | shr) expression` puts a two-token rule inside the
-/// group (`shr : GT GT`), so the answer there is `GT`, not the operand's FIRST
-/// — which every comparison operand matches.
+/// The token kinds that can stand one position after `shared_token` — the
+/// discriminator an overlap group's sub-dispatch branches on. Empty means "no
+/// discriminator", never "anything". Measured on the element carrying the shared
+/// token, not the one after it (soundness invariant 11).
 fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
     for let mut i = 1; i < elements.len(); i += 1 {
         let elem = &elements[i];
@@ -6247,11 +6241,8 @@ fn group_second_token(
 }
 
 /// The offset-1 set of `elements[start..]`, or empty when neither K-prefix walk
-/// reaches that depth. Both are sound and they halt at different shapes — the
-/// deep one sees through a single-alternative rule (`shr : GT GT`) but stops at
-/// a multi-alternative one, the shallow one reads that rule's FIRST but stops
-/// at any element wider than a token — so a shape only one can measure is still
-/// measured.
+/// reaches that depth. Both are sound and halt at different shapes, so a shape
+/// only one can measure is still measured.
 fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContext) -> List<String> {
     let mut visiting: List<String> = [];
     let [deep, _] = ctx.deep_position_first_sets_from(elements, start, 2, &mut visiting);
@@ -6266,11 +6257,9 @@ fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContex
 }
 
 /// The sub-dispatch condition separating one candidate of a shared-first-token
-/// group from the rest. A second-token check when the walk names one, else the
-/// candidate's own suffix scan — which decides the same way the non-LR overlap
-/// tournament does, and unlike a vacuous condition lets the next candidate try
-/// instead of breaking the loop. The branch re-runs that scan for its own
-/// guard; both calls are pure in `(kinds, pos, follow)`.
+/// group from the rest: a second-token check when the walk names one, else the
+/// candidate's own suffix scan, which is pure in `(kinds, pos, follow)` and,
+/// unlike a vacuous condition, lets the next candidate try.
 fn lr_second_token_cond(
     shared_token: &String,
     elements: &List<Element>,

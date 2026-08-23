@@ -6,13 +6,10 @@
 //! `impl Foo for Base` handler and installs it with `with Foo => &mut base do`.
 //! See `action.md`, "SuperClass — an effect interface".
 //!
-//! This module is the language-independent core: extract each recognizer's base
-//! name, scan action / predicate bodies for `this.<method>` call sites,
-//! synthesize the effect interface, and rewrite each call site to
-//! `Foo::<method>()`. Threading the `with Foo` effect onto the op-reachable
-//! generated fns lives in codegen. Lexer and parser each have their own base
-//! and their own call form: the lexer's operations read a `LexerView` over the
-//! match window, the parser's read the recognizer.
+//! This module is the language-independent core: base name, call-site scan,
+//! interface synthesis, call rewrite. Codegen threads the effect. Each
+//! recognizer has its own base — a lexer op reads a `LexerView`, a parser op
+//! the recognizer.
 
 use {
     Alternative,

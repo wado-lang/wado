@@ -1,8 +1,6 @@
 //! SuperClass as an effect interface (parser). A `{this.next_gt()}?` predicate
-//! in a parser rule lowers to the ambient op `PsBase::next_gt(p)`; the base
-//! reads the recognizer through the same action-context API a translated action
-//! uses, and every parse entry carries `with PsBase`, so omitting the handler is
-//! a compile error rather than a silently predicate-free parser.
+//! lowers to the ambient op `PsBase::next_gt(p)`, and every parse entry carries
+//! `with PsBase`, so omitting the handler is a compile error.
 
 use prs from "./grammars/wado_prs_super.g4"
     with {
@@ -56,11 +54,9 @@ test "a gap between the two > fails the predicate" {
     assert !r.ok(), "a separated pair is not a shift";
 }
 
-// The other emit path: two interchangeable alternatives, so the predicate
-// selects at the dispatch instead of guarding inside one. Both alts match the
-// same `ID`, so the tree cannot say which was taken — what it pins is that the
-// gate is reached (the effect threads through the dispatch) and that either
-// polarity still parses.
+// The other emit path: the predicate selects at the dispatch instead of
+// guarding inside one alternative. Both alts match the same `ID`, so the tree
+// cannot say which was taken — what this pins is that the gate is reached.
 test "an alt-initial predicate gates the dispatch" {
     assert pick(&"a", true) == [true, 1], `${pick(&"a", true):?}`;
     assert pick(&"a", false) == [true, 1], `${pick(&"a", false):?}`;

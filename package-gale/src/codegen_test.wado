@@ -934,8 +934,6 @@ test "metadata comment lists grammar-level options" {
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
     assert str_contains(&output, &"//   option language = Python");
-    // `superClass` is per recognizer, so it is read from the resolved slot and
-    // not repeated from `options`.
     assert str_contains(&output, &"//   option superClass = BaseParser (parser)");
     assert !str_contains(&output, &"//   option superClass = my.pkg.BaseParser");
     assert str_contains(&output, &"//   option tokenVocab = TestLexer");
