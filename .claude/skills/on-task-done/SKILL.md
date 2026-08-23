@@ -1,13 +1,16 @@
 ---
 name: on-task-done
-description: "Task-completion flow: self-review the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 70+ min) and commit its generated changes. Invoke ONLY when the user asks for it by name or explicitly asks to run the completion flow — never on your own initiative, and not because a task looks finished."
+description: "Task-completion flow: `/code-review --fix` and `/cleanup` over the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 70+ min) and commit its generated changes. Invoke ONLY when the user asks for it by name or explicitly asks to run the completion flow — never on your own initiative, and not because a task looks finished."
 ---
 
 # Overview
 
-When you finish a task, you'd better reviewing the branch by yourself.
+First, review the branch yourself, with:
 
-Also, update docs if applicable:
+1. `/code-review --fix`
+2. `/cleanup`
+
+Then update docs if applicable:
 
 - docs/spec.md
 - docs/cheatsheet.md
