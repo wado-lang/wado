@@ -675,6 +675,35 @@ export fn run() {
 }
 
 #[test]
+fn stdlib_identity_attribute_is_checked_in_an_imported_module_too() {
+    // Only the entry's identity is consulted, but a file does not become
+    // well-formed by being imported rather than compiled.
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("dep.wado"),
+        "#![stdlib]\npub fn helper() -> i32 { return 1 }\n",
+    )
+    .expect("write dep");
+    let entry = "use { helper } from \"./dep.wado\";\ntest \"x\" { assert helper() == 1; }\n";
+
+    let options = wado_compiler::CompilerOptions {
+        target_world: Some("test".to_string()),
+        ..Default::default()
+    };
+    let Err(err) = crate::common::compile_source_with_compiler_options(
+        &dir.path().join("main_test.wado"),
+        entry,
+        options,
+    ) else {
+        panic!("an imported module's malformed `#![stdlib]` must be rejected");
+    };
+    assert!(
+        err.to_string().contains("#![stdlib] takes the name of"),
+        "unexpected message: {err}"
+    );
+}
+
+#[test]
 fn stdlib_identity_attribute_naming_no_bundled_module_is_an_error() {
     // `#![stdlib("…")]` pins the entry's module identity; any file can write
     // it, so an unregistered name is a diagnostic, never a panic.

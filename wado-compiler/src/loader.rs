@@ -174,14 +174,16 @@ impl std::fmt::Display for LoadError {
 /// diagnostic use. `None` is the argument-less form, which names nothing to
 /// quote back.
 fn stdlib_identity_message(path: Option<&str>) -> String {
-    let lead = match path {
-        Some(path) => format!("#![stdlib({path:?})] does not name a bundled stdlib module"),
-        None => "#![stdlib] names no bundled stdlib module".to_string(),
-    };
-    format!(
-        "{lead}; the attribute declares the identity of a module bundled in the \
-         compiler and is not for use outside it"
-    )
+    match path {
+        Some(path) => format!(
+            "#![stdlib({path:?})] does not name a bundled stdlib module; the attribute \
+             declares the identity of a module bundled in the compiler and is not for \
+             use outside it"
+        ),
+        None => "#![stdlib] takes the name of a bundled stdlib module, as \
+                 `#![stdlib(\"core:cli\")]`"
+            .to_string(),
+    }
 }
 
 impl std::error::Error for LoadError {}
@@ -980,39 +982,51 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     ast
 }
 
-/// Resolve a `#![stdlib("…")]` declaration on `module` to a canonical
-/// `ModuleSource`, `Ok(None)` when the attribute is absent.
+/// The bundled-stdlib identity `module` declares, `Ok(None)` when it declares
+/// none. `file` is the module's path, for the diagnostic.
 ///
-/// A name no bundled module answers to is rejected rather than degraded to
-/// `EntryPoint`: the attribute pins the entry's identity, and the rest of the
-/// compile resolves against whatever it says. Any file can write it, so the
-/// rejection is a diagnostic, not a panic — `file` is the entry's path, which
-/// carries the attribute.
+/// The attribute names one of the modules bundled in the compiler, and every
+/// spelling that names nothing — an omitted name, a name no bundled module
+/// answers to — is an error wherever it is written. Only the entry's identity
+/// is consulted, but a file does not become well-formed by being imported
+/// rather than compiled, so [`ModuleLoader::check_stdlib_identities`] holds
+/// every loaded module to the same rule.
+fn stdlib_identity_of<'a>(module: &'a Module, file: &str) -> Result<Option<&'a str>, LoadError> {
+    let Some(attribute) = module.stdlib_identity_attribute() else {
+        return Ok(None);
+    };
+    let path = module.stdlib_identity();
+    match path.filter(|p| stdlib::get_stdlib_module(p).is_some()) {
+        Some(path) => Ok(Some(path)),
+        None => Err(LoadError::StdlibIdentity {
+            path: path.map(str::to_string),
+            file: file.to_string(),
+            line: attribute.span.line,
+            column: attribute.span.column,
+        }),
+    }
+}
+
+/// Resolve `module`'s `#![stdlib("…")]` declaration to a canonical
+/// `ModuleSource`, `Ok(None)` when it declares none.
+///
+/// The identity pins the entry's `ModuleSource`, which the rest of the compile
+/// resolves against — hence [`stdlib_identity_of`]'s rejection rather than a
+/// silent degrade to `EntryPoint`.
 fn parse_stdlib_identity_attribute(
     interner: &mut ModuleSourceInterner,
     module: &Module,
     file: &str,
 ) -> Result<Option<ModuleSource>, LoadError> {
-    let Some(attribute) = module.stdlib_identity_attribute() else {
+    let Some(path) = stdlib_identity_of(module, file)? else {
         return Ok(None);
-    };
-    let path = module.stdlib_identity();
-    let reject = || LoadError::StdlibIdentity {
-        path: path.map(str::to_string),
-        file: file.to_string(),
-        line: attribute.span.line,
-        column: attribute.span.column,
-    };
-
-    let Some(path) = path.filter(|p| stdlib::get_stdlib_module(p).is_some()) else {
-        return Err(reject());
     };
     if let Some(name) = path.strip_prefix("core:") {
         Ok(Some(interner.core(name)))
     } else if let Some(interface) = path.strip_prefix("wasi:") {
         Ok(Some(interner.wasi(interface)))
     } else {
-        Err(reject())
+        unreachable!("a registered stdlib path is `core:`- or `wasi:`-prefixed")
     }
 }
 
@@ -1074,6 +1088,17 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("does not name a bundled stdlib module"),
+            "unexpected message: {err}"
+        );
+    }
+
+    #[test]
+    fn stdlib_identity_attribute_without_a_name_is_an_error() {
+        let module = parse_test_module("#![no_prelude]\n#![stdlib]\n");
+        let err = stdlib_identity_of(&module, "nameless.wado")
+            .expect_err("an omitted name must be rejected");
+        assert!(
+            err.to_string().contains("#![stdlib] takes the name of"),
             "unexpected message: {err}"
         );
     }
@@ -1432,6 +1457,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
         }
 
+        self.check_stdlib_identities()?;
+
         // Collect and load files referenced by #include_str / #include_bytes
         let included_files = {
             let _span = self.logger.span("load/included_files");
@@ -1449,6 +1476,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             invocations: self.invocations,
             interner: self.interner,
         })
+    }
+
+    /// Hold every loaded module's `#![stdlib("…")]` declaration to the rule
+    /// [`stdlib_identity_of`] states. The entry's is resolved before its
+    /// imports load; this reaches the rest.
+    fn check_stdlib_identities(&self) -> Result<(), LoadError> {
+        for (module_source, module) in &self.loaded {
+            stdlib_identity_of(module, &module_source.source_path())?;
+        }
+        Ok(())
     }
 
     /// Collect import paths from a module's use declarations.
