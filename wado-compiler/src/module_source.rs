@@ -152,14 +152,31 @@ impl ModuleSourceInterner {
     /// module in one package rather than forking into two.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         let path = self.intern(path);
-        let pkg = if let Some(existing) = self.package_roots.get(&path) {
-            existing.clone()
-        } else {
-            let pkg = self.intern(pkg);
-            self.package_roots.insert(path.clone(), pkg.clone());
-            pkg
-        };
+        let pkg = self.elect_package_root(&path, pkg);
         ModuleSource::Dependency { pkg, path }
+    }
+
+    /// The package root for `path`, memoized so `pkg` is a function of the
+    /// path rather than of load order.
+    ///
+    /// A module can be reached under more than one candidate root — its own
+    /// package's, and a sibling package's when that sibling imports it
+    /// relatively. The candidate sharing the longer directory prefix with the
+    /// module wins, which is the one whose tree actually contains it, so the
+    /// answer does not depend on which `use` the loader walked first.
+    fn elect_package_root(&mut self, path: &InternedStr, candidate: &str) -> InternedStr {
+        let better = match self.package_roots.get(path) {
+            None => true,
+            Some(current) => {
+                shared_dir_len(path, candidate) > shared_dir_len(path, current.as_str())
+            }
+        };
+        if better {
+            let interned = self.intern(candidate);
+            self.package_roots.insert(path.clone(), interned.clone());
+            return interned;
+        }
+        self.package_roots[path].clone()
     }
 
     /// Resolve a bare dependency name to its entry module `ModuleSource`, if
@@ -211,13 +228,7 @@ impl ModuleSourceInterner {
     /// root a URL is seen under wins; see [`Self::dependency_module`].
     pub fn remote_module(&mut self, pkg: &str, url: &str) -> ModuleSource {
         let url = self.intern(url);
-        let pkg = if let Some(existing) = self.package_roots.get(&url) {
-            existing.clone()
-        } else {
-            let pkg = self.intern(pkg);
-            self.package_roots.insert(url.clone(), pkg.clone());
-            pkg
-        };
+        let pkg = self.elect_package_root(&url, pkg);
         ModuleSource::Remote { pkg, url }
     }
     pub fn redirected(&mut self, uri: &str) -> ModuleSource {
@@ -696,6 +707,22 @@ impl ModuleSource {
             other => other.to_string(),
         }
     }
+}
+
+/// How many leading directory components `path` and `root` share. Comparing
+/// whole components keeps `deps/xpkg2/` from counting as a prefix of
+/// `deps/xpkg/`.
+fn shared_dir_len(path: &str, root: &str) -> usize {
+    let dirs = |s: &str| -> Vec<String> {
+        let mut parts: Vec<String> = s.split('/').map(str::to_string).collect();
+        parts.pop();
+        parts
+    };
+    dirs(path)
+        .iter()
+        .zip(dirs(root).iter())
+        .take_while(|(a, b)| a == b)
+        .count()
 }
 
 /// The portable base name of an entry-point filename: its path relative to

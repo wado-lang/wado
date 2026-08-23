@@ -2928,6 +2928,8 @@ pub enum Pattern {
 
 #[derive(Debug, Clone)]
 pub struct StructPatternField {
+    /// The node's own id, whose [`AstIdSpace`] names the module that wrote it.
+    pub id: AstId,
     pub field_name: String,
     pub pattern: Pattern,
     pub span: Span,

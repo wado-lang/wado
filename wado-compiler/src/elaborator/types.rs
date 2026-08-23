@@ -1410,11 +1410,15 @@ impl TypeError {
                          package and cannot be accessed from another package; mark it `pub` to \
                          expose it across packages"
                     ),
-                    crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
+                    crate::ast::Visibility::Private => format!(
                         "field `{field_name}` of struct `{struct_name}` is private to its defining \
                          file; mark it `internal` (same package) or `pub` (cross package) to widen \
                          access"
                     ),
+                    // `pub` reaches everywhere, so it never fails the check.
+                    crate::ast::Visibility::Public => {
+                        unreachable!("a `pub` field is reachable from every module")
+                    }
                 },
                 *span,
             ),

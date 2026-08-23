@@ -2692,9 +2692,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (inferred[..split].to_vec(), inferred[split..].to_vec())
     }
 
-    /// The canonical signature of the receiver-less method `method_name` on
-    /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
-    /// hold a name split out of a mangled spelling, so there is no site to take.
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call,
     /// the spelling an associated function is reached by.
     pub(super) fn check_static_call_visibility(
@@ -2739,6 +2736,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find(|e| e.name == method_name)
     }
 
+    /// The canonical signature of the receiver-less method `method_name` on
+    /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
+    /// hold a name split out of a mangled spelling, so there is no site to take.
     pub(super) fn static_method_sig(
         &self,
         struct_name: &str,

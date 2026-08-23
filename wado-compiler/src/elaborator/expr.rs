@@ -1398,7 +1398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MemberOwner::Written(Some(ty)) => self.get_type_name(ty),
             MemberOwner::Written(None) => member_name.to_string(),
         };
-        let _ = self.emit(TypeError::PrivateMemberAccess {
+        let _ = self.emit_in(&vantage, TypeError::PrivateMemberAccess {
             type_name,
             member_name: member_name.to_string(),
             member_kind,
@@ -1443,7 +1443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
-                    let _ = self.emit(TypeError::PrivateFieldAccess {
+let _ = self.emit(TypeError::PrivateFieldAccess {
                         struct_name,
                         field_name: field_name.to_string(),
                         visibility: *vis,
@@ -3786,7 +3786,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let set_explicitly = provided_names.contains(fname);
                 let read_via_spread = !struct_lit.spreads.is_empty() && !set_explicitly;
                 if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
-                    let _ = self.emit(TypeError::PrivateFieldAccess {
+let _ = self.emit(TypeError::PrivateFieldAccess {
                         struct_name: display_name.clone(),
                         field_name: fname.clone(),
                         visibility: *vis,
@@ -4092,7 +4092,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             if !vis.reachable_from(same_package) {
-                let _ = self.emit(TypeError::PrivateFieldAccess {
+let _ = self.emit(TypeError::PrivateFieldAccess {
                     struct_name: self.tysys.type_id_to_string(base_types[base_idx]),
                     field_name: name.clone(),
                     visibility: *vis,

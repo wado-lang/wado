@@ -231,6 +231,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.logger.error_in(&self.current_module_source, err)
     }
 
+    /// [`Self::emit`] for a diagnostic whose span belongs to `module` — a
+    /// foreign default expression or associated-constant body — so the file it
+    /// is reported against is the one the span indexes.
+    pub(super) fn emit_in(
+        &self,
+        module: &ModuleSource,
+        err: impl Into<crate::compiler_host::Diagnostic>,
+    ) -> Result<(), crate::logger::Bail> {
+        self.logger.error_in(module, err)
+    }
+
     /// The declaration an item node declares.
     ///
     /// Every item the collect pass walks was declared into the table, so a miss
@@ -2035,6 +2046,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     concrete_owner,
                 },
             );
+        }
+
+        // An associated constant's body belongs to this module, so its facts
+        // must be recorded here. Reify reads them under the declaring module's
+        // perspective, and a `pub const` no module of its own uses would
+        // otherwise reach codegen with nothing resolved.
+        let mut scope = scope;
+        for constant in &impl_block.constants {
+            let declared = scope.resolve_type(&constant.ty);
+            let mut ctx = crate::elaborator::types::FunctionContext::new(
+                declared,
+                crate::name::global_name(&scope.current_module_source, &constant.name),
+            );
+            scope.resolve_expr(&constant.value, &mut ctx, Some(declared));
         }
 
         // Collect explicitly provided method names

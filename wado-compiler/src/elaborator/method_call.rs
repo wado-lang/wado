@@ -700,8 +700,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     let expected_type = expected_param_types[i];
                     let mut default_expr = default_ast.clone();
+                    let vantage = Some((callee_module.clone(), default_expr.id().space()));
                     default_expr.substitute_idents(&subs);
-                    let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                    let resolved = s.with_foreign_vantage(vantage, |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    });
                     args.push(placeholder(resolved, default_expr.span()));
                     if let Some(name) = param_names.get(i) {
                         subs.insert(name.clone(), default_expr);
@@ -1482,6 +1485,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .unwrap_or_default();
+        // The module those defaults were written in, so their bodies answer to
+        // it rather than to this call site.
+        let static_method_module = struct_name_for_lookup.as_ref().and_then(|name| {
+            self.static_method_entry(name, &static_call.method)
+                .map(|e| e.module.clone())
+        });
 
         // For generic variant constructors (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
@@ -1586,8 +1595,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let expected_type = param_types[i];
                 let mut default_expr = default_ast.clone();
+                let vantage = static_method_module
+                    .clone()
+                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
-                let resolved = self.resolve_expr(&default_expr, ctx, Some(expected_type));
+                let resolved = self.with_default_scope_module(static_method_module.clone(), |s| {
+                    s.with_foreign_vantage(vantage, |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    })
+                });
                 args.push(placeholder(resolved, default_expr.span()));
                 subs.insert(pname.clone(), default_expr);
             }

@@ -3042,6 +3042,7 @@ impl Parser {
                     };
 
                     fields.push(StructPatternField {
+                        id: self.alloc_ast_id(),
                         field_name,
                         pattern,
                         span: field_span,

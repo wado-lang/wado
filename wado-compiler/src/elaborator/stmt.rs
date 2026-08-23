@@ -1180,7 +1180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.check_field_visibility(
                             type_id,
                             &field.field_name,
-                            None,
+                            Some(field.id),
                             field.span,
                         );
                     }
@@ -1828,7 +1828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.check_field_visibility(
                             scrutinee_type,
                             &field.field_name,
-                            None,
+                            Some(field.id),
                             field.span,
                         );
                     }
