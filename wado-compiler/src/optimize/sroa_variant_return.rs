@@ -2062,8 +2062,10 @@ fn rewrite_call_sites(
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
-                func.locals[local as usize].type_id = tuple_type;
-                retype_let(&mut body, local, tuple_type);
+                let slot = &mut func.locals[local as usize].type_id;
+                changed |= *slot != tuple_type;
+                *slot = tuple_type;
+                changed |= retype_let(&mut body, local, tuple_type);
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root;
@@ -2074,8 +2076,7 @@ fn rewrite_call_sites(
                 rebind: &rebind,
                 span,
             };
-            rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
-            changed = true;
+            changed |= rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
         }
         func.body = Some(body);
         if changed {
@@ -2107,7 +2108,8 @@ fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candida
 /// Retype the binding statement and every read of the bound temp. The local's
 /// own entry is retyped by the caller; a `Let` and each `Local` node carry
 /// their own copy.
-fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) {
+fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
+    let mut changed = false;
     for stmt in body.stmts.values_mut() {
         if let StmtKind::Let {
             local_index,
@@ -2115,17 +2117,22 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) {
             ..
         } = &mut stmt.kind
             && *local_index == local
+            && *type_id != tuple_type
         {
             *type_id = tuple_type;
+            changed = true;
         }
     }
     for node in body.exprs.values_mut() {
         if let ExprKind::Local { index, .. } = &node.kind
             && *index == local
+            && node.type_id != tuple_type
         {
             node.type_id = tuple_type;
+            changed = true;
         }
     }
+    changed
 }
 
 /// Read-only context for the call-site rewrite over one body.
@@ -2256,7 +2263,8 @@ fn collect_call_scrutinees(
 }
 
 /// Rewrite every destructuring read of a tuple-bound temp.
-fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
+fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
+    let mut changed = false;
     if let NodeRef::Expr(e) = node {
         match body.exprs[e].kind.clone() {
             ExprKind::VariantTag { expr } => {
@@ -2265,7 +2273,7 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     let kind = tag_read(body, local, tuple_type, cx);
                     body.exprs[e].kind = kind;
                     body.exprs[e].type_id = TypeTable::I32;
-                    return;
+                    return true;
                 }
             }
             ExprKind::VariantTest {
@@ -2290,7 +2298,7 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                         right: k,
                     };
                     body.exprs[e].type_id = TypeTable::BOOL;
-                    return;
+                    return true;
                 }
             }
             ExprKind::VariantPayload {
@@ -2301,19 +2309,20 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     let read = slot_read(body, local, &layout, case_index, cx);
                     body.exprs[e].kind = body.exprs[read].kind.clone();
                     body.exprs[e].type_id = body.exprs[read].type_id;
-                    return;
+                    return true;
                 }
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if let Some(local) = temp_local(body, scrut, cx.bound) {
                     let layout = cx.layout_of(local).clone();
                     rewrite_match_on_temp(body, e, local, &layout, arms, cx);
+                    changed = true;
                 }
             }
             // The destructure itself: leaving it alone keeps a rebuild from
             // nesting under the field reads it planted, which it cannot tell apart.
             ExprKind::FieldAccess { expr, .. } if temp_local(body, expr, cx.bound).is_some() => {
-                return;
+                return false;
             }
             // A read of the temp wants the variant whole; the tuple holds it.
             ExprKind::Local { index, .. } if cx.bound.contains_key(&index) => {
@@ -2323,7 +2332,7 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                 let rebuilt = rebuild_variant(body, index, &name, variant_type, &layout, cx.span);
                 body.exprs[e].kind = body.exprs[rebuilt].kind.clone();
                 body.exprs[e].type_id = variant_type;
-                return;
+                return true;
             }
             _ => {}
         }
@@ -2331,8 +2340,9 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
-        rewrite_temp_uses(body, c, cx);
+        changed |= rewrite_temp_uses(body, c, cx);
     }
+    changed
 }
 
 /// Whether every mention of `local` is one the rewrite lowers: a destructure, or
