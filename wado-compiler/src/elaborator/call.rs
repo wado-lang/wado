@@ -14,6 +14,7 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::scope::Scope;
 use super::sem::decls::FunctionSig;
+use super::trait_env::ImplTargetKey;
 use super::sig::MethodSig;
 use super::trait_env;
 use super::types::{FunctionContext, TypeError};
@@ -2701,15 +2702,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        let (_, _, decl_id, _) = trait_env
+        if let Some((_, _, decl_id, _)) = trait_env
             .resource_static_method_index
-            .get(&key)?
-            .iter()
-            .find(|(name, ..)| name == method_name)?;
-        self.tysys
-            .signatures
-            .resource_method_sig(*decl_id, method_name)
-            .cloned()
+            .get(&key)
+            .and_then(|entries| entries.iter().find(|(name, ..)| name == method_name))
+        {
+            return self
+                .tysys
+                .signatures
+                .resource_method_sig(*decl_id, method_name)
+                .cloned();
+        }
+        // `Parent::method(&child)` is how a colliding name is disambiguated, so
+        // the qualified form reaches an inherited method too. Only an instance
+        // method: a static belongs to its declaring resource alone.
+        let ImplTargetKey::Decl(def) = key else {
+            return None;
+        };
+        let sig = self.resource_chain_method_sig(def, method_name)?;
+        (sig.self_kind != ast::SelfKind::None).then_some(sig)
+    }
+
+    /// The signature of `method_name` on `def` or on the nearest ancestor that
+    /// declares it.
+    pub(super) fn resource_chain_method_sig(
+        &self,
+        def: crate::defs::DefId,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let mut current = def;
+        loop {
+            if let Some(info) = self.tysys.all_resource_types.get(&current)
+                && let Some(sig) = self
+                    .tysys
+                    .signatures
+                    .resource_method_sig(info.defined_at, method_name)
+            {
+                return Some(sig.clone());
+            }
+            current = self.tysys.type_table.borrow().resource_parent(current)?;
+        }
     }
 
     /// Look up function parameter types with type args substituted.

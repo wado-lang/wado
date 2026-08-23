@@ -1047,14 +1047,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `def` or anything it extends declares `method_name`, whatever
-    /// the receiver shape — the question the ambiguity check asks before a
-    /// trait impl is allowed to answer for an extern-ref resource.
-    pub(super) fn resource_chain_declares(
+    /// The resource that declares `method_name` for a receiver declared by
+    /// `def` — itself or the nearest ancestor. The ambiguity check needs the
+    /// declaration, not just the fact, to name it in the diagnostic.
+    pub(super) fn resource_declaring(
         &self,
         def: crate::defs::DefId,
         method_name: &str,
-    ) -> bool {
+    ) -> Option<crate::defs::DefId> {
         let mut current = def;
         loop {
             if let Some(info) = self.tysys.all_resource_types.get(&current)
@@ -1064,12 +1064,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .resource_method_sig(info.defined_at, method_name)
                     .is_some()
             {
-                return true;
+                return Some(current);
             }
-            match self.tysys.type_table.borrow().resource_parent(current) {
-                Some(parent) => current = parent,
-                None => return false,
-            }
+            current = self.tysys.type_table.borrow().resource_parent(current)?;
         }
     }
 

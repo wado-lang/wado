@@ -351,3 +351,80 @@ fn a_trait_impl_without_a_collision_is_fine() {
     let d = diagnostics(source);
     assert!(d.is_empty(), "distinct names do not collide, got {d:?}");
 }
+
+#[test]
+fn a_cycle_above_the_child_terminates() {
+    // `A extends B` is well-formed on its own; the cycle is between its
+    // ancestors, so the override walk must not follow it forever.
+    let source = "#[cm(\"web:dom/a\", type = \"extern-ref\")]\n\
+         resource A extends B {\n    fn tag(&self) -> String;\n}\n\
+         #[cm(\"web:dom/b\", type = \"extern-ref\")]\n\
+         resource B extends C {\n    fn tag(&self) -> String;\n}\n\
+         #[cm(\"web:dom/c\", type = \"extern-ref\")]\n\
+         resource C extends B {\n    fn tag(&self) -> String;\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.to_lowercase().contains("cycle")),
+        "expected the cycle reported, got {d:?}"
+    );
+}
+
+#[test]
+fn branches_agree_on_the_ancestor() {
+    let source = chain(
+        "fn pick(flag: bool, n: Node, t: EventTarget) -> EventTarget {\n\
+         \x20   let x = if flag { n } else { t };\n\
+         \x20   return x;\n\
+         }",
+    );
+    let d = diagnostics(&source);
+    assert!(d.is_empty(), "an if joins on the ancestor, got {d:?}");
+}
+
+#[test]
+fn match_arms_agree_on_the_ancestor() {
+    let source = chain(
+        "fn pick(flag: bool, n: Node, t: EventTarget) -> EventTarget {\n\
+         \x20   return match flag {\n\
+         \x20       true => n,\n\
+         \x20       false => t,\n\
+         \x20   };\n\
+         }",
+    );
+    let d = diagnostics(&source);
+    assert!(d.is_empty(), "match arms join on the ancestor, got {d:?}");
+}
+
+#[test]
+fn probe_the_declaring_resource_qualifies_its_own_method() {
+    let source = chain_with_method(
+        "    fn tag(&self) -> String;",
+        "fn via_parent(n: Node) -> String { return EventTarget::tag(&n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(d.is_empty(), "probe: parent-qualified, got {d:?}");
+}
+
+#[test]
+fn probe_a_resource_qualifies_its_own_method() {
+    let source = "#[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node {\n    fn tag(&self) -> String;\n}\n\
+         fn own(n: Node) -> String { return Node::tag(&n); }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "probe: own method qualified, got {d:?}");
+}
+
+#[test]
+fn the_qualified_form_reaches_an_inherited_method() {
+    let source = chain_with_method(
+        "    fn tag(&self) -> String;",
+        "fn via_child(n: Node) -> String { return Node::tag(&n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(
+        d.is_empty(),
+        "the child qualifies an inherited method, got {d:?}"
+    );
+}

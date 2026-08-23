@@ -1998,6 +1998,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else_type
                     } else if else_unknown && !then_unknown {
                         then_type
+                    } else if let Some(joined) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .resource_join(then_type, else_type)
+                    {
+                        joined
                     } else if if_expr.else_block.is_none() {
                         if then_type != TypeTable::UNIT {
                             let type_name = self.tysys.type_table.borrow().type_name(then_type);
@@ -2312,6 +2319,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
+
+        // Arms in one `extends` chain agree on the ancestor, whichever order
+        // they are written in: the first-arm pick above would otherwise make a
+        // parent-typed later arm a mismatch.
+        let type_id = if expected_type.is_some() {
+            type_id
+        } else {
+            let tt = self.tysys.type_table.borrow();
+            arm_bodies.iter().fold(type_id, |acc, (arm_type, _)| {
+                tt.resource_join(acc, *arm_type).unwrap_or(acc)
+            })
+        };
 
         // Report any `null`-bodied arm whose `Option<???>` inner could not be
         // inferred against a resolved non-`Option` result — AST mirror of the

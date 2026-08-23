@@ -1112,15 +1112,6 @@ impl TypeTable {
             .copied()
     }
 
-    /// Register the `(AstId -> TypeId)` mapping for a declared type.
-    ///
-    /// Called by the elaborator right after constructing the `TypeId` that
-    /// represents a user-declared type (struct, enum, variant, flags,
-    /// newtype, resource). Both directions of the map are populated:
-    /// forward `type_by_symbol[key] = type_id` and inverse
-    /// `symbol_by_type[type_id] = key`.
-    /// Attach the program's declarations, so a nominal type can render its
-    /// head once it carries one instead of a spelling.
     /// Record that `def` declares an extern-ref-backed resource.
     pub fn mark_extern_ref_resource(&mut self, def: crate::defs::DefId) {
         self.extern_ref_resources.insert(def);
@@ -1146,6 +1137,22 @@ impl TypeTable {
         self.resource_parents.get(&def).copied()
     }
 
+    /// The type two branches agree on when one resource extends the other:
+    /// the ancestor. `None` when neither reaches the other, which is a
+    /// mismatch like any other.
+    #[must_use]
+    pub fn resource_join(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        let (ResolvedType::Resource { def: a_def }, ResolvedType::Resource { def: b_def }) =
+            (self.get(a), self.get(b))
+        else {
+            return None;
+        };
+        if self.is_resource_subtype(*a_def, *b_def) {
+            return Some(b);
+        }
+        self.is_resource_subtype(*b_def, *a_def).then_some(a)
+    }
+
     /// Whether `sub` is `sup` or extends it, directly or transitively. The
     /// relation is reflexive and transitive; unrelated resources are
     /// incomparable.
@@ -1163,6 +1170,8 @@ impl TypeTable {
         }
     }
 
+    /// Attach the program's declarations, so a nominal type can render its
+    /// head once it carries one instead of a spelling.
     pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {
         // A module-level declaration is entered first and kept: a
         // function-local item shares its module, and a spelling that reaches

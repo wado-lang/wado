@@ -156,8 +156,16 @@ fn reject_overrides<H: CompilerHost>(
     logger: &Logger<'_, H>,
 ) {
     let own = method_names.get(&clause.child).map_or(&[][..], Vec::as_slice);
+    // A rejected clause leaves its link in `links`, so a cycle between
+    // ancestors is still reachable from here even though it never reaches the
+    // committed relation. Stop at the first repeat.
+    let mut seen: Vec<crate::defs::DefId> = Vec::new();
     let mut ancestor = Some(parent);
     while let Some(current) = ancestor {
+        if seen.contains(&current) {
+            return;
+        }
+        seen.push(current);
         for (name, span) in own {
             let Some(inherited) = method_names.get(&current) else {
                 continue;

@@ -340,7 +340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if method_info.is_some()
                 && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
                 && self.tysys.type_table.borrow().is_extern_ref_resource(def)
-                && self.resource_chain_declares(def, method_name)
+                && let Some(declaring) = self.resource_declaring(def, method_name)
                 && let Some(trait_name) = self.trait_impl_declaring(
                     &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
                     method_name,
@@ -348,7 +348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let _ = self.emit(TypeError::AmbiguousResourceMethod {
                     method: method_name.to_string(),
-                    resource: struct_name.clone(),
+                    resource: self.tysys.resolutions.defs().name(declaring).to_string(),
                     trait_name,
                     span,
                 });
@@ -2622,6 +2622,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return return_type;
         }
 
+        // `Parent::method(&child)` — the index is keyed by the declaring
+        // resource, so an inherited method is only reachable by walking the
+        // chain. Instance methods only: a static belongs to its declaring
+        // resource alone.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
+            && sig.self_kind != ast::SelfKind::None
+        {
+            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
+        }
+
         // Auto-derived `Default::default()` returns the struct type itself.
         if method_name == "default"
             && let Some(struct_type) = self
@@ -3462,6 +3473,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .resource_static_method_index
             .get(&static_key)
             && methods.iter().any(|(name, ..)| name == method_name)
+        {
+            return true;
+        }
+
+        // The index is keyed by the declaring resource, so `Child::method(&c)`
+        // — the form that disambiguates a colliding name — reaches an
+        // inherited method only by walking the chain. Instance methods only: a
+        // static belongs to its declaring resource alone.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
+            && sig.self_kind != ast::SelfKind::None
         {
             return true;
         }
