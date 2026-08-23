@@ -2067,6 +2067,27 @@ impl FunctionContext {
 
     /// Look up a variable, checking outer context for captures if in a closure.
     /// Returns either a local variable reference or a capture reference.
+    /// Run `body` with the surrounding frame's bindings out of scope.
+    ///
+    /// A constant's body is closed over its own module: it resolves names
+    /// there, never against the frame reify inlines it into. Local allocation
+    /// stays on this context, because that frame is where its locals live.
+    pub(super) fn with_caller_bindings_hidden<R>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let scopes = std::mem::replace(&mut self.scopes, vec![IndexMap::default()]);
+        let outer_locals = std::mem::take(&mut self.outer_locals);
+        let deref_overrides = std::mem::take(&mut self.deref_overrides);
+        let outer_box_types = std::mem::take(&mut self.outer_box_types);
+        let result = body(self);
+        self.scopes = scopes;
+        self.outer_locals = outer_locals;
+        self.deref_overrides = deref_overrides;
+        self.outer_box_types = outer_box_types;
+        result
+    }
+
     pub(super) fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
         // First check local scopes
         for scope in self.scopes.iter().rev() {

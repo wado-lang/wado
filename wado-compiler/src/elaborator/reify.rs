@@ -9168,8 +9168,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // literal (e.g. `i32::MAX`'s `2147483647` as an f64). Reify the
             // body under the defining module's perspective so every
             // annotation lookup hits the right module's records.
-            let resolved = self.with_const_module_perspective(&const_module, |this| {
-                this.reify_expr(&const_expr, ctx, Some(type_id))
+            let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                self.with_const_module_perspective(&const_module, |this| {
+                    this.reify_expr(&const_expr, ctx, Some(type_id))
+                })
             });
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
