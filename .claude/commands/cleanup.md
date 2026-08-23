@@ -1,5 +1,5 @@
 ---
-description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication and dead code, turn invariants into asserts, and delete the comments the code already speaks."
+description: "Cut the branch down to what the code cannot say: reuse what exists, remove duplication, dead code, and wasted work, turn invariants into asserts, and delete the comments the code already speaks."
 argument-hint: "[extra instructions]"
 ---
 
@@ -30,6 +30,9 @@ generated corpus, and don't cut a WEP's required sections.
 - Altitude: a special case layered on shared infrastructure means the fix sits
   too shallow. Generalize the mechanism instead.
 - Dead code: delete what the change left behind.
+- Efficiency: cut wasted work — recomputation, repeated I/O, independent work
+  run in sequence. A stored closure pins everything it captured; prefer a struct
+  holding only the fields it needs.
 - Naming and structure: a comment explaining _what_ the code does marks the code
   to fix. Rename and decompose until it is redundant, then delete it.
 - Invariants: state them as `assert!`, never as a comment.
