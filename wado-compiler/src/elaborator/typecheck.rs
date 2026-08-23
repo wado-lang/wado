@@ -37,10 +37,9 @@ pub(super) fn check_assignable(
     check_at(actual, expected, type_table, Position::Covariant)
 }
 
-/// Where a comparison sits, which is what decides whether `resource extends`
-/// applies: a value, a `return`, and the referent of a `&T` admit a subtype;
-/// the referent of a `&mut T`, a container's element, and a function type's
-/// parts do not. See `docs/wep-2026-04-28-resource-inheritance.md`.
+/// Whether the position admits a subtype: a value, a `return` and a `&T`
+/// referent do; `&mut T`, a container element and a function type's parts do
+/// not. See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Position {
     Covariant,
@@ -225,8 +224,7 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 9: `resource Child extends Parent` — only where the position admits
-    // a subtype.
+    // Rule 9: `resource Child extends Parent`, where the position admits it.
     if position == Position::Covariant
         && let ResolvedType::Resource { def: actual_def } = type_table.get(actual_inner)
         && let ResolvedType::Resource { def: expected_def } = type_table.get(expected_inner)

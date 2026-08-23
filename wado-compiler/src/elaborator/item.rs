@@ -1706,9 +1706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }
         });
-        // `Self` in a resource method names the declaring resource. Without
-        // this it resolved to `unknown`, and every check against a `-> Self`
-        // return deferred instead of deciding.
+        // `Self` in a resource method names the declaring resource.
         if self_type.is_some() {
             scope.annotate_ctx.trait_ctx.self_type = self_type;
         }

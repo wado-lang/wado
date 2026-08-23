@@ -1249,9 +1249,7 @@ impl Attribute {
         })
     }
 
-    /// The backing `#[cm(..., type="extern-ref" | "i32")]` declares, if any.
-    /// The parser has already rejected any other spelling. Another attribute's
-    /// `type` field is its own business: only `#[cm]` names a backing.
+    /// The backing `#[cm(..., type=...)]` declares, if any.
     pub fn cm_resource_backing(&self) -> Option<CmResourceBacking> {
         if self.name != "cm" {
             return None;
@@ -1298,8 +1296,7 @@ pub enum CmBoundary {
 }
 
 /// How a `#[cm(..., type=...)]` resource is represented at the CM boundary.
-/// `ExternRef` is a host-object handle: copyable, outside the affine resource
-/// discipline. See `docs/wep-2026-04-28-resource-inheritance.md`.
+/// See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CmResourceBacking {
     ExternRef,
@@ -1307,7 +1304,6 @@ pub enum CmResourceBacking {
 }
 
 impl CmResourceBacking {
-    /// The spelling `#[cm(..., type="...")]` accepts.
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "extern-ref" => Some(Self::ExternRef),
@@ -1443,8 +1439,7 @@ pub struct ResourceDecl {
     /// Generic type parameters: `resource Future<T> { ... }`
     pub type_params: Vec<GenericParam>,
     /// The parent named by `resource Child extends Parent`, unresolved.
-    /// Single inheritance: at most one, and only an extern-ref-backed resource
-    /// may take one. See `docs/wep-2026-04-28-resource-inheritance.md`.
+    /// See `docs/wep-2026-04-28-resource-inheritance.md`.
     pub parent: Option<Type>,
     pub attrs: Vec<Attribute>,
     /// Methods declared within the resource block. Each is a signature only:

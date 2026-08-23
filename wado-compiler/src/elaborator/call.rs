@@ -14,9 +14,9 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::scope::Scope;
 use super::sem::decls::FunctionSig;
-use super::trait_env::ImplTargetKey;
 use super::sig::MethodSig;
 use super::trait_env;
+use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
@@ -2713,9 +2713,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .resource_method_sig(*decl_id, method_name)
                 .cloned();
         }
-        // `Parent::method(&child)` is how a colliding name is disambiguated, so
-        // the qualified form reaches an inherited method too. Only an instance
-        // method: a static belongs to its declaring resource alone.
+        // The qualified form disambiguates a colliding name, so it reaches an
+        // inherited method too.
         let ImplTargetKey::Decl(def) = key else {
             return None;
         };
@@ -2723,8 +2722,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (sig.self_kind != ast::SelfKind::None).then_some(sig)
     }
 
-    /// The signature of `method_name` on `def` or on the nearest ancestor that
-    /// declares it.
+    /// The signature of `method_name` on `def` or the nearest ancestor that
+    /// declares it. A static is not inherited, so callers filter on
+    /// [`ast::SelfKind`].
     pub(super) fn resource_chain_method_sig(
         &self,
         def: crate::defs::DefId,

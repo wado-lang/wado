@@ -7,15 +7,13 @@ published library (e.g. `wado-lang:marl`) extensible: the library performs a
 guest-defined effect (`Highlight`), and the consumer supplies the
 implementation from outside the library's OCI artifact.
 
-This note is the **guest↔guest** direction: both ends are components in an
-acyclic instantiation graph, so neither can call the other's exports the way a
-host can. The **host↔guest** direction — a JS host holding a Wado closure — is
-[Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks), and it escapes most of
-what follows by having a real host. What does carry across: the engine rules
-below (host reentry is task-chain-scoped), and the endpoint (first-class
-function values). What does not: the host effect pump is rejected here because
-a published artifact must run on any host — a browser glue we generate for our
-own `web:*` bindings has no such obligation.
+This note is the **guest↔guest** direction: neither end is a host, so neither
+can call the other's exports. The host↔guest direction is
+[Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+
+The engine rules below and the endpoint (first-class function values) carry
+across; the host-pump rejection does not — it is about a published artifact's
+portability, which a browser glue we generate for our own bindings does not owe.
 
 Companion WEPs:
 

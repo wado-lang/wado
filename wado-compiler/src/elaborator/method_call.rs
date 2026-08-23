@@ -332,11 +332,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver.type_id, method_name);
-            // One name reachable both through an extern-ref resource's
-            // `extends` chain and through a trait impl is ambiguous: picking
-            // either side silently rebinds call sites when the other grows the
-            // name. A trait-qualified call has already returned above, so this
-            // is the unqualified form only.
+            // Reachable through both the `extends` chain and a trait impl:
+            // picking either side rebinds call sites when the other grows the
+            // name. The qualified forms have returned above.
             if method_info.is_some()
                 && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
                 && self.tysys.type_table.borrow().is_extern_ref_resource(def)
@@ -2622,10 +2620,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return return_type;
         }
 
-        // `Parent::method(&child)` — the index is keyed by the declaring
-        // resource, so an inherited method is only reachable by walking the
-        // chain. Instance methods only: a static belongs to its declaring
-        // resource alone.
+        // The index is keyed by the declaring resource, so an inherited
+        // method is reachable only by walking the chain.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
             && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
             && sig.self_kind != ast::SelfKind::None
@@ -3477,10 +3473,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // The index is keyed by the declaring resource, so `Child::method(&c)`
-        // — the form that disambiguates a colliding name — reaches an
-        // inherited method only by walking the chain. Instance methods only: a
-        // static belongs to its declaring resource alone.
+        // Same walk as `lookup_static_method_return_type`: the index holds
+        // only the declaring resource's own methods.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
             && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
             && sig.self_kind != ast::SelfKind::None

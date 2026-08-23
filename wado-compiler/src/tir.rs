@@ -826,14 +826,11 @@ pub struct TypeTable {
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
-    /// Resources declared `#[cm(..., type="extern-ref")]`: a handle to a host
-    /// object, copyable and outside the affine resource discipline. Recorded
-    /// where the declaration's attributes are still in hand, and read by every
-    /// predicate that asks whether a type owns a resource.
+    /// Resources declared `#[cm(..., type = "extern-ref")]`: a copyable handle
+    /// to a host object, outside the affine resource discipline.
     extern_ref_resources: IndexSet<crate::defs::DefId>,
-    /// `resource Child extends Parent`, child → parent. Single inheritance and
-    /// acyclic — the elaborator rejects anything else before recording it — so
-    /// the chain is walked by following the link.
+    /// `resource Child extends Parent`, child → parent. Acyclic: the
+    /// elaborator rejects a cycle before recording it.
     resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
@@ -1112,35 +1109,30 @@ impl TypeTable {
             .copied()
     }
 
-    /// Record that `def` declares an extern-ref-backed resource.
     pub fn mark_extern_ref_resource(&mut self, def: crate::defs::DefId) {
         self.extern_ref_resources.insert(def);
     }
 
-    /// Whether `def` declares an extern-ref-backed resource — a copyable host
-    /// handle, which no affine check and no cleanup pass owns.
+    /// Whether `def` declares an extern-ref-backed resource, which no affine
+    /// check and no cleanup pass owns.
     #[must_use]
     pub fn is_extern_ref_resource(&self, def: crate::defs::DefId) -> bool {
         self.extern_ref_resources.contains(&def)
     }
 
-    /// Record `child extends parent`. The caller has already checked that both
-    /// are extern-ref-backed resources and that the link closes no cycle.
+    /// Record `child extends parent`, already validated by the caller.
     pub fn set_resource_parent(&mut self, child: crate::defs::DefId, parent: crate::defs::DefId) {
         assert_ne!(child, parent, "a resource cannot extend itself");
         self.resource_parents.insert(child, parent);
     }
 
-    /// The resource `def` extends, if it declares one.
     #[must_use]
     pub fn resource_parent(&self, def: crate::defs::DefId) -> Option<crate::defs::DefId> {
         self.resource_parents.get(&def).copied()
     }
 
-    /// The type two branches agree on when one resource extends the other: the
-    /// ancestor, under the same shared reference the branches were written
-    /// with. `None` when neither reaches the other — a mismatch like any
-    /// other — and for `&mut`, which is invariant.
+    /// The ancestor two branches agree on when one resource extends the other,
+    /// under the shared reference they were written with. `&mut` is invariant.
     pub fn resource_join(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if let (ResolvedType::Ref(a_inner), ResolvedType::Ref(b_inner)) = (self.get(a), self.get(b))
         {
@@ -1159,9 +1151,7 @@ impl TypeTable {
         self.is_resource_subtype(*b_def, *a_def).then_some(a)
     }
 
-    /// Whether `sub` is `sup` or extends it, directly or transitively. The
-    /// relation is reflexive and transitive; unrelated resources are
-    /// incomparable.
+    /// Whether `sub` is `sup` or extends it, directly or transitively.
     #[must_use]
     pub fn is_resource_subtype(&self, sub: crate::defs::DefId, sup: crate::defs::DefId) -> bool {
         let mut current = sub;

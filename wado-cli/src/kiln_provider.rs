@@ -722,9 +722,7 @@ fn combined_sources_hash(sources: &[(String, [u8; 32])]) -> String {
     let mut hasher = Sha256::new();
     // v4: `.wado` sources hash as token streams (see `hash_source`), and the
     // ABI generation folds in here because this is a generator's only
-    // identity. The magic tracks `INDEX_VERSION`, so a keyword added to the
-    // lexer — which re-tokenizes sources that spelled it as an identifier —
-    // misses rather than reusing a component built under the old alphabet.
+    // identity. The magic tracks `INDEX_VERSION`, which a new keyword moves.
     hasher.update(b"kiln-generator-sources-v4\n");
     hasher.update(KILN_GENERATOR_ABI_TAG);
     for (path, hash) in sources {

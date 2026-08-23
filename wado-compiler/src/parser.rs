@@ -6,18 +6,17 @@ use crate::ast::{
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
     CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement,
-    ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
-    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
+    TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -1069,9 +1068,7 @@ impl Parser {
 
         // The backing is a property of the handle type, so it has one home.
         if !self.check(&TokenKind::Resource)
-            && let Some(attr) = attrs
-                .iter()
-                .find(|a| a.cm_resource_backing().is_some())
+            && let Some(attr) = attrs.iter().find(|a| a.cm_resource_backing().is_some())
         {
             return Err(ParseError {
                 message: "#[cm(..., type=...)] declares a resource's handle backing; \
@@ -1371,10 +1368,7 @@ impl Parser {
             let parent = self.parse_type()?;
             if self.check(&TokenKind::Comma) {
                 let span = self.peek().span;
-                return Err(self.error_at_span(
-                    span,
-                    "a resource extends a single parent",
-                ));
+                return Err(self.error_at_span(span, "a resource extends a single parent"));
             }
             Some(parent)
         } else {
@@ -6322,7 +6316,9 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
                 );
             };
             if key != "type" {
-                return Err(format!("unknown #[cm] field `{key}`; the only field is `type`"));
+                return Err(format!(
+                    "unknown #[cm] field `{key}`; the only field is `type`"
+                ));
             }
             if CmResourceBacking::parse(value).is_none() {
                 return Err(format!(

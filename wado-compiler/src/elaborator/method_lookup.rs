@@ -1032,10 +1032,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
-        // Walk the `extends` chain: the nearest declaration answers, and a
-        // parent's method keeps the parent's own signature — `Self` included.
-        // A generic parent is rejected at declaration, so only the receiver's
-        // own declaration takes type arguments.
+        // The nearest declaration answers, keeping its own signature. Only the
+        // receiver's takes type arguments — a generic resource is rejected.
         let mut current = def;
         let mut args = receiver_type_args;
         loop {
@@ -1048,8 +1046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The resource that declares `method_name` for a receiver declared by
-    /// `def` — itself or the nearest ancestor. The ambiguity check needs the
-    /// declaration, not just the fact, to name it in the diagnostic.
+    /// `def` — itself or the nearest ancestor.
     pub(super) fn resource_declaring(
         &self,
         def: crate::defs::DefId,
@@ -1093,8 +1090,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// [`Self::find_resource_method_info`] for one declaration, without the
-    /// `extends` walk.
+    /// [`Self::find_resource_method_info`] without the `extends` walk.
     fn resource_method_info_on(
         &mut self,
         def: crate::defs::DefId,

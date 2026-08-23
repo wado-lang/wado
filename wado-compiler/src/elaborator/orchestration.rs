@@ -30,29 +30,21 @@ use super::types::{
 use super::tysys::TypeSystem;
 
 /// One `resource Child extends Parent` clause, held until every resource has
-/// been collected: a parent may be declared after its child, or in another
-/// module, and the backing check needs both sides.
+/// been collected: a parent may be declared after its child, or elsewhere.
 struct PendingExtends {
     child: crate::defs::DefId,
     child_name: String,
-    /// Whether the child itself takes type parameters. A generic resource has
-    /// no `extends` support yet.
     child_is_generic: bool,
     parent: Type,
     module: ModuleSource,
     span: crate::token::Span,
 }
 
-/// Every resource's declared method names, by declaration. Recorded during the
-/// collect pass so the override check can read a parent's names whatever order
-/// the declarations came in.
+/// Every resource's declared instance-method names, by declaration.
 type ResourceMethodNames = IndexMap<crate::defs::DefId, Vec<(String, crate::token::Span)>>;
 
-/// Resolve every `extends` clause and record the ones that hold. A clause is
-/// rejected when the parent is not a resource, either side is not
-/// extern-ref-backed, the parent carries generic arguments (out of scope in
-/// v1), or the link closes a cycle. See
-/// `docs/wep-2026-04-28-resource-inheritance.md`.
+/// Resolve every `extends` clause and record the ones that hold.
+/// See `docs/wep-2026-04-28-resource-inheritance.md`.
 fn resolve_resource_extends<H: CompilerHost>(
     pending: &[PendingExtends],
     method_names: &ResourceMethodNames,
@@ -76,7 +68,10 @@ fn resolve_resource_extends<H: CompilerHost>(
         let Some(site) = crate::resolve::head_site(&clause.parent) else {
             reject(
                 clause,
-                format!("`{}` extends a shape that names no resource", clause.child_name),
+                format!(
+                    "`{}` extends a shape that names no resource",
+                    clause.child_name
+                ),
             );
             continue;
         };
@@ -106,9 +101,8 @@ fn resolve_resource_extends<H: CompilerHost>(
             }
         };
         let defs = resolutions.defs();
-        // A generic resource takes no part in `extends` yet — nothing asks for
-        // it. The written shape is not the question: `Base` and `Base<i32>`
-        // name one declaration, and only the declaration knows its arity.
+        // Keyed on the declaration, not the written shape: `Base` and
+        // `Base<i32>` name one resource, and only it knows its arity.
         if clause.child_is_generic || generic_resources.contains(&parent) {
             let generic = if clause.child_is_generic {
                 clause.child_name.clone()
@@ -117,9 +111,7 @@ fn resolve_resource_extends<H: CompilerHost>(
             };
             reject(
                 clause,
-                format!(
-                    "`{generic}` is generic; `extends` does not support generic resources yet"
-                ),
+                format!("`{generic}` is generic; `extends` does not support generic resources yet"),
             );
             continue;
         }
@@ -173,8 +165,8 @@ fn resolve_resource_extends<H: CompilerHost>(
     }
 }
 
-/// A child may not redeclare a method any ancestor declares: resolution stays
-/// static only while one name reaches one declaration.
+/// A child may not redeclare a method an ancestor declares: one name must
+/// reach one declaration.
 fn reject_overrides<H: CompilerHost>(
     clause: &PendingExtends,
     parent: crate::defs::DefId,
@@ -183,10 +175,11 @@ fn reject_overrides<H: CompilerHost>(
     links: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
     logger: &Logger<'_, H>,
 ) {
-    let own = method_names.get(&clause.child).map_or(&[][..], Vec::as_slice);
-    // A rejected clause leaves its link in `links`, so a cycle between
-    // ancestors is still reachable from here even though it never reaches the
-    // committed relation. Stop at the first repeat.
+    let own = method_names
+        .get(&clause.child)
+        .map_or(&[][..], Vec::as_slice);
+    // `links` still holds a rejected clause's link, so a cycle between
+    // ancestors is reachable here though it never reaches the relation.
     let mut seen: Vec<crate::defs::DefId> = Vec::new();
     let mut ancestor = Some(parent);
     while let Some(current) = ancestor {
@@ -508,23 +501,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }) {
                                 type_table.borrow_mut().mark_extern_ref_resource(def);
                             }
-                            let is_generic =
-                                resource_decl.type_params.iter().any(|p| !p.is_effect);
+                            let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
                             if is_generic {
                                 generic_resources.insert(def);
                             }
-                            // Instance methods only: a static is not inherited,
-                            // so a child declaring one of the same name shadows
-                            // nothing.
+                            // A static is not inherited, so it shadows nothing.
                             resource_method_names.insert(
                                 def,
                                 resource_decl
                                     .methods
                                     .iter()
                                     .filter(|m| {
-                                        m.params
-                                            .iter()
-                                            .any(|p| p.self_kind != ast::SelfKind::None)
+                                        m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
                                     })
                                     .map(|m| (m.name.clone(), m.span))
                                     .collect(),

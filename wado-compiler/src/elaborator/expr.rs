@@ -2226,13 +2226,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The type a set of branches agrees on: identity, `never` deferring to
-    /// its sibling, an unresolved branch deferring to a resolved one, or the
-    /// nearest common ancestor when one branch's resource extends another's.
-    /// `None` when they disagree — the caller reports that in its own terms.
-    ///
-    /// The one place branch agreement is decided: `if`, `if let` and `match`
-    /// all route here, so a rule added for one is a rule for all three.
+    /// The type a set of branches agrees on, `None` when they disagree — the
+    /// caller reports that in its own terms. The one place branch agreement is
+    /// decided: `if`, `if let` and `match` all route here.
     pub(super) fn agreed_branch_type(&self, branches: &[TypeId]) -> Option<TypeId> {
         let mut agreed: Option<TypeId> = None;
         for &branch in branches {
@@ -2342,9 +2338,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
         });
 
-        // Arms in one `extends` chain agree on the ancestor, whichever order
-        // they are written in: the first-arm pick above would otherwise make a
-        // parent-typed later arm a mismatch.
+        // Whichever order the arms are written in: the first-arm pick above
+        // would make a parent-typed later arm a mismatch.
         let type_id = if expected_type.is_some() {
             type_id
         } else {

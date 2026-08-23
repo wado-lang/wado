@@ -1,5 +1,4 @@
-//! `#[cm(..., type="extern-ref")]` marks a resource as a host-object handle:
-//! copyable, and outside the affine discipline every other resource follows.
+//! `#[cm(..., type = "extern-ref")]` backing and `resource extends`.
 //! See `docs/wep-2026-04-28-resource-inheritance.md`.
 
 use crate::common::InMemoryHost;
@@ -45,7 +44,9 @@ fn a_plain_resource_is_move_only() {
     let source = format!("resource Handle {{}}\n{USE_TWICE}");
     let errors = move_errors(&source);
     assert!(
-        errors.iter().any(|e| e.contains("use_twice") || e.contains('h')),
+        errors
+            .iter()
+            .any(|e| e.contains("use_twice") || e.contains('h')),
         "expected a use-after-move error, got {errors:?}"
     );
 }
@@ -272,9 +273,8 @@ fn self_stays_the_declaring_resource() {
     assert!(!d.is_empty(), "`Self` does not follow the receiver's type");
 }
 
-/// `Self` on a resource method is the declaring resource, so a return typed
-/// `Self` is checked like any other — it used to resolve to `unknown`, which
-/// deferred every check against it.
+/// `Self` on a resource method is the declaring resource, so a `-> Self`
+/// return is checked like any other.
 #[test]
 fn an_inherited_return_type_is_checked() {
     let source = chain_with_method(
@@ -297,7 +297,10 @@ fn a_self_return_is_checked() {
          fn narrow(e: EventTarget) -> Other { return e.me(); }\n\
          export fn run() {}\n";
     let d = diagnostics(source);
-    assert!(!d.is_empty(), "`Self` is the declaring resource, not `Other`");
+    assert!(
+        !d.is_empty(),
+        "`Self` is the declaring resource, not `Other`"
+    );
 }
 
 #[test]
@@ -429,8 +432,7 @@ fn the_qualified_form_reaches_an_inherited_method() {
     );
 }
 
-// --- The rules the WEP states, each against every construct that can reach
-// --- them. Derived from the spec, not from the implementation.
+// The rules the WEP states, each against every construct that reaches them.
 
 #[test]
 fn extends_rejects_an_unknown_parent() {
@@ -507,8 +509,7 @@ fn a_child_may_declare_a_static_the_parent_also_declares() {
     );
 }
 
-/// `&Child` / `&Parent` branches, in both orders, through every construct that
-/// unifies branches.
+/// `&Child` / `&Parent` branches, for a case to write in either order.
 fn ref_branches(body: &str) -> String {
     format!(
         "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
