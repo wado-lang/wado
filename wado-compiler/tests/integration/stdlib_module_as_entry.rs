@@ -17,9 +17,9 @@ fn core_modules() -> Vec<PathBuf> {
     paths
 }
 
-/// The whole `dir` tree's entry-point modules: a `*_test.wado` is an ordinary
-/// entry point, and a `#![wasm_module("…")]` module is not compilable as one at
-/// all (see `a_wasm_module_entry_is_rejected`).
+/// The whole `dir` tree, minus what this sweep is not about: a `*_test.wado`,
+/// an ordinary entry point `mise run test-wado` covers, and a
+/// `#![wasm_module("…")]` module, not compilable as an entry at all.
 fn collect_modules(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).expect("core dir should be readable") {
         let path = entry.expect("dir entry").path();
