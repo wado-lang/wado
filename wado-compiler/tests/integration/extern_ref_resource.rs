@@ -299,3 +299,28 @@ fn a_self_return_is_checked() {
     let d = diagnostics(source);
     assert!(!d.is_empty(), "`Self` is the declaring resource, not `Other`");
 }
+
+#[test]
+fn a_child_cannot_redeclare_an_inherited_method() {
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {\n    fn tag(&self) -> String;\n}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {\n    fn tag(&self) -> String;\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("tag")),
+        "expected an override error naming the method, got {d:?}"
+    );
+}
+
+#[test]
+fn a_child_may_declare_its_own_method_names() {
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {\n    fn tag(&self) -> String;\n}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {\n    fn text(&self) -> String;\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "a distinct name is fine, got {d:?}");
+}

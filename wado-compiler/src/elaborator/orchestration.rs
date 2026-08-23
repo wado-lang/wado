@@ -40,6 +40,11 @@ struct PendingExtends {
     span: crate::token::Span,
 }
 
+/// Every resource's declared method names, by declaration. Recorded during the
+/// collect pass so the override check can read a parent's names whatever order
+/// the declarations came in.
+type ResourceMethodNames = IndexMap<crate::defs::DefId, Vec<(String, crate::token::Span)>>;
+
 /// Resolve every `extends` clause and record the ones that hold. A clause is
 /// rejected when the parent is not a resource, either side is not
 /// extern-ref-backed, the parent carries generic arguments (out of scope in
@@ -47,6 +52,7 @@ struct PendingExtends {
 /// `docs/wep-2026-04-28-resource-inheritance.md`.
 fn resolve_resource_extends<H: CompilerHost>(
     pending: &[PendingExtends],
+    method_names: &ResourceMethodNames,
     resolutions: &crate::resolve::Resolutions,
     type_table: &RefCell<TypeTable>,
     logger: &Logger<'_, H>,
@@ -135,6 +141,42 @@ fn resolve_resource_extends<H: CompilerHost>(
         type_table
             .borrow_mut()
             .set_resource_parent(clause.child, parent);
+        reject_overrides(clause, parent, method_names, resolutions, &links, logger);
+    }
+}
+
+/// A child may not redeclare a method any ancestor declares: resolution stays
+/// static only while one name reaches one declaration.
+fn reject_overrides<H: CompilerHost>(
+    clause: &PendingExtends,
+    parent: crate::defs::DefId,
+    method_names: &ResourceMethodNames,
+    resolutions: &crate::resolve::Resolutions,
+    links: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    logger: &Logger<'_, H>,
+) {
+    let own = method_names.get(&clause.child).map_or(&[][..], Vec::as_slice);
+    let mut ancestor = Some(parent);
+    while let Some(current) = ancestor {
+        for (name, span) in own {
+            let Some(inherited) = method_names.get(&current) else {
+                continue;
+            };
+            if inherited.iter().any(|(other, _)| other == name) {
+                let _ = logger.error_in(
+                    &clause.module,
+                    TypeError::ResourceExtends {
+                        message: format!(
+                            "`{}` redeclares `{name}`, which it inherits from `{}`",
+                            clause.child_name,
+                            resolutions.defs().name(current)
+                        ),
+                        span: *span,
+                    },
+                );
+            }
+        }
+        ancestor = links.get(&current).copied();
     }
 }
 
@@ -286,6 +328,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .unwrap_or_default();
 
         let mut pending_extends: Vec<PendingExtends> = Vec::new();
+        let mut resource_method_names: ResourceMethodNames = IndexMap::default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -428,6 +471,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }) {
                                 type_table.borrow_mut().mark_extern_ref_resource(def);
                             }
+                            resource_method_names.insert(
+                                def,
+                                resource_decl
+                                    .methods
+                                    .iter()
+                                    .map(|m| (m.name.clone(), m.span))
+                                    .collect(),
+                            );
                             if let Some(parent) = &resource_decl.parent {
                                 pending_extends.push(PendingExtends {
                                     child: def,
@@ -1045,7 +1096,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        resolve_resource_extends(&pending_extends, &resolutions, &type_table, logger);
+        resolve_resource_extends(
+            &pending_extends,
+            &resource_method_names,
+            &resolutions,
+            &type_table,
+            logger,
+        );
 
         // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);
