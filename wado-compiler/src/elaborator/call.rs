@@ -1137,6 +1137,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|ty| self.resolve_type(ty))
                         .collect();
 
+                    // `ns::Type::method` never reaches the bare-spelling check,
+                    // so the ladder is enforced here. The receiver is named at
+                    // its own segment, which the walk answered for.
+                    {
+                        let receiver_site = ident.segments.len().checked_sub(2).map(|i| ident.segments[i].id);
+                        let receiver = self.impl_target_at(receiver_site, type_name);
+                        let qualified = format!("{type_name}::{method_name}");
+                        self.check_static_call_visibility(
+                            &receiver,
+                            &qualified,
+                            Some(call.id),
+                            call.span,
+                        );
+                    }
+
                     // Find the impl module via the trait env (global index)
                     let arg_type_hint = if (method_name == "from" || method_name == "try_from")
                         && args.len() == 1

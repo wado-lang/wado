@@ -25,3 +25,11 @@ impl Item {
 
   fn secret_static() -> i32 { return 99 }
 }
+
+impl Item {
+  fn bump(&mut self) -> i32 { self.v += 1; return self.v }
+
+  pub fn bump_open(&mut self) -> i32 { return self.bump() }
+}
+
+pub fn make_items() -> List<Item> { return [Item { v: 0 }] }
