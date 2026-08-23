@@ -141,14 +141,21 @@ fn poll_to_completion<F: Future>(fut: F) -> F::Output {
 pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
     snap.tir_modules
         .keys()
-        .filter(|ms| {
-            matches!(
-                ms,
-                ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
-            )
-        })
+        .filter(|ms| covers(snap, ms))
         .cloned()
         .collect()
+}
+
+/// Whether the snapshot holds its own parse of `module_source`.
+///
+/// `ModuleSource::EntryPoint` values compare equal regardless of filename, so
+/// the snapshot's synthetic empty entry would match every compile's entry; the
+/// variant gate keeps it out.
+pub(crate) fn covers(snap: &Semantics, module_source: &ModuleSource) -> bool {
+    matches!(
+        module_source,
+        ModuleSource::Core { .. } | ModuleSource::Wasi { .. } | ModuleSource::Wasm { .. }
+    ) && snap.tir_modules.contains_key(module_source)
 }
 
 /// Deep-clone a cached [`TirModule`] for a per-compile pipeline. A naïve `Clone`
