@@ -2426,7 +2426,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .trait_env
                     .impl_headers
-                    .get(&(b.module.clone(), b.ast_id))
+                    .get(&b.def)
                 else {
                     return false;
                 };
@@ -2451,7 +2451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .trait_env
                     .impl_headers
-                    .get(&(b.module.clone(), b.ast_id))?;
+                    .get(&b.def)?;
                 Some((
                     self.tysys
                         .trait_env
@@ -2762,23 +2762,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameter (`impl<V: Bound> Trait for V`) keys under that binder instead.
     /// Both are searched in the current module, only the declaration namespace
     /// outside it. Consumers re-check the impl's spelling.
-    fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<(ModuleSource, AstId)> {
+    fn trait_impl_keys_current_first(&self, struct_name: &str) -> Vec<crate::defs::DefId> {
         let env = &self.tysys.trait_env;
-        let declared = env.entries_by_receiver_vec(
-            &self
-                .impl_target(struct_name)
-                .receiver(self.tysys.resolutions.defs()),
-        );
+        let defs = self.tysys.resolutions.defs();
+        let declared = env.entries_by_receiver_vec(&self.impl_target(struct_name).receiver(defs));
         let binder = env.entries_by_receiver_vec(&Receiver::Type(FqTypeName::binder(struct_name)));
-        let is_current =
-            |(module, _): &&(ModuleSource, AstId)| *module == self.current_module_source;
-        let mut keys: Vec<(ModuleSource, AstId)> = declared
+        let is_current = |k: &&crate::defs::DefId| *defs.module(**k) == self.current_module_source;
+        let mut keys: Vec<crate::defs::DefId> = declared
             .iter()
             .chain(binder.iter())
             .filter(is_current)
-            .cloned()
+            .copied()
             .collect();
-        keys.extend(declared.iter().filter(|k| !is_current(k)).cloned());
+        keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
         keys
     }
 
@@ -2804,7 +2800,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .signatures
                     .method_sig(method.ast_id)
                     .expect("the decl pass records every impl-declared method's signature");
-                if key.0 == self.current_module_source {
+                if *self.tysys.resolutions.defs().module(*key) == self.current_module_source {
                     current.push(sig);
                 } else {
                     others.push(sig);
@@ -3043,11 +3039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// whether each takes `self`, so the question is answered without an
     /// impl-block AST — and keyed canonically, so two modules' same-named
     /// types cannot answer for each other.
-    fn keys_declare_static_method(
-        &self,
-        keys: &[(ModuleSource, crate::ast::AstId)],
-        method_name: &str,
-    ) -> bool {
+    fn keys_declare_static_method(&self, keys: &[crate::defs::DefId], method_name: &str) -> bool {
         keys.iter().any(|key| {
             self.tysys
                 .trait_env
@@ -3134,8 +3126,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let mut candidates: Vec<ConversionCandidate> = Vec::new();
         let mut has_blanket = false;
-        for (module, impl_id) in self.trait_impl_keys_current_first(struct_name) {
-            let header = &self.tysys.trait_env.impl_headers[&(module.clone(), impl_id)];
+        for impl_def in self.trait_impl_keys_current_first(struct_name) {
+            let header = &self.tysys.trait_env.impl_headers[&impl_def];
+            let module = self.tysys.resolutions.defs().module(impl_def).clone();
             let Some(trait_type) = header.trait_type.as_ref() else {
                 continue;
             };
@@ -3178,7 +3171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let source = *self
                 .tysys
                 .signatures
-                .impl_sig(impl_id)
+                .impl_sig(impl_def)
                 .expect("the decl pass records every impl block's declaration facts")
                 .trait_type_args
                 .first()
@@ -3335,8 +3328,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None
         };
 
-        for (module_source, impl_id) in self.trait_impl_keys_current_first(struct_name) {
-            let header = &self.tysys.trait_env.impl_headers[&(module_source.clone(), impl_id)];
+        for impl_def in self.trait_impl_keys_current_first(struct_name) {
+            let header = &self.tysys.trait_env.impl_headers[&impl_def];
+            let module_source = self.tysys.resolutions.defs().module(impl_def).clone();
             if let Some((trait_name, method_id)) = check_impl(header, &module_source) {
                 return Some(StaticMethodRef::new(
                     module_source,

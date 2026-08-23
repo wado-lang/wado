@@ -30,8 +30,8 @@ pub(crate) struct Signatures {
     pub(crate) resource_method_ids: IndexMap<(AstId, String), AstId>,
 
     /// Per-`impl`-block facts shared by the block's methods, keyed by the
-    /// block's `AstId`.
-    pub(crate) impl_sigs: IndexMap<AstId, ImplSig>,
+    /// block's [`crate::defs::DefId`].
+    pub(crate) impl_sigs: IndexMap<crate::defs::DefId, ImplSig>,
 
     /// Per-`trait`-declaration facts, keyed by the declaration's `AstId`.
     /// `TraitEnv::decl_index` maps a canonical trait name to that `AstId`,
@@ -73,9 +73,9 @@ impl Signatures {
         self.method_sig(*method_id)
     }
 
-    /// Declaration facts of the `impl` block at `ast_id`.
-    pub(crate) fn impl_sig(&self, ast_id: AstId) -> Option<&ImplSig> {
-        self.impl_sigs.get(&ast_id)
+    /// Declaration facts of the `impl` block `def`.
+    pub(crate) fn impl_sig(&self, def: crate::defs::DefId) -> Option<&ImplSig> {
+        self.impl_sigs.get(&def)
     }
 
     /// Declaration facts of the `trait` declared at `ast_id`.

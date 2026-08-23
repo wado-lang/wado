@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, BinaryOp, Expr, Type};
+use crate::ast::{self, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, RefKind};
 use crate::tir::{
@@ -36,10 +37,10 @@ use super::util::placeholder;
 pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replace-on-assign type (primitive, enum, flags, fn); \
      use the containing value's reference directly";
 
-/// Lightweight reference to an impl block. Stores `(module_source,
-/// item_id)` and resolves to the block's digested [`ImplHeader`] via
-/// [`impl_header`]. Dispatch cannot reach the impl AST at all.
-struct ImplBlockRef(ModuleSource, AstId);
+/// Lightweight reference to an impl block: its identity, resolving to the
+/// block's digested [`ImplHeader`] via [`impl_header`]. Dispatch cannot reach
+/// the impl AST at all.
+struct ImplBlockRef(DefId);
 
 /// The digested header of the impl block `r` points at. Borrowed from the
 /// caller's `TraitEnv` handle rather than from `&self`, so the header stays
@@ -51,7 +52,7 @@ struct ImplBlockRef(ModuleSource, AstId);
 fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader {
     trait_env
         .impl_headers
-        .get(&(r.0.clone(), r.1))
+        .get(&r.0)
         .expect("every indexed impl block has an ImplHeader")
 }
 
@@ -60,7 +61,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn impl_sig(&self, r: &ImplBlockRef) -> &super::sig::ImplSig {
         self.tysys
             .signatures
-            .impl_sig(r.1)
+            .impl_sig(r.0)
             .expect("the decl pass records every impl block's declaration facts")
     }
 }
@@ -334,7 +335,7 @@ impl TypeSystem {
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get the module source for an `ImplBlockRef`.
     fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
-        r.0.clone()
+        self.tysys.resolutions.defs().module(r.0).clone()
     }
 
     /// Collect trait impl block references for a given type name.
@@ -350,7 +351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(entry)
                     .is_some_and(|h| h.trait_name.is_some())
                 {
-                    refs.push(ImplBlockRef(entry.0.clone(), entry.1));
+                    refs.push(ImplBlockRef(*entry));
                 }
             }
         }
@@ -370,7 +371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .get(entry)
                         .is_some_and(|h| h.trait_name.is_some())
                     {
-                        refs.push(ImplBlockRef(entry.0.clone(), entry.1));
+                        refs.push(ImplBlockRef(*entry));
                     }
                 }
             }
@@ -408,7 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let impl_sig = signatures
-                .impl_sig(impl_ref.1)
+                .impl_sig(impl_ref.0)
                 .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
             let declared = self
@@ -869,14 +870,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Coherence lets any same-package module host an `impl <struct_name>`.
         if struct_module_source.is_some() {
-            let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
+            let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
                 &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
             );
             // The receiver's own declaration, which is what an impl header
             // targeting it must name.
             let receiver_decl = self.tysys.type_table.borrow().nominal_def(base_type_id);
-            for (impl_module, item_id) in &entries {
-                let impl_ref = ImplBlockRef(impl_module.clone(), *item_id);
+            for entry in &entries {
+                let impl_ref = ImplBlockRef(*entry);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
                 // The header names its target at a site of its own, answered
@@ -907,11 +908,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if struct_module_source.is_none() {
-            let entries: Vec<(ModuleSource, AstId)> = self.tysys.trait_env.inherent_impl_keys(
+            let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
                 &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
             );
-            for (search_module_source, item_id) in &entries {
-                let impl_ref = ImplBlockRef(search_module_source.clone(), *item_id);
+            for entry in &entries {
+                let impl_ref = ImplBlockRef(*entry);
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
                 if self.get_type_name(&header.ty) != struct_name
@@ -995,7 +996,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_header = header.methods.iter().find(|m| m.name == method_name)?;
         let sig = signatures.method_sig(method_header.ast_id)?;
         let impl_sig = signatures
-            .impl_sig(impl_ref.1)
+            .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts");
 
         let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
@@ -1013,7 +1014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_ref_impl: false,
             method_type_param_ids: sig.own_type_param_ids(),
             method_own_params: sig.own_params.clone(),
-            impl_module: Some(impl_ref.0.clone()),
+            impl_module: Some(self.impl_block_module_source(impl_ref)),
             from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
             param_names: super::sig::Param::names(&sig.params),
@@ -1578,19 +1579,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
         // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
         // any concrete type that implements Iterator. Snapshot the value blankets
-        // (module, ast id, bound names) so the per-bound checks below borrow `self`
+        // (block, bound names) so the per-bound checks below borrow `self`
         // without holding a `trait_env` borrow.
-        let value_blankets: Vec<(ModuleSource, AstId, Vec<super::trait_env::BlanketBound>)> = self
+        let value_blankets: Vec<(DefId, Vec<super::trait_env::BlanketBound>)> = self
             .tysys
             .trait_env
             .blanket_impls
             .values()
             .flatten()
             .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
-            .map(|b| (b.module.clone(), b.ast_id, b.bounds.clone()))
+            .map(|b| (b.def, b.bounds.clone()))
             .collect();
         let type_lookup = self.type_lookup();
-        for (module, ast_id, bounds) in &value_blankets {
+        for (blanket, bounds) in &value_blankets {
             // Gate on all bounds. The receiver-`TypeId` check is preferred:
             // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
             // explicit `impl`, which the name-based lookup misses. A viable
@@ -1627,7 +1628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .blanket_assoc_constraints_hold(receiver_type_id, bounds)
             {
-                impl_refs.push(ImplBlockRef(module.clone(), *ast_id));
+                impl_refs.push(ImplBlockRef(*blanket));
             }
         }
         impl_refs
@@ -1791,9 +1792,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // frame exactly when a target argument names a type the impl's module
         // cannot see, and the target then carries a slot this filter believes
         // is concrete.
+        let impl_module = self.impl_block_module_source(impl_ref);
         let is_target_slot = |name: &str| {
             self.tysys
-                .is_impl_target_param(&impl_ref.0, &header.type_params, name)
+                .is_impl_target_param(&impl_module, &header.type_params, name)
         };
         let is_blanket_tp = matches!(&header.ty, Type::Named(n) if is_target_slot(&n.name));
         let generic_is_parametric = matches!(&header.ty, Type::Generic(g)
@@ -2109,7 +2111,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // this query, resolved it.
         let signatures = Rc::clone(&scope.tysys.signatures);
         let impl_sig = signatures
-            .impl_sig(impl_ref.1)
+            .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts")
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
@@ -2167,7 +2169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the spelling it wrote, which is how an erroneous block reaches a
         // lookup at all; a candidate built without an identity keys on nothing.
         let Some(trait_decl) = signatures
-            .impl_sig(impl_ref.1)
+            .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts")
             .trait_decl
         else {

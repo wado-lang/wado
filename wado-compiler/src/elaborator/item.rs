@@ -888,8 +888,14 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .self_type
             .expect("entering an impl frame binds Self to the target");
 
+        let impl_def = scope
+            .tysys
+            .resolutions
+            .defs()
+            .of_ast_id(impl_block.id)
+            .expect("every impl block is a declaration");
         scope.sem.decls.impl_sigs.insert(
-            impl_block.id,
+            impl_def,
             super::sig::ImplSig {
                 self_type,
                 target_type_args,

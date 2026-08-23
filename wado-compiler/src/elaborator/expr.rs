@@ -4925,7 +4925,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument are header facts, so the impls are reached by the target's
         // canonical key rather than by scanning every module for one whose
         // written target name matches.
-        let declares_from = |key: &(ModuleSource, crate::ast::AstId)| -> bool {
+        let declares_from = |key: &crate::defs::DefId| -> bool {
             self.tysys
                 .trait_env
                 .impl_headers
@@ -4947,10 +4947,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .all_impl_keys(&self.impl_target(target_name));
         // The current module wins a tie.
+        let defs = self.tysys.resolutions.defs();
         keys.iter()
-            .find(|key| key.0 == self.current_module_source && declares_from(key))
+            .find(|key| *defs.module(**key) == self.current_module_source && declares_from(key))
             .or_else(|| keys.iter().find(|key| declares_from(key)))
-            .map(|(module, _)| module.clone())
+            .map(|key| defs.module(*key).clone())
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| self.current_module_source.clone())
     }

@@ -190,9 +190,9 @@ pub(crate) fn render_decl_name(defs: &crate::defs::DefTable, def: DefId) -> Stri
 
 /// Target type → the trait impl blocks written for it. Built once from all
 /// loaded modules so a method call costs a lookup rather than a scan.
-pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<(ModuleSource, AstId)>>;
+pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<DefId>>;
 
-type ReceiverImplIndex = IndexMap<name::Receiver, Vec<(ModuleSource, AstId)>>;
+type ReceiverImplIndex = IndexMap<name::Receiver, Vec<DefId>>;
 
 fn index_by_receiver(index: &TraitImplIndex, defs: &crate::defs::DefTable) -> ReceiverImplIndex {
     let mut out: ReceiverImplIndex = IndexMap::default();
@@ -207,7 +207,7 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &crate::defs::DefTable) -> Re
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
 /// and type parameters without re-fetching the impl block from
-/// `loaded_modules`. Keyed by `(ModuleSource, AstId)` in
+/// `loaded_modules`. Keyed by the block's [`DefId`] in
 /// [`TraitEnv::impl_headers`].
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
@@ -288,14 +288,13 @@ impl ImplHeader {
 /// type, so two modules' same-named bounds stay apart — the spelling the
 /// blanket wrote cannot answer that.
 fn blanket_pack_assocs(
-    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    impl_headers: &IndexMap<DefId, ImplHeader>,
     blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
-) -> IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> {
-    let mut out: IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>> = IndexMap::default();
+) -> IndexMap<DefId, Vec<(DefId, String)>> {
+    let mut out: IndexMap<DefId, Vec<(DefId, String)>> = IndexMap::default();
     for blanket in blanket_impls.values().flatten() {
-        let key = (blanket.module.clone(), blanket.ast_id);
-        let Some(header) = impl_headers.get(&key) else {
+        let Some(header) = impl_headers.get(&blanket.def) else {
             continue;
         };
         let pairs: Vec<(DefId, String)> = header
@@ -314,7 +313,7 @@ fn blanket_pack_assocs(
             })
             .collect();
         if !pairs.is_empty() {
-            out.insert(key, pairs);
+            out.insert(blanket.def, pairs);
         }
     }
     out
@@ -340,14 +339,13 @@ pub(crate) enum BlanketParamSource {
 /// is the point — type arguments are consumed positionally, so a receiver
 /// written after another parameter sits at a slot the caller never fills.
 fn blanket_param_sources(
-    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    impl_headers: &IndexMap<DefId, ImplHeader>,
     blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
     resolutions: &crate::resolve::Resolutions,
-) -> IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> {
-    let mut out: IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>> = IndexMap::default();
+) -> IndexMap<DefId, Vec<BlanketParamSource>> {
+    let mut out: IndexMap<DefId, Vec<BlanketParamSource>> = IndexMap::default();
     for blanket in blanket_impls.values().flatten() {
-        let key = (blanket.module.clone(), blanket.ast_id);
-        let Some(header) = impl_headers.get(&key) else {
+        let Some(header) = impl_headers.get(&blanket.def) else {
             continue;
         };
         let sources: Vec<BlanketParamSource> = header
@@ -377,7 +375,7 @@ fn blanket_param_sources(
                 BlanketParamSource::Projection(def, assoc.name.clone())
             })
             .collect();
-        out.insert(key, sources);
+        out.insert(blanket.def, sources);
     }
     out
 }
@@ -434,9 +432,9 @@ pub(crate) struct BlanketBound {
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketImpl {
     pub(crate) module: ModuleSource,
-    /// The impl block's AST id; with `module`, the key into `impl_headers` for
+    /// The impl block's identity, and the key into `impl_headers` for
     /// consumers needing the full header (associated types, bound constraints).
-    pub(crate) ast_id: AstId,
+    pub(crate) def: DefId,
     pub(crate) receiver: BlanketReceiver,
     /// Receiver param name (`T` in `impl<T: Bound> Trait for T`).
     pub(crate) param: String,
@@ -481,7 +479,7 @@ fn classify_blanket_receiver(
 
 /// Digested header of a `trait` declaration: its name plus per-method
 /// signatures method-lookup queries read off the AST. Built in
-/// [`TraitEnv::build`] and keyed by `(ModuleSource, AstId)` in
+/// [`TraitEnv::build`] and keyed by the declaration's [`DefId`] in
 /// [`TraitEnv::trait_decl_headers`]. Reuses [`ImplMethodHeader`] for the
 /// per-method digest (name + type parameters).
 #[derive(Clone, Debug)]
@@ -661,7 +659,7 @@ fn push_module(
 /// a substituted call to a concrete impl's own module, while a generic impl's
 /// instance is materialised in the receiver type's.
 fn index_impl_modules(
-    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    impl_headers: &IndexMap<DefId, ImplHeader>,
     resolutions: &crate::resolve::Resolutions,
     concrete_only: bool,
 ) -> ImplModuleIndex {
@@ -731,21 +729,21 @@ pub struct TraitEnv {
     /// `effect_decl_index` to recognise handler-installable kinds in `with`
     /// clauses and `impl R for T` blocks.
     pub(super) resource_decl_index: ResourceDeclIndex,
-    /// Digested headers for every indexed impl block, keyed by
-    /// `(ModuleSource, AstId)`. Trait/method queries read this instead of
-    /// re-fetching the impl block AST from `loaded_modules`. See [`ImplHeader`].
-    pub(super) impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader>,
+    /// Digested headers for every indexed impl block, keyed by the block's
+    /// [`DefId`]. Trait/method queries read this instead of re-fetching the
+    /// impl block AST from `loaded_modules`. See [`ImplHeader`].
+    pub(super) impl_headers: IndexMap<DefId, ImplHeader>,
     /// Per blanket impl, the `(declaring trait, associated type)` pairs whose
     /// binding is a type pack. Resolved once at build time from each bound's
     /// own reference site, so the trait is a declaration rather than the
     /// spelling the blanket wrote (WEP 2026-08-12).
-    pub(super) blanket_pack_assocs: IndexMap<(ModuleSource, AstId), Vec<(DefId, String)>>,
+    pub(super) blanket_pack_assocs: IndexMap<DefId, Vec<(DefId, String)>>,
     /// Per blanket impl, what determines each of its parameters, in
     /// declaration order. Resolved once at build time from each bound's own
     /// reference site.
-    pub(super) blanket_param_sources: IndexMap<(ModuleSource, AstId), Vec<BlanketParamSource>>,
-    /// Digested headers for every `trait` declaration, keyed by
-    /// `(ModuleSource, AstId)`. Lets method-lookup queries read trait
+    pub(super) blanket_param_sources: IndexMap<DefId, Vec<BlanketParamSource>>,
+    /// Digested headers for every `trait` declaration, keyed by its
+    /// [`DefId`]. Lets method-lookup queries read trait
     /// method signatures without re-fetching the trait AST. See
     /// [`TraitDeclHeader`].
     pub(super) trait_decl_headers: IndexMap<DefId, TraitDeclHeader>,
@@ -886,7 +884,7 @@ impl TraitEnv {
             IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
-        let mut impl_headers: IndexMap<(ModuleSource, AstId), ImplHeader> = IndexMap::default();
+        let mut impl_headers: IndexMap<DefId, ImplHeader> = IndexMap::default();
         let mut trait_decl_headers: IndexMap<DefId, TraitDeclHeader> = IndexMap::default();
         let mut function_type_params: IndexMap<(ModuleSource, String), Vec<ast::GenericParam>> =
             IndexMap::default();
@@ -1097,6 +1095,11 @@ impl TraitEnv {
                 let Item::Impl(impl_block) = item else {
                     continue;
                 };
+                // Every loaded module's `impl` blocks are identified by
+                // `DefTable::build`, so a miss means the two walks diverged.
+                let impl_def = defs
+                    .of_ast_id(impl_block.id)
+                    .expect("every impl block is a declaration");
                 let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
                 let trait_ref: Option<crate::defs::DefId> = impl_block
                     .trait_type
@@ -1113,7 +1116,7 @@ impl TraitEnv {
                     )
                 });
                 impl_headers.insert(
-                    (module_source.clone(), impl_block.id),
+                    impl_def,
                     ImplHeader {
                         module: module_source.clone(),
                         target: type_key.clone(),
@@ -1149,7 +1152,7 @@ impl TraitEnv {
                 all_impl_index
                     .entry(type_key.clone())
                     .or_default()
-                    .push((module_source.clone(), impl_block.id));
+                    .push(impl_def);
                 if impl_block.trait_type.is_some() {
                     if let Some((receiver, param)) =
                         classify_blanket_receiver(&impl_block.ty, &impl_block.type_params)
@@ -1182,7 +1185,7 @@ impl TraitEnv {
                                 .or_default()
                                 .push(BlanketImpl {
                                     module: module_source.clone(),
-                                    ast_id: impl_block.id,
+                                    def: impl_def,
                                     receiver,
                                     param,
                                     bounds,
@@ -1192,7 +1195,7 @@ impl TraitEnv {
                     impl_index
                         .entry(type_key.clone())
                         .or_default()
-                        .push((module_source.clone(), impl_block.id));
+                        .push(impl_def);
                     // Static methods on trait impl blocks (no `self`
                     // parameter) join the same canonical bucket as
                     // inherent statics. `f64::from_bits` and friends in
@@ -1356,7 +1359,7 @@ impl TraitEnv {
 
     /// Keys of every impl block on `type_key`, in global build order —
     /// inherent and trait alike.
-    pub(super) fn all_impl_keys(&self, type_key: &ImplTargetKey) -> Vec<(ModuleSource, AstId)> {
+    pub(super) fn all_impl_keys(&self, type_key: &ImplTargetKey) -> Vec<DefId> {
         self.all_impl_index
             .get(type_key)
             .cloned()
@@ -1366,10 +1369,7 @@ impl TraitEnv {
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
-    pub(super) fn inherent_impl_keys(
-        &self,
-        type_key: &ImplTargetKey,
-    ) -> Vec<(ModuleSource, AstId)> {
+    pub(super) fn inherent_impl_keys(&self, type_key: &ImplTargetKey) -> Vec<DefId> {
         self.all_impl_index
             .get(type_key)
             .map(|keys| {
@@ -1468,11 +1468,11 @@ impl TraitEnv {
     pub(crate) fn entries_by_receiver<'a>(
         &'a self,
         receiver: &'a name::Receiver,
-    ) -> impl Iterator<Item = &'a (ModuleSource, AstId)> + 'a {
+    ) -> impl Iterator<Item = DefId> + 'a {
         self.by_receiver
             .get(receiver)
             .into_iter()
-            .flat_map(|entries| entries.iter())
+            .flat_map(|entries| entries.iter().copied())
     }
 
     /// Collected form of [`Self::entries_by_receiver`], for callers that need
@@ -1480,8 +1480,8 @@ impl TraitEnv {
     pub(crate) fn entries_by_receiver_vec(
         &self,
         receiver: &name::Receiver,
-    ) -> Vec<(ModuleSource, AstId)> {
-        self.entries_by_receiver(receiver).cloned().collect()
+    ) -> Vec<DefId> {
+        self.entries_by_receiver(receiver).collect()
     }
 
     /// Receiver-matched form of [`Self::has_any_methodful_impl`].
@@ -1514,8 +1514,10 @@ impl TraitEnv {
         trait_: crate::defs::DefId,
         module_source: &ModuleSource,
     ) -> bool {
-        self.entries_by_receiver(receiver)
-            .any(|entry| entry.0 == *module_source && self.methodful_header_matches(entry, trait_))
+        self.entries_by_receiver(receiver).any(|entry| {
+            self.defs.module(entry) == module_source
+                && self.methodful_header_matches(entry, trait_)
+        })
     }
 
     /// Whether an inherent `impl` on `receiver` declares `method_name`.
@@ -1535,13 +1537,9 @@ impl TraitEnv {
             })
     }
 
-    fn methodful_header_matches(
-        &self,
-        entry: &(ModuleSource, AstId),
-        trait_: crate::defs::DefId,
-    ) -> bool {
+    fn methodful_header_matches(&self, entry: DefId, trait_: crate::defs::DefId) -> bool {
         self.impl_headers
-            .get(entry)
+            .get(&entry)
             .is_some_and(|header| !header.methods.is_empty() && header.trait_ref == Some(trait_))
     }
 
@@ -1622,7 +1620,7 @@ impl TraitEnv {
     /// order — see [`blanket_param_sources`].
     pub(crate) fn blanket_param_sources(&self, blanket: &BlanketImpl) -> Vec<BlanketParamSource> {
         self.blanket_param_sources
-            .get(&(blanket.module.clone(), blanket.ast_id))
+            .get(&blanket.def)
             .cloned()
             .unwrap_or_default()
     }
@@ -1635,7 +1633,7 @@ impl TraitEnv {
     /// `Members`.
     pub(crate) fn pack_assocs_of_blanket(&self, blanket: &BlanketImpl) -> Vec<(DefId, String)> {
         self.blanket_pack_assocs
-            .get(&(blanket.module.clone(), blanket.ast_id))
+            .get(&blanket.def)
             .cloned()
             .unwrap_or_default()
     }
@@ -2205,7 +2203,7 @@ impl VariadicImpl<'_> {
 /// their own. The same walk refuses a target the compiler cannot implement.
 fn check_variadic_impl_overlap(
     defs: &crate::defs::DefTable,
-    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    impl_headers: &IndexMap<DefId, ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
     let mut groups: IndexMap<&ImplTargetKey, Vec<VariadicImpl<'_>>> = IndexMap::default();
@@ -2311,7 +2309,7 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
 /// written head — two modules' `Box_` are two types, and a spelling cannot say so.
 fn check_inherent_impl_collisions(
     defs: &crate::defs::DefTable,
-    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    impl_headers: &IndexMap<DefId, ImplHeader>,
     resolutions: &crate::resolve::Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
@@ -2388,7 +2386,7 @@ fn check_inherent_impl_collisions(
 /// paired with the offending impl's [`ModuleSource`] for file attribution.
 fn check_all_orphan_rules(
     defs: &crate::defs::DefTable,
-    impl_headers: &IndexMap<(ModuleSource, AstId), ImplHeader>,
+    impl_headers: &IndexMap<DefId, ImplHeader>,
     decl_index: &TraitDeclIndex,
     type_decl_index: &IndexSet<DefId>,
     resolve: ResolveWritten<'_>,

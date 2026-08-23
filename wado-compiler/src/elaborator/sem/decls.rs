@@ -97,8 +97,8 @@ pub(crate) struct ModuleDecls {
     /// Facts of this module's `impl` blocks that belong to the block rather
     /// than to one method — its target and trait type arguments and its
     /// associated-type bindings — resolved once in the block's own frame and
-    /// keyed by the block's `AstId`.
-    pub(crate) impl_sigs: IndexMap<crate::ast::AstId, super::super::sig::ImplSig>,
+    /// keyed by the block's [`crate::defs::DefId`].
+    pub(crate) impl_sigs: IndexMap<crate::defs::DefId, super::super::sig::ImplSig>,
     /// Facts of this module's `trait` declarations, resolved once in each
     /// trait's own frame (`Self` at slot 0) and keyed by the declaration's
     /// `AstId`, so a use site instantiates instead of re-resolving the trait

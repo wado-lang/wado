@@ -2444,7 +2444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for blanket in trait_env.blanket_impls.get(&trait_).into_iter().flatten() {
                 let Some(header) = trait_env
                     .impl_headers
-                    .get(&(blanket.module.clone(), blanket.ast_id))
+                    .get(&blanket.def)
                 else {
                     continue;
                 };
