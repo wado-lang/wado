@@ -133,11 +133,12 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     // round would otherwise revisit — and those sites are usually perfectly
     // handleable, just not yet bound. Reboxing them without trying would give
     // up the optimization on the very sites inlining just made hot.
+    let scalarized = scalarized_returns(project);
     let mut all = candidates.clone();
-    for (key, (variant_type, layout)) in scalarized_returns(project) {
+    for (&key, (variant_type, layout)) in &scalarized {
         all.entry(key).or_insert(Candidate {
-            layout,
-            variant_type,
+            layout: layout.clone(),
+            variant_type: *variant_type,
         });
     }
     rewrite_call_sites(project, &all, &mut touched);
@@ -152,7 +153,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     }
     // Only now: whatever the rewrite above declined is a straggler, and it is
     // one the moment its callee's signature changed — not an iteration later.
-    changed |= rebox_stragglers(project, gate);
+    changed |= rebox_stragglers(project, &scalarized, gate);
     debug_assert_call_sites_rewritten(project);
     changed
 }
@@ -166,8 +167,11 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
 /// `f(x)` ⇒ `{ let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }`.
 /// This is what makes the rewrite sound without validation — `nir/inline` keeps
 /// planting call sites after a callee's signature is already committed.
-fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let scalarized = scalarized_returns(project);
+fn rebox_stragglers(
+    project: &mut NirPackage,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    gate: &mut FunctionGate,
+) -> bool {
     if scalarized.is_empty() {
         return false;
     }
@@ -178,20 +182,26 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         let Some(mut body) = func.body.take() else {
             continue;
         };
+        // Every step below keys on a call to a scalarized callee; without one
+        // they all walk the body to find nothing.
+        if !calls_any(&body, scalarized) {
+            func.body = Some(body);
+            continue;
+        }
         let span = func.span;
-        let bound = handled_call_sites(&body, &scalarized, own_return);
+        let bound = handled_call_sites(&body, scalarized, own_return);
         let mut targets: Vec<ExprId> = Vec::new();
         collect_straggler_calls(
             &body,
             NodeRef::Block(body.root),
-            &scalarized,
+            scalarized,
             &bound,
             &mut targets,
         );
         let reboxed = !targets.is_empty();
         for call in targets {
             crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
-            rebox_call(&mut body, &mut func.locals, call, &scalarized, span);
+            rebox_call(&mut body, &mut func.locals, call, scalarized, span);
         }
         func.body = Some(body);
         if reboxed {
@@ -199,8 +209,17 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             changed = true;
         }
     }
-    changed |= rebox_stragglers_in_globals(project, &scalarized);
+    changed |= rebox_stragglers_in_globals(project, scalarized);
     changed
+}
+
+/// Whether `body` calls any function in `targets` — an arena scan that decides
+/// in one pass whether the tree walks keyed on such a call have anything to
+/// find. Nearly every function in a package calls none of them.
+fn calls_any<V>(body: &Body, targets: &IndexMap<FuncId, V>) -> bool {
+    body.exprs.values().any(|node| {
+        matches!(&node.kind, ExprKind::Call { func_id, .. } if targets.contains_key(func_id))
+    })
 }
 
 /// The same repair over the global initializers. They are never rewritten —
@@ -2043,6 +2062,12 @@ fn rewrite_call_sites(
         let Some(mut body) = func.body.take() else {
             continue;
         };
+        // Every step below keys on a call to a candidate; without one they all
+        // walk the body to find nothing.
+        if !calls_any(&body, candidates) {
+            func.body = Some(body);
+            continue;
+        }
         let span = func.span;
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing
