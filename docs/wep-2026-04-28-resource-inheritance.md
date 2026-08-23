@@ -53,9 +53,9 @@ Backing is **always declared explicitly** on the resource, and **structurally ve
 
 Concretely:
 
-- `#[cm(...)]` on a `resource` requires a `type=...` field. Allowed values in v1: `"extern-ref"` and `"i32"`. The CM-layer naming (`extern-ref`, `i32`) is used; the matching Wado-level type names are `ExternRef` and the native `i32`.
+- `#[cm(...)]` on a `resource` requires a `type=...` field. Allowed values in v1: `"extern-ref"` and `"i32"`. The CM-layer naming is used; the backing has no user-facing Wado type name.
   ```wado
-  #[cm("web:dom#Element", type="extern-ref")]
+  #[cm("web:dom/element", type="extern-ref")]
   pub resource Element { ... }
 
   #[cm("wasi:http/types@0.3.0#request", type="i32")]
@@ -88,13 +88,13 @@ pub resource Child extends Parent { ... }
 The `extends Parent` clause slots between the resource name (and any generic parameter list) and the body. It is optional; resources without `extends` behave as today.
 
 ```wado
-#[cm("web:dom#EventTarget", type="extern-ref")]
+#[cm("web:dom/event-target", type="extern-ref")]
 pub resource EventTarget { ... }
 
-#[cm("web:dom#Node", type="extern-ref")]
+#[cm("web:dom/node", type="extern-ref")]
 pub resource Node extends EventTarget { ... }
 
-#[cm("web:dom#Element", type="extern-ref")]
+#[cm("web:dom/element", type="extern-ref")]
 pub resource Element extends Node { ... }
 ```
 
@@ -474,21 +474,23 @@ How `extends` and the operations on it lower from Wado to WIT/CM, and from WIT/C
 
 #### Three layers
 
-| Layer  | Identity                                                        |
-| ------ | --------------------------------------------------------------- |
-| Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`) |
-| WIT/CM | one resource type, `extern-ref`                                 |
-| Wasm   | the corresponding GC reference, `externref`                     |
+| Layer  | Identity                                                                        |
+| ------ | ------------------------------------------------------------------------------- |
+| Wado   | each type in the `extends` chain is distinct (`Element ≠ Node`)                 |
+| WIT/CM | one type, `extern-ref`                                                          |
+| Wasm   | v1: an opaque `u32` host-table index; under CM-GC: the GC reference `externref` |
 
 This is the same erasure pattern as [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md): the Wado type system holds the structure, the wasm output knows nothing about it. extends differs from newtype only in that **method namespacing is preserved at the WIT layer** — methods are imported under per-Wado-type WIT interfaces, even though the receiver type is universal.
 
 #### Universal receiver at the WIT layer
 
-A single CM resource type:
+A single CM type:
 
 ```wit
-resource extern-ref;
+type extern-ref = u32;   // v1; becomes the CM extern-ref type under CM-GC
 ```
+
+v1 does not wait for CM-GC. The universal handle is an opaque `u32` index into a host-side table owned by the host glue, copyable and exempt from the affine analysis of [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — which is what gives extern-ref-backed handles their value semantics. It is deliberately not a CM `resource`: CM resource handles are affine, and an affine handle cannot have the value semantics this WEP specifies. Every signature below is written against the `extern-ref` name, so the CM-GC switch changes the alias and the lowering, not the shapes.
 
 Every extends-related Wado type is the same `extern-ref` once it crosses the boundary. There is no `event-target` resource, no `node` resource, no `element` resource at the CM level — only the methods are split.
 
@@ -563,11 +565,15 @@ Upcast and the receiver argument of inherited methods are wasm-level no-ops; the
 
 #### Lifecycle
 
-`extern-ref`-backed resources follow CM-GC's standard lifecycle for externref-backed resources. extends does not introduce a Wado-specific drop protocol, and the same underlying `externref` is GC-collected exactly once regardless of how many Wado static types referenced it.
+Under CM-GC, `extern-ref`-backed resources follow the standard externref lifecycle: extends introduces no Wado-specific drop protocol, and the same underlying `externref` is GC-collected exactly once regardless of how many Wado static types referenced it.
+
+v1 has no release path. Wasm GC offers no finalization, so a handle the host table hands out is never reclaimed and each one costs a table slot for the lifetime of the instance. This is acceptable for a page-scoped program and is removed by the CM-GC switch, not by a Wado-side drop protocol.
 
 ## Consequences
 
 ### Implementation Roadmap
+
+This is the full feature. The minimum subset Tide's MVP needs, and the order to land it in, is [Tide § Minimum Implementation Roadmap](./wep-2026-04-01-tide.md#minimum-implementation-roadmap); generic parents and the stdlib-wide `type=` migration sit outside it.
 
 #### M1: Language core + `#[cm(...)]` extension + minimal lowering (single landing)
 
