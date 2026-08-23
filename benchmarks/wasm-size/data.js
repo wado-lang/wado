@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787414205735,
+  "lastUpdate": 1787443847856,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50217,6 +50217,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d9c76dde8815ac4beb6ca653b8e9f82505b7fc7e"
         },
         "date": 1787414204860,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "134d78193afce72094c7951c28f9b8d2929cbc2f",
+          "message": "Merge pull request #1876 from wado-lang/claude/wado-core-json-issues-5dpk19\n\nfix(optimizer): follow a write that reaches storage through a derived handle",
+          "timestamp": "2026-08-23T08:55:31+09:00",
+          "tree_id": "ec50d9340b398b7e025def73962f6e7ddb46ee4e",
+          "url": "https://github.com/wado-lang/wado/commit/134d78193afce72094c7951c28f9b8d2929cbc2f"
+        },
+        "date": 1787443847341,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
