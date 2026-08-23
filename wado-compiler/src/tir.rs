@@ -4029,14 +4029,13 @@ impl TypeTable {
         }
     }
 
-    /// The arguments an instantiation was made with, or `None` for a type that
-    /// is not one.
+    /// The arguments an instantiation carries; `None` if `id` is not one.
     #[must_use]
     pub fn generic_type_args(&self, id: TypeId) -> Option<Vec<TypeId>> {
         match self.get(id) {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-            // No recovery: an empty list is a declaration, not an instantiation.
+            // No fallback search: an empty list is a declaration, not an instantiation.
             ResolvedType::Struct { type_args, .. } | ResolvedType::Newtype { type_args, .. }
                 if !type_args.is_empty() =>
             {

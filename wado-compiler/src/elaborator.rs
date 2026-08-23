@@ -2001,12 +2001,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if scope.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
-                    // Without an owner the head alone names one function for
-                    // every instantiation. A trait impl needs none: the trait
-                    // index keys it by receiver.
                     let is_instantiation = match tt.get(peeled) {
                         crate::tir::ResolvedType::GenericInstance { .. } => true,
                         crate::tir::ResolvedType::Newtype { type_args, .. } => {
+                            // A trait impl needs none: the trait index keys it.
                             !type_args.is_empty() && trait_name.is_none()
                         }
                         _ => false,
