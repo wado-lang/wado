@@ -31,12 +31,13 @@ Follow the `rust` skill for Rust and the `wado` skill for Wado.
 
 ### Comments
 
-- Delete what is readable from the code.
-- Doc and module comments: 3 lines max. Say what it is, not how it works.
+- Delete outright what carries no information or repeats the code; trim only
+  what survives that.
+- Doc and module comments: 2 lines max. Say what it is, not how it works.
 
 ### Markdown
 
-- Correct, fresh, concise. 2 lines max per topic.
+- Correct, fresh, concise. 3 lines max per topic.
 
 ## Cycle
 
