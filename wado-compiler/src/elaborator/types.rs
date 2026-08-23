@@ -781,6 +781,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `resource Child extends Parent` clause the elaborator rejected: the
+    /// parent is not a resource, a backing does not match, the chain is
+    /// cyclic, or the parent carries generic arguments (out of scope in v1).
+    ResourceExtends {
+        message: String,
+        span: Span,
+    },
+
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
     /// type arguments that have not been supplied. The fix is to either
@@ -1570,6 +1578,9 @@ impl TypeError {
             ),
             TypeError::CompilerItemAttr { message, span } => {
                 (Code::CompilerItemAttr, message.clone(), *span)
+            }
+            TypeError::ResourceExtends { message, span } => {
+                (Code::ResourceExtends, message.clone(), *span)
             }
             TypeError::BareGenericFunctionRef { name, span } => (
                 Code::GenericFunctionRef,

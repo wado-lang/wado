@@ -29,6 +29,138 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 
+/// One `resource Child extends Parent` clause, held until every resource has
+/// been collected: a parent may be declared after its child, or in another
+/// module, and the backing check needs both sides.
+struct PendingExtends {
+    child: crate::defs::DefId,
+    child_name: String,
+    parent: Type,
+    module: ModuleSource,
+    span: crate::token::Span,
+}
+
+/// Resolve every `extends` clause and record the ones that hold. A clause is
+/// rejected when the parent is not a resource, either side is not
+/// extern-ref-backed, the parent carries generic arguments (out of scope in
+/// v1), or the link closes a cycle. See
+/// `docs/wep-2026-04-28-resource-inheritance.md`.
+fn resolve_resource_extends<H: CompilerHost>(
+    pending: &[PendingExtends],
+    resolutions: &crate::resolve::Resolutions,
+    type_table: &RefCell<TypeTable>,
+    logger: &Logger<'_, H>,
+) {
+    let reject = |clause: &PendingExtends, message: String| {
+        let _ = logger.error_in(
+            &clause.module,
+            TypeError::ResourceExtends {
+                message,
+                span: clause.span,
+            },
+        );
+    };
+
+    let mut links: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
+    for clause in pending {
+        if matches!(clause.parent, Type::Generic(_) | Type::NamespacedGeneric(_)) {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends a parent with generic arguments; not supported in v1",
+                    clause.child_name
+                ),
+            );
+            continue;
+        }
+        let Some(site) = crate::resolve::head_site(&clause.parent) else {
+            reject(
+                clause,
+                format!("`{}` extends a shape that names no resource", clause.child_name),
+            );
+            continue;
+        };
+        let parent = match resolutions.get(site) {
+            crate::resolve::Resolution::Def(def) => def,
+            // An unresolved name is already reported as such; saying it twice
+            // helps no one.
+            crate::resolve::Resolution::Binder(_) | crate::resolve::Resolution::Unresolved => {
+                continue;
+            }
+        };
+        let defs = resolutions.defs();
+        if defs.kind(parent) != crate::defs::DefKind::Resource {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends `{}`, which is not a resource",
+                    clause.child_name,
+                    defs.name(parent)
+                ),
+            );
+            continue;
+        }
+        let tt = type_table.borrow();
+        let child_is_extern_ref = tt.is_extern_ref_resource(clause.child);
+        let parent_is_extern_ref = tt.is_extern_ref_resource(parent);
+        drop(tt);
+        if !child_is_extern_ref || !parent_is_extern_ref {
+            let lacking = if child_is_extern_ref {
+                defs.name(parent).to_string()
+            } else {
+                clause.child_name.clone()
+            };
+            reject(
+                clause,
+                format!(
+                    "`extends` requires `#[cm(..., type = \"extern-ref\")]` on both resources; `{lacking}` does not declare it"
+                ),
+            );
+            continue;
+        }
+        links.insert(clause.child, parent);
+    }
+
+    for clause in pending {
+        let Some(&parent) = links.get(&clause.child) else {
+            continue;
+        };
+        if reaches(&links, parent, clause.child) {
+            reject(
+                clause,
+                format!("`{}` extends itself through a cycle", clause.child_name),
+            );
+            continue;
+        }
+        type_table
+            .borrow_mut()
+            .set_resource_parent(clause.child, parent);
+    }
+}
+
+/// Whether `target` is `from` or lies on its parent chain.
+fn reaches(
+    links: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    from: crate::defs::DefId,
+    target: crate::defs::DefId,
+) -> bool {
+    let mut seen: Vec<crate::defs::DefId> = Vec::new();
+    let mut current = from;
+    loop {
+        if current == target {
+            return true;
+        }
+        if seen.contains(&current) {
+            return false;
+        }
+        seen.push(current);
+        match links.get(&current) {
+            Some(&next) => current = next,
+            None => return false,
+        }
+    }
+}
+
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
 /// [`Elaborator::build_tir_from_state`]. The [`TypeSystem`] internals are
 /// reference-counted so per-module elaborators clone them cheaply, and the
@@ -152,6 +284,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut all_resource_types: IndexMap<crate::defs::DefId, ResourceInfo> = snapshot_state
             .map(|s| (*s.tysys.all_resource_types).clone())
             .unwrap_or_default();
+
+        let mut pending_extends: Vec<PendingExtends> = Vec::new();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -293,6 +427,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     == Some(crate::ast::CmResourceBacking::ExternRef)
                             }) {
                                 type_table.borrow_mut().mark_extern_ref_resource(def);
+                            }
+                            if let Some(parent) = &resource_decl.parent {
+                                pending_extends.push(PendingExtends {
+                                    child: def,
+                                    child_name: resource_decl.name.clone(),
+                                    parent: parent.clone(),
+                                    module: module_source.clone(),
+                                    span: resource_decl.span,
+                                });
                             }
                         }
                         super::item::register_resource_compiler_item(
@@ -901,6 +1044,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
         }
+
+        resolve_resource_extends(&pending_extends, &resolutions, &type_table, logger);
 
         // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);

@@ -831,6 +831,10 @@ pub struct TypeTable {
     /// where the declaration's attributes are still in hand, and read by every
     /// predicate that asks whether a type owns a resource.
     extern_ref_resources: IndexSet<crate::defs::DefId>,
+    /// `resource Child extends Parent`, child → parent. Single inheritance and
+    /// acyclic — the elaborator rejects anything else before recording it — so
+    /// the chain is walked by following the link.
+    resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
     /// A name comes out of an identity and never goes back in. Attached where
@@ -956,6 +960,7 @@ impl TypeTable {
             anon_struct_index: IndexMap::default(),
             decl_index: IndexMap::default(),
             extern_ref_resources: IndexSet::default(),
+            resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
 
@@ -1126,6 +1131,36 @@ impl TypeTable {
     #[must_use]
     pub fn is_extern_ref_resource(&self, def: crate::defs::DefId) -> bool {
         self.extern_ref_resources.contains(&def)
+    }
+
+    /// Record `child extends parent`. The caller has already checked that both
+    /// are extern-ref-backed resources and that the link closes no cycle.
+    pub fn set_resource_parent(&mut self, child: crate::defs::DefId, parent: crate::defs::DefId) {
+        assert_ne!(child, parent, "a resource cannot extend itself");
+        self.resource_parents.insert(child, parent);
+    }
+
+    /// The resource `def` extends, if it declares one.
+    #[must_use]
+    pub fn resource_parent(&self, def: crate::defs::DefId) -> Option<crate::defs::DefId> {
+        self.resource_parents.get(&def).copied()
+    }
+
+    /// Whether `sub` is `sup` or extends it, directly or transitively. The
+    /// relation is reflexive and transitive; unrelated resources are
+    /// incomparable.
+    #[must_use]
+    pub fn is_resource_subtype(&self, sub: crate::defs::DefId, sup: crate::defs::DefId) -> bool {
+        let mut current = sub;
+        loop {
+            if current == sup {
+                return true;
+            }
+            match self.resource_parent(current) {
+                Some(parent) => current = parent,
+                None => return false,
+            }
+        }
     }
 
     pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {

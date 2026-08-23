@@ -10,6 +10,16 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
+/// Elaboration diagnostics, as `"CODE: message"`.
+fn diagnostics(source: &str) -> Vec<String> {
+    let host = InMemoryHost::new();
+    let _ = block_on(semantics(source, &host, Some("entry.wado")));
+    host.diagnostics()
+        .into_iter()
+        .map(|d| format!("{:?}: {}", d.code, d.message))
+        .collect()
+}
+
 fn move_errors(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
@@ -60,5 +70,78 @@ fn an_i32_backed_resource_stays_move_only() {
     assert!(
         !errors.is_empty(),
         "an i32-backed handle keeps the affine discipline"
+    );
+}
+
+const EXTERN_REF: &str = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]";
+
+#[test]
+fn extends_links_two_extern_ref_resources() {
+    let source = format!(
+        "{EXTERN_REF}\nresource EventTarget {{}}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {{}}\n\
+         export fn run() {{}}\n"
+    );
+    assert!(
+        diagnostics(&source).is_empty(),
+        "a well-formed chain reports nothing, got {:?}",
+        diagnostics(&source)
+    );
+}
+
+#[test]
+fn extends_requires_extern_ref_on_both_sides() {
+    let source = "resource EventTarget {}
+         resource Node extends EventTarget {}
+         export fn run() {}
+";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("extern-ref")),
+        "expected a backing-mismatch error, got {d:?}"
+    );
+}
+
+#[test]
+fn extends_parent_must_be_a_resource() {
+    let source = "struct EventTarget {}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("is not a resource")),
+        "expected a parent-kind error, got {d:?}"
+    );
+}
+
+#[test]
+fn extends_rejects_a_cycle() {
+    let source = "#[cm(\"web:dom/a\", type = \"extern-ref\")]
+         resource A extends B {}
+         #[cm(\"web:dom/b\", type = \"extern-ref\")]
+         resource B extends A {}
+         export fn run() {}
+";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.to_lowercase().contains("cycle")),
+        "expected a cycle error, got {d:?}"
+    );
+}
+
+#[test]
+fn extends_rejects_a_generic_parent_in_v1() {
+    let source = "#[cm(\"web:dom/base\", type = \"extern-ref\")]
+         resource Base<T> {}
+         #[cm(\"web:dom/leaf\", type = \"extern-ref\")]
+         resource Leaf extends Base<i32> {}
+         export fn run() {}
+";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("generic arguments")),
+        "a generic parent is out of scope in v1 and must be reported, got {d:?}"
     );
 }
