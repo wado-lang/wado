@@ -1669,7 +1669,10 @@ impl ImportAttributes {
 
 /// Symbol visibility ladder, orthogonal to `is_export` (the Component Model
 /// surface flag). See docs/wep-2026-06-25-visibility-internal-pub-export.md.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// The variants are declared narrowest first, so the derived `Ord` is the
+/// ladder itself and `min` is "the narrower reach of the two".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Visibility {
     /// No modifier: visible only within the defining file.
     #[default]

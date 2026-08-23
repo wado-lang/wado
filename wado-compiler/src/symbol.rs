@@ -368,6 +368,49 @@ impl SymbolTable {
             .map(|reexport| reexport.visibility)
     }
 
+    /// The reach `name` actually has in `module_source`, following re-export
+    /// chains and narrowing at every hop.
+    ///
+    /// A re-export cannot grant more reach than the item it names, so the
+    /// answer is the narrowest visibility on the chain.
+    pub fn effective_visibility_in_module(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+    ) -> Option<Visibility> {
+        self.effective_visibility_with_visited(module_source, name, &mut Vec::new())
+    }
+
+    fn effective_visibility_with_visited(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+        visited: &mut Vec<(ModuleSource, String)>,
+    ) -> Option<Visibility> {
+        let visit_key = (module_source.clone(), name.to_string());
+        if visited.contains(&visit_key) {
+            return None;
+        }
+        visited.push(visit_key);
+
+        if let Some(symbol) = self
+            .modules
+            .get(module_source)
+            .and_then(|module| module.get(name))
+            .and_then(|key| self.symbols.get(key))
+        {
+            return Some(symbol.visibility);
+        }
+
+        let reexport = self.get_reexport(module_source, name)?;
+        let source = self.effective_visibility_with_visited(
+            &reexport.source_module,
+            &reexport.source_name,
+            visited,
+        )?;
+        Some(reexport.visibility.min(source))
+    }
+
     /// Names a module re-exports via `pub use`, in declaration order.
     pub fn reexport_names(&self, module_source: &ModuleSource) -> Vec<String> {
         self.reexports
