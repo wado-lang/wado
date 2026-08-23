@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787471497604,
+  "lastUpdate": 1787473502147,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50393,6 +50393,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7935de32cc3d55de96c706a7d7861b0d4a6f0bb8"
         },
         "date": 1787471496903,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "44049ecdfd8ad815be37253bb052f1af6a14ada1",
+          "message": "Merge pull request #1882 from wado-lang/claude/wado-compiler-performance-178e94\n\nperf(optimizer): converge the NIR fixed-point loop and stop rebuilding whole-program tables",
+          "timestamp": "2026-08-23T17:11:44+09:00",
+          "tree_id": "4387c37da275a19311e2b4079089e8c54deb24f9",
+          "url": "https://github.com/wado-lang/wado/commit/44049ecdfd8ad815be37253bb052f1af6a14ada1"
+        },
+        "date": 1787473501523,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
