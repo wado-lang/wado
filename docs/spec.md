@@ -3617,13 +3617,12 @@ For associative arrays, use `TreeMap` from `core:collections`:
 use { TreeMap } from "core:collections";
 
 let mut map = TreeMap::<String, i32>::new();
-map.insert("x", 10);
-map.insert("y", 20);
+map["x"] = 10;                   // insert or overwrite
+map["y"] = 20;
 
-// Index syntax
-map["z"] = 30;                    // assignment
-let v = map["x"];                 // panics if key not found
+let v = map["x"];                // panics if key not found
 let opt = map.get("x");          // returns Option<V>
+map.try_insert("x", 99);         // inserts only if absent; reports whether it did
 
 // Keys preserve insertion order
 let keys = map.keys();  // returns List<K> in insertion order
@@ -3906,7 +3905,7 @@ A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query
 ```
 core:json#parse                      # free function / global
 core:math#f64::PI                    # associated const / static fn
-core:collections#TreeMap.insert      # instance method
+core:collections#TreeMap.get         # instance method
 core:collections#List<String>::len   # generics use Wado angle brackets
 core:fmt#Point^Display::fmt          # trait-impl member
 "./utils.wado"#Helper::new           # relative path — must be quoted
