@@ -108,9 +108,8 @@ fn parser_super_fn_clause(ctx: &GenContext) -> String {
     return "";
 }
 
-/// The ` with Foo` clause a parse-entry fn carries: the lexer's base, because
-/// the entry calls `tokenize` (which carries that effect), and the parser's,
-/// because a rule evaluates its predicates. Empty when there is no superClass.
+/// The ` with Foo` clause a parse-entry fn carries: the lexer's base (it
+/// tokenizes) and the parser's (its rules evaluate predicates).
 fn superclass_clause(ctx: &GenContext) -> String {
     let mut bases: List<String> = [];
     if ctx.has_superclass() {

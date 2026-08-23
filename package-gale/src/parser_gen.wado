@@ -6216,10 +6216,8 @@ fn gen_general_group_scan_dispatch(
     w.end();
 }
 
-/// The token kinds that can stand one position after `shared_token` — the
-/// discriminator an overlap group's sub-dispatch branches on. Empty means "no
-/// discriminator", never "anything". Measured on the element carrying the shared
-/// token, not the one after it (soundness invariant 11).
+/// The discriminator an overlap group's sub-dispatch branches on, measured on
+/// the carrier (invariant 11). Empty means "none", never "anything".
 fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
     for let mut i = 1; i < elements.len(); i += 1 {
         let elem = &elements[i];
@@ -6245,8 +6243,7 @@ fn compute_lr_second_token(shared_token: &String, elements: &List<Element>, ctx:
 }
 
 /// Whether a nullable carrier contributes exactly one token once taken: a `?`
-/// over a single token. A `*` can come round again, so even a one-token body
-/// leaves offset 1 unknown.
+/// over a single token. A `*` can come round again, so it never does.
 fn optional_body_is_single_token(elem: &Element, ctx: &mut GenContext) -> bool {
     let mut visiting: List<String> = [];
     return match elem {
@@ -6256,9 +6253,7 @@ fn optional_body_is_single_token(elem: &Element, ctx: &mut GenContext) -> bool {
 }
 
 /// `compute_lr_second_token` for a group: the union over the alternatives that
-/// can start with `shared_token`. One exactly a token long hands offset 1 to
-/// whatever follows the group; one the walk cannot measure leaves the whole
-/// answer unknown, since a partial union would exclude what it did not see.
+/// can start with `shared_token`, empty when one of them cannot be measured.
 fn group_second_token(
     alts: &List<Alternative>,
     shared_token: &String,
@@ -6297,8 +6292,7 @@ fn group_second_token(
 }
 
 /// The offset-1 set of `elements[start..]`, or empty when neither K-prefix walk
-/// reaches that depth. Both are sound and halt at different shapes, so a shape
-/// only one can measure is still measured.
+/// reaches that depth. They halt at different shapes, so both are tried.
 fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContext) -> List<String> {
     let mut visiting: List<String> = [];
     let [deep, _] = ctx.deep_position_first_sets_from(elements, start, 2, &mut visiting);
@@ -6312,11 +6306,8 @@ fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContex
     return [];
 }
 
-/// The sub-dispatch condition separating one candidate of a shared-first-token
-/// group from the rest, as `[condition, scan_local]`: a second-token check when
-/// the walk names one, else the candidate's own suffix scan, which — unlike a
-/// vacuous condition — lets the next candidate try. The caller binds a
-/// non-empty `scan_local` ahead of the chain; the branch it guards reuses it.
+/// One candidate's sub-dispatch condition as `[condition, scan_local]`: a
+/// second-token check, else its own suffix scan bound to `scan_local`.
 fn lr_second_token_plan(
     shared_token: &String,
     elements: &List<Element>,

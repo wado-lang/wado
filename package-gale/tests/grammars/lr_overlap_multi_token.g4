@@ -2,9 +2,7 @@
 // License: same as the Gale package.
 //
 // The Rust `>>` shape: a shift operator is a two-token rule reference inside
-// the shared group, so both LR suffixes start with `>` and only the *second*
-// token separates them — which the overlap dispatch can see only by looking
-// inside `shr`, past the group alternative's single element.
+// the shared group, so only the token inside `shr` separates the suffixes.
 grammar LrOverlapMultiToken;
 
 e   : e (shl | shr) e

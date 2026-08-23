@@ -190,8 +190,7 @@ fn split_top_level_commas(text: &String) -> List<String> {
 }
 
 /// Declare the parser's base effect on a generated parse function. Every one
-/// carries it — a `{this.m()}?` predicate can sit in any rule, the way an ANTLR
-/// recognizer *is* its base. Scan functions are exempt: they evaluate no action.
+/// carries it — a predicate can sit in any rule; scan fns evaluate none.
 pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &GenContext) {
     if ctx.has_parser_superclass() {
         f.add_effect(ctx.parser_superclass_name());
@@ -545,17 +544,14 @@ fn pred_fn_name(id: i32) -> String {
     return `pred_${id}`;
 }
 
-/// Whether a Wado body names `this` with no parser base wired to receive it:
-/// the grammar declares none, or declares one Gale refused, and Wado has no
-/// such name. A Java body's `this` is java2wado's, over `@parser::members`.
+/// Whether a Wado body names `this` with no parser base wired to receive it.
+/// A Java body's `this` is java2wado's, resolved over `@parser::members`.
 fn body_names_unwired_base(text: &String, ctx: &GenContext) -> bool {
     return ctx.action_language() matches { Wado } && !ctx.has_parser_superclass() && !find_this_calls(text).is_empty();
 }
 
-/// Whether a body is already Wado, so no host translator is involved: written
-/// in it (`language = Wado`), or turned into ambient base calls by the
-/// superClass rewrite. Such a body reads only `p` and constants, so a gateable
-/// alt-initial predicate extracts to a standalone `pred_<id>(p)` fn.
+/// Whether a body is already Wado — written in it, or turned into base calls by
+/// the superClass rewrite — and so reads only `p` and constants.
 fn body_needs_no_translator(text: &String, ctx: &GenContext) -> bool {
     if find_attr_refs(text).len() != 0 {
         return false;
@@ -862,11 +858,8 @@ pub fn gen_action_body(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
     }
 }
 
-/// Translate an action (`is_predicate = false`, a statement list) or a predicate
-/// condition (`is_predicate = true`, an expression) to Wado, warning (loud) and
-/// returning `null` on failure. A ref-free Wado body passes through verbatim; a
-/// body naming an unwired base is dropped, under the refusal's diagnostic when
-/// there was one.
+/// Translate an action (a statement list) or a predicate condition (an
+/// expression) to Wado, warning (loud) and returning `null` on failure.
 fn translate_action_or_warn(src: &ActionSource, is_predicate: bool, ctx: &mut GenContext) -> Option<String> {
     if body_names_unwired_base(&src.text, ctx) {
         // A refused base already reported the cause; an undeclared one has not.

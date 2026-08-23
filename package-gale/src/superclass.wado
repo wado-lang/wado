@@ -7,16 +7,13 @@
 //! See `action.md`, "SuperClass — an effect interface".
 //!
 //! This module is the language-independent core: base name, call-site scan,
-//! interface synthesis, call rewrite. Codegen threads the effect. Each
-//! recognizer has its own base — a lexer op reads a `LexerView`, a parser op
-//! the recognizer.
+//! interface synthesis, call rewrite. Codegen threads the effect.
 
 use {
     Alternative,
     Element,
     Grammar,
     ActionKind,
-    AltAction,
     LexerRule,
     LexerAlternative,
     LexerElement,
@@ -56,6 +53,98 @@ pub struct SuperCall {
     pub name: String,
     /// The call passes something — `this.m(2)`, not `this.m()`.
     pub has_args: bool,
+}
+
+/// One action or predicate body, with the kind that fixes its call form.
+struct SuperBody {
+    text: String,
+    kind: ActionKind,
+}
+
+/// Every lexer action / predicate body, in source order. The one traversal both
+/// whole-grammar questions and the op collection read.
+fn lexer_bodies(grammar: &Grammar) -> List<SuperBody> {
+    let mut out: List<SuperBody> = [];
+    for let rule of &grammar.lexer_rules {
+        for let alt of &rule.body {
+            push_lexer_alt_bodies(alt, &mut out);
+        }
+    }
+    return out;
+}
+
+fn push_lexer_alt_bodies(alt: &LexerAlternative, out: &mut List<SuperBody>) {
+    for let a of &alt.actions {
+        out.push(SuperBody { text: a.source.text, kind: a.kind });
+    }
+    for let e of &alt.elements {
+        push_lexer_elem_bodies(e, out);
+    }
+}
+
+fn push_lexer_elem_bodies(elem: &LexerElement, out: &mut List<SuperBody>) {
+    match elem {
+        Group(alts) => {
+            for let alt of alts {
+                push_lexer_alt_bodies(alt, out);
+            }
+        },
+        Repeat(rep) => push_lexer_elem_bodies(&rep.element, out),
+        Not(nn) => push_lexer_elem_bodies(&nn.element, out),
+        _ => {
+        },
+    }
+}
+
+/// Every parser action / predicate body, in source order. An `@init` / `@after`
+/// prequel is an action, which is what makes a base call in one refusable.
+fn parser_bodies(grammar: &Grammar) -> List<SuperBody> {
+    let mut out: List<SuperBody> = [];
+    for let rule of &grammar.parser_rules {
+        for let prequel of &[&rule.init_action, &rule.after_action] {
+            if let Some(a) = *prequel {
+                out.push(SuperBody { text: a.text, kind: ActionKind::Action });
+            }
+        }
+        for let alt of &rule.alternatives {
+            push_parser_alt_bodies(alt, &mut out);
+        }
+    }
+    return out;
+}
+
+fn push_parser_alt_bodies(alt: &Alternative, out: &mut List<SuperBody>) {
+    for let a of &alt.actions {
+        out.push(SuperBody { text: a.source.text, kind: a.kind });
+    }
+    for let e of &alt.elements {
+        push_parser_elem_bodies(e, out);
+    }
+}
+
+fn push_parser_elem_bodies(elem: &Element, out: &mut List<SuperBody>) {
+    match elem {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                push_parser_alt_bodies(alt, out);
+            }
+        },
+        Repeat(rep) => push_parser_elem_bodies(&rep.element, out),
+        Label(lab) => push_parser_elem_bodies(&lab.element, out),
+        Not(n) => push_parser_elem_bodies(&n.element, out),
+        _ => {
+        },
+    }
+}
+
+fn collect_super_ops(bodies: &List<SuperBody>) -> List<SuperOp> {
+    let mut ops: List<SuperOp> = [];
+    for let b of bodies {
+        for let call of &find_this_calls(&b.text) {
+            add_super_op(&mut ops, call, &b.kind);
+        }
+    }
+    return ops;
 }
 
 /// The lexer's `superClass` base, or `null` when there is none.
@@ -109,9 +198,8 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
     return out;
 }
 
-/// Split a template literal starting at `i` (a backtick) into `[end, spans]`:
-/// the index just past the closing backtick, and the `${ ... }` bodies. Only
-/// the literal text between them is inert.
+/// Split a template literal at `i` into `[end, spans]`: past the closing
+/// backtick, and the `${ ... }` bodies. Only the text between them is inert.
 fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
     let mut spans: List<[i32, i32]> = [];
     let mut k = i + 1;
@@ -320,17 +408,10 @@ pub fn super_ops_mixed_role(ops: &List<SuperOp>) -> List<String> {
     return out;
 }
 
-/// Collect the superClass operations across a grammar's lexer rules: every
-/// distinct `this.<method>` call in an action / predicate body, in source
-/// order, deduped by name.
+/// The lexer's superClass operations: every distinct `this.<method>` call in an
+/// action / predicate body, in source order, deduped by name.
 pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
-    let mut ops: List<SuperOp> = [];
-    for let rule of &grammar.lexer_rules {
-        for let alt of &rule.body {
-            collect_lexer_alt_ops(alt, &mut ops);
-        }
-    }
-    return ops;
+    return collect_super_ops(&lexer_bodies(grammar));
 }
 
 /// Whether `body` is nothing but base-method calls and separators — the source
@@ -371,77 +452,25 @@ pub fn body_is_base_calls_only(body: &String, base_name: &String) -> bool {
     return true;
 }
 
-/// Whether every `{ ... }` action body in the grammar's lexer is
-/// base-calls-only, which is what lets a `language = Java` `superClass`
-/// grammar run its actions at all. All-or-nothing per grammar: one body
-/// carrying host code leaves every lexer action unexecuted, each reported.
+/// Whether every lexer `{ ... }` action body is base-calls-only, which is what
+/// lets a `language = Java` `superClass` grammar run its actions at all.
 pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
-    for let rule of &grammar.lexer_rules {
-        for let alt of &rule.body {
-            if !alt_actions_are_base_calls(alt, base_name) {
-                return false;
-            }
-        }
-    }
-    return true;
+    return lexer_bodies(grammar).iter_ref().all(|b: &SuperBody| !b.kind matches { Action }
+        || body_is_base_calls_only(&b.text, base_name));
 }
 
-fn alt_actions_are_base_calls(alt: &LexerAlternative, base_name: &String) -> bool {
-    for let a of &alt.actions {
-        if a.kind matches { Action } && !body_is_base_calls_only(&a.source.text, base_name) {
-            return false;
-        }
-    }
-    return alt.elements.iter_ref().all(|e| elem_actions_are_base_calls(e, base_name));
-}
-
-fn elem_actions_are_base_calls(elem: &LexerElement, base_name: &String) -> bool {
-    return match elem {
-        Group(alts) => alts.iter_ref().all(|a| alt_actions_are_base_calls(a, base_name)),
-        Repeat(rep) => elem_actions_are_base_calls(&rep.element, base_name),
-        Not(nn) => elem_actions_are_base_calls(&nn.element, base_name),
-        _ => true,
-    };
-}
-
-/// Whether a lexer body still names `this` after wiring — no base was declared
-/// for the lexer (a combined grammar's `superClass` is the parser's), or the
-/// one declared was refused. No translator has a receiver for the name.
+/// Whether a lexer body still names `this` after wiring — no lexer base was
+/// declared (a combined grammar's is the parser's), or it was refused.
 pub fn lexer_bodies_name_unwired_base(grammar: &Grammar) -> bool {
-    for let rule of &grammar.lexer_rules {
-        for let alt of &rule.body {
-            if lexer_alt_names_this(alt) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-fn lexer_alt_names_this(alt: &LexerAlternative) -> bool {
-    for let a of &alt.actions {
-        if !find_this_calls(&a.source.text).is_empty() {
-            return true;
-        }
-    }
-    return alt.elements.iter_ref().any(|e| lexer_elem_names_this(e));
-}
-
-fn lexer_elem_names_this(elem: &LexerElement) -> bool {
-    return match elem {
-        Group(alts) => alts.iter_ref().any(|a| lexer_alt_names_this(a)),
-        Repeat(rep) => lexer_elem_names_this(&rep.element),
-        Not(nn) => lexer_elem_names_this(&nn.element),
-        _ => false,
-    };
+    return lexer_bodies(grammar).iter_ref().any(|b: &SuperBody| !find_this_calls(&b.text).is_empty());
 }
 
 /// Why a lexer base cannot be wired, or empty when it can. The message names
 /// the operations that forced it.
 pub fn lexer_super_refusal(ops: &List<SuperOp>) -> String {
-    let with_args = super_ops_with_args(ops);
+    let with_args = args_refusal(ops);
     if !with_args.is_empty() {
-        return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+        return with_args;
     }
     let mixed = super_ops_mixed_role(ops);
     if !mixed.is_empty() {
@@ -457,9 +486,9 @@ pub fn lexer_super_refusal(ops: &List<SuperOp>) -> String {
 /// Why a parser base cannot be wired, or empty when it can. The parser side
 /// carries no command surface, so an action op has nothing to drive.
 pub fn parser_super_refusal(ops: &List<SuperOp>) -> String {
-    let with_args = super_ops_with_args(ops);
+    let with_args = args_refusal(ops);
     if !with_args.is_empty() {
-        return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+        return with_args;
     }
     let actions = super_ops_actions(ops);
     if !actions.is_empty() {
@@ -468,8 +497,18 @@ pub fn parser_super_refusal(ops: &List<SuperOp>) -> String {
     return "";
 }
 
+/// The refusal both recognizers share: the rewrite drops call arguments and the
+/// interface has no type to declare them with.
+fn args_refusal(ops: &List<SuperOp>) -> String {
+    let with_args = super_ops_with_args(ops);
+    if with_args.is_empty() {
+        return "";
+    }
+    return `is called with arguments (${with_args.join(", ")}); a base operation has no signature source for them`;
+}
+
 /// Operations reached from an action body rather than a predicate.
-pub fn super_ops_actions(ops: &List<SuperOp>) -> List<String> {
+fn super_ops_actions(ops: &List<SuperOp>) -> List<String> {
     let mut out: List<String> = [];
     for let op of ops {
         if !op.is_predicate || op.mixed_role {
@@ -479,50 +518,10 @@ pub fn super_ops_actions(ops: &List<SuperOp>) -> List<String> {
     return out;
 }
 
-/// Collect the superClass operations across a grammar's parser rules: every
-/// distinct `this.<method>` call in an action / predicate body, in source
-/// order, deduped by name.
+/// The parser's superClass operations: every distinct `this.<method>` call in
+/// an action / predicate body, in source order, deduped by name.
 pub fn collect_parser_super_ops(grammar: &Grammar) -> List<SuperOp> {
-    let mut ops: List<SuperOp> = [];
-    for let rule of &grammar.parser_rules {
-        for let prequel of &[&rule.init_action, &rule.after_action] {
-            if let Some(a) = *prequel {
-                for let call of &find_this_calls(&a.text) {
-                    add_super_op(&mut ops, call, &ActionKind::Action);
-                }
-            }
-        }
-        for let alt of &rule.alternatives {
-            collect_parser_alt_ops(alt, &mut ops);
-        }
-    }
-    return ops;
-}
-
-fn collect_parser_alt_ops(alt: &Alternative, ops: &mut List<SuperOp>) {
-    for let a of &alt.actions {
-        for let call of &find_this_calls(&a.source.text) {
-            add_super_op(ops, call, &a.kind);
-        }
-    }
-    for let e of &alt.elements {
-        collect_parser_elem_ops(e, ops);
-    }
-}
-
-fn collect_parser_elem_ops(elem: &Element, ops: &mut List<SuperOp>) {
-    match elem {
-        Group(g) => {
-            for let alt of &g.alternatives {
-                collect_parser_alt_ops(alt, ops);
-            }
-        },
-        Repeat(rep) => collect_parser_elem_ops(&rep.element, ops),
-        Label(lab) => collect_parser_elem_ops(&lab.element, ops),
-        Not(n) => collect_parser_elem_ops(&n.element, ops),
-        _ => {
-        },
-    }
+    return collect_super_ops(&parser_bodies(grammar));
 }
 
 /// Emit `interface Foo { ... }` for a parser base: one predicate operation per
@@ -536,10 +535,8 @@ pub fn gen_parser_super_interface(w: &mut CodeWriter, name: &String, ops: &List<
     w.blank();
 }
 
-/// Rewrite every parser predicate body in place, turning each
-/// `this.<method>(...)` into `Foo::<method>(p)`. Alternatives only: a `this.`
-/// call in an `@init` / `@after` prequel is an action op, which the parser
-/// side refuses before the rewrite runs.
+/// Rewrite every parser predicate body in place, `this.<method>(...)` into
+/// `Foo::<method>(p)`. Alternatives only: a prequel call is refused earlier.
 pub fn rewrite_parser_superclass_calls(grammar: &mut Grammar, base_name: &String) {
     for let rule of &mut grammar.parser_rules {
         for let alt of &mut rule.alternatives {
@@ -588,40 +585,7 @@ fn rewrite_parser_elem(elem: &Element, base_name: &String) -> Element {
 /// Whether every parser action / predicate body is base-calls-only, which is
 /// what lets a `language = Java` `superClass` grammar run them at all.
 pub fn parser_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
-    for let rule of &grammar.parser_rules {
-        for let prequel of &[&rule.init_action, &rule.after_action] {
-            if let Some(a) = *prequel {
-                if !body_is_base_calls_only(&a.text, base_name) {
-                    return false;
-                }
-            }
-        }
-        for let alt of &rule.alternatives {
-            if !parser_alt_is_base_calls(alt, base_name) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-fn parser_alt_is_base_calls(alt: &Alternative, base_name: &String) -> bool {
-    for let a of &alt.actions {
-        if !body_is_base_calls_only(&a.source.text, base_name) {
-            return false;
-        }
-    }
-    return alt.elements.iter_ref().all(|e| parser_elem_is_base_calls(e, base_name));
-}
-
-fn parser_elem_is_base_calls(elem: &Element, base_name: &String) -> bool {
-    return match elem {
-        Group(g) => g.alternatives.iter_ref().all(|a| parser_alt_is_base_calls(a, base_name)),
-        Repeat(rep) => parser_elem_is_base_calls(&rep.element, base_name),
-        Label(lab) => parser_elem_is_base_calls(&lab.element, base_name),
-        Not(n) => parser_elem_is_base_calls(&n.element, base_name),
-        _ => true,
-    };
+    return parser_bodies(grammar).iter_ref().all(|b: &SuperBody| body_is_base_calls_only(&b.text, base_name));
 }
 
 /// Whether a rule's match fn (transitively, through referenced fragments)
@@ -713,31 +677,6 @@ fn elem_calls_super(
     return false;
 }
 
-fn collect_lexer_alt_ops(alt: &LexerAlternative, ops: &mut List<SuperOp>) {
-    for let a of &alt.actions {
-        for let call of &find_this_calls(&a.source.text) {
-            add_super_op(ops, call, &a.kind);
-        }
-    }
-    for let e of &alt.elements {
-        collect_lexer_elem_ops(e, ops);
-    }
-}
-
-fn collect_lexer_elem_ops(elem: &LexerElement, ops: &mut List<SuperOp>) {
-    match elem {
-        Group(alts) => {
-            for let alt of alts {
-                collect_lexer_alt_ops(alt, ops);
-            }
-        },
-        Repeat(rep) => collect_lexer_elem_ops(&rep.element, ops),
-        Not(n) => collect_lexer_elem_ops(&n.element, ops),
-        _ => {
-        },
-    }
-}
-
 /// Emit `interface Foo { ... }`, one operation per op, then the lifecycle hooks.
 /// A predicate takes the read-only `LexerView` and returns `bool`; an action
 /// also takes the `Lexer`, for the command surface.
@@ -825,9 +764,7 @@ fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
 }
 
 /// Replace each `this.<method>(...)` call in `body` with the ambient operation
-/// call for `site`, copying everything else verbatim and skipping string /
-/// template-text / comment spans so a `this.` inside host text is never
-/// rewritten. Call arguments are dropped (zero-argument today).
+/// call for `site`, over the same spans `find_this_calls` reads.
 pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) -> String {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();

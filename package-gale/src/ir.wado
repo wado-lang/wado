@@ -181,16 +181,14 @@ pub struct Grammar {
     /// parsing — `parse()` itself returns an empty array because it operates
     /// on the file contents, not the path.
     pub source_files: List<String>,
-    /// The `superClass` base of each recognizer, empty when none. Resolved from
-    /// `options` by grammar kind and merged across splits, so these — not
+    /// The `superClass` base of each recognizer, empty when none. These — not
     /// `options` — answer which base a call site reaches.
     pub lexer_superclass: String = "",
     pub parser_superclass: String = "",
 }
 
-/// The `[lexer, parser]` `superClass` bases a single grammar declares. A
-/// `lexer grammar` names the lexer's base; a `parser` or combined grammar the
-/// parser's (`vendor/antlr4/doc/options.md`).
+/// The `[lexer, parser]` bases a grammar declares: a `lexer grammar` names the
+/// lexer's, a `parser` or combined one the parser's (`doc/options.md`).
 pub fn superclass_bases(kind: &GrammarKind, options: &List<GrammarOption>) -> [String, String] {
     let mut lexer = String::new();
     let mut parser = String::new();

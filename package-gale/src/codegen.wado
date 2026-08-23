@@ -303,9 +303,8 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     };
 }
 
-/// Wire each declared `superClass` base to its effect interface: collect the
-/// operations and rewrite the call sites, or refuse the base with a diagnostic
-/// naming what Gale cannot represent.
+/// Wire each declared `superClass` base to its effect interface, or refuse it
+/// with a diagnostic naming what Gale cannot represent.
 fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
     if let Some(sc) = lexer_superclass_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
@@ -356,9 +355,8 @@ fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
     }
 }
 
-/// Whether codegen runs the grammar's parser action bodies at all: java2wado
-/// emits the host language, or every body is base calls, which the rewrite
-/// turns into Wado on its own — the one way a `language = Java` base executes.
+/// Whether codegen runs the grammar's parser action bodies: java2wado emits the
+/// language, or every body is base calls, which the rewrite makes Wado.
 fn parser_bodies_execute(grammar: &Grammar, base: &String) -> bool {
     return action_language_is_emittable(grammar) || parser_bodies_are_base_calls(grammar, base);
 }
