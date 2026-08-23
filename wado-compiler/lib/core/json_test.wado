@@ -252,8 +252,8 @@ test "serialize pretty empty array" {
 
 test "serialize pretty map" {
     let mut m: TreeMap<String, i32> = TreeMap::new();
-    m["a"] = 1;
-    m["b"] = 2;
+    m.insert("a", 1);
+    m.insert("b", 2);
     let r = to_string_pretty(&m);
     assert r matches { Ok(s) && s == "{
   \"a\": 1,

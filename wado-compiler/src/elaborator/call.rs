@@ -483,6 +483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let effective_name = callee_kind.effective_name();
+        self.check_static_call_visibility(effective_name, call.span);
         // The receiver of `Type::method` is named at its own segment, and the
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
@@ -2687,6 +2688,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The canonical signature of the receiver-less method `method_name` on
     /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
     /// hold a name split out of a mangled spelling, so there is no site to take.
+    /// Enforce the visibility ladder on a qualified `Type::method(...)` call,
+    /// the spelling an associated function is reached by.
+    fn check_static_call_visibility(&mut self, effective_name: &str, span: crate::token::Span) {
+        let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
+            return;
+        };
+        let Some(entry) = self.static_method_entry(struct_name, method_name) else {
+            return;
+        };
+        let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
+        let owner = struct_name.to_string();
+        self.check_inherent_member_visibility(
+            visibility,
+            Some(&module),
+            super::expr::MemberOwner::Named(&owner),
+            method_name,
+            super::types::ImplMemberKind::Method,
+            span,
+        );
+    }
+
+    /// The static-method index entry `Type::name` selects, for the questions
+    /// the signature alone cannot answer — which module declared it, and at
+    /// what visibility.
+    pub(super) fn static_method_entry(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<&super::trait_env::StaticMethodEntry> {
+        let key = self.impl_target(struct_name);
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(&key)?
+            .iter()
+            .find(|e| e.name == method_name)
+    }
+
     pub(super) fn static_method_sig(
         &self,
         struct_name: &str,

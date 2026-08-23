@@ -287,8 +287,9 @@ pub enum ModuleSource {
         path: InternedStr,
     },
     /// A module of a dependency package, resolved from a bare-name
-    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is `path`,
-    /// so two aliases for one file unify. Distinct from
+    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is
+    /// `(pkg, path)` — the same pair `package_id` reads, so two equal values
+    /// can never report different packages. Distinct from
     /// [`ModuleSource::Local`] to carry the package boundary, but loaded alike.
     Dependency {
         /// The package root: the dependency's resolved `[package].lib`. Shared
@@ -378,8 +379,19 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
-            (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
-            (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
+            (
+                Self::Dependency {
+                    pkg: pa,
+                    path: a,
+                },
+                Self::Dependency {
+                    pkg: pb,
+                    path: b,
+                },
+            ) => (pa, a) == (pb, b),
+            (Self::Remote { pkg: pa, url: a }, Self::Remote { pkg: pb, url: b }) => {
+                (pa, a) == (pb, b)
+            }
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
                 Self::Wasm {
@@ -408,8 +420,14 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
-            Self::Dependency { path, .. } => path.hash(state),
-            Self::Remote { url, .. } => url.hash(state),
+            Self::Dependency { pkg, path } => {
+                pkg.hash(state);
+                path.hash(state);
+            }
+            Self::Remote { pkg, url } => {
+                pkg.hash(state);
+                url.hash(state);
+            }
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
                 path.hash(state);

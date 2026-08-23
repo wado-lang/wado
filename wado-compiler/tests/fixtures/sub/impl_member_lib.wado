@@ -15,3 +15,13 @@ impl Item {
 }
 
 pub fn make_item() -> Item { return Item { v: 0 } }
+
+impl Item {
+  const BASE: i32 = 40;
+
+  /// A `pub` constant whose body reads a file-private one: the body belongs to
+  /// this file, so a consumer re-walking it must not be judged from its own.
+  pub const DERIVED: i32 = Item::BASE + 2;
+
+  fn secret_static() -> i32 { return 99 }
+}

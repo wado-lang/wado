@@ -614,18 +614,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
         if let Some(assoc) = self.associated_constant_of_path(ident) {
-            let owner = assoc_const_owner_segment(ident);
             self.check_inherent_member_visibility(
                 assoc.inherent_visibility,
                 Some(&assoc.module),
-                owner,
+                MemberOwner::Named(assoc_const_owner_segment(ident)),
                 ident.segments.last().map_or(&ident.name, |s| &s.name),
                 super::types::ImplMemberKind::AssociatedConstant,
                 ident.span,
             );
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
-            self.resolve_expr(&assoc.value, ctx, Some(assoc.ty));
+            let const_module = assoc.module.clone();
+            self.with_default_scope_module(Some(const_module), |s| {
+                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+            });
             return assoc.ty;
         }
 
@@ -1343,14 +1345,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
+    /// The module whose source text is being walked, which is what a
+    /// visibility question is asked from. Foreign AST re-walked at a consumer
+    /// site — a default expression, an associated constant's body — is written
+    /// in its declaring module, not here.
+    pub(super) fn visibility_vantage(&self) -> ModuleSource {
+        self.annotate_ctx
+            .default_scope_module
+            .clone()
+            .unwrap_or_else(|| self.current_module_source.clone())
+    }
+
     /// Enforce an inherent impl member's rung of the visibility ladder.
-    /// `owner_name` is the type it is declared on, not its own type.
+    /// `owner` names the type the member is declared on, not its own type. It
+    /// is resolved only to fill a diagnostic, never on the reaching path.
     /// `visibility` is `None` where the member does not decide its own reach.
     pub(super) fn check_inherent_member_visibility(
         &mut self,
         visibility: Option<crate::ast::Visibility>,
         impl_module: Option<&ModuleSource>,
-        owner_name: &str,
+        owner: MemberOwner<'_>,
         member_name: &str,
         member_kind: super::types::ImplMemberKind,
         span: Span,
@@ -1358,15 +1372,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (Some(visibility), Some(impl_module)) = (visibility, impl_module) else {
             return;
         };
-        if *impl_module == self.current_module_source {
+        let vantage = self.visibility_vantage();
+        if *impl_module == vantage {
             return;
         }
-        let same_package = impl_module.same_package(&self.current_module_source);
+        let same_package = impl_module.same_package(&vantage);
         if visibility.reachable_from(same_package) {
             return;
         }
+        let type_name = match owner {
+            MemberOwner::Type(id) => self.tysys.type_id_to_string(id),
+            MemberOwner::Named(name) => name.to_string(),
+            MemberOwner::Written(Some(ty)) => self.get_type_name(ty),
+            MemberOwner::Written(None) => member_name.to_string(),
+        };
         let _ = self.emit(TypeError::PrivateMemberAccess {
-            type_name: owner_name.to_string(),
+            type_name,
             member_name: member_name.to_string(),
             member_kind,
             visibility,
@@ -1400,11 +1421,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Same module — always allowed
-        if module_source == self.current_module_source {
+        let vantage = self.visibility_vantage();
+        if module_source == vantage {
             return;
         }
 
-        let same_package = module_source.same_package(&self.current_module_source);
+        let same_package = module_source.same_package(&vantage);
         if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
@@ -5251,6 +5273,17 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             _ => ast::walk_expr(self, expr),
         }
     }
+}
+
+/// How to name the type an impl member is declared on, resolved only when a
+/// diagnostic needs it.
+pub(super) enum MemberOwner<'a> {
+    /// A method's receiver.
+    Type(TypeId),
+    /// An already-spelled name, such as a constant path's owner segment.
+    Named(&'a str),
+    /// A written qualifier, as a pattern carries it.
+    Written(Option<&'a ast::Type>),
 }
 
 /// The segment naming an associated constant's owner — `K` in `K::SECRET` and

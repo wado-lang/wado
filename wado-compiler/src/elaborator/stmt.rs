@@ -1591,13 +1591,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(assoc) =
                         self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
-                        let owner = variant_qualifier
-                            .as_ref()
-                            .map_or_else(|| variant_name.clone(), |q| self.get_type_name(q));
                         self.check_inherent_member_visibility(
                             assoc.inherent_visibility,
                             Some(&assoc.module),
-                            &owner,
+                            super::expr::MemberOwner::Written(variant_qualifier.as_ref()),
                             variant_name,
                             super::types::ImplMemberKind::AssociatedConstant,
                             *span,
@@ -1606,7 +1603,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // constant introduces no binding — it is either a literal
                         // or an opaque constant-value pattern — so return none
                         // either way.
-                        self.resolve_expr(&assoc.value, ctx, Some(assoc.ty));
+                        let const_module = assoc.module.clone();
+                        self.with_default_scope_module(Some(const_module), |s| {
+                            s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                        });
                         return Vec::new();
                     }
 

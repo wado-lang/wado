@@ -548,6 +548,10 @@ pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
     pub(super) name: String,
+    /// The declaring module, and the rung an *inherent* associated function
+    /// declared. `None` on a trait impl's, which reaches as far as the trait.
+    pub(super) module: ModuleSource,
+    pub(super) inherent_visibility: Option<ast::Visibility>,
     /// The method itself: the key into the signature digest, which carries
     /// everything a lookup needs — resolved in the impl's own frame and its
     /// own module's perspective.
@@ -1213,6 +1217,8 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    inherent_visibility: None,
                                     method_id: method.id,
                                 });
                         }
@@ -1232,6 +1238,8 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
+                                    module: module_source.clone(),
+                                    inherent_visibility: Some(method.visibility),
                                     method_id: method.id,
                                 });
                         }

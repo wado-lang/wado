@@ -513,11 +513,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        let receiver_name = self.tysys.type_id_to_string(base_type_id);
         self.check_inherent_member_visibility(
             inherent_visibility,
             inherent_impl_module.as_ref(),
-            &receiver_name,
+            super::expr::MemberOwner::Type(base_type_id),
             method_name,
             super::types::ImplMemberKind::Method,
             span,
