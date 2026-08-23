@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787449510778,
+  "lastUpdate": 1787470171187,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50305,6 +50305,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/29e43cbbe44b66fdad621608a015de239ac7c000"
         },
         "date": 1787449510044,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3bf0fa847055c94f9adac9d1219f457b26316ef2",
+          "message": "Merge pull request #1881 from wado-lang/claude/sequence-family-wep-gaps-1owi0w\n\nfix(elaborator,tir): name a concrete impl by the newtype instantiation it owns",
+          "timestamp": "2026-08-23T16:10:48+09:00",
+          "tree_id": "05d54fabc23a0df62c8d70c6898b1d4c3bf00e4f",
+          "url": "https://github.com/wado-lang/wado/commit/3bf0fa847055c94f9adac9d1219f457b26316ef2"
+        },
+        "date": 1787470170547,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
