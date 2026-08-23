@@ -408,7 +408,7 @@ impl SymbolTable {
             &reexport.source_name,
             visited,
         )?;
-        Some(reexport.visibility.min(source))
+        Some(reexport.visibility.narrower(source))
     }
 
     /// Names a module re-exports via `pub use`, in declaration order.

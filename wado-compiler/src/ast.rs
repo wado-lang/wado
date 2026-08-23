@@ -1670,8 +1670,7 @@ impl ImportAttributes {
 /// Symbol visibility ladder, orthogonal to `is_export` (the Component Model
 /// surface flag). See docs/wep-2026-06-25-visibility-internal-pub-export.md.
 ///
-/// The variants are declared narrowest first, so the derived `Ord` is the
-/// ladder itself and `min` is "the narrower reach of the two".
+/// Ordered by reach; `visibility_order_is_the_ladder` pins it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum Visibility {
     /// No modifier: visible only within the defining file.
@@ -1703,6 +1702,16 @@ impl Visibility {
             Visibility::Internal => same_package,
             Visibility::Private => false,
         }
+    }
+
+    /// Whether `self` reaches no further than `other`.
+    pub fn reaches_no_further_than(self, other: Self) -> bool {
+        self <= other
+    }
+
+    /// The narrower reach of the two.
+    pub fn narrower(self, other: Self) -> Self {
+        self.min(other)
     }
 
     /// Source keyword with a trailing space (`""` for file-private).
@@ -3555,6 +3564,24 @@ pub struct ImplBlock {
     /// meaningful for effect handler impls; ignored for ordinary trait impls.
     pub rest: Option<RestClause>,
     pub span: Span,
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::Visibility;
+
+    /// The ladder is the ordering: every reach comparison reads from it.
+    #[test]
+    fn visibility_order_is_the_ladder() {
+        assert!(Visibility::Private < Visibility::Internal);
+        assert!(Visibility::Internal < Visibility::Public);
+        assert_eq!(
+            Visibility::Public.narrower(Visibility::Internal),
+            Visibility::Internal
+        );
+        assert!(Visibility::Internal.reaches_no_further_than(Visibility::Public));
+        assert!(!Visibility::Public.reaches_no_further_than(Visibility::Internal));
+    }
 }
 
 #[cfg(test)]

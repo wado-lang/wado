@@ -1004,7 +1004,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         else {
             return Ok(());
         };
-        if reexport_visibility <= source_visibility {
+        if reexport_visibility.reaches_no_further_than(source_visibility) {
             return Ok(());
         }
         self.logger.error_in(
