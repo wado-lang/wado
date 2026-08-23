@@ -3,7 +3,7 @@ description: "Cut the branch down to what the code cannot say: reuse what exists
 argument-hint: "[extra instructions]"
 ---
 
-# Cleanup
+# Distill
 
 $ARGUMENTS
 

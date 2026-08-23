@@ -1,6 +1,6 @@
 ---
 name: on-task-done
-description: "Task-completion flow: `/code-review --fix` and `/cleanup` over the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 70+ min) and commit its generated changes. Invoke ONLY when the user asks for it by name or explicitly asks to run the completion flow — never on your own initiative, and not because a task looks finished."
+description: "Task-completion flow: `/code-review --fix` and `/distill` over the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 70+ min) and commit its generated changes. Invoke ONLY when the user asks for it by name or explicitly asks to run the completion flow — never on your own initiative, and not because a task looks finished."
 ---
 
 # Overview
@@ -8,7 +8,7 @@ description: "Task-completion flow: `/code-review --fix` and `/cleanup` over the
 First, review the branch:
 
 1. `/code-review --fix`
-2. `/cleanup`
+2. `/distill`
 
 Then update docs if applicable:
 
