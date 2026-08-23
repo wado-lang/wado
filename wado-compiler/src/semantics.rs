@@ -1128,13 +1128,11 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // the ~28 s of CPU otherwise duplicated across a typical `wado test`
     // run.  Returns `None` when called from inside the snapshot builder
     // itself (re-entry guard); a fresh full pipeline runs in that case.
-    // A `#![stdlib("core:…")]` entry re-parses a module the snapshot holds its
-    // own parse of, and `AstId`s never survive a re-parse: seeding would give
-    // that one module two identities (#1875), so it compiles wholly from source.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        crate::stdlib_snapshot::get_or_init_snapshot()
-            .filter(|snap| !crate::stdlib_snapshot::covers(snap, &load_result.entry_module_source))
+        crate::stdlib_snapshot::get_or_init_snapshot().filter(|snap| {
+            crate::stdlib_snapshot::reparsed_snapshot_module(snap, &load_result.modules).is_none()
+        })
     };
 
     let (symbols, analyze_ok) = {

@@ -1054,6 +1054,33 @@ fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
     )
 }
 
+/// The same slot table for the bindings synthesized from a *bundled* wasm asset
+/// (`core:libm.wat`). Its bytes are fixed at build time, so its synthesized
+/// module is as stable as a bundled source and must be parsed once per process
+/// too: an `AstId` has to mean the same node in every compile for the stdlib
+/// snapshot to seed one (WEP 2026-08-12 §1). A host-loaded asset can change
+/// between compiles and is parsed each time.
+fn wasm_binding_slots()
+-> &'static crate::hashmap::IndexMap<&'static str, std::sync::OnceLock<Module>> {
+    use std::sync::OnceLock;
+
+    static SLOTS: OnceLock<crate::hashmap::IndexMap<&'static str, OnceLock<Module>>> =
+        OnceLock::new();
+    SLOTS.get_or_init(|| {
+        stdlib::ALL_CORE_WASM_ASSETS
+            .iter()
+            .map(|&(path, _)| (path, OnceLock::new()))
+            .collect()
+    })
+}
+
+/// Return the cached bindings AST for a bundled wasm asset, parsing `source` on
+/// first access. `None` for a host-loaded asset.
+fn cached_wasm_binding_module(import_path: &str, source: &str) -> Option<&'static Module> {
+    let (key, slot) = wasm_binding_slots().get_key_value(import_path)?;
+    Some(slot.get_or_init(|| parse_bind_stdlib(key, source)))
+}
+
 /// Compute the cache key string used by [`cached_stdlib_module`] for a
 /// `ModuleSource`. Returns `None` for variants that the stdlib cache
 /// never holds (Local / Remote / `EntryPoint` / Redirected / Wasm).
@@ -1469,14 +1496,19 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let synthesized_source = synthesize_wasm_bindings_source(&namespace, &function_exports);
         let span = format!("synthesize {namespace}");
         self.logger.span_start(&span);
-        let ast = self
-            .parse_source(&synthesized_source, &source)
-            .inspect_err(|_e| {
+        let ast = if let Some(cached) = cached_wasm_binding_module(&path, &synthesized_source) {
+            cached.clone()
+        } else {
+            let ast = self
+                .parse_source(&synthesized_source, &source)
+                .inspect_err(|_e| {
+                    self.logger.span_end(&span);
+                })?;
+            self.bind_module(&ast, &source).inspect_err(|_e| {
                 self.logger.span_end(&span);
             })?;
-        self.bind_module(&ast, &source).inspect_err(|_e| {
-            self.logger.span_end(&span);
-        })?;
+            ast
+        };
         self.logger.span_end(&span);
         self.loaded.insert(source.clone(), ast);
 

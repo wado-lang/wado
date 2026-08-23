@@ -1,5 +1,5 @@
-//! A stdlib module compiled as the entry point (#1875): the fresh parse and the
-//! stdlib snapshot's own parse of that file gave it two identities, so trait
+//! A stdlib module compiled as the entry point (#1875): its own parse and the
+//! stdlib snapshot's parse of that file gave it two identities, so trait
 //! synthesis re-derived an impl it writes by hand and monomorphize panicked.
 
 use std::path::{Path, PathBuf};
