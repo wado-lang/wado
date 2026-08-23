@@ -1904,7 +1904,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // An `if let` whose branches are all bare `null` leaves the
                 // type unresolved; report it rather than ICEing in codegen.
-                self.report_uninferable_result(type_id, if_expr.span, "if expression");
+                // When one branch resolved, the other's `null` tail is checked
+                // against it — the sibling's type is what agreement adopted.
+                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+                    if let Some(eb) = &if_expr.else_block {
+                        blocks.push(eb);
+                    }
+                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+                }
 
                 // Same arm-agreement rule as the `Condition::Expr` arm below:
                 // `expected_type = Some(X)` pins `type_id` unconditionally, so

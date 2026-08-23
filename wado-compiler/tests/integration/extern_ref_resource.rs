@@ -2,21 +2,30 @@
 //! See `docs/wep-2026-04-28-resource-inheritance.md`.
 
 use crate::common::InMemoryHost;
-use wado_compiler::check_resource_moves_semantic;
 use wado_compiler::semantics::semantics;
+use wado_compiler::{check_effects_semantic, check_resource_moves_semantic};
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
-/// Elaboration diagnostics, as `"CODE: message"`.
+/// Everything a `wado check` would report: elaboration diagnostics and the
+/// effect check that runs after it. Both, because a form the elaborator
+/// accepts can still be rejected downstream.
 fn diagnostics(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
-    let _ = block_on(semantics(source, &host, Some("entry.wado")));
-    host.diagnostics()
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let mut out: Vec<String> = host
+        .diagnostics()
         .into_iter()
         .map(|d| format!("{:?}: {}", d.code, d.message))
-        .collect()
+        .collect();
+    out.extend(
+        check_effects_semantic(&sem)
+            .into_iter()
+            .map(|e| format!("Effect: {e}")),
+    );
+    out
 }
 
 fn move_errors(source: &str) -> Vec<String> {
@@ -590,5 +599,20 @@ fn the_ambiguity_names_the_resource_declaring_the_instance_method() {
     assert!(
         d.iter().any(|e| e.contains("'EventTarget'")),
         "expected the declaring resource named, got {d:?}"
+    );
+}
+
+#[test]
+fn an_ancestor_qualified_call_needs_no_extra_resource() {
+    // The ambiguity diagnostic tells the user to write exactly this, so the
+    // form it names must pass every check, not only the elaborator's.
+    let source = chain_with_method(
+        "    fn id(&self) -> String;",
+        "fn follow(n: Node) -> String { return EventTarget::id(&n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(
+        d.is_empty(),
+        "a child holds its ancestors' capability, got {d:?}"
     );
 }

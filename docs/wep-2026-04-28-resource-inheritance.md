@@ -594,6 +594,7 @@ Not built:
 - `downcast`, and the `Eq` / `Inspect` / `Display` host imports.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - The stdlib-wide `type=` migration, and generic resources on either side of `extends`.
+- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. Bundling Tide's `web:*` modules (Tide M5) is what makes this reachable, and what must fix it — the two maps need seeding from the snapshot, as `all_resource_types` already is.
 
 ## See Also
 

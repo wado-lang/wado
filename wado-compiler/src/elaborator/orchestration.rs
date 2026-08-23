@@ -144,6 +144,22 @@ fn resolve_resource_extends<H: CompilerHost>(
             );
             continue;
         }
+        // Absence means the collect pass never walked the declaration, which
+        // it skips for a module the stdlib snapshot covers: no method names,
+        // no arity, so the checks that need them would pass by default.
+        // Nothing in the stdlib declares a backing yet; when Tide's `web:*`
+        // modules do, this says so instead of accepting what it cannot check.
+        if !method_names.contains_key(&parent) {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends `{}`, which a prebuilt module declares; `extends` across that boundary is not supported yet",
+                    clause.child_name,
+                    defs.name(parent)
+                ),
+            );
+            continue;
+        }
         links.insert(clause.child, parent);
     }
 
