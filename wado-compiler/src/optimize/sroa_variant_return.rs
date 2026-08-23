@@ -136,7 +136,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     let scalarized = scalarized_returns(project);
     let mut all = candidates.clone();
     for (&key, (variant_type, layout)) in &scalarized {
-        all.entry(key).or_insert(Candidate {
+        all.entry(key).or_insert_with(|| Candidate {
             layout: layout.clone(),
             variant_type: *variant_type,
         });

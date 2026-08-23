@@ -168,9 +168,12 @@ impl EngineBuffers {
         // keeps `build_indices`, which visits locals in body order, from growing
         // `uses` through several reallocations.
         for entry in &mut self.uses[..self.dirty_uses] {
-            entry.def = None;
-            entry.defs = 0;
-            entry.reads.clear();
+            let mut reads = std::mem::take(&mut entry.reads);
+            reads.clear();
+            *entry = LocalUses {
+                reads,
+                ..LocalUses::default()
+            };
         }
         if self.uses.len() < local_count {
             self.uses.resize_with(local_count, LocalUses::default);
