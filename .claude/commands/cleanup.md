@@ -1,19 +1,19 @@
 ---
 description: "Cut the branch down to what the code cannot say: delete redundant comments, turn invariants into asserts, and remove duplication."
-argument-hint: "[paths…] — defaults to the branch diff"
+argument-hint: "[extra instructions]"
 ---
 
 # Cleanup
 
-## Scope
+$ARGUMENTS
 
-`$ARGUMENTS`, or when that is empty:
+## Scope
 
 ```sh
 git diff origin/main...HEAD --stat
 ```
 
-Every file in that scope — Rust, Wado, Markdown — plus any doc it made stale.
+Every file in that diff — Rust, Wado, Markdown — plus any doc it made stale.
 Follow the `rust` skill for Rust and the `wado` skill for Wado.
 
 ## Rules
@@ -40,7 +40,7 @@ Follow the `rust` skill for Rust and the `wado` skill for Wado.
 
 ## Cycle
 
-Three passes over the scope, each re-reading what the last one left; surviving a
+Three passes over the diff, each re-reading what the last one left; surviving a
 pass is no exemption. Stop when a pass finds nothing to cut.
 
 ## Finish
