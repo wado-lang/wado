@@ -96,7 +96,10 @@ the two components' host imports without hand-written forwarding.
       consuming direction of the mapping. It splits: a `dtor`-less exported
       handle decodes to a copyable
       [token](./wep-2026-05-21-resource-ownership.md) with no ownership analysis
-      to consume, where a `dtor`-bearing one needs the full affine mapping. The
+      to consume, where a `dtor`-bearing one needs the full affine mapping.
+      Nothing in a component's type distinguishes an interned referent from one
+      minted per call, so omitting the `dtor` is the exporter's assertion that
+      its referents have a backing, and the importer takes it at its word. The
       compile-time-bounded half of a bundled ICU surface
       ([`core:icu`](./wep-2026-08-09-core-icu.md)) rests on the token alone.
 - [ ] Async value types (`stream<T>` / `future<T>`) in an imported signature.

@@ -49,7 +49,7 @@ traps.
 | -------------------- | ------------------------------------------------------ | ------------------- | ------------------------ |
 | Affine resource      | a CM `own`/`borrow` or waitable handle, or a guest one | Move-only + a check | `resource.drop` / `dtor` |
 | Host-object resource | a Wasm GC reference to a host object (no `dtor`)       | Value semantics     | Wasm GC                  |
-| Non-owning token     | an index naming something owned elsewhere (no `dtor`)  | Value semantics     | none — the owner's       |
+| Non-owning token     | an index naming something owned elsewhere (no `dtor`)  | Value semantics     | none of its own          |
 
 The `dtor` decides the kind, not the representation. A handle that owns one must
 be move-only, because copying it aliases a destructor; without one there is

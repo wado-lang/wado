@@ -53,24 +53,9 @@ The user-visible module is deliberately not the unit of code splitting.
 A free function covers normalization, case folding, `is_nfc`, character
 properties, and one-shot locale-sensitive casing.
 
-What separates the two handle shapes is who ends the object's life.
-
-**Non-owning token.** A collator over a declared locale, plural rules, a
-formatter over a fixed skeleton, a segmenter: immutable, and configured only
-from what `with { locales: [...] }` and the program's types already bound. The
-implementation component interns these, so the set is finite by construction and
-never needs freeing, and the handle keeps the value semantics the rest of
-`core:*` has — it sits in a global, and a closure captures it by copy, so
-`list.sort_by(|a, b| c.compare(a, b))` is written the obvious way.
-
-**Affine resource.** A collator tailored from user-supplied rules, a formatter
-compiled from a runtime skeleton or message pattern, anything keyed by an
-`Accept-Language` string, a lazy segmentation iterator. The far side allocates
-these per call from input the program does not bound, so the object has an end
-and something must reach it: the handle carries a `dtor` and is move-only.
-
-The split is the slicer's own line, so a program whose data can be sliced meets
-no move-only handle at all.
+What separates the two handle shapes is who ends the object's life. That split is
+the slicer's own line, so a program whose data can be sliced meets no move-only
+handle at all.
 
 Statefulness forces the affine shape for a second, independent reason: copying a
 token aliases its referent, which two copies of a lazy iterator would show by
@@ -82,6 +67,24 @@ Where a capability serves both a one-shot and a loop, the facade offers both: a
 convenience function that constructs and discards, and the handle for when the
 construction should be hoisted. The facade makes the cost visible where it is
 paid.
+
+#### Non-owning token
+
+A collator over a declared locale, plural rules, a formatter over a fixed
+skeleton, a segmenter: immutable, and configured only from what
+`with { locales: [...] }` and the program's types already bound. The
+implementation component interns these, so the set is finite by construction and
+never needs freeing, and the handle keeps the value semantics the rest of
+`core:*` has — it sits in a global, and a closure captures it by copy, so
+`list.sort_by(|a, b| c.compare(a, b))` is written the obvious way.
+
+#### Affine resource
+
+A collator tailored from user-supplied rules, a formatter compiled from a runtime
+skeleton or message pattern, anything keyed by an `Accept-Language` string, a
+lazy segmentation iterator. The far side allocates these per call from input the
+program does not bound, so the object has an end and something must reach it: the
+handle carries a `dtor` and is move-only.
 
 ### The code partition is invisible
 
@@ -275,9 +278,9 @@ runtime data dependencies, not taxonomy.
   deserialization cost. For a single capability this is roughly size-neutral
   against baking; the win is across capabilities and from per-program slicing.
 - The CM import blocker splits. The compile-time-bounded surface needs only a
-  `dtor`-less imported handle; the tailored and runtime-configured surface waits
-  on full resource import, a gap shared with every resource-bearing third-party
-  component.
+  `dtor`-less imported handle; the tailored, runtime-configured, and stateful
+  surface waits on full resource import, a gap shared with every
+  resource-bearing third-party component.
 
 ## Open questions
 
@@ -288,8 +291,9 @@ runtime data dependencies, not taxonomy.
       diagnosing toward the affine form is undecided.
 - [ ] Holding an affine handle in a global, and capturing one in a closure
       ([resource ownership](./wep-2026-05-21-resource-ownership.md)). The token
-      form needs neither, so this bounds only the runtime-configured surface —
-      where a service caching a collator per `Accept-Language` lives.
+      form needs neither, so this bounds only the tailored, runtime-configured,
+      and stateful surface — where a service caching a collator per
+      `Accept-Language` lives.
 - [ ] Does ICU4X expose collation sort keys? A bulk key-extraction call would let
       a sort cross the boundary once instead of per comparison, which dominates
       any handle-versus-lookup difference.
@@ -307,10 +311,11 @@ runtime data dependencies, not taxonomy.
       ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
       a `dtor`-less imported handle decoded as a copyable newtype. It is all the
       first slice needs — normalization, case mapping, character properties,
-      collation over the declared locales, grapheme segmentation.
+      collation over the declared locales, and grapheme boundaries by eager
+      pass.
 - [ ] Affine resource support in the same path — methods, static constructors,
-      `borrow<T>` parameters, `resource.drop` — gating the runtime-configured
-      surface, not the package.
+      `borrow<T>` parameters, `resource.drop` — gating the tailored,
+      runtime-configured, and stateful surface, not the package.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
       itself.
 - [ ] Promote the spike's data-free components into first-party prebuilt
@@ -332,5 +337,5 @@ runtime data dependencies, not taxonomy.
   the implementation components are consumed and composed.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API
   need no longer be CM-representable.
-- [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the three
-  handle kinds the facade draws on.
+- [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the token and
+  affine handle kinds the facade draws on.
