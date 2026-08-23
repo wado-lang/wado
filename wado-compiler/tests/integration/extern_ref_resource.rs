@@ -145,3 +145,77 @@ fn extends_rejects_a_generic_parent_in_v1() {
         "a generic parent is out of scope in v1 and must be reported, got {d:?}"
     );
 }
+
+/// Two extern-ref resources in a chain, plus whatever the case needs.
+fn chain(rest: &str) -> String {
+    format!(
+        "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {{}}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {{}}\n\
+         {rest}\n\
+         export fn run() {{}}\n"
+    )
+}
+
+#[test]
+fn a_child_passes_where_the_parent_is_expected() {
+    let source = chain(
+        "fn takes(t: EventTarget) -> EventTarget { return t; }\n\
+         fn give(n: Node) -> EventTarget { return takes(n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(d.is_empty(), "upcast is implicit, got {d:?}");
+}
+
+#[test]
+fn a_parent_does_not_pass_where_the_child_is_expected() {
+    let source = chain(
+        "fn takes(n: Node) -> Node { return n; }\n\
+         fn give(t: EventTarget) -> Node { return takes(t); }",
+    );
+    let d = diagnostics(&source);
+    assert!(!d.is_empty(), "downcast is never implicit");
+}
+
+#[test]
+fn a_shared_reference_is_covariant() {
+    let source = chain(
+        "fn takes(t: &EventTarget) -> i32 { return 1; }\n\
+         fn give(n: &Node) -> i32 { return takes(n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(d.is_empty(), "&Child is usable as &Parent, got {d:?}");
+}
+
+#[test]
+fn a_mutable_reference_is_invariant() {
+    let source = chain(
+        "fn takes(t: &mut EventTarget) -> i32 { return 1; }\n\
+         fn give(n: &mut Node) -> i32 { return takes(n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(!d.is_empty(), "&mut is invariant");
+}
+
+#[test]
+fn a_container_is_invariant() {
+    let source = chain(
+        "fn takes(t: List<EventTarget>) -> i32 { return t.len(); }\n\
+         fn give(n: List<Node>) -> i32 { return takes(n); }",
+    );
+    let d = diagnostics(&source);
+    assert!(!d.is_empty(), "List<Child> is not List<Parent>");
+}
+
+#[test]
+fn unrelated_resources_are_incomparable() {
+    let source = chain(
+        "#[cm(\"web:dom/other\", type = \"extern-ref\")]\n\
+         resource Other {}\n\
+         fn takes(t: EventTarget) -> EventTarget { return t; }\n\
+         fn give(o: Other) -> EventTarget { return takes(o); }",
+    );
+    let d = diagnostics(&source);
+    assert!(!d.is_empty(), "an unrelated resource is not a subtype");
+}

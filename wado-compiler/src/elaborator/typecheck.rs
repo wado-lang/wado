@@ -34,6 +34,25 @@ pub(super) fn check_assignable(
     expected: TypeId,
     type_table: &TypeTable,
 ) -> TypeCheckResult {
+    check_at(actual, expected, type_table, Position::Covariant)
+}
+
+/// Where a comparison sits, which is what decides whether `resource extends`
+/// applies: a value, a `return`, and the referent of a `&T` admit a subtype;
+/// the referent of a `&mut T`, a container's element, and a function type's
+/// parts do not. See `docs/wep-2026-04-28-resource-inheritance.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Position {
+    Covariant,
+    Invariant,
+}
+
+fn check_at(
+    actual: TypeId,
+    expected: TypeId,
+    type_table: &TypeTable,
+    position: Position,
+) -> TypeCheckResult {
     // Rule 1: Identity
     if actual == expected {
         return TypeCheckResult::Compatible;
@@ -84,7 +103,12 @@ pub(super) fn check_assignable(
             return TypeCheckResult::Incompatible;
         }
         if actual_inner != expected_inner {
-            return check_assignable(actual_inner, expected_inner, type_table);
+            let inner_position = if expected_is_mut {
+                Position::Invariant
+            } else {
+                position
+            };
+            return check_at(actual_inner, expected_inner, type_table, inner_position);
         }
         return TypeCheckResult::Compatible;
     }
@@ -120,7 +144,7 @@ pub(super) fn check_assignable(
             if actual_t == TypeTable::UNKNOWN || expected_t == TypeTable::UNKNOWN {
                 return TypeCheckResult::Compatible;
             }
-            return check_assignable(actual_t, expected_t, type_table);
+            return check_at(actual_t, expected_t, type_table, Position::Invariant);
         }
         (Some(_), None) | (None, Some(_)) => {
             return TypeCheckResult::Incompatible;
@@ -157,13 +181,13 @@ pub(super) fn check_assignable(
             return TypeCheckResult::Incompatible;
         }
         for (a, e) in actual_params.iter().zip(expected_params.iter()) {
-            match check_assignable(*a, *e, type_table) {
+            match check_at(*a, *e, type_table, Position::Invariant) {
                 TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
                 TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
                 TypeCheckResult::Compatible => {}
             }
         }
-        return check_assignable(*actual_ret, *expected_ret, type_table);
+        return check_at(*actual_ret, *expected_ret, type_table, Position::Invariant);
     }
     // One is function, the other isn't -> incompatible
     if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
@@ -192,7 +216,7 @@ pub(super) fn check_assignable(
             return TypeCheckResult::Incompatible;
         }
         for (a, e) in actual_args.iter().zip(expected_args.iter()) {
-            match check_assignable(*a, *e, type_table) {
+            match check_at(*a, *e, type_table, Position::Invariant) {
                 TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
                 TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
                 TypeCheckResult::Compatible => {}
@@ -201,7 +225,17 @@ pub(super) fn check_assignable(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 9: General catch-all -- different concrete types
+    // Rule 9: `resource Child extends Parent` — only where the position admits
+    // a subtype.
+    if position == Position::Covariant
+        && let ResolvedType::Resource { def: actual_def } = type_table.get(actual_inner)
+        && let ResolvedType::Resource { def: expected_def } = type_table.get(expected_inner)
+        && type_table.is_resource_subtype(*actual_def, *expected_def)
+    {
+        return TypeCheckResult::Compatible;
+    }
+
+    // Rule 10: General catch-all -- different concrete types
     if actual_inner != expected_inner {
         return TypeCheckResult::Incompatible;
     }
