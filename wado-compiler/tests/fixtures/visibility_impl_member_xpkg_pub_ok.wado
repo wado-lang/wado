@@ -1,0 +1,17 @@
+//! `pub` impl members reach another package; a `pub` method may still call the
+//! type's own file-private and `internal` members from inside the package.
+use { make_gadget, Gadget } from "xpkg";
+
+test "a pub method reaches across packages" {
+    assert make_gadget().open_method() == 34;
+}
+
+test "a pub associated constant reaches across packages" {
+    assert Gadget::OPEN_C == 300;
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" }
+}

@@ -1,5 +1,6 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
+use super::sig::AssocConstSig;
 use crate::ast::{
     self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
     ForOfStmt, ForStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt, Stmt,
@@ -1588,8 +1589,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some((_const_module, type_id, const_expr)) =
-                        self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                    if let Some(AssocConstSig {
+                        ty: type_id,
+                        value: const_expr,
+                        ..
+                    }) = self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal

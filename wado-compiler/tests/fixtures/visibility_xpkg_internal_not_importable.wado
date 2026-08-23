@@ -1,0 +1,13 @@
+//! `internal` does not reach across a package boundary: the consumer cannot
+//! import a dependency's package-internal symbol.
+use { pkg_only_helper } from "xpkg";
+
+export fn run() {
+    assert pkg_only_helper() == 5;
+}
+
+__DATA__
+{
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" },
+  "compile_error": "cannot be imported from another package"
+}

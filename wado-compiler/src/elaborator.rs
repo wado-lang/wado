@@ -1206,7 +1206,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         owner: crate::defs::DefId,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<sig::AssocConstSig> {
         self.tysys
             .signatures
             .associated_constant(owner, name)
@@ -1218,7 +1218,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn associated_constant_of_path(
         &self,
         ident: &ast::IdentExpr,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<sig::AssocConstSig> {
         let owner = trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
@@ -1230,7 +1230,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         qualifier: Option<&ast::Type>,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<sig::AssocConstSig> {
         let owner = trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
         self.associated_constant_of(owner, name)
     }
@@ -1653,7 +1653,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // same-named types. Lookups canonicalize the queried prefix the
         // same way ([`Self::lookup_associated_constant`]).
         self.sem.decls.associated_constants.clear();
-        let assoc_const_inputs: Vec<(String, String, ast::Type, ast::Expr)> = module
+        type AssocConstInput = (String, String, ast::Type, ast::Expr, Option<ast::Visibility>);
+        let assoc_const_inputs: Vec<AssocConstInput> = module
             .items
             .iter()
             .filter_map(|item| {
@@ -1665,6 +1666,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .flat_map(|impl_block| {
                 let type_name = self.get_type_name(&impl_block.ty);
+                // A trait impl's constant reaches as far as the trait; only an
+                // inherent one carries a ladder of its own.
+                let is_inherent = impl_block.trait_type.is_none();
                 impl_block
                     .constants
                     .iter()
@@ -1674,20 +1678,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             assoc_const.name.clone(),
                             assoc_const.ty.clone(),
                             assoc_const.value.clone(),
+                            is_inherent.then_some(assoc_const.visibility),
                         )
                     })
                     .collect::<Vec<_>>()
             })
             .collect();
-        for (type_name, const_name, ty, value) in assoc_const_inputs {
+        for (type_name, const_name, ty, value, inherent_visibility) in assoc_const_inputs {
             let type_id = self.resolve_type(&ty);
             let Some(owner) = self.decl_key_or_local(&type_name) else {
                 continue;
             };
-            self.sem
-                .decls
-                .associated_constants
-                .insert((owner, const_name), (module_source.clone(), type_id, value));
+            self.sem.decls.associated_constants.insert(
+                (owner, const_name),
+                sig::AssocConstSig {
+                    module: module_source.clone(),
+                    ty: type_id,
+                    value,
+                    inherent_visibility,
+                },
+            );
         }
 
         // Must stay in the decl pass: `Signatures` is assembled once every

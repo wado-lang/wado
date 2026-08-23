@@ -1,0 +1,22 @@
+//! A dependency package's own modules see each other's `internal` items: the
+//! package boundary is the package, not the file. `xpkg/lib.wado` reaches
+//! `xpkg/util.wado`'s `internal` function, struct, and field.
+use { from_internal, secret_code, open_helper } from "xpkg";
+
+test "a dependency reaches its own internal function" {
+    assert from_internal() == 5;
+}
+
+test "a dependency reaches its own internal struct and field" {
+    assert secret_code() == 7;
+}
+
+test "a dependency's pub items still reach the consumer" {
+    assert open_helper() == 6;
+}
+
+__DATA__
+{
+  "test": {},
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" }
+}

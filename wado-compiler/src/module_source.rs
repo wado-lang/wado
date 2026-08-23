@@ -136,8 +136,18 @@ impl ModuleSourceInterner {
         self.dependencies = dependencies;
     }
 
+    /// A dependency's entry module: the package root is the module itself.
     pub fn dependency(&mut self, path: &str) -> ModuleSource {
+        self.dependency_module(path, path)
+    }
+
+    /// A module of the dependency package rooted at `pkg`. A relative import
+    /// from within a dependency goes through here so every module of the
+    /// package shares one [`PackageId`], which is what makes `internal` reach
+    /// package-wide instead of file-wide.
+    pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         ModuleSource::Dependency {
+            pkg: self.intern(pkg),
             path: self.intern(path),
         }
     }
@@ -182,8 +192,16 @@ impl ModuleSourceInterner {
             path: self.intern(path),
         }
     }
+    /// A remote package's entry module: the package root is the URL itself.
     pub fn remote(&mut self, url: &str) -> ModuleSource {
+        self.remote_module(url, url)
+    }
+
+    /// A module of the remote package rooted at `pkg`, for a relative import
+    /// from within one. See [`Self::dependency_module`].
+    pub fn remote_module(&mut self, pkg: &str, url: &str) -> ModuleSource {
         ModuleSource::Remote {
+            pkg: self.intern(pkg),
             url: self.intern(url),
         }
     }
@@ -273,13 +291,24 @@ pub enum ModuleSource {
         path: InternedStr,
     },
     /// A module of a dependency package, resolved from a bare-name
-    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is the
-    /// resolved entry-module `path`, so two aliases pointing at the same package
-    /// unify. Distinct from [`ModuleSource::Local`] to carry the package boundary
-    /// — only `export` items cross it — though loaded exactly like it.
-    Dependency { path: InternedStr },
+    /// `use { … } from "<dep>"` against `[dependencies]`. Module identity is
+    /// `path`, so two aliases pointing at the same file unify. Distinct from
+    /// [`ModuleSource::Local`] to carry the package boundary, though loaded
+    /// exactly like it.
+    Dependency {
+        /// The package root: the dependency's resolved `[package].lib` path.
+        /// Every module of the package carries the same value, so `internal`
+        /// reaches package-wide rather than file-wide. A relative import from
+        /// within the package inherits it.
+        pkg: InternedStr,
+        /// This module's own path.
+        path: InternedStr,
+    },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
+        /// The package root: the URL the package was first entered through.
+        /// A remote package has no manifest, so the entry URL stands in for it.
+        pkg: InternedStr,
         /// Full URL (e.g., "<https://example.com/lib.wado>")
         url: InternedStr,
     },
@@ -339,8 +368,8 @@ impl ModuleSource {
             | Self::EntryPoint { .. }
             | Self::Redirected { .. }
             | Self::Wasm { .. } => PackageId::Root,
-            Self::Dependency { path } => PackageId::Dependency(path.clone()),
-            Self::Remote { url } => PackageId::Remote(url.clone()),
+            Self::Dependency { pkg, .. } => PackageId::Dependency(pkg.clone()),
+            Self::Remote { pkg, .. } => PackageId::Remote(pkg.clone()),
         }
     }
 
@@ -357,8 +386,8 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
-            (Self::Dependency { path: a }, Self::Dependency { path: b }) => a == b,
-            (Self::Remote { url: a }, Self::Remote { url: b }) => a == b,
+            (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
+            (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
                 Self::Wasm {
@@ -387,8 +416,8 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
-            Self::Dependency { path } => path.hash(state),
-            Self::Remote { url } => url.hash(state),
+            Self::Dependency { path, .. } => path.hash(state),
+            Self::Remote { url, .. } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
                 path.hash(state);
@@ -494,8 +523,8 @@ impl ModuleSource {
             Self::Core { name } => vec!["core".to_string(), name.to_string()],
             Self::Wasi { interface } => vec!["wasi".to_string(), interface.to_string()],
             Self::Local { path } => vec![path.to_string()],
-            Self::Dependency { path } => vec!["dep".to_string(), path.to_string()],
-            Self::Remote { url } => vec![url.to_string()],
+            Self::Dependency { path, .. } => vec!["dep".to_string(), path.to_string()],
+            Self::Remote { url, .. } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![entry_basename(filename).to_string()],
             Self::Redirected { uri } => vec![uri.to_string()],
             Self::Wasm { path, .. } => vec![path.to_string()],
@@ -650,7 +679,7 @@ impl ModuleSource {
             // resolves against this, so it must be the same base-relative path
             // the module itself was loaded from, or the include would resolve
             // against the consumer's directory instead of the dependency's.
-            Self::Dependency { path } => path.to_string(),
+            Self::Dependency { path, .. } => path.to_string(),
             other => other.to_string(),
         }
     }
@@ -669,8 +698,8 @@ impl fmt::Display for ModuleSource {
             Self::Core { name } => write!(f, "core:{name}"),
             Self::Wasi { interface } => write!(f, "wasi:{interface}"),
             Self::Local { path } => write!(f, "{path}"),
-            Self::Dependency { path } => write!(f, "dep:{path}"),
-            Self::Remote { url } => write!(f, "{url}"),
+            Self::Dependency { path, .. } => write!(f, "dep:{path}"),
+            Self::Remote { url, .. } => write!(f, "{url}"),
             // Symbol identity, not a file path: the entry's qualifier is its
             // base name (its path relative to its own directory), so WIR names
             // stay stable across invocations and machines — the compile path is

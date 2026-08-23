@@ -719,6 +719,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_defaults: vec![],
                             param_names: vec![],
                             consumes_self: false,
+                            inherent_visibility: None,
                         });
                     }
                     if method_name == "zip" {
@@ -761,6 +762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_defaults: vec![],
                             param_names: vec![],
                             consumes_self: false,
+                            inherent_visibility: None,
                         });
                     }
                     (
@@ -1018,6 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
+            inherent_visibility: Some(method_header.visibility),
         })
     }
 
@@ -1064,6 +1067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
+            inherent_visibility: None,
         })
     }
 
@@ -2296,6 +2300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_defaults,
                     param_names,
                     consumes_self: self_kind == ast::SelfKind::Value,
+                    inherent_visibility: None,
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -2366,6 +2371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &default_method.sig.params,
                         ),
                         consumes_self: self_kind == ast::SelfKind::Value,
+                        inherent_visibility: None,
                     },
                     impl_module_source,
                     blanket_type_param,
@@ -3370,6 +3376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults: method_param_defaults,
             param_names: method_param_names,
             consumes_self: _,
+            inherent_visibility: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

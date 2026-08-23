@@ -1,0 +1,18 @@
+//! Impl members at each rung of the visibility ladder, for the same-package
+//! `visibility_impl_member_*` fixtures.
+
+pub struct Item { pub v: i32 }
+
+impl Item {
+  fn file_private(&self) -> i32 { return self.v + 1 }
+
+  internal fn pkg_internal(&self) -> i32 { return self.v + 2 }
+
+  pub fn open(&self) -> i32 { return self.file_private() + self.pkg_internal() }
+
+  const FILE_PRIVATE_C: i32 = 10;
+
+  internal const PKG_INTERNAL_C: i32 = 20;
+}
+
+pub fn make_item() -> Item { return Item { v: 0 } }

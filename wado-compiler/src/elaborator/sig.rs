@@ -10,6 +10,18 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::sem::decls::FunctionSig;
 
+/// What an `impl` block's `const NAME: T = expr;` declares.
+#[derive(Debug, Clone)]
+pub(crate) struct AssocConstSig {
+    /// The impl-declaring module; reify walks [`Self::value`] under it.
+    pub(crate) module: ModuleSource,
+    pub(crate) ty: TypeId,
+    pub(crate) value: crate::ast::Expr,
+    /// The declared rung on an inherent impl. `None` on a trait impl's
+    /// constant, which reaches as far as the trait does.
+    pub(crate) inherent_visibility: Option<crate::ast::Visibility>,
+}
+
 /// Program-wide declaration facts, resolved once by the decl pass and read-only
 /// afterwards (WEP 2026-05-26). One entry per source declaration, holding what
 /// it *says*, never anything computed from a use site. AST survives inside an
@@ -43,12 +55,10 @@ pub(crate) struct Signatures {
     /// `(declared type, is_mut)`.
     pub(crate) globals: IndexMap<ModuleSource, IndexMap<String, (TypeId, bool)>>,
 
-    /// Impl-associated constants, keyed by `(owning type declaration, constant
-    /// name)` → `(impl-declaring module, declared type, value expr)`. The
-    /// owner is an identity, so two modules' same-named types cannot share an
-    /// entry.
-    pub(crate) associated_constants:
-        IndexMap<(crate::defs::DefId, String), (ModuleSource, TypeId, crate::ast::Expr)>,
+    /// Impl-associated constants, keyed by `(owning type declaration,
+    /// constant name)`. The owner is an identity, so two modules' same-named
+    /// types cannot share an entry.
+    pub(crate) associated_constants: IndexMap<(crate::defs::DefId, String), AssocConstSig>,
 
     /// Per-module `__DATA__` section contents; modules without one have no
     /// entry.
@@ -93,7 +103,7 @@ impl Signatures {
         &self,
         owner: crate::defs::DefId,
         name: &str,
-    ) -> Option<&(ModuleSource, TypeId, crate::ast::Expr)> {
+    ) -> Option<&AssocConstSig> {
         self.associated_constants.get(&(owner, name.to_string()))
     }
 

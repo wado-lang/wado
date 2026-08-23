@@ -157,6 +157,29 @@ pub(crate) struct GenericNewtypeInfo {
     pub(super) base_type_ast: ast::Type,
 }
 
+/// Which kind of inherent impl member a visibility violation names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImplMemberKind {
+    Method,
+    AssociatedConstant,
+}
+
+impl ImplMemberKind {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Method => "method",
+            Self::AssociatedConstant => "associated constant",
+        }
+    }
+
+    fn verb(self) -> &'static str {
+        match self {
+            Self::Method => "called",
+            Self::AssociatedConstant => "read",
+        }
+    }
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -604,6 +627,16 @@ pub enum TypeError {
     PrivateFieldAccess {
         struct_name: String,
         field_name: String,
+        visibility: crate::ast::Visibility,
+        span: Span,
+    },
+
+    /// An inherent impl member (method or associated constant) reached from
+    /// beyond its declared visibility.
+    PrivateMemberAccess {
+        type_name: String,
+        member_name: String,
+        member_kind: ImplMemberKind,
         visibility: crate::ast::Visibility,
         span: Span,
     },
@@ -1385,6 +1418,30 @@ impl TypeError {
                 },
                 *span,
             ),
+            TypeError::PrivateMemberAccess {
+                type_name,
+                member_name,
+                member_kind,
+                visibility,
+                span,
+            } => (
+                Code::PrivateSymbol,
+                {
+                    let kind = member_kind.noun();
+                    let verb = member_kind.verb();
+                    match visibility {
+                        crate::ast::Visibility::Internal => format!(
+                            "{kind} `{member_name}` of `{type_name}` is `internal` to its package                              and cannot be {verb} from another package; mark it `pub` to expose it                              across packages"
+                        ),
+                        crate::ast::Visibility::Private | crate::ast::Visibility::Public => {
+                            format!(
+                                "{kind} `{member_name}` of `{type_name}` is private to its                                  defining file; mark it `internal` (same package) or `pub` (cross                                  package) to widen access"
+                            )
+                        }
+                    }
+                },
+                *span,
+            ),
             TypeError::MethodNotFound {
                 type_name,
                 method_name,
@@ -1729,6 +1786,11 @@ pub(super) struct MethodInfo {
     /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
     /// move check reads it to flag use-after-move through a consuming method.
     pub(super) consumes_self: bool,
+    /// The rung of the visibility ladder an *inherent* member declared.
+    /// `None` for everything whose reach the member itself does not decide: a
+    /// trait impl's methods (they reach as far as the trait), resource
+    /// methods, and the synthesized builtins.
+    pub(super) inherent_visibility: Option<crate::ast::Visibility>,
 }
 
 /// Labeled block expression target for tracking break types

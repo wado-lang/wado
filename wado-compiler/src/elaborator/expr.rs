@@ -1,6 +1,7 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
+use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
@@ -612,12 +613,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
-        {
+        if let Some(assoc) = self.associated_constant_of_path(ident) {
+            self.check_inherent_member_visibility(
+                assoc.inherent_visibility,
+                Some(&assoc.module),
+                assoc.ty,
+                ident.segments.last().map_or(&ident.name, |s| &s.name),
+                super::types::ImplMemberKind::AssociatedConstant,
+                ident.span,
+            );
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
-            self.resolve_expr(&const_expr, ctx, Some(type_id));
-            return type_id;
+            self.resolve_expr(&assoc.value, ctx, Some(assoc.ty));
+            return assoc.ty;
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -1332,6 +1340,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         });
         (0, TypeTable::UNKNOWN)
+    }
+
+    /// Enforce an inherent impl member's rung of the visibility ladder.
+    ///
+    /// `visibility` is `None` for members whose reach the member does not
+    /// decide — a trait impl's methods reach as far as the trait, and resource
+    /// methods and builtins have no ladder of their own.
+    pub(super) fn check_inherent_member_visibility(
+        &mut self,
+        visibility: Option<crate::ast::Visibility>,
+        impl_module: Option<&ModuleSource>,
+        receiver_type: TypeId,
+        member_name: &str,
+        member_kind: super::types::ImplMemberKind,
+        span: Span,
+    ) {
+        let (Some(visibility), Some(impl_module)) = (visibility, impl_module) else {
+            return;
+        };
+        if *impl_module == self.current_module_source {
+            return;
+        }
+        let same_package = impl_module.same_package(&self.current_module_source);
+        if visibility.reachable_from(same_package) {
+            return;
+        }
+        let _ = self.emit(TypeError::PrivateMemberAccess {
+            type_name: self.tysys.type_id_to_string(receiver_type),
+            member_name: member_name.to_string(),
+            member_kind,
+            visibility,
+            span,
+        });
     }
 
     pub(super) fn check_field_visibility(
@@ -2668,7 +2709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            if let Some((_m, _type_id, const_expr)) =
+            if let Some(AssocConstSig { value: const_expr, .. }) =
                 self.associated_constant_qualified(variant_qualifier, variant_name)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {

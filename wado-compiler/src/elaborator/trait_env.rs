@@ -401,6 +401,9 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
+    /// The member's own rung of the visibility ladder, enforced on inherent
+    /// impls (a trait impl's members reach as far as the trait does).
+    pub(super) visibility: ast::Visibility,
 }
 
 /// The receiver shape of a blanket impl.
@@ -1086,6 +1089,7 @@ impl TraitEnv {
                                         .iter()
                                         .filter(|p| p.self_kind == ast::SelfKind::None)
                                         .count(),
+                                    visibility: m.visibility,
                                 })
                                 .collect(),
                             assoc_types: trait_decl.associated_types.clone(),
@@ -1137,6 +1141,7 @@ impl TraitEnv {
                                     .iter()
                                     .filter(|p| p.self_kind == ast::SelfKind::None)
                                     .count(),
+                                visibility: m.visibility,
                             })
                             .collect(),
                         associated_types: impl_block.associated_types.clone(),

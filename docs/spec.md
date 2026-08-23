@@ -3820,13 +3820,20 @@ export fn run() { ... }
 A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
-The ladder applies to top-level items. Members of an `impl` block (methods,
-associated constants) accept the same file-private / `internal` / `pub` ladder;
-`export` on a member is a compile error (a method has no Component Model
-boundary). Member visibility is not yet enforced at call sites, so `internal` on
-a member currently records intent (package scope) rather than restricting
-access. A struct field accepts `pub` or `internal` (only `pub` widens access
-beyond the defining module; `internal` currently behaves like file-private).
+The ladder applies to top-level items, to struct fields, and to members of an
+`impl` block (methods, associated constants). `export` on a member is a compile
+error — a method has no Component Model boundary. Calling a method or reading an
+associated constant beyond its reach is a compile error, as it is for a field.
+Only an *inherent* member carries a ladder of its own; a trait impl's members
+reach as far as the trait does.
+
+```wado
+impl Config {
+    fn parse_raw() { }         // this file only
+    internal fn reload() { }   // other files in this package
+    pub fn get() { }           // other packages
+}
+```
 
 #### Re-export visibility
 

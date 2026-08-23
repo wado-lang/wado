@@ -1,0 +1,13 @@
+//! A file-private method on a `pub` struct is not callable from another
+//! package. The struct's visibility does not lift its members'.
+use { make_gadget } from "xpkg";
+
+export fn run() {
+    assert make_gadget().file_private() == 12;
+}
+
+__DATA__
+{
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" },
+  "compile_error": "is private to"
+}

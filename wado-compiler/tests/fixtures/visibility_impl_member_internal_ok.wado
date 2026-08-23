@@ -1,0 +1,14 @@
+//! `internal` impl members reach other files in the same package.
+use { make_item, Item } from "./sub/impl_member_lib.wado";
+
+test "internal method within the package" {
+    assert make_item().pkg_internal() == 2;
+}
+
+test "internal associated constant within the package" {
+    assert Item::PKG_INTERNAL_C == 20;
+}
+
+test "pub method calls the type's own private members" {
+    assert make_item().open() == 3;
+}

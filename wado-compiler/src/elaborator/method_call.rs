@@ -481,6 +481,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults,
             param_names,
             consumes_self,
+            inherent_visibility,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -508,8 +509,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_defaults: vec![],
                 param_names: vec![],
                 consumes_self: false,
+                inherent_visibility: None,
             }
         };
+
+        self.check_inherent_member_visibility(
+            inherent_visibility,
+            inherent_impl_module.as_ref(),
+            base_type_id,
+            method_name,
+            super::types::ImplMemberKind::Method,
+            span,
+        );
 
         // Tuple.len() is a compile-time constant — return immediately without a function call.
         if method_name == "len" && self.tysys.type_table.borrow().is_tuple(base_type_id) {

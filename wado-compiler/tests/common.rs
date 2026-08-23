@@ -44,6 +44,9 @@ pub struct FilesystemHost {
     diagnostics: Mutex<Vec<Diagnostic>>,
     /// Stubbed environment for `#[param(from_env = ...)]` resolution.
     env: indexmap::IndexMap<String, String>,
+    /// Stubbed `[dependencies]`: name → the dependency's `[package].lib` path,
+    /// relative to `base_path`. Lets a fixture span several packages.
+    dependencies: indexmap::IndexMap<String, String>,
 }
 
 impl FilesystemHost {
@@ -52,12 +55,19 @@ impl FilesystemHost {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
             env: indexmap::IndexMap::new(),
+            dependencies: indexmap::IndexMap::new(),
         }
     }
 
     /// Seed the compile-time environment consulted by `env_var`.
     pub fn with_env(mut self, env: indexmap::IndexMap<String, String>) -> Self {
         self.env = env;
+        self
+    }
+
+    /// Seed the resolved path `[dependencies]` a bare `use ... from "name"` binds to.
+    pub fn with_dependencies(mut self, dependencies: indexmap::IndexMap<String, String>) -> Self {
+        self.dependencies = dependencies;
         self
     }
 
@@ -86,6 +96,14 @@ impl CompilerHost for FilesystemHost {
 
     fn env_var(&self, name: &str) -> Option<String> {
         self.env.get(name).cloned()
+    }
+
+    fn dependency_index(&self) -> wado_compiler::DependencyIndex {
+        let mut index = wado_compiler::DependencyIndex::default();
+        for (name, lib) in &self.dependencies {
+            index.resolved.insert(name.clone(), lib.clone());
+        }
+        index
     }
 }
 
@@ -863,6 +881,7 @@ pub fn compile_source_with_compiler_options_and_filename(
         options,
         display_filename,
         indexmap::IndexMap::new(),
+        indexmap::IndexMap::new(),
     )
     .0
 }
@@ -882,6 +901,7 @@ pub fn compile_capturing_warnings(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
     env: indexmap::IndexMap<String, String>,
+    dependencies: indexmap::IndexMap<String, String>,
 ) -> (
     Result<wado_compiler::CompileResult, CompileError>,
     Vec<String>,
@@ -891,7 +911,9 @@ pub fn compile_capturing_warnings(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemHost::new(base_path).with_env(env);
+    let host = FilesystemHost::new(base_path)
+        .with_env(env)
+        .with_dependencies(dependencies);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
