@@ -151,6 +151,21 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
         .collect()
 }
 
+/// The first module `snap` cached that `modules` carries as a different parse —
+/// the condition the snapshot may seed a compile under, its facts keying on
+/// `DefId`s only that parse mints (WEP 2026-08-12 §1).
+pub(crate) fn reparsed_snapshot_module<'a>(
+    snap: &Semantics,
+    modules: &'a IndexMap<ModuleSource, crate::ast::Module>,
+) -> Option<&'a ModuleSource> {
+    let cached = stdlib_sources(snap);
+    modules.iter().find_map(|(ms, module)| {
+        let reparsed =
+            cached.contains(ms) && snap.space_modules.get(&module.ast_id_space()) != Some(ms);
+        reparsed.then_some(ms)
+    })
+}
+
 /// Deep-clone a cached [`TirModule`] for a per-compile pipeline. A naïve `Clone`
 /// would only bump the snapshot's shared `Rc`s, letting an optimiser pass
 /// corrupt it, so the function `Rc`s are rebuilt fresh — memoised by pointer
@@ -275,6 +290,26 @@ mod tests {
         assert!(
             entry_count <= 1,
             "expected at most one EntryPoint module, got {entry_count}"
+        );
+    }
+
+    /// The precondition must hold for an ordinary compile, or every compile
+    /// silently re-elaborates the stdlib.
+    #[test]
+    fn a_plain_compile_carries_the_snapshot_parses() {
+        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let host = SnapshotHost;
+        let load_result = poll_to_completion(async {
+            ModuleLoader::new(&host, LogLevel::Off)
+                .load_all("fn main() {}", Some("plain.wado"))
+                .await
+        })
+        .expect("loader should succeed");
+
+        assert_eq!(
+            reparsed_snapshot_module(&snap, &load_result.modules),
+            None,
+            "a cached module is being re-parsed per compile"
         );
     }
 

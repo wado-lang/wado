@@ -1,0 +1,66 @@
+// An impl on an *intermediate* newtype link serves every level above it,
+// however many: the direct operator, the operator behind a bound, the
+// receiverless static, and the comparison that erases to an instruction.
+use { println } from "core:cli";
+
+type Inner = i32;
+
+type Outer = Inner;
+
+type Outermost = Outer;
+
+impl Add for Inner {
+    type Output = Inner;
+
+    fn add(&self, rhs: &Inner) -> Inner {
+        return 99 as Inner;
+    }
+}
+
+impl Neg for Inner {
+    type Output = Inner;
+
+    fn neg(&self) -> Inner {
+        return 77 as Inner;
+    }
+}
+
+impl Eq for Inner {
+    fn eq(&self, other: &Inner) -> bool {
+        return true;
+    }
+}
+
+trait Tagged {
+    fn tag() -> String;
+}
+
+impl Tagged for Inner {
+    fn tag() -> String {
+        return "I";
+    }
+}
+
+fn plus<T: Add>(a: T, b: T) -> T::Output {
+    return a + b;
+}
+
+fn tag_of<T: Tagged>(t: T) -> String {
+    return T::tag();
+}
+
+export fn run() with Stdout {
+    let i = builtin::black_box(1) as Inner;
+    let j = builtin::black_box(2) as Inner;
+    let x = builtin::black_box(1) as Outer;
+    let y = builtin::black_box(2) as Outer;
+    let z = builtin::black_box(1) as Outermost;
+    let w = builtin::black_box(2) as Outermost;
+    println(`${(i + j) as i32} ${(x + y) as i32} ${(z + w) as i32}`);
+    println(`${plus(i, j) as i32} ${plus(x, y) as i32} ${plus(z, w) as i32}`);
+    println(`${(-x) as i32} ${(-z) as i32} ${x == y} ${z == w}`);
+    println(`${tag_of(i)} ${tag_of(x)} ${tag_of(z)}`);
+}
+
+__DATA__
+{"stdout": "99 99 99\n99 99 99\n77 77 true true\nI I I\n"}

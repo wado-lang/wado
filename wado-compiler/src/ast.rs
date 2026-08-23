@@ -948,11 +948,17 @@ impl Module {
 
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
     pub fn wasm_module(&self) -> Option<&str> {
+        self.wasm_module_attribute()
+            .and_then(|a| a.args.first())
+            .map(AttrArg::as_str)
+    }
+
+    /// The attribute itself, for a diagnostic's span.
+    #[must_use]
+    pub fn wasm_module_attribute(&self) -> Option<&InnerAttribute> {
         self.inner_attributes
             .iter()
             .find(|a| a.name == "wasm_module")
-            .and_then(|a| a.args.first())
-            .map(AttrArg::as_str)
     }
 
     /// Returns the canonical bundled-stdlib import path declared by
@@ -965,11 +971,15 @@ impl Module {
     /// `ModuleSource` and dedup against the bundled cache when an editor
     /// opens the file directly.
     pub fn stdlib_identity(&self) -> Option<&str> {
-        self.inner_attributes
-            .iter()
-            .find(|a| a.name == "stdlib")
+        self.stdlib_identity_attribute()
             .and_then(|a| a.args.first())
             .map(AttrArg::as_str)
+    }
+
+    /// The attribute itself: a malformed one has no identity, but has a span.
+    #[must_use]
+    pub fn stdlib_identity_attribute(&self) -> Option<&InnerAttribute> {
+        self.inner_attributes.iter().find(|a| a.name == "stdlib")
     }
 
     /// Returns the value of a scalar `key = "value"` argument on any

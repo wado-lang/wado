@@ -133,11 +133,12 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     // round would otherwise revisit — and those sites are usually perfectly
     // handleable, just not yet bound. Reboxing them without trying would give
     // up the optimization on the very sites inlining just made hot.
+    let scalarized = scalarized_returns(project);
     let mut all = candidates.clone();
-    for (key, (variant_type, layout)) in scalarized_returns(project) {
-        all.entry(key).or_insert(Candidate {
-            layout,
-            variant_type,
+    for (&key, (variant_type, layout)) in &scalarized {
+        all.entry(key).or_insert_with(|| Candidate {
+            layout: layout.clone(),
+            variant_type: *variant_type,
         });
     }
     rewrite_call_sites(project, &all, &mut touched);
@@ -152,7 +153,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     }
     // Only now: whatever the rewrite above declined is a straggler, and it is
     // one the moment its callee's signature changed — not an iteration later.
-    changed |= rebox_stragglers(project, gate);
+    changed |= rebox_stragglers(project, &scalarized, gate);
     debug_assert_call_sites_rewritten(project);
     changed
 }
@@ -166,8 +167,11 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
 /// `f(x)` ⇒ `{ let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }`.
 /// This is what makes the rewrite sound without validation — `nir/inline` keeps
 /// planting call sites after a callee's signature is already committed.
-fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let scalarized = scalarized_returns(project);
+fn rebox_stragglers(
+    project: &mut NirPackage,
+    scalarized: &IndexMap<FuncId, (TypeId, Layout)>,
+    gate: &mut FunctionGate,
+) -> bool {
     if scalarized.is_empty() {
         return false;
     }
@@ -178,20 +182,25 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         let Some(mut body) = func.body.take() else {
             continue;
         };
+        // Every step below keys on a call to a scalarized callee.
+        if !calls_any(&body, scalarized) {
+            func.body = Some(body);
+            continue;
+        }
         let span = func.span;
-        let bound = handled_call_sites(&body, &scalarized, own_return);
+        let bound = handled_call_sites(&body, scalarized, own_return);
         let mut targets: Vec<ExprId> = Vec::new();
         collect_straggler_calls(
             &body,
             NodeRef::Block(body.root),
-            &scalarized,
+            scalarized,
             &bound,
             &mut targets,
         );
         let reboxed = !targets.is_empty();
         for call in targets {
             crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
-            rebox_call(&mut body, &mut func.locals, call, &scalarized, span);
+            rebox_call(&mut body, &mut func.locals, call, scalarized, span);
         }
         func.body = Some(body);
         if reboxed {
@@ -199,8 +208,16 @@ fn rebox_stragglers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             changed = true;
         }
     }
-    changed |= rebox_stragglers_in_globals(project, &scalarized);
+    changed |= rebox_stragglers_in_globals(project, scalarized);
     changed
+}
+
+/// Whether `body` calls any function in `targets` — one arena scan, far cheaper
+/// than the tree walks it gates.
+fn calls_any<V>(body: &Body, targets: &IndexMap<FuncId, V>) -> bool {
+    body.exprs.values().any(|node| {
+        matches!(&node.kind, ExprKind::Call { func_id, .. } if targets.contains_key(func_id))
+    })
 }
 
 /// The same repair over the global initializers. They are never rewritten —
@@ -2043,6 +2060,11 @@ fn rewrite_call_sites(
         let Some(mut body) = func.body.take() else {
             continue;
         };
+        // Every step below keys on a call to a candidate.
+        if !calls_any(&body, candidates) {
+            func.body = Some(body);
+            continue;
+        }
         let span = func.span;
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing
@@ -2062,8 +2084,10 @@ fn rewrite_call_sites(
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
-                func.locals[local as usize].type_id = tuple_type;
-                retype_let(&mut body, local, tuple_type);
+                let slot = &mut func.locals[local as usize].type_id;
+                changed |= *slot != tuple_type;
+                *slot = tuple_type;
+                changed |= retype_let(&mut body, local, tuple_type);
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root;
@@ -2074,8 +2098,7 @@ fn rewrite_call_sites(
                 rebind: &rebind,
                 span,
             };
-            rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
-            changed = true;
+            changed |= rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
         }
         func.body = Some(body);
         if changed {
@@ -2084,15 +2107,14 @@ fn rewrite_call_sites(
     }
 }
 
-/// Retype every call to a rewritten callee. The node's own `type_id` is what
-/// downstream passes and `wir_build` read; leaving the variant there would make
-/// a tuple-returning call claim to produce a boxed variant.
-/// Reports `changed` only when a type actually moved. Reporting the write
-/// itself re-dirties every caller of every scalarized function on each round,
-/// and the gate then never quiesces.
+/// Retype every reachable call to a rewritten callee: the node's own `type_id` is
+/// what downstream passes and `wir_build` read, and a variant left there makes a
+/// tuple-returning call claim to produce a boxed one. Reports `changed` only when
+/// a type moved on a node that runs.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
     let mut changed = false;
-    for node in body.exprs.values_mut() {
+    for e in crate::nir_visitor::reachable_exprs(body) {
+        let node = &mut body.exprs[e];
         if let ExprKind::Call { func_id, .. } = &node.kind
             && let Some(cand) = candidates.get(func_id)
             && node.type_id != cand.layout.tuple_type
@@ -2107,7 +2129,8 @@ fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candida
 /// Retype the binding statement and every read of the bound temp. The local's
 /// own entry is retyped by the caller; a `Let` and each `Local` node carry
 /// their own copy.
-fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) {
+fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) -> bool {
+    let mut changed = false;
     for stmt in body.stmts.values_mut() {
         if let StmtKind::Let {
             local_index,
@@ -2115,17 +2138,22 @@ fn retype_let(body: &mut Body, local: u32, tuple_type: TypeId) {
             ..
         } = &mut stmt.kind
             && *local_index == local
+            && *type_id != tuple_type
         {
             *type_id = tuple_type;
+            changed = true;
         }
     }
     for node in body.exprs.values_mut() {
         if let ExprKind::Local { index, .. } = &node.kind
             && *index == local
+            && node.type_id != tuple_type
         {
             node.type_id = tuple_type;
+            changed = true;
         }
     }
+    changed
 }
 
 /// Read-only context for the call-site rewrite over one body.
@@ -2256,7 +2284,8 @@ fn collect_call_scrutinees(
 }
 
 /// Rewrite every destructuring read of a tuple-bound temp.
-fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
+fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
+    let mut changed = false;
     if let NodeRef::Expr(e) = node {
         match body.exprs[e].kind.clone() {
             ExprKind::VariantTag { expr } => {
@@ -2265,7 +2294,7 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     let kind = tag_read(body, local, tuple_type, cx);
                     body.exprs[e].kind = kind;
                     body.exprs[e].type_id = TypeTable::I32;
-                    return;
+                    return true;
                 }
             }
             ExprKind::VariantTest {
@@ -2290,7 +2319,7 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                         right: k,
                     };
                     body.exprs[e].type_id = TypeTable::BOOL;
-                    return;
+                    return true;
                 }
             }
             ExprKind::VariantPayload {
@@ -2301,19 +2330,20 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                     let read = slot_read(body, local, &layout, case_index, cx);
                     body.exprs[e].kind = body.exprs[read].kind.clone();
                     body.exprs[e].type_id = body.exprs[read].type_id;
-                    return;
+                    return true;
                 }
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if let Some(local) = temp_local(body, scrut, cx.bound) {
                     let layout = cx.layout_of(local).clone();
                     rewrite_match_on_temp(body, e, local, &layout, arms, cx);
+                    changed = true;
                 }
             }
             // The destructure itself: leaving it alone keeps a rebuild from
             // nesting under the field reads it planted, which it cannot tell apart.
             ExprKind::FieldAccess { expr, .. } if temp_local(body, expr, cx.bound).is_some() => {
-                return;
+                return false;
             }
             // A read of the temp wants the variant whole; the tuple holds it.
             ExprKind::Local { index, .. } if cx.bound.contains_key(&index) => {
@@ -2323,7 +2353,7 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
                 let rebuilt = rebuild_variant(body, index, &name, variant_type, &layout, cx.span);
                 body.exprs[e].kind = body.exprs[rebuilt].kind.clone();
                 body.exprs[e].type_id = variant_type;
-                return;
+                return true;
             }
             _ => {}
         }
@@ -2331,8 +2361,9 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) {
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
-        rewrite_temp_uses(body, c, cx);
+        changed |= rewrite_temp_uses(body, c, cx);
     }
+    changed
 }
 
 /// Whether every mention of `local` is one the rewrite lowers: a destructure, or

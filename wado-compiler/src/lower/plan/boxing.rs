@@ -384,9 +384,7 @@ impl TypeBuilder {
         for r in &replacements {
             self.box_type_ids.insert(r.type_id);
             type_table.register_box_payload(r.type_id, r.payload);
-            if r.is_shared {
-                type_table.register_shared_box(r.type_id);
-            }
+            type_table.register_boxed_ref(r.type_id, r.is_shared);
         }
         // Also register the canonical `Box<T>` wrapper ids that
         // `create_needed_box_types` minted, so callers can ask for the

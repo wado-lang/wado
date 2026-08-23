@@ -1130,7 +1130,9 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        crate::stdlib_snapshot::get_or_init_snapshot()
+        crate::stdlib_snapshot::get_or_init_snapshot().filter(|snap| {
+            crate::stdlib_snapshot::reparsed_snapshot_module(snap, &load_result.modules).is_none()
+        })
     };
 
     let (symbols, analyze_ok) = {

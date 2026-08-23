@@ -332,20 +332,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if is_comparison {
             // A type that erases to a scalar is still its own type, so an impl
-            // it writes answers the comparison before the erased form's
-            // instruction does — newtype, `enum` and `flags` alike.
-            let own_comparison_impl = super::tysys::operator_compiler_item(&op)
+            // it writes — or inherits from a link below — answers the
+            // comparison before the erased form's instruction does.
+            let comparison_impl_link = super::tysys::operator_compiler_item(&op)
                 .and_then(|item| self.tysys.compiler_trait_def(item))
-                .is_some_and(|trait_| {
-                    let key = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .impl_receiver_key(left.type_id);
-                    self.tysys
-                        .trait_env
-                        .has_any_methodful_impl_by_receiver(&key, trait_)
-                });
+                .and_then(|trait_| self.tysys.own_impl_link(left.type_id, trait_));
             // The receiver for trait lookup, named by its declaring module and
             // read off the resolved type. `Enum` and `Flags` appear only under
             // the guard above — absent an impl of their own, `==` lowers to a
@@ -368,13 +359,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ResolvedType::Newtype { .. }
                 | ResolvedType::Enum { .. }
                 | ResolvedType::Flags { .. }
-                    if own_comparison_impl =>
+                    if let Some(link) = comparison_impl_link =>
                 {
                     Some(
                         self.tysys
                             .type_table
                             .borrow()
-                            .fq_base_type_name(left.type_id)
+                            .fq_base_type_name(link)
                             .into_string(),
                     )
                 }
@@ -398,8 +389,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             if let Some(struct_name) = struct_name {
-                let lookup_type_id = if own_comparison_impl {
-                    left.type_id
+                let lookup_type_id = if let Some(link) = comparison_impl_link {
+                    link
                 } else {
                     let tt = self.tysys.type_table.borrow();
                     tt.get_newtype_base(left.type_id).unwrap_or(left.type_id)
@@ -636,7 +627,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // For newtypes, resolve base type for trait impl fallback
                 let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name, left.type_id);
+                    self.tysys
+                        .trait_impl_base_lookup(&struct_name, left.type_id, trait_);
 
                 // The right operand is resolved by now, so its type selects
                 // among the receiver's `Add<Rhs>` impls (WEP 2026-07-31).
@@ -651,16 +643,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut impl_name = struct_name.clone();
                 let mut impl_type_id = left.type_id;
                 if admitted.is_empty() {
-                    // The impl is read on the newtype's base, so the right
+                    // The impl is read on the link that wrote it, so the right
                     // operand is read there too: `impl Add for Vec2`
                     // dispatched through `Position` declares `&Vec2`, and the
                     // operand is a `Position` over the same base.
                     let rhs_base = self
                         .tysys
-                        .type_table
-                        .borrow()
-                        .get_newtype_base(right.type_id)
-                        .unwrap_or(right.type_id);
+                        .own_impl_link(right.type_id, trait_)
+                        .unwrap_or_else(|| {
+                            self.tysys
+                                .type_table
+                                .borrow()
+                                .get_newtype_base(right.type_id)
+                                .unwrap_or(right.type_id)
+                        });
                     let rhs_class = super::synth::ArgClass::Exact(rhs_base);
                     admitted = self.find_arithmetic_trait_impls(
                         &lookup_name,
@@ -842,7 +838,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // For newtypes, resolve base type for trait impl fallback
                 let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name, left.type_id);
+                    self.tysys
+                        .trait_impl_base_lookup(&struct_name, left.type_id, trait_);
 
                 // Find the shift trait implementation. `Shl` / `Shr` declare
                 // `rhs: u32` and take no trait argument, so there is nothing
@@ -1203,11 +1200,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             };
             if let Some(struct_name) = struct_name {
-                let (lookup_name, lookup_type_id) =
-                    self.tysys.newtype_base_lookup(&struct_name, expr_type);
                 let Some(trait_) = self.tysys.compiler_trait_def(item) else {
                     return TypeTable::ERROR;
                 };
+                let (lookup_name, lookup_type_id) =
+                    self.tysys
+                        .trait_impl_base_lookup(&struct_name, expr_type, trait_);
                 let resolved = self
                     .resolve_trait_method_for_op(
                         &struct_name,

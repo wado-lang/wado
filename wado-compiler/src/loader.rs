@@ -62,6 +62,13 @@ pub enum LoadError {
         module_source: ModuleSource,
         message: String,
     },
+    /// `#![stdlib("…")]` names no bundled stdlib module, or names nothing.
+    StdlibIdentity {
+        path: Option<String>,
+        file: String,
+        line: usize,
+        column: usize,
+    },
 }
 
 impl LoadError {
@@ -144,7 +151,33 @@ impl std::fmt::Display for LoadError {
             } => {
                 write!(f, "wasm import error in {module_source}: {message}")
             }
+            LoadError::StdlibIdentity {
+                path,
+                file,
+                line,
+                column,
+            } => {
+                write!(
+                    f,
+                    "{file}: line {line}, column {column}: {}",
+                    stdlib_identity_message(path.as_deref())
+                )
+            }
         }
+    }
+}
+
+/// The one wording the display and the diagnostic share.
+fn stdlib_identity_message(path: Option<&str>) -> String {
+    match path {
+        Some(path) => format!(
+            "#![stdlib({path:?})] does not name a bundled stdlib module; the attribute \
+             declares the identity of a module bundled in the compiler and is not for \
+             use outside it"
+        ),
+        None => "#![stdlib] takes the name of a bundled stdlib module, as \
+                 `#![stdlib(\"core:cli\")]`"
+            .to_string(),
     }
 }
 
@@ -205,6 +238,23 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                 code: Code::InvalidSyntax,
                 message: format!("wasm import error in {module_source}: {message}"),
                 span: None,
+            },
+            LoadError::StdlibIdentity {
+                ref path,
+                ref file,
+                line,
+                column,
+            } => Self {
+                severity: Severity::Error,
+                code: Code::ModuleNotFound,
+                message: stdlib_identity_message(path.as_deref()),
+                span: Some(DiagnosticSpan {
+                    file: file.clone(),
+                    line,
+                    column,
+                    end_line: None,
+                    end_column: None,
+                }),
             },
             ref other => Self {
                 severity: Severity::Error,
@@ -927,36 +977,43 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
     ast
 }
 
-/// Resolve a `#![stdlib("…")]` declaration on `module` to a canonical
-/// `ModuleSource`.
-///
-/// Returns `None` only when the attribute is absent. The attribute is
-/// authored exclusively by files inside `wado-compiler/lib/`, so a
-/// malformed argument (anything not registered in
-/// [`stdlib::get_stdlib_module`]) is a stdlib bug — it panics rather than
-/// silently degrading to `EntryPoint`, since the LSP would then see the
-/// duplicate-definition cascade we introduced this attribute to suppress.
+/// The bundled-stdlib identity `module` declares, `Ok(None)` when it declares
+/// none. Naming nothing is an error wherever it is written — a file does not
+/// become well-formed by being imported rather than compiled.
+fn stdlib_identity_of<'a>(module: &'a Module, file: &str) -> Result<Option<&'a str>, LoadError> {
+    let Some(attribute) = module.stdlib_identity_attribute() else {
+        return Ok(None);
+    };
+    let path = module.stdlib_identity();
+    match path.filter(|p| stdlib::get_stdlib_module(p).is_some()) {
+        Some(path) => Ok(Some(path)),
+        None => Err(LoadError::StdlibIdentity {
+            path: path.map(str::to_string),
+            file: file.to_string(),
+            line: attribute.span.line,
+            column: attribute.span.column,
+        }),
+    }
+}
+
+/// Resolve `module`'s `#![stdlib("…")]` declaration to a canonical
+/// `ModuleSource`: it pins the entry's, which the rest of the compile resolves
+/// against.
 fn parse_stdlib_identity_attribute(
     interner: &mut ModuleSourceInterner,
     module: &Module,
-) -> Option<ModuleSource> {
-    let path = module.stdlib_identity()?;
-    let resolved = if let Some(name) = path.strip_prefix("core:") {
-        interner.core(name)
-    } else if let Some(interface) = path.strip_prefix("wasi:") {
-        interner.wasi(interface)
-    } else {
-        panic!(
-            "#![stdlib({path:?})] must use a `core:` or `wasi:` prefix; \
-             this attribute is internal to bundled stdlib files"
-        );
+    file: &str,
+) -> Result<Option<ModuleSource>, LoadError> {
+    let Some(path) = stdlib_identity_of(module, file)? else {
+        return Ok(None);
     };
-    assert!(
-        stdlib::get_stdlib_module(path).is_some(),
-        "#![stdlib({path:?})] does not match any bundled stdlib module; \
-         add the registration to `stdlib::get_stdlib_module` or correct the path",
-    );
-    Some(resolved)
+    if let Some(name) = path.strip_prefix("core:") {
+        Ok(Some(interner.core(name)))
+    } else if let Some(interface) = path.strip_prefix("wasi:") {
+        Ok(Some(interner.wasi(interface)))
+    } else {
+        unreachable!("a registered stdlib path is `core:`- or `wasi:`-prefixed")
+    }
 }
 
 #[cfg(test)]
@@ -1003,8 +1060,32 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let want = interner.core("prelude/types.wado");
         assert_eq!(
-            parse_stdlib_identity_attribute(&mut interner, &module),
-            Some(want)
+            parse_stdlib_identity_attribute(&mut interner, &module, "types.wado").ok(),
+            Some(Some(want))
+        );
+    }
+
+    #[test]
+    fn unregistered_stdlib_identity_attribute_is_an_error() {
+        let module = parse_test_module("#![no_prelude]\n#![stdlib(\"core:bogus.wado\")]\n");
+        let mut interner = ModuleSourceInterner::new();
+        let err = parse_stdlib_identity_attribute(&mut interner, &module, "bogus.wado")
+            .expect_err("an unregistered path must be rejected");
+        assert!(
+            err.to_string()
+                .contains("does not name a bundled stdlib module"),
+            "unexpected message: {err}"
+        );
+    }
+
+    #[test]
+    fn stdlib_identity_attribute_without_a_name_is_an_error() {
+        let module = parse_test_module("#![no_prelude]\n#![stdlib]\n");
+        let err = stdlib_identity_of(&module, "nameless.wado")
+            .expect_err("an omitted name must be rejected");
+        assert!(
+            err.to_string().contains("#![stdlib] takes the name of"),
+            "unexpected message: {err}"
         );
     }
 }
@@ -1052,6 +1133,30 @@ fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
         slot.module
             .get_or_init(|| parse_bind_stdlib(key, slot.source)),
     )
+}
+
+/// [`stdlib_slots`] for a *bundled* wasm asset's synthesized bindings: its bytes
+/// are fixed at build time, so it is parsed once per process too — an `AstId`
+/// must mean the same node in every compile (WEP 2026-08-12 §1).
+fn wasm_binding_slots()
+-> &'static crate::hashmap::IndexMap<&'static str, std::sync::OnceLock<Module>> {
+    use std::sync::OnceLock;
+
+    static SLOTS: OnceLock<crate::hashmap::IndexMap<&'static str, OnceLock<Module>>> =
+        OnceLock::new();
+    SLOTS.get_or_init(|| {
+        stdlib::ALL_CORE_WASM_ASSETS
+            .iter()
+            .map(|&(path, _)| (path, OnceLock::new()))
+            .collect()
+    })
+}
+
+/// The cached bindings AST for a bundled wasm asset; `None` for a host-loaded
+/// one, whose bytes can change between compiles.
+fn cached_wasm_binding_module(import_path: &str, source: &str) -> Option<&'static Module> {
+    let (key, slot) = wasm_binding_slots().get_key_value(import_path)?;
+    Some(slot.get_or_init(|| parse_bind_stdlib(key, source)))
 }
 
 /// Compute the cache key string used by [`cached_stdlib_module`] for a
@@ -1214,8 +1319,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<LoadResult, LoadError> {
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
 
-        let entry_module_source = parse_stdlib_identity_attribute(&mut self.interner, &entry_ast)
-            .unwrap_or(tentative_entry_source);
+        let entry_module_source = parse_stdlib_identity_attribute(
+            &mut self.interner,
+            &entry_ast,
+            &tentative_entry_source.source_path(),
+        )?
+        .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
         self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
         self.entry_dir = crate::name::entry_dir_of(Some(&entry_module_source));
@@ -1331,6 +1440,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
         }
 
+        self.check_stdlib_identities()?;
+
         // Collect and load files referenced by #include_str / #include_bytes
         let included_files = {
             let _span = self.logger.span("load/included_files");
@@ -1348,6 +1459,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             invocations: self.invocations,
             interner: self.interner,
         })
+    }
+
+    /// Hold every loaded module to [`stdlib_identity_of`]'s rule. The entry's
+    /// is resolved before its imports load; this reaches the rest.
+    fn check_stdlib_identities(&self) -> Result<(), LoadError> {
+        for (module_source, module) in &self.loaded {
+            stdlib_identity_of(module, &module_source.source_path())?;
+        }
+        Ok(())
     }
 
     /// Collect import paths from a module's use declarations.
@@ -1469,14 +1589,19 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let synthesized_source = synthesize_wasm_bindings_source(&namespace, &function_exports);
         let span = format!("synthesize {namespace}");
         self.logger.span_start(&span);
-        let ast = self
-            .parse_source(&synthesized_source, &source)
-            .inspect_err(|_e| {
+        let ast = if let Some(cached) = cached_wasm_binding_module(&path, &synthesized_source) {
+            cached.clone()
+        } else {
+            let ast = self
+                .parse_source(&synthesized_source, &source)
+                .inspect_err(|_e| {
+                    self.logger.span_end(&span);
+                })?;
+            self.bind_module(&ast, &source).inspect_err(|_e| {
                 self.logger.span_end(&span);
             })?;
-        self.bind_module(&ast, &source).inspect_err(|_e| {
-            self.logger.span_end(&span);
-        })?;
+            ast
+        };
         self.logger.span_end(&span);
         self.loaded.insert(source.clone(), ast);
 
