@@ -401,8 +401,7 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
-    /// The member's own rung of the visibility ladder, enforced on inherent
-    /// impls (a trait impl's members reach as far as the trait does).
+    /// The member's declared rung; consulted only on an inherent impl.
     pub(super) visibility: ast::Visibility,
 }
 

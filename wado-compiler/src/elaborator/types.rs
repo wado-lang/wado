@@ -1790,10 +1790,8 @@ pub(super) struct MethodInfo {
     /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
     /// move check reads it to flag use-after-move through a consuming method.
     pub(super) consumes_self: bool,
-    /// The rung of the visibility ladder an *inherent* member declared.
-    /// `None` for everything whose reach the member itself does not decide: a
-    /// trait impl's methods (they reach as far as the trait), resource
-    /// methods, and the synthesized builtins.
+    /// An inherent member's declared rung. `None` where the member does not
+    /// decide its own reach: trait impls, resource methods, builtins.
     pub(super) inherent_visibility: Option<crate::ast::Visibility>,
 }
 

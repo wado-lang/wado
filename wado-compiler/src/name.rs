@@ -1298,9 +1298,7 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
-    // Relative import from within a dependency module stays inside that
-    // dependency package (resolved against the importing dependency file), and
-    // carries the importer's package root so `internal` reaches package-wide.
+    // A relative import inherits the importer's package root.
     if let ModuleSource::Dependency { pkg, path } = from_module
         && (import_source.starts_with("./") || import_source.starts_with("../"))
     {

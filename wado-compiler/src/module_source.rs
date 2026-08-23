@@ -136,15 +136,12 @@ impl ModuleSourceInterner {
         self.dependencies = dependencies;
     }
 
-    /// A dependency's entry module: the package root is the module itself.
+    /// A dependency's entry module: it is its own package root.
     pub fn dependency(&mut self, path: &str) -> ModuleSource {
         self.dependency_module(path, path)
     }
 
-    /// A module of the dependency package rooted at `pkg`. A relative import
-    /// from within a dependency goes through here so every module of the
-    /// package shares one [`PackageId`], which is what makes `internal` reach
-    /// package-wide instead of file-wide.
+    /// A non-entry module of the dependency package rooted at `pkg`.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         ModuleSource::Dependency {
             pkg: self.intern(pkg),
@@ -192,13 +189,12 @@ impl ModuleSourceInterner {
             path: self.intern(path),
         }
     }
-    /// A remote package's entry module: the package root is the URL itself.
+    /// A remote package's entry module: it is its own package root.
     pub fn remote(&mut self, url: &str) -> ModuleSource {
         self.remote_module(url, url)
     }
 
-    /// A module of the remote package rooted at `pkg`, for a relative import
-    /// from within one. See [`Self::dependency_module`].
+    /// A non-entry module of the remote package rooted at `pkg`.
     pub fn remote_module(&mut self, pkg: &str, url: &str) -> ModuleSource {
         ModuleSource::Remote {
             pkg: self.intern(pkg),
@@ -291,23 +287,19 @@ pub enum ModuleSource {
         path: InternedStr,
     },
     /// A module of a dependency package, resolved from a bare-name
-    /// `use { … } from "<dep>"` against `[dependencies]`. Module identity is
-    /// `path`, so two aliases pointing at the same file unify. Distinct from
-    /// [`ModuleSource::Local`] to carry the package boundary, though loaded
-    /// exactly like it.
+    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is `path`,
+    /// so two aliases for one file unify. Distinct from
+    /// [`ModuleSource::Local`] to carry the package boundary, but loaded alike.
     Dependency {
-        /// The package root: the dependency's resolved `[package].lib` path.
-        /// Every module of the package carries the same value, so `internal`
-        /// reaches package-wide rather than file-wide. A relative import from
-        /// within the package inherits it.
+        /// The package root: the dependency's resolved `[package].lib`. Shared
+        /// by every module of the package, and inherited by a relative import.
         pkg: InternedStr,
-        /// This module's own path.
         path: InternedStr,
     },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
-        /// The package root: the URL the package was first entered through.
-        /// A remote package has no manifest, so the entry URL stands in for it.
+        /// The package root: the URL the package was first entered through,
+        /// a remote package having no manifest to name one.
         pkg: InternedStr,
         /// Full URL (e.g., "<https://example.com/lib.wado>")
         url: InternedStr,

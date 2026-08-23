@@ -3820,12 +3820,11 @@ export fn run() { ... }
 A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
-The ladder applies to top-level items, to struct fields, and to members of an
-`impl` block (methods, associated constants). `export` on a member is a compile
-error — a method has no Component Model boundary. Calling a method or reading an
-associated constant beyond its reach is a compile error, as it is for a field.
-Only an _inherent_ member carries a ladder of its own; a trait impl's members
-reach as far as the trait does.
+The ladder applies to top-level items, struct fields, and `impl` members
+(methods, associated constants); reaching one beyond its rung is a compile
+error. `export` on a member is an error — a method has no CM boundary. Only an
+_inherent_ member has a ladder; a trait impl's members reach as far as the
+trait.
 
 ```wado
 impl Config {

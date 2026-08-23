@@ -206,9 +206,7 @@ struct TestSpec {
     param_env: indexmap::IndexMap<String, String>,
 
     /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
-    /// relative to the fixture directory. Each entry is a separate package, so
-    /// this is how a fixture exercises the cross-package half of the
-    /// visibility ladder (`internal` must not reach across).
+    /// relative to the fixture directory. Each entry is its own package.
     #[serde(default)]
     dependencies: indexmap::IndexMap<String, String>,
 

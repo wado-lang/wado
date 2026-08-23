@@ -45,7 +45,7 @@ pub struct FilesystemHost {
     /// Stubbed environment for `#[param(from_env = ...)]` resolution.
     env: indexmap::IndexMap<String, String>,
     /// Stubbed `[dependencies]`: name → the dependency's `[package].lib` path,
-    /// relative to `base_path`. Lets a fixture span several packages.
+    /// relative to `base_path`.
     dependencies: indexmap::IndexMap<String, String>,
 }
 
@@ -65,7 +65,7 @@ impl FilesystemHost {
         self
     }
 
-    /// Seed the resolved path `[dependencies]` a bare `use ... from "name"` binds to.
+    /// Seed the `[dependencies]` a bare `use ... from "name"` binds to.
     pub fn with_dependencies(mut self, dependencies: indexmap::IndexMap<String, String>) -> Self {
         self.dependencies = dependencies;
         self

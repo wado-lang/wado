@@ -1591,8 +1591,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(assoc) =
                         self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
-                        // A pattern reaches the constant exactly as an
-                        // expression does, so it answers to the same ladder.
                         let owner = variant_qualifier
                             .as_ref()
                             .map_or_else(|| variant_name.clone(), |q| self.get_type_name(q));

@@ -122,12 +122,10 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
 - [x] Package identity: `ModuleSource::package_id()` groups modules into
       packages. `core:*` is one package, `wasi:*` another (independent), the entry
       point and its local modules the `Root` package, and each resolved dependency
-      / remote URL its own package. A dependency's package key is the package
-      root — its resolved `[package].lib` — not the module path, and a relative
-      import from within the package inherits it, so every module of one
-      dependency shares a `PackageId` and `internal` reaches package-wide there
-      exactly as it does in `Root`. A remote package is rooted at the URL it was
-      first entered through.
+      / remote URL its own package. A dependency's key is its package root (the
+      resolved `[package].lib`), not the module path, and a relative import
+      inherits it, so every module of one dependency shares a `PackageId`. A
+      remote package is rooted at the URL it was first entered through.
 - [x] Enforcement at import resolution (analyze phase): file-private symbols are
       never importable; `internal` reaches only same-package importers; `pub` /
       `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
@@ -144,15 +142,12 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
   beyond its reach (field access, struct literal, or destructuring pattern) is a
   `PRIVATE_SYMBOL` compile error, checked via the same
   `Visibility::reachable_from(same_package)` predicate as item imports.
-- [x] Impl members (methods, associated constants) carry the same three-rung
-      ladder as struct fields: no modifier is file-private, `internal` reaches
-      the package, `pub` reaches other packages. `export` on an impl member is a
-      compile error with a targeted diagnostic — a method has no CM boundary.
-      Calling or reading a member beyond its reach is a `PRIVATE_SYMBOL` error,
-      checked through the same `Visibility::reachable_from(same_package)`
-      predicate as fields and item imports. Only _inherent_ members carry a
-      ladder of their own; a trait impl's members reach as far as the trait
-      does, so their declared visibility is not consulted.
+- [x] Impl members (methods, associated constants) carry the same ladder as
+      struct fields, checked through the same
+      `Visibility::reachable_from(same_package)` predicate — in expression and
+      pattern position alike. `export` on a member is a compile error with a
+      targeted diagnostic. Only _inherent_ members carry a ladder; a trait
+      impl's members reach as far as the trait, so theirs is not consulted.
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
 

@@ -1344,13 +1344,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Enforce an inherent impl member's rung of the visibility ladder.
-    ///
-    /// `owner_name` is the type the member is declared on — for a constant that
-    /// is its owner, never its own declared type.
-    ///
-    /// `visibility` is `None` for members whose reach the member does not
-    /// decide — a trait impl's methods reach as far as the trait, and resource
-    /// methods and builtins have no ladder of their own.
+    /// `owner_name` is the type it is declared on, not its own type.
+    /// `visibility` is `None` where the member does not decide its own reach.
     pub(super) fn check_inherent_member_visibility(
         &mut self,
         visibility: Option<crate::ast::Visibility>,
@@ -5258,9 +5253,8 @@ impl AstVisitor for MutatedVarsCollector<'_> {
     }
 }
 
-/// The segment naming the owner of an associated constant path — `K` in
-/// `K::SECRET`, `K` in `ns::K::SECRET`. Falls back to the fused spelling when
-/// the path carries no owner segment.
+/// The segment naming an associated constant's owner — `K` in `K::SECRET` and
+/// in `ns::K::SECRET`.
 fn assoc_const_owner_segment(ident: &ast::IdentExpr) -> &str {
     ident
         .segments

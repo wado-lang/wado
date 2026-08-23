@@ -1751,8 +1751,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 let pkg = pkg.to_string();
                 return Ok(self.interner.remote_module(&pkg, &resolved));
             }
-            // Relative import from within a dependency module stays inside
-            // that dependency package, carrying the importer's package root.
+            // A relative import inherits the importer's package root.
             if let ModuleSource::Dependency { pkg, path } = from_module_source {
                 let resolved = resolve_module_path(path, import_source);
                 let pkg = pkg.to_string();

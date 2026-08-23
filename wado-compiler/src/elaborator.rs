@@ -1672,8 +1672,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .flat_map(|impl_block| {
                 let type_name = self.get_type_name(&impl_block.ty);
-                // A trait impl's constant reaches as far as the trait; only an
-                // inherent one carries a ladder of its own.
                 let is_inherent = impl_block.trait_type.is_none();
                 impl_block
                     .constants
