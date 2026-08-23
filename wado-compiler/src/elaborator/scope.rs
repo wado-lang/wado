@@ -77,12 +77,9 @@ pub(super) struct Scope {
     /// the callee's lexical scope for defaults that reference
     /// module-private items (WEP 2026-04-11).
     pub(super) default_scope_module: Option<ModuleSource>,
-    /// The module whose source text the node under resolution was written in,
-    /// which is where a visibility question about it is asked from. Foreign
-    /// AST re-walked at a consumer — a default expression, an associated
-    /// constant's body — is written in its declaring module; the caller's own
-    /// arguments substituted into it are not, so this tracks the id space the
-    /// foreign AST was parsed in rather than assuming a whole subtree.
+    /// The module a visibility question is asked from, with the id space it
+    /// applies to: foreign AST answers to its declaring module, while the
+    /// caller's own arguments spliced into it keep their own space.
     pub(super) foreign_vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
 }
 

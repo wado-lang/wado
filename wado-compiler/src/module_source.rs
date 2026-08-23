@@ -122,8 +122,8 @@ pub struct ModuleSourceInterner {
     /// declared-but-unresolved entries (with reasons) for precise errors.
     /// Empty for single-file compilation.
     dependencies: crate::compiler_host::DependencyIndex,
-    /// Module path → the package root it was first reached under, so `pkg`
-    /// stays a function of the path and equal modules agree on their package.
+    /// Module path → its elected package root, so `pkg` is a function of the
+    /// path and equal modules agree on their package.
     package_roots: crate::hashmap::IndexMap<InternedStr, InternedStr>,
 }
 
@@ -145,25 +145,18 @@ impl ModuleSourceInterner {
         self.dependency_module(path, path)
     }
 
-    /// A non-entry module of the dependency package rooted at `pkg`.
-    ///
-    /// The first root a path is seen under wins, so the same file reached both
-    /// as a direct dependency and through a sibling's relative import stays one
-    /// module in one package rather than forking into two.
+    /// A non-entry module of the dependency package rooted at `pkg`, elected
+    /// by [`Self::elect_package_root`] so one file reached two ways stays one
+    /// module in one package.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         let path = self.intern(path);
         let pkg = self.elect_package_root(&path, pkg);
         ModuleSource::Dependency { pkg, path }
     }
 
-    /// The package root for `path`, memoized so `pkg` is a function of the
-    /// path rather than of load order.
-    ///
-    /// A module can be reached under more than one candidate root — its own
-    /// package's, and a sibling package's when that sibling imports it
-    /// relatively. The candidate sharing the longer directory prefix with the
-    /// module wins, which is the one whose tree actually contains it, so the
-    /// answer does not depend on which `use` the loader walked first.
+    /// The package root for `path`. A module is reachable under more than one
+    /// candidate — a sibling package importing it relatively offers its own —
+    /// so the one whose tree contains it wins, never whichever came first.
     fn elect_package_root(&mut self, path: &InternedStr, candidate: &str) -> InternedStr {
         let better = match self.package_roots.get(path) {
             None => true,
@@ -224,8 +217,8 @@ impl ModuleSourceInterner {
         self.remote_module(url, url)
     }
 
-    /// A non-entry module of the remote package rooted at `pkg`. The first
-    /// root a URL is seen under wins; see [`Self::dependency_module`].
+    /// A non-entry module of the remote package rooted at `pkg`.
+    /// See [`Self::dependency_module`].
     pub fn remote_module(&mut self, pkg: &str, url: &str) -> ModuleSource {
         let url = self.intern(url);
         let pkg = self.elect_package_root(&url, pkg);
@@ -318,10 +311,8 @@ pub enum ModuleSource {
     },
     /// A module of a dependency package, resolved from a bare-name
     /// `use { … } from "<dep>"` against `[dependencies]`. Identity is `path`,
-    /// so one file reached two ways stays one module; `pkg` is a function of
-    /// it, memoized by the interner, so equal values agree on their package.
-    /// Distinct from [`ModuleSource::Local`] to carry the package boundary,
-    /// but loaded alike.
+    /// so one file reached two ways stays one module. Distinct from
+    /// [`ModuleSource::Local`] to carry the package boundary, but loaded alike.
     Dependency {
         /// The package root: the dependency's resolved `[package].lib`. Shared
         /// by every module of the package, and inherited by a relative import.
@@ -330,8 +321,8 @@ pub enum ModuleSource {
     },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
-        /// The package root: the URL the package was first entered through,
-        /// a remote package having no manifest to name one.
+        /// The package root: the URL the package is entered through, a remote
+        /// package having no manifest to name one.
         pkg: InternedStr,
         /// Full URL (e.g., "<https://example.com/lib.wado>")
         url: InternedStr,

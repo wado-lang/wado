@@ -124,8 +124,9 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
       point and its local modules the `Root` package, and each resolved dependency
       / remote URL its own package. A dependency's key is its package root (the
       resolved `[package].lib`), not the module path, and a relative import
-      inherits it, so every module of one dependency shares a `PackageId`. A
-      remote package is rooted at the URL it was first entered through.
+      inherits it, so every module of one dependency shares a `PackageId`.
+      Where a module is reachable under two roots, the one whose tree contains
+      it wins, so the answer does not depend on load order.
 - [x] Enforcement at import resolution (analyze phase): file-private symbols are
       never importable; `internal` reaches only same-package importers; `pub` /
       `export` reach anywhere. A violation is a `PRIVATE_SYMBOL` compile error. The
@@ -136,16 +137,11 @@ view present such re-exports at the re-export's visibility, so a `pub use`-d
       collection so the two never disagree (a same-package `internal` global is
       reachable through `use ns from "..."; ns::FOO` as well as a named import).
 - [x] `internal use` re-exports (the package-internal counterpart to `pub use`).
-- The ladder applies to top-level items and to struct fields. A struct field's
-  `internal` reaches other files in the same package; `pub` reaches other
-  packages; no modifier is file-private. Reading, setting, or binding a field
-  beyond its reach (field access, struct literal, or destructuring pattern) is a
-  `PRIVATE_SYMBOL` compile error, checked via the same
-  `Visibility::reachable_from(same_package)` predicate as item imports.
-- [x] Impl members (methods, associated constants) carry the same ladder as
-      struct fields, checked through the same
-      `Visibility::reachable_from(same_package)` predicate — in expression and
-      pattern position alike. `export` on a member is a compile error with a
+- [x] Struct fields carry the ladder too: reading, setting, or binding one
+      beyond its reach — field access, struct literal, or destructuring
+      pattern — is a `PRIVATE_SYMBOL` compile error.
+- [x] Impl members (methods, associated constants) likewise, in expression and
+      pattern position alike, and `export` on one is a compile error with a
       targeted diagnostic. Only _inherent_ members carry a ladder; a trait
       impl's members reach as far as the trait, so theirs is not consulted.
 - The bundled `core:internal` module was renamed to `core:rt` so the module

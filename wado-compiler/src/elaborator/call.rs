@@ -2695,13 +2695,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (inferred[..split].to_vec(), inferred[split..].to_vec())
     }
 
-    /// Enforce the visibility ladder on a qualified `Type::method(...)` call,
-    /// the spelling an associated function is reached by.
-    ///
-    /// `receiver` is the key the *neighbouring* lookups resolved the receiver
-    /// to. Re-deriving it from the spelling would key to whatever `Type` names
-    /// here, which is a different declaration once a default written elsewhere
-    /// is spliced into a caller that declares its own same-named type.
+    /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
+    /// `receiver` is the key the neighbouring lookups resolved, not one
+    /// re-derived from the spelling, which a splice can make mean another type.
     pub(super) fn check_static_call_visibility(
         &mut self,
         receiver: &super::trait_env::ImplTargetKey,

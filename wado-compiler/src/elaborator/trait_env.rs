@@ -548,8 +548,8 @@ pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
     pub(super) name: String,
-    /// The declaring module, and the rung an *inherent* associated function
-    /// declared. `None` on a trait impl's, which reaches as far as the trait.
+    /// The declaring module, and an inherent associated function's declared
+    /// rung; `None` on a trait impl's.
     pub(super) module: ModuleSource,
     pub(super) inherent_visibility: Option<ast::Visibility>,
     /// The method itself: the key into the signature digest, which carries

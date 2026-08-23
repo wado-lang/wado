@@ -1354,12 +1354,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
-    /// The module whose source text wrote the node being checked, which is
-    /// what a visibility question is asked from. Set while walking foreign AST
-    /// and matched by id space, so a caller's own argument substituted into a
-    /// callee's default expression is still judged here.
-    /// `node` is `None` where the checked site carries no id — a pattern
-    /// field — which judges it here; foreign AST is expression AST.
+    /// The module that wrote `node`, per [`super::scope::Scope::foreign_vantage`].
+    /// `None` judges here, for a site carrying no id.
     pub(super) fn visibility_vantage(&self, node: Option<ast::AstId>) -> ModuleSource {
         match (&self.annotate_ctx.foreign_vantage, node) {
             (Some((module, space)), Some(id)) if id.space() == *space => module.clone(),
@@ -1398,13 +1394,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MemberOwner::Written(Some(ty)) => self.get_type_name(ty),
             MemberOwner::Written(None) => member_name.to_string(),
         };
-        let _ = self.emit_in(&vantage, TypeError::PrivateMemberAccess {
-            type_name,
-            member_name: member_name.to_string(),
-            member_kind,
-            visibility,
-            span,
-        });
+        let _ = self.emit_in(
+            &vantage,
+            TypeError::PrivateMemberAccess {
+                type_name,
+                member_name: member_name.to_string(),
+                member_kind,
+                visibility,
+                span,
+            },
+        );
     }
 
     pub(super) fn check_field_visibility(
@@ -1443,7 +1442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
-let _ = self.emit(TypeError::PrivateFieldAccess {
+                    let _ = self.emit(TypeError::PrivateFieldAccess {
                         struct_name,
                         field_name: field_name.to_string(),
                         visibility: *vis,
@@ -3786,7 +3785,7 @@ let _ = self.emit(TypeError::PrivateFieldAccess {
                 let set_explicitly = provided_names.contains(fname);
                 let read_via_spread = !struct_lit.spreads.is_empty() && !set_explicitly;
                 if !vis.reachable_from(same_package) && (set_explicitly || read_via_spread) {
-let _ = self.emit(TypeError::PrivateFieldAccess {
+                    let _ = self.emit(TypeError::PrivateFieldAccess {
                         struct_name: display_name.clone(),
                         field_name: fname.clone(),
                         visibility: *vis,
@@ -4092,7 +4091,7 @@ let _ = self.emit(TypeError::PrivateFieldAccess {
                 continue;
             };
             if !vis.reachable_from(same_package) {
-let _ = self.emit(TypeError::PrivateFieldAccess {
+                let _ = self.emit(TypeError::PrivateFieldAccess {
                     struct_name: self.tysys.type_id_to_string(base_types[base_idx]),
                     field_name: name.clone(),
                     visibility: *vis,
@@ -5290,14 +5289,10 @@ impl AstVisitor for MutatedVarsCollector<'_> {
     }
 }
 
-/// How to name the type an impl member is declared on, resolved only when a
-/// diagnostic needs it.
+/// How to name the type an impl member is declared on.
 pub(super) enum MemberOwner<'a> {
-    /// A method's receiver.
     Type(TypeId),
-    /// An already-spelled name, such as a constant path's owner segment.
     Named(&'a str),
-    /// A written qualifier, as a pattern carries it.
     Written(Option<&'a ast::Type>),
 }
 

@@ -2048,10 +2048,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
-        // An associated constant's body belongs to this module, so its facts
-        // must be recorded here. Reify reads them under the declaring module's
-        // perspective, and a `pub const` no module of its own uses would
-        // otherwise reach codegen with nothing resolved.
+        // Reify reads a constant's body facts under this module's
+        // perspective, so this module must be the one that records them.
         let mut scope = scope;
         for constant in &impl_block.constants {
             let declared = scope.resolve_type(&constant.ty);

@@ -17,8 +17,7 @@ pub(crate) struct AssocConstSig {
     pub(crate) module: ModuleSource,
     pub(crate) ty: TypeId,
     pub(crate) value: crate::ast::Expr,
-    /// The declared rung on an inherent impl. `None` on a trait impl's
-    /// constant, which reaches as far as the trait does.
+    /// The declared rung; `None` on a trait impl's constant.
     pub(crate) inherent_visibility: Option<crate::ast::Visibility>,
 }
 
