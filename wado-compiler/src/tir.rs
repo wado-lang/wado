@@ -4036,8 +4036,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-            // No recovery: a struct or a newtype carries its arguments, so an
-            // empty list means it is a declaration rather than an instantiation.
+            // No recovery: an empty list is a declaration, not an instantiation.
             ResolvedType::Struct { type_args, .. } | ResolvedType::Newtype { type_args, .. }
                 if !type_args.is_empty() =>
             {
