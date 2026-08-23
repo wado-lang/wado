@@ -4029,21 +4029,16 @@ impl TypeTable {
         }
     }
 
-    /// Extract the type arguments for a generic type.
-    ///
-    /// Works for both `GenericInstance` (which stores `type_args` directly) and
-    /// monomorphized `Struct` types (which require searching for the original
-    /// `GenericInstance` in the type table).
-    ///
-    /// Returns `None` for non-generic types.
+    /// The arguments an instantiation carries; `None` if `id` is not one.
     #[must_use]
     pub fn generic_type_args(&self, id: TypeId) -> Option<Vec<TypeId>> {
         match self.get(id) {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-            // No recovery: a struct carries its arguments, so an empty list
-            // means it is a declaration rather than an instantiation.
-            ResolvedType::Struct { type_args, .. } if !type_args.is_empty() => {
+            // No fallback search: an empty list is a declaration, not an instantiation.
+            ResolvedType::Struct { type_args, .. } | ResolvedType::Newtype { type_args, .. }
+                if !type_args.is_empty() =>
+            {
                 Some(type_args.clone())
             }
             _ => None,

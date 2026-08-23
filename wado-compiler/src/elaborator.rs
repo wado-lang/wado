@@ -2001,11 +2001,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if scope.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
-                    matches!(
-                        tt.get(peeled),
-                        crate::tir::ResolvedType::GenericInstance { .. }
-                    )
-                    .then(|| tt.fq_type_name(peeled))
+                    let is_instantiation = match tt.get(peeled) {
+                        crate::tir::ResolvedType::GenericInstance { .. } => true,
+                        crate::tir::ResolvedType::Newtype { type_args, .. } => {
+                            // A trait impl needs none: the trait index keys it.
+                            !type_args.is_empty() && trait_name.is_none()
+                        }
+                        _ => false,
+                    };
+                    is_instantiation.then(|| tt.fq_type_name(peeled))
                 } else {
                     None
                 };
