@@ -1,0 +1,38 @@
+// A concrete impl on a generic newtype instantiation names one function per
+// instantiation, as `impl List<u8>` does. Owned by the head alone, the call
+// site's `Pair<List<i32>>::peek` reached no function at all.
+use { println } from "core:cli";
+
+type Nt<T> = List<T>;
+type Pair<U> = List<U>;
+
+trait Tagged {
+    fn tag(&self) -> String;
+}
+
+impl Pair<List<i32>> {
+    fn peek(&self) -> i32 {
+        return self[0][0];
+    }
+}
+
+impl Pair<Nt<i32>> {
+    fn peek(&self) -> i32 {
+        return self[0][0] + 10;
+    }
+}
+
+impl Tagged for Pair<List<i32>> {
+    fn tag(&self) -> String {
+        return "P";
+    }
+}
+
+export fn run() with Stdout {
+    let p: Pair<List<i32>> = [[1, 2]] as Pair<List<i32>>;
+    let q: Pair<Nt<i32>> = [[3, 4] as Nt<i32>] as Pair<Nt<i32>>;
+    println(`${p.peek()} ${q.peek()} ${p.tag()}`);
+}
+
+__DATA__
+{"stdout": "1 13 P\n"}

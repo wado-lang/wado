@@ -2001,11 +2001,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if scope.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
-                    matches!(
-                        tt.get(peeled),
-                        crate::tir::ResolvedType::GenericInstance { .. }
-                    )
-                    .then(|| tt.fq_type_name(peeled))
+                    // A generic newtype instantiation owns its inherent
+                    // methods too: `Pair<List<i32>>` and `Pair<Nt<i32>>` are two
+                    // owners, and the head alone names one function for both. A
+                    // trait impl keeps the head — the trait index keys it, and
+                    // an instantiated owner is a name that index never answers.
+                    let is_instantiation = match tt.get(peeled) {
+                        crate::tir::ResolvedType::GenericInstance { .. } => true,
+                        crate::tir::ResolvedType::Newtype { type_args, .. } => {
+                            !type_args.is_empty() && trait_name.is_none()
+                        }
+                        _ => false,
+                    };
+                    is_instantiation.then(|| tt.fq_type_name(peeled))
                 } else {
                     None
                 };
