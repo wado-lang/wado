@@ -14,6 +14,8 @@ git diff origin/main...HEAD --stat
 ```
 
 Every file in that diff — Rust, Wado, Markdown — plus any doc it made stale.
+Whatever you notice on the way in is in scope too: pre-existing is no
+exemption.
 Follow the `rust` skill for Rust and the `wado` skill for Wado.
 
 ## Rules
