@@ -332,6 +332,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Look up method info based on receiver type (inherent + base type trait methods)
         if method_info.is_none() && required_trait.is_none() {
             method_info = self.lookup_method_info(receiver.type_id, method_name);
+            // One name reachable both through an extern-ref resource's
+            // `extends` chain and through a trait impl is ambiguous: picking
+            // either side silently rebinds call sites when the other grows the
+            // name. A trait-qualified call has already returned above, so this
+            // is the unqualified form only.
+            if method_info.is_some()
+                && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
+                && self.tysys.type_table.borrow().is_extern_ref_resource(def)
+                && self.resource_chain_declares(def, method_name)
+                && let Some(trait_name) = self.trait_impl_declaring(
+                    &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+                    method_name,
+                )
+            {
+                let _ = self.emit(TypeError::AmbiguousResourceMethod {
+                    method: method_name.to_string(),
+                    resource: struct_name.clone(),
+                    trait_name,
+                    span,
+                });
+            }
         }
 
         // Fall back to base type trait methods

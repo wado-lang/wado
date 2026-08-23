@@ -324,3 +324,30 @@ fn a_child_may_declare_its_own_method_names() {
     let d = diagnostics(source);
     assert!(d.is_empty(), "a distinct name is fine, got {d:?}");
 }
+
+#[test]
+fn a_trait_impl_colliding_with_a_resource_method_is_ambiguous() {
+    let source = "#[cm(\"web:dom/element\", type = \"extern-ref\")]\n\
+         resource Element {\n    fn id(&self) -> String;\n}\n\
+         trait Identified {\n    fn id(&self) -> String;\n}\n\
+         impl Identified for Element {\n    fn id(&self) -> String { return \"x\"; }\n}\n\
+         fn use_it(e: Element) -> String { return e.id(); }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.iter().any(|e| e.contains("ambiguous")),
+        "expected an ambiguity error, got {d:?}"
+    );
+}
+
+#[test]
+fn a_trait_impl_without_a_collision_is_fine() {
+    let source = "#[cm(\"web:dom/element\", type = \"extern-ref\")]\n\
+         resource Element {\n    fn id(&self) -> String;\n}\n\
+         trait Named {\n    fn name(&self) -> String;\n}\n\
+         impl Named for Element {\n    fn name(&self) -> String { return \"x\"; }\n}\n\
+         fn use_it(e: Element) -> String { return e.name(); }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "distinct names do not collide, got {d:?}");
+}

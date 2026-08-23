@@ -310,6 +310,8 @@ el.private_helper();            // ERROR: private_helper is visible only in dom.
 
 Reason: `extends` is a type-level relation, not a name-space merge. Inheriting visibility from the child would let the child silently re-export private parent internals.
 
+Not implementable as written today, and left unimplemented: a resource method has no visibility of its own — it takes the resource's, and the parser gives every one `Visibility::Private` for that reason — so a module-private method inside a `pub resource` cannot be spelled. The rule needs per-method visibility on resources first, which no consumer asks for: WebIDL members are all public.
+
 ### Downcast
 
 #### Signature

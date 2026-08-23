@@ -781,6 +781,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// One name reachable both as a resource's own or inherited method and
+    /// through a visible trait impl. The call must name which it means.
+    AmbiguousResourceMethod {
+        method: String,
+        resource: String,
+        trait_name: String,
+        span: Span,
+    },
+
     /// A `resource Child extends Parent` clause the elaborator rejected: the
     /// parent is not a resource, a backing does not match, the chain is
     /// cyclic, or the parent carries generic arguments (out of scope in v1).
@@ -1582,6 +1591,18 @@ impl TypeError {
             TypeError::ResourceExtends { message, span } => {
                 (Code::ResourceExtends, message.clone(), *span)
             }
+            TypeError::AmbiguousResourceMethod {
+                method,
+                resource,
+                trait_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
             TypeError::BareGenericFunctionRef { name, span } => (
                 Code::GenericFunctionRef,
                 format!(

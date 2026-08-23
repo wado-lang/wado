@@ -1047,6 +1047,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether `def` or anything it extends declares `method_name`, whatever
+    /// the receiver shape — the question the ambiguity check asks before a
+    /// trait impl is allowed to answer for an extern-ref resource.
+    pub(super) fn resource_chain_declares(
+        &self,
+        def: crate::defs::DefId,
+        method_name: &str,
+    ) -> bool {
+        let mut current = def;
+        loop {
+            if let Some(info) = self.tysys.all_resource_types.get(&current)
+                && self
+                    .tysys
+                    .signatures
+                    .resource_method_sig(info.defined_at, method_name)
+                    .is_some()
+            {
+                return true;
+            }
+            match self.tysys.type_table.borrow().resource_parent(current) {
+                Some(parent) => current = parent,
+                None => return false,
+            }
+        }
+    }
+
+    /// The trait whose impl for `type_key` declares `method_name`, if one does.
+    /// Direct impls only: a blanket impl answers for every type, so counting it
+    /// here would make every prelude-provided name collide.
+    pub(super) fn trait_impl_declaring(
+        &self,
+        type_key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<String> {
+        for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
+            let header = self
+                .tysys
+                .trait_env
+                .impl_headers
+                .get(&(impl_ref.0.clone(), impl_ref.1))?;
+            if header.methods.iter().any(|m| m.name == method_name)
+                && let Some(trait_name) = &header.trait_name
+            {
+                return Some(trait_name.clone());
+            }
+        }
+        None
+    }
+
     /// [`Self::find_resource_method_info`] for one declaration, without the
     /// `extends` walk.
     fn resource_method_info_on(
