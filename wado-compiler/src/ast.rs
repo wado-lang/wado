@@ -947,11 +947,18 @@ impl Module {
 
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
     pub fn wasm_module(&self) -> Option<&str> {
+        self.wasm_module_attribute()
+            .and_then(|a| a.args.first())
+            .map(AttrArg::as_str)
+    }
+
+    /// The `#![wasm_module("…")]` attribute itself — the span a diagnostic
+    /// about the separate core module points at.
+    #[must_use]
+    pub fn wasm_module_attribute(&self) -> Option<&InnerAttribute> {
         self.inner_attributes
             .iter()
             .find(|a| a.name == "wasm_module")
-            .and_then(|a| a.args.first())
-            .map(AttrArg::as_str)
     }
 
     /// Returns the canonical bundled-stdlib import path declared by
