@@ -834,6 +834,7 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
         }
         Pattern::Struct { fields, .. } => {
             for field in fields {
+                v.visit_id(field.id, field.span);
                 v.visit_pattern(&field.pattern);
             }
         }

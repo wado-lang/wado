@@ -3007,6 +3007,10 @@ impl Parser {
                         break;
                     }
 
+                    // Alloc-at-start (like every other node) so a leading
+                    // comment attaches here and allocation order matches the
+                    // order `visit_pattern` walks.
+                    let field_id = self.alloc_ast_id();
                     let field_span = self.peek().span;
                     let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
                         // Allow string literals as field names for JSON compatibility
@@ -3042,7 +3046,7 @@ impl Parser {
                     };
 
                     fields.push(StructPatternField {
-                        id: self.alloc_ast_id(),
+                        id: field_id,
                         field_name,
                         pattern,
                         span: field_span,
