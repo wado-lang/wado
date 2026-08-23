@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787523526809,
+  "lastUpdate": 1787526721952,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50569,6 +50569,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0e31a460de5f9063c04b0b1cf277ebd5e37de55a"
         },
         "date": 1787523526345,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2805468f38a06a2d2b3dd71b362bdca988b02bd",
+          "message": "Merge pull request #1887 from wado-lang/compiler-perf-body-walks\n\nperf(compiler): answer per-local NIR queries from one body walk",
+          "timestamp": "2026-08-24T07:58:33+09:00",
+          "tree_id": "f6d563d56de52275eb48e4a6ce79c6ca40d4752e",
+          "url": "https://github.com/wado-lang/wado/commit/f2805468f38a06a2d2b3dd71b362bdca988b02bd"
+        },
+        "date": 1787526721084,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
