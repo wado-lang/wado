@@ -10,16 +10,15 @@ $ARGUMENTS
 ## Scope
 
 ```sh
-git diff origin/main...HEAD --stat
-git diff HEAD --stat
+git diff "$(git merge-base origin/main HEAD)" --stat
+git status --short
 ```
 
-Every file in those diffs — Rust, Wado, Markdown — plus any doc it made stale.
-The pass often runs before the commit, so the working tree counts. Whatever you
-notice on the way in is in scope too, pre-existing or not; an argument adds
-instructions and never narrows this. Generated files and WEPs defer to their
-directory's `AGENTS.md`: don't touch a generated corpus, and don't cut a WEP's
-required sections.
+Every file those report — Rust, Wado, Markdown — plus any doc it made stale. The
+pass often runs before the commit, so staged, unstaged, and untracked files
+count. Whatever you notice on the way in is in scope too, pre-existing or not.
+Generated files and WEPs defer to their directory's `AGENTS.md`: don't touch a
+generated corpus, and don't cut a WEP's required sections.
 
 ## Rules
 
@@ -38,7 +37,8 @@ required sections.
   holding only the fields it needs.
 - Naming and structure: a comment explaining _what_ the code does marks the code
   to fix. Rename and decompose until it is redundant, then delete it.
-- Invariants: state them as `assert!`, never as a comment.
+- Invariants: state them as an assertion — `assert!` in Rust, `assert` in Wado
+  — never as a comment.
 
 ### Comments
 
