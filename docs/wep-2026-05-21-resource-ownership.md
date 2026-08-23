@@ -51,36 +51,30 @@ traps.
 | Host-object resource | a Wasm GC reference to a host object (no `dtor`)       | Value semantics     | Wasm GC                  |
 | Non-owning token     | an index naming something owned elsewhere (no `dtor`)  | Value semantics     | none — the owner's       |
 
-The `dtor` decides the kind, not the representation. A handle to a one-shot,
-destructor-bearing thing must be move-only, because copying it aliases it — a
-double-drop, a use-after-transfer, or a double free. Without a `dtor` there is
-nothing to run twice and nothing to free, so aliasing is safe and the handle is
-an ordinary value. The `i32`-vs-`externref` question is orthogonal to all three
-rows.
+The `dtor` decides the kind, not the representation. A handle that owns one must
+be move-only, because copying it aliases a destructor; without one there is
+nothing to free, so the handle is an ordinary value. `i32`-vs-`externref` is
+orthogonal to all three rows.
 
 ### Non-owning tokens
 
 A non-owning token names something whose lifetime another party already
-guarantees, so it carries no lifecycle of its own. It is a copyable newtype, not
-affine. Two backings qualify:
+guarantees. Two backings qualify:
 
 - **An affine resource owns the referent.** `Waitable` is this: `Subtask::join`
-  returns the subtask's own handle number as the identity to match a
-  `WaitEvent` against, and the `Subtask` owns the drop.
+  returns the subtask's own handle number as the identity to match a `WaitEvent`
+  against, and the `Subtask` owns the drop.
 - **An immortal table in a statically composed component.** `core:icu`'s
-  interned handles are this: the implementation component interns each object
-  whose configuration the program bounds at compile time, so the table is finite
-  by construction and never freed. Composition is static, so the table's
-  lifetime is the program's.
+  interned handles are this: the component interns each object whose
+  configuration the program bounds at compile time, so the table is finite by
+  construction and never freed.
 
-A CM `borrow<R>` cannot stand in for either. A borrow must be dropped before the
-call returns, where a token is compared long after it is obtained, is copied
-across those comparisons, and travels inside an ordinary struct by value —
-`WaitEvent.handle` is a plain field.
+A CM `borrow<R>` cannot stand in for either: it must be dropped before the call
+returns, where a token is compared long after, is copied across comparisons, and
+travels inside a struct by value (`WaitEvent.handle`).
 
-What disqualifies a token is a referent with neither backing: an object the
-far side allocates per call from unbounded runtime input has no owner and no
-bound, so a copyable index leaks it. That case is affine.
+A referent with neither backing — allocated per call from unbounded runtime
+input — is affine instead: a copyable index would leak it.
 
 The rest of this WEP concerns affine resources.
 
@@ -493,5 +487,5 @@ client.
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
 - [`core:icu`](./wep-2026-08-09-core-icu.md) — the non-owning token's second
-  backing, and its first consumer outside `Waitable`.
+  backing.
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

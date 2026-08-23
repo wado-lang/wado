@@ -53,39 +53,30 @@ The user-visible module is deliberately not the unit of code splitting.
 A free function covers normalization, case folding, `is_nfc`, character
 properties, and one-shot locale-sensitive casing.
 
-Everything else is constructed, and construction is what makes the cost visible:
-a constructor says where the expensive thing happens, where a call that is
-expensive only the first time reads as free at every call site. What separates
-the two handle shapes is not that — it is who ends the object's life.
+What separates the two handle shapes is who ends the object's life.
 
 **Non-owning token.** A collator over a declared locale, plural rules, a
 formatter over a fixed skeleton, a segmenter: immutable, and configured only
-from what `with { locales: [...] }` and the program's own types already bound at
-compile time. The implementation component interns these, so the set is finite
-by construction and never needs freeing, and the handle is a copyable newtype
-under the [non-owning token](./wep-2026-05-21-resource-ownership.md) rule. It
-keeps the value semantics the rest of `core:*` has: it sits in a global, and a
-closure captures it by copy, so `list.sort_by(|a, b| c.compare(a, b))` is
-written the obvious way.
+from what `with { locales: [...] }` and the program's types already bound. The
+implementation component interns these, so the set is finite by construction and
+never needs freeing, and the handle keeps the value semantics the rest of
+`core:*` has — it sits in a global, and a closure captures it by copy, so
+`list.sort_by(|a, b| c.compare(a, b))` is written the obvious way.
 
 **Affine resource.** A collator tailored from user-supplied rules, a formatter
 compiled from a runtime skeleton or message pattern, anything keyed by an
-`Accept-Language` string, a lazy segmentation iterator. Here the far side
-allocates per call from input the program does not bound, so the object has an
-end and something must reach it: the handle carries a `dtor` and is move-only.
+`Accept-Language` string, a lazy segmentation iterator. The far side allocates
+these per call from input the program does not bound, so the object has an end
+and something must reach it: the handle carries a `dtor` and is move-only.
 
-The line between them is the one the slicer already draws — whether the object
-is a pure function of a key the program bounds at compile time. It is the same
-test that decides whether a capability's data can be sliced, so a program that
-stays inside the compile-time-bounded surface meets no move-only handle at all.
+The split is the slicer's own line, so a program whose data can be sliced meets
+no move-only handle at all.
 
-Statefulness forces the affine shape for a second, independent reason. Copying a
-token aliases its referent, which is unobservable for an immutable object and
-observable for a stateful one: two copies of a lazy iterator would advance each
-other. So the segmenter is a token and the iteration is not — a full pass
-returns a `List<u32>` of boundaries and needs no handle of its own, while lazy
-iteration over a large document is affine. Forcing the lazy case into an eager
-list is pathological when the caller wants the first few.
+Statefulness forces the affine shape for a second, independent reason: copying a
+token aliases its referent, which two copies of a lazy iterator would show by
+advancing each other. So the segmenter is a token and the iteration is not — a
+full pass returns a `List<u32>` of boundaries, while lazy iteration is affine, an
+eager list being pathological when the caller wants the first few.
 
 Where a capability serves both a one-shot and a loop, the facade offers both: a
 convenience function that constructs and discards, and the handle for when the
@@ -230,22 +221,18 @@ What stays move-only is what genuinely has an end.
 
 ### One handle shape for everything
 
-Two collapses were considered, and each loses what the split keeps.
-
-Making every handle affine is uniform and adds no kind, but move-only on an
-immutable interned object is a discipline with no safety payoff — nothing can be
-double-freed because nothing is freed — and it costs exactly what the hot paths
-need: a collator in a global for a long-running service, and a collator captured
-by a comparison closure. It would also put the entire surface behind CM resource
-import rather than only the part that owns a `dtor`.
+Making every handle affine adds no kind, but move-only on an immutable interned
+object is a discipline with no safety payoff — nothing can be double-freed
+because nothing is freed — and it costs what the hot paths need: a collator in a
+global, and a collator captured by a comparison closure. It would also put the
+entire surface behind CM resource import rather than the part owning a `dtor`.
 
 Making every handle a bare index is the mirror error. It reintroduces what sank
-the memoizing surface above: an object built per request from `Accept-Language`
-accumulates in the far side's table with no eviction and no visibility — a leak
-rather than a cache, since nothing is even reused. And it breaks value semantics
-wherever the object is stateful, because copying the handle silently shares the
-state. The representation was never the question. A CM handle is already an
-index into a per-instance table; ownership is what differs.
+the memoizing surface above — an object built per request from `Accept-Language`
+accumulates far-side with no eviction and no visibility, a leak rather than a
+cache — and it silently shares the state of every object that has some.
+Representation was never the question: a CM handle is already an index into a
+per-instance table.
 
 ### Three user-visible modules
 
@@ -287,24 +274,22 @@ runtime data dependencies, not taxonomy.
 - Runtime-loaded data loses zero-copy-from-static and adds a fixed per-capability
   deserialization cost. For a single capability this is roughly size-neutral
   against baking; the win is across capabilities and from per-program slicing.
-- The CM import blocker is split rather than shared. The compile-time-bounded
-  surface needs only a `dtor`-less imported handle, which is strictly less than
-  resource import; only the tailored and runtime-configured surface waits on the
-  full thing. That gap is still shared with every resource-bearing third-party
-  component, and WASI's own surface is resource-heavy.
+- The CM import blocker splits. The compile-time-bounded surface needs only a
+  `dtor`-less imported handle; the tailored and runtime-configured surface waits
+  on full resource import, a gap shared with every resource-bearing third-party
+  component.
 
 ## Open questions
 
 - [ ] What proves a construction site's configuration compile-time bounded, so
       the facade may offer the token form there. A combinatorial option space is
       not the obstacle — a constant at the site is what bounds the interned set —
-      but whether that is expressed as a distinct type, or as a const-argument
-      requirement whose failure diagnoses toward the affine form, is undecided.
+      but whether that is a distinct type or a const-argument requirement
+      diagnosing toward the affine form is undecided.
 - [ ] Holding an affine handle in a global, and capturing one in a closure
       ([resource ownership](./wep-2026-05-21-resource-ownership.md)). The token
-      form needs neither, so this bounds only the tailored and
-      runtime-configured surface — but a service caching a collator built from
-      `Accept-Language` wants precisely that.
+      form needs neither, so this bounds only the runtime-configured surface —
+      where a service caching a collator per `Accept-Language` lives.
 - [ ] Does ICU4X expose collation sort keys? A bulk key-extraction call would let
       a sort cross the boundary once instead of per comparison, which dominates
       any handle-versus-lookup difference.
@@ -320,12 +305,12 @@ runtime data dependencies, not taxonomy.
 
 - [ ] Non-owning token support in CM component import
       ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
-      a `dtor`-less imported handle decoded as a copyable newtype. This is all
-      the first slice needs — normalization, case mapping, character properties,
+      a `dtor`-less imported handle decoded as a copyable newtype. It is all the
+      first slice needs — normalization, case mapping, character properties,
       collation over the declared locales, grapheme segmentation.
 - [ ] Affine resource support in the same path — methods, static constructors,
-      `borrow<T>` parameters, `resource.drop`. It gates the tailored and
-      runtime-configured surface, not the package.
+      `borrow<T>` parameters, `resource.drop` — gating the runtime-configured
+      surface, not the package.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
       itself.
 - [ ] Promote the spike's data-free components into first-party prebuilt
@@ -348,5 +333,4 @@ runtime data dependencies, not taxonomy.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API
   need no longer be CM-representable.
 - [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the three
-  handle kinds the facade draws on, and the non-owning token rule the
-  compile-time-bounded surface rests on.
+  handle kinds the facade draws on.
