@@ -620,13 +620,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 MemberOwner::Named(assoc_const_owner_segment(ident)),
                 ident.segments.last().map_or(&ident.name, |s| &s.name),
                 super::types::ImplMemberKind::AssociatedConstant,
+                Some(ident.id),
                 ident.span,
             );
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
+            let vantage = (assoc.module.clone(), assoc.value.id().space());
             let const_module = assoc.module.clone();
             self.with_default_scope_module(Some(const_module), |s| {
-                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                s.with_foreign_vantage(Some(vantage), |s| {
+                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                })
             });
             return assoc.ty;
         }
@@ -1176,7 +1180,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_field_type(expr_type, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
-        self.check_field_visibility(expr_type, &field_access.field, field_access.span);
+        self.check_field_visibility(
+            expr_type,
+            &field_access.field,
+            Some(field_access.id),
+            field_access.span,
+        );
 
         field_type
     }
@@ -1345,15 +1354,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
-    /// The module whose source text is being walked, which is what a
-    /// visibility question is asked from. Foreign AST re-walked at a consumer
-    /// site — a default expression, an associated constant's body — is written
-    /// in its declaring module, not here.
-    pub(super) fn visibility_vantage(&self) -> ModuleSource {
-        self.annotate_ctx
-            .default_scope_module
-            .clone()
-            .unwrap_or_else(|| self.current_module_source.clone())
+    /// The module whose source text wrote the node being checked, which is
+    /// what a visibility question is asked from. Set while walking foreign AST
+    /// and matched by id space, so a caller's own argument substituted into a
+    /// callee's default expression is still judged here.
+    /// `node` is `None` where the checked site carries no id — a pattern
+    /// field — which judges it here; foreign AST is expression AST.
+    pub(super) fn visibility_vantage(&self, node: Option<ast::AstId>) -> ModuleSource {
+        match (&self.annotate_ctx.foreign_vantage, node) {
+            (Some((module, space)), Some(id)) if id.space() == *space => module.clone(),
+            _ => self.current_module_source.clone(),
+        }
     }
 
     /// Enforce an inherent impl member's rung of the visibility ladder.
@@ -1367,12 +1378,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: MemberOwner<'_>,
         member_name: &str,
         member_kind: super::types::ImplMemberKind,
+        node: Option<ast::AstId>,
         span: Span,
     ) {
         let (Some(visibility), Some(impl_module)) = (visibility, impl_module) else {
             return;
         };
-        let vantage = self.visibility_vantage();
+        let vantage = self.visibility_vantage(node);
         if *impl_module == vantage {
             return;
         }
@@ -1399,6 +1411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_type: TypeId,
         field_name: &str,
+        node: Option<ast::AstId>,
         span: Span,
     ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
@@ -1410,18 +1423,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .nominal_head(struct_type)
                 .expect("a nominal type names a declaration"),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.check_field_visibility(inner, field_name, span);
+                self.check_field_visibility(inner, field_name, node, span);
                 return;
             }
             ResolvedType::Newtype { base_type, .. } => {
-                self.check_field_visibility(base_type, field_name, span);
+                self.check_field_visibility(base_type, field_name, node, span);
                 return;
             }
             _ => return,
         };
 
         // Same module — always allowed
-        let vantage = self.visibility_vantage();
+        let vantage = self.visibility_vantage(node);
         if module_source == vantage {
             return;
         }
@@ -3763,10 +3776,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the default is evaluated in the defining module, so encapsulation is
         // preserved — so only flag fields the user explicitly provided, not the
         // defaults synthesized above.
-        if struct_module_source != self.current_module_source
+        let vantage = self.visibility_vantage(Some(struct_lit.id));
+        if struct_module_source != vantage
             && let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl)
         {
-            let same_package = struct_module_source.same_package(&self.current_module_source);
+            let same_package = struct_module_source.same_package(&vantage);
             for (fname, _, vis) in &struct_info.fields {
                 // Flagged when explicitly set, or read from `base` via a spread.
                 let set_explicitly = provided_names.contains(fname);
@@ -4069,10 +4083,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some((module, fields)) = &base_info[base_idx].1 else {
                 continue;
             };
-            if *module == self.current_module_source {
+            let vantage = self.visibility_vantage(Some(struct_lit.id));
+            if *module == vantage {
                 continue;
             }
-            let same_package = module.same_package(&self.current_module_source);
+            let same_package = module.same_package(&vantage);
             let Some((.., vis)) = fields.iter().find(|(n, ..)| n == name) else {
                 continue;
             };

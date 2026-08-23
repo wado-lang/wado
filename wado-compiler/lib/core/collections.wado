@@ -207,9 +207,9 @@ impl<K: Ord> TreeMap<K, V> {
         self.size = self.size + 1;
     }
 
-    /// Inserts a key-value pair into the map.
-    /// If the key already exists, updates the value (preserving insertion order).
-    /// If the key was previously removed, re-inserts it at the end.
+    /// The implementation behind `map[key] = value`; the public API is index
+    /// assignment, `try_insert`, and `get_or_insert`. Updates in place when the
+    /// key exists (keeping its order), else appends.
     fn insert(&mut self, key: K, value: V) with stores[key, value] {
         let existing_index = self.find_index(key);
         if existing_index >= 0 {

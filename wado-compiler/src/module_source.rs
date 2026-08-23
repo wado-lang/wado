@@ -122,6 +122,9 @@ pub struct ModuleSourceInterner {
     /// declared-but-unresolved entries (with reasons) for precise errors.
     /// Empty for single-file compilation.
     dependencies: crate::compiler_host::DependencyIndex,
+    /// Module path → the package root it was first reached under, so `pkg`
+    /// stays a function of the path and equal modules agree on their package.
+    package_roots: crate::hashmap::IndexMap<InternedStr, InternedStr>,
 }
 
 impl ModuleSourceInterner {
@@ -129,6 +132,7 @@ impl ModuleSourceInterner {
         Self {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
             dependencies: crate::compiler_host::DependencyIndex::default(),
+            package_roots: crate::hashmap::IndexMap::default(),
         }
     }
 
@@ -142,11 +146,20 @@ impl ModuleSourceInterner {
     }
 
     /// A non-entry module of the dependency package rooted at `pkg`.
+    ///
+    /// The first root a path is seen under wins, so the same file reached both
+    /// as a direct dependency and through a sibling's relative import stays one
+    /// module in one package rather than forking into two.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
-        ModuleSource::Dependency {
-            pkg: self.intern(pkg),
-            path: self.intern(path),
-        }
+        let path = self.intern(path);
+        let pkg = if let Some(existing) = self.package_roots.get(&path) {
+            existing.clone()
+        } else {
+            let pkg = self.intern(pkg);
+            self.package_roots.insert(path.clone(), pkg.clone());
+            pkg
+        };
+        ModuleSource::Dependency { pkg, path }
     }
 
     /// Resolve a bare dependency name to its entry module `ModuleSource`, if
@@ -194,12 +207,18 @@ impl ModuleSourceInterner {
         self.remote_module(url, url)
     }
 
-    /// A non-entry module of the remote package rooted at `pkg`.
+    /// A non-entry module of the remote package rooted at `pkg`. The first
+    /// root a URL is seen under wins; see [`Self::dependency_module`].
     pub fn remote_module(&mut self, pkg: &str, url: &str) -> ModuleSource {
-        ModuleSource::Remote {
-            pkg: self.intern(pkg),
-            url: self.intern(url),
-        }
+        let url = self.intern(url);
+        let pkg = if let Some(existing) = self.package_roots.get(&url) {
+            existing.clone()
+        } else {
+            let pkg = self.intern(pkg);
+            self.package_roots.insert(url.clone(), pkg.clone());
+            pkg
+        };
+        ModuleSource::Remote { pkg, url }
     }
     pub fn redirected(&mut self, uri: &str) -> ModuleSource {
         ModuleSource::Redirected {
@@ -287,10 +306,11 @@ pub enum ModuleSource {
         path: InternedStr,
     },
     /// A module of a dependency package, resolved from a bare-name
-    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is
-    /// `(pkg, path)` — the same pair `package_id` reads, so two equal values
-    /// can never report different packages. Distinct from
-    /// [`ModuleSource::Local`] to carry the package boundary, but loaded alike.
+    /// `use { … } from "<dep>"` against `[dependencies]`. Identity is `path`,
+    /// so one file reached two ways stays one module; `pkg` is a function of
+    /// it, memoized by the interner, so equal values agree on their package.
+    /// Distinct from [`ModuleSource::Local`] to carry the package boundary,
+    /// but loaded alike.
     Dependency {
         /// The package root: the dependency's resolved `[package].lib`. Shared
         /// by every module of the package, and inherited by a relative import.
@@ -379,19 +399,8 @@ impl PartialEq for ModuleSource {
             (Self::Core { name: a }, Self::Core { name: b }) => a == b,
             (Self::Wasi { interface: a }, Self::Wasi { interface: b }) => a == b,
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
-            (
-                Self::Dependency {
-                    pkg: pa,
-                    path: a,
-                },
-                Self::Dependency {
-                    pkg: pb,
-                    path: b,
-                },
-            ) => (pa, a) == (pb, b),
-            (Self::Remote { pkg: pa, url: a }, Self::Remote { pkg: pb, url: b }) => {
-                (pa, a) == (pb, b)
-            }
+            (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
+            (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
             (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
             (
                 Self::Wasm {
@@ -420,14 +429,8 @@ impl std::hash::Hash for ModuleSource {
             Self::Core { name } => name.hash(state),
             Self::Wasi { interface } => interface.hash(state),
             Self::Local { path } => path.hash(state),
-            Self::Dependency { pkg, path } => {
-                pkg.hash(state);
-                path.hash(state);
-            }
-            Self::Remote { pkg, url } => {
-                pkg.hash(state);
-                url.hash(state);
-            }
+            Self::Dependency { path, .. } => path.hash(state),
+            Self::Remote { url, .. } => url.hash(state),
             Self::Redirected { uri } => uri.hash(state),
             Self::Wasm { path, kind } => {
                 path.hash(state);

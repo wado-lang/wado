@@ -483,7 +483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let effective_name = callee_kind.effective_name();
-        self.check_static_call_visibility(effective_name, call.span);
+        self.check_static_call_visibility(effective_name, Some(call.id), call.span);
         // The receiver of `Type::method` is named at its own segment, and the
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
@@ -1878,9 +1878,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => break,
                 };
                 let mut default_expr = default_ast;
+                let vantage = s
+                    .annotate_ctx
+                    .default_scope_module
+                    .clone()
+                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
                 let expected_type = param_types[i];
-                let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                let resolved = s.with_foreign_vantage(vantage, |s| {
+                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                });
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
@@ -2690,7 +2697,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// hold a name split out of a mangled spelling, so there is no site to take.
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call,
     /// the spelling an associated function is reached by.
-    fn check_static_call_visibility(&mut self, effective_name: &str, span: crate::token::Span) {
+    pub(super) fn check_static_call_visibility(
+        &mut self,
+        effective_name: &str,
+        node: Option<crate::ast::AstId>,
+        span: crate::token::Span,
+    ) {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
         };
@@ -2705,6 +2717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::expr::MemberOwner::Named(&owner),
             method_name,
             super::types::ImplMemberKind::Method,
+            node,
             span,
         );
     }

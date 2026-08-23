@@ -77,6 +77,13 @@ pub(super) struct Scope {
     /// the callee's lexical scope for defaults that reference
     /// module-private items (WEP 2026-04-11).
     pub(super) default_scope_module: Option<ModuleSource>,
+    /// The module whose source text the node under resolution was written in,
+    /// which is where a visibility question about it is asked from. Foreign
+    /// AST re-walked at a consumer — a default expression, an associated
+    /// constant's body — is written in its declaring module; the caller's own
+    /// arguments substituted into it are not, so this tracks the id space the
+    /// foreign AST was parsed in rather than assuming a whole subtree.
+    pub(super) foreign_vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -181,6 +188,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         self.with_scope_field(|scope| &mut scope.default_scope_module, module, body)
+    }
+
+    /// Run `body` with the visibility vantage set to `module` for nodes parsed
+    /// in `space`. See [`Scope::foreign_vantage`].
+    pub(super) fn with_foreign_vantage<R>(
+        &mut self,
+        vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_scope_field(|scope| &mut scope.foreign_vantage, vantage, body)
     }
 
     /// Expand a written bound list to include every bound's supertraits, so a

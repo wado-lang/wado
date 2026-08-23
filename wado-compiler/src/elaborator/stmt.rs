@@ -1177,7 +1177,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let (_field_index, field_type) =
                         self.lookup_field_type(type_id, &field.field_name, field.span);
                     if type_name_matches {
-                        self.check_field_visibility(type_id, &field.field_name, field.span);
+                        self.check_field_visibility(
+                            type_id,
+                            &field.field_name,
+                            None,
+                            field.span,
+                        );
                     }
                     self.resolve_let_pattern_inner(
                         &field.pattern,
@@ -1597,15 +1602,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             super::expr::MemberOwner::Written(variant_qualifier.as_ref()),
                             variant_name,
                             super::types::ImplMemberKind::AssociatedConstant,
+                            None,
                             *span,
                         );
                         // Resolve the const body for its facts. An associated
                         // constant introduces no binding — it is either a literal
                         // or an opaque constant-value pattern — so return none
                         // either way.
+                        let vantage = (assoc.module.clone(), assoc.value.id().space());
                         let const_module = assoc.module.clone();
                         self.with_default_scope_module(Some(const_module), |s| {
-                            s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                            s.with_foreign_vantage(Some(vantage), |s| {
+                                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                            })
                         });
                         return Vec::new();
                     }
@@ -1816,7 +1825,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let (_field_index, field_type) =
                         self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
                     if type_name_matches {
-                        self.check_field_visibility(scrutinee_type, &field.field_name, field.span);
+                        self.check_field_visibility(
+                            scrutinee_type,
+                            &field.field_name,
+                            None,
+                            field.span,
+                        );
                     }
                     field_bindings.extend(self.resolve_if_pattern_inner(
                         &field.pattern,

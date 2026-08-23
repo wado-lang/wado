@@ -519,6 +519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::expr::MemberOwner::Type(base_type_id),
             method_name,
             super::types::ImplMemberKind::Method,
+            call_id,
             span,
         );
 
@@ -1426,6 +1427,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the global `StaticMethodIndex`.
         let (struct_name_for_lookup, struct_key_for_lookup) =
             self.static_receiver_struct_key(target_type_id);
+
+        // `Type::<T>::method()` parses as a static-method call and never
+        // reaches `resolve_call`, which checks the bare spelling.
+        if let Some(name) = struct_name_for_lookup.clone() {
+            self.check_static_call_visibility(
+                &format!("{name}::{}", static_call.method),
+                Some(static_call.id),
+                static_call.span,
+            );
+        }
 
         // Look up parameter types for coercion. Thread the canonical
         // receiver key (from the resolved target type) so that two
