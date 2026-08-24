@@ -360,6 +360,11 @@ use hl from "./JSON.g4"
 let html = hl::highlight(&"{\"k\": 42}");
 ```
 
+Alongside it Gale emits `capture_vocabulary() -> List<String>` — the distinct
+capture classes this grammar can emit, sorted. Feed it to `gale-highlight`'s
+`Theme::unstyled` / `Theme::unknown` to catch a class a theme drops or
+misspells instead of shipping it unstyled.
+
 A query maps tokens to capture names from the tree-sitter standard vocabulary
 (`keyword`, `string`, `number`, `comment`, `constant.builtin`,
 `punctuation.bracket`, `operator`, …); each capture becomes a CSS class
