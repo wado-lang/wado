@@ -1939,37 +1939,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`: the
-                    // normalized chain's result is `agree(then_block_result,
-                    // else_type)` collapsed to `Unit` on mismatch (the
-                    // per-level `unwrap_or(UNIT)` recursion reduces to exactly
-                    // this — equal for single- and multi-element chains). Then
-                    // the same agreement against the else block as before.
+                    // AST mirror of `block_result_type(chain_block)`, and the
+                    // same shape as the `Condition::Expr` arm below: the chain's
+                    // result is what the then block and the else block agree on.
                     let else_type = if_expr
                         .else_block
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
                     let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    let agreed_chain = self.agreed_branch_type(&[then_type, else_type]);
-                    let chain_type = agreed_chain.unwrap_or(TypeTable::UNIT);
                     match (
-                        agreed_chain.or_else(|| self.agreed_branch_type(&[chain_type, else_type])),
+                        self.agreed_branch_type(&[then_type, else_type]),
                         &if_expr.else_block,
                     ) {
                         (Some(agreed), _) => agreed,
                         (None, None) => TypeTable::UNIT,
                         (None, Some(else_block)) => {
-                            let (chain_name, else_name) = self
+                            let (then_name, else_name) = self
                                 .tysys
                                 .type_table
                                 .borrow()
-                                .type_names_for_mismatch(chain_type, else_type);
+                                .type_names_for_mismatch(then_type, else_type);
                             let _ = self.emit(TypeError::TypeMismatch {
-                                expected: chain_name,
+                                expected: then_name,
                                 found: else_name,
                                 span: else_block.span,
                             });
-                            chain_type
+                            then_type
                         }
                     }
                 };

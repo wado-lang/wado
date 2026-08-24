@@ -123,7 +123,7 @@ pub struct WirPackage {
     /// Trait-bound violations collected instead of trapping the build, so the
     /// driver can emit a clean diagnostic and bail. Empty in well-formed programs.
     pub trait_bound_violations: Vec<TraitBoundViolation>,
-    /// Calls to a `#[cm(...)]` member no import backs, collected like
+    /// Calls to a `#[cm(...)]` member with no backing import, collected like
     /// [`Self::trait_bound_violations`]. Empty in well-formed programs.
     pub cm_import_violations: Vec<CmImportViolation>,
 }

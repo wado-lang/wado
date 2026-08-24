@@ -1059,15 +1059,15 @@ impl Parser {
             false
         };
 
+        if !self.check(&TokenKind::Resource) {
+            reject_resource_backing(&attrs)?;
+        }
+
         // Check for contextual keyword "test" (identifier followed by string or block)
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "test"
         {
             return self.parse_test_decl(attrs).map(Item::Test);
-        }
-
-        if !self.check(&TokenKind::Resource) {
-            reject_resource_backing(&attrs)?;
         }
 
         match self.peek_kind() {
@@ -5285,6 +5285,7 @@ impl Parser {
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
+            reject_resource_backing(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
@@ -6985,6 +6986,8 @@ mod tests {
             "enum E { #[cm(\"a:b/c\", type=\"i32\")] Case }",
             "variant V { #[cm(\"a:b/c\", type=\"i32\")] Case(i32) }",
             "resource R { #[cm(\"a:b/c\", type=\"i32\")] fn m(&self); }",
+            "flags F { #[cm(\"a:b/c\", type=\"i32\")] A }",
+            "#[cm(\"a:b/c\", type=\"i32\")] test \"t\" { assert true; }",
         ] {
             let err = parse(source).unwrap_err();
             assert!(

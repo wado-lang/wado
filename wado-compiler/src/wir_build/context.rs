@@ -181,7 +181,7 @@ pub struct WirContext<'a> {
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<crate::wir::TraitBoundViolation>,
-    /// Calls to a `#[cm(...)]` member no import backs, collected alongside
+    /// Calls to a `#[cm(...)]` member with no backing import, collected alongside
     /// [`Self::trait_bound_violations`] and reported the same way.
     pub cm_import_violations: Vec<crate::wir::CmImportViolation>,
 }

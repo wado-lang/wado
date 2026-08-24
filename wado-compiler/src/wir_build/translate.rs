@@ -1855,8 +1855,8 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Handle a `FunctionRef` that did not resolve to a generated function:
-    /// record the two the front end admits — an unsatisfied trait bound and an
-    /// unbacked `#[cm(...)]` member — and `panic` on anything else.
+    /// record the two cases the front end admits — an unsatisfied trait bound
+    /// and a `#[cm(...)]` member with no backing import — and `panic` on the rest.
     fn unresolved_call_or_trap(
         &mut self,
         func: &crate::nir::FunctionRef,

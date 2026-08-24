@@ -55,7 +55,7 @@ fn a_plain_resource_is_move_only() {
     assert!(
         errors
             .iter()
-            .any(|e| e.contains("use_twice") || e.contains('h')),
+            .any(|e| e.contains("resource `h` used after it was moved")),
         "expected a use-after-move error, got {errors:?}"
     );
 }

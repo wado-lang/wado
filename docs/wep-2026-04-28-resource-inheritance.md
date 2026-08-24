@@ -49,11 +49,11 @@ A future WEP can extend `extends` to `i32`-backed resources if we find a lowerin
 
 ### How the representation is chosen for a given resource
 
-Backing is **always declared explicitly** on the resource, and **structurally verified** by the compiler. There is no namespace-based inference, no default-by-omission for resources that participate in CM bindings.
+Backing is **declared on the resource** and **structurally verified** by the compiler — never inferred from the namespace. The field is optional and reads as `i32` when omitted; `extends` is what requires it, on both sides.
 
 Concretely:
 
-- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-ref"` or `"i32"`. `extern-ref` is rejected outside `web:*` while its lowering is unbuilt: on a resource the compiler does lower, the backing turns off the drop and the move check while the own-handle surface stays, leaking a handle and admitting a double use. The CM-layer naming is used; the backing has no user-facing Wado type name. **Not yet mandatory**: requiring it means migrating every stdlib resource, which no consumer needs — omitting it reads as `i32`, and only `extends` demands the declaration.
+- `#[cm(...)]` on a `resource` takes a `type=...` field, `"extern-ref"` or `"i32"`. `extern-ref` is rejected outside `web:*` while its lowering is unbuilt: on a resource the compiler does lower, the backing turns off the drop and the move check while the own-handle surface stays, leaking a handle and admitting a double use. The CM-layer naming is used; the backing has no user-facing Wado type name. Making it mandatory means migrating every stdlib resource, which no consumer needs.
   ```wado
   #[cm("web:dom/element", type = "extern-ref")]
   pub resource Element { ... }
