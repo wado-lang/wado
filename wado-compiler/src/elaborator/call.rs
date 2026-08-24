@@ -1439,7 +1439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A built-in type constructor — a variant case, not a function, so the
         // site above declines it.
-        else if self.names_result_or_option_case(&effective_name) {
+        else if self.names_result_or_option_case(effective_name) {
             self.record_item_reference_by_name(ident.id, effective_name);
             (
                 Some(CalleeRef::rendered(
