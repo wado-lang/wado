@@ -64,8 +64,7 @@ Concretely:
 - A resource without `#[cm(...)]` is `i32`-backed and **cannot use `extends`** in v1. Hierarchies require explicit CM identity.
 - `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type = "extern-ref"`. Mismatched backings in an `extends` family is a hard error, not a warning.
 - A resource declared with `type = "extern-ref"` but without any `extends` relationship is allowed (a future-proof opt-in to the GC backing).
-- Until the lowering lands (Tide M3), the backing is accepted only under `web:*`. On a resource the compiler already lowers, it would keep the CM own-handle surface while turning off the drop and the move check the backing exempts — a leaked handle and a double use. Not inference: the backing is still declared, and this gate goes away with M3.
-  The gate tests the namespace the declaration itself spells, so it is a guard against reaching the unbuilt lowering by accident, not a boundary — a hand-written `#[cm("web:...")]` resource already reaches everything it admits. Consumers outside `web:*` are expected; each one arrives here, and the whole gate goes with M3.
+- The gate is the namespace the declaration spells, not a provenance: it keeps the unbuilt lowering out of the resources the compiler does lower, and grants nothing a hand-written `#[cm("web:...")]` resource could not already reach. Not inference — the backing is still declared. Consumers outside `web:*` are expected; the gate goes with Tide M3.
 
 ### Why mandatory + structural over namespace inference
 
@@ -102,7 +101,7 @@ pub resource Element extends Node { ... }
 
 Rules:
 
-- `extends` introduces a new keyword. Existing identifiers named `extends` (none in the standard library) become reserved.
+- `extends` is a keyword only between a resource name and its parent; elsewhere it stays an identifier.
 - Only one parent type is permitted (single inheritance). The parent must be a `resource`, not a trait, struct, or enum.
 - Neither side may be generic: a generic resource takes no part in `extends` yet. Not a rejection of the idea — no consumer asks for it (WebIDL has no generics), so it is unbuilt rather than out of scope. The check reads the declaration's arity, not the written shape, so `Base` and `Base<i32>` are one answer.
 - `extends` is permitted only when both the declaring resource and its parent declare `type = "extern-ref"` in `#[cm(...)]`. A backing mismatch is a compile error (per the representation section above).

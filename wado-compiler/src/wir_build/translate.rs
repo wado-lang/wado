@@ -1854,13 +1854,10 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Handle a `FunctionRef` that did not resolve to a generated function. Two
-    /// names are a program the front end admits and the back end cannot lower:
-    /// a `Type^Trait::method` whose bound is unsatisfied, and a `#[cm(...)]`
-    /// member no import backs. Record either and emit `Unreachable` so the
-    /// build finishes (the driver reports and bails). Any other name is an
-    /// internal inconsistency — `panic`.
-    fn unresolved_trait_call_or_trap(
+    /// Handle a `FunctionRef` that did not resolve to a generated function:
+    /// record the two the front end admits — an unsatisfied trait bound and an
+    /// unbacked `#[cm(...)]` member — and `panic` on anything else.
+    fn unresolved_call_or_trap(
         &mut self,
         func: &crate::nir::FunctionRef,
         span: crate::token::Span,
@@ -2356,7 +2353,7 @@ impl FunctionTranslator<'_, '_> {
                     };
                     self.wrap_call_with_prelude(prelude, call, expr.type_id)
                 } else {
-                    self.unresolved_trait_call_or_trap(func, expr.span, || {
+                    self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
                             "[WIR] unresolved Call: name={:?} module={} builtin={:?} method_info={:?}",
                             func.name, func.module_source, builtin, func.method_info

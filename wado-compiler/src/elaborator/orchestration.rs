@@ -29,25 +29,16 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 
-/// One `resource Child extends Parent` clause, held until every resource has
-/// been collected: a parent may be declared after its child, or elsewhere.
-/// Whether a resource may take the extern-ref backing yet.
-///
-/// The extern-ref lowering is unbuilt, so a resource the compiler does lower
-/// would keep its own-handle surface while losing the drop and the move check
-/// the backing turns off — a leak and a double use. Until that lowering exists
-/// the backing is confined to the binding surface it was introduced for, Tide's
-/// `web:*` modules.
-///
-/// The test is the namespace the declaration itself spells: a written string,
-/// not a provenance, so it grants nothing a hand-written `#[cm("web:...")]`
-/// resource could not already reach. It is a gate against reaching the unbuilt
-/// lowering by accident, not a boundary. Non-`web` consumers are expected; each
-/// arrives here, and the whole gate goes once the lowering lands.
+/// Whether a resource may take the extern-ref backing yet: while the lowering
+/// is unbuilt, only the namespace the declaration spells keeps it out of a
+/// resource the compiler does lower. See the WEP linked from
+/// [`resolve_resource_extends`].
 fn extern_ref_backing_allowed(attr: &crate::ast::Attribute) -> bool {
     attr.as_cm_import().is_some_and(|cm| cm.namespace == "web")
 }
 
+/// One `resource Child extends Parent` clause, held until every resource has
+/// been collected: a parent may be declared after its child, or elsewhere.
 struct PendingExtends {
     child: crate::defs::DefId,
     child_name: String,

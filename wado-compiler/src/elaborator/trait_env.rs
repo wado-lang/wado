@@ -864,6 +864,18 @@ impl SynthesisedImpls {
 }
 
 impl TraitEnv {
+    /// The entry `key`'s resource declares for a static named `method_name`.
+    pub(super) fn resource_static(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<&(String, ModuleSource, AstId, usize)> {
+        self.resource_static_method_index
+            .get(key)?
+            .iter()
+            .find(|(name, ..)| name == method_name)
+    }
+
     /// Build the trait indices from all loaded modules, once, before per-module
     /// resolution begins, and check the orphan rule on local impl blocks. Every
     /// receiver-type and trait-name reference in an `impl` header is resolved

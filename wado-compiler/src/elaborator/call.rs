@@ -2806,11 +2806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        if let Some((_, _, decl_id, _)) = trait_env
-            .resource_static_method_index
-            .get(&key)
-            .and_then(|entries| entries.iter().find(|(name, ..)| name == method_name))
-        {
+        if let Some((_, _, decl_id, _)) = trait_env.resource_static(&key, method_name) {
             return self
                 .tysys
                 .signatures

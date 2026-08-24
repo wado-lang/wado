@@ -2567,13 +2567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.resolutions.defs(),
             def?,
         );
-        let (_, _, decl_id, _) = self
-            .tysys
-            .trait_env
-            .resource_static_method_index
-            .get(&key)?
-            .iter()
-            .find(|(name, ..)| name == method_name)?;
+        let (_, _, decl_id, _) = self.tysys.trait_env.resource_static(&key, method_name)?;
         self.tysys
             .signatures
             .resource_method_sig(*decl_id, method_name)?
@@ -2662,16 +2656,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let indexed_resource_return = self
             .tysys
             .trait_env
-            .resource_static_method_index
-            .get(&static_key)
-            .and_then(|entries| {
-                entries
-                    .iter()
-                    .find(|(name, ..)| name == method_name)
-                    .and_then(|(name, _, item_id, _)| {
-                        let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
-                        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-                    })
+            .resource_static(&static_key, method_name)
+            .and_then(|(name, _, item_id, _)| {
+                let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
+                Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
             });
         if let Some(return_type) = indexed_resource_return {
             return return_type;
@@ -2785,9 +2773,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn declares_resource_static(&self, def: crate::defs::DefId, method_name: &str) -> bool {
         self.tysys
             .trait_env
-            .resource_static_method_index
-            .get(&crate::elaborator::trait_env::ImplTargetKey::Decl(def))
-            .is_some_and(|entries| entries.iter().any(|(name, ..)| name == method_name))
+            .resource_static(
+                &crate::elaborator::trait_env::ImplTargetKey::Decl(def),
+                method_name,
+            )
+            .is_some()
     }
 
     /// Resolve a static-method receiver `TypeId` to its `(struct_name,
@@ -3536,14 +3526,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // O(1) lookup via pre-built resource static method index.
-        // Same canonical-key disambiguation.
-        if let Some(methods) = self
+        if self
             .tysys
             .trait_env
-            .resource_static_method_index
-            .get(&static_key)
-            && methods.iter().any(|(name, ..)| name == method_name)
+            .resource_static(&static_key, method_name)
+            .is_some()
         {
             return true;
         }

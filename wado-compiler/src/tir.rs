@@ -823,8 +823,7 @@ pub struct TypeTable {
     /// Resources declared `#[cm(..., type = "extern-ref")]`: a copyable handle
     /// to a host object, outside the affine resource discipline.
     extern_ref_resources: IndexSet<crate::defs::DefId>,
-    /// `resource Child extends Parent`, child → parent. Acyclic: the
-    /// elaborator rejects a cycle before recording it.
+    /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///

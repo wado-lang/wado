@@ -1950,11 +1950,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
                     let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    let chain_type = self
-                        .agreed_branch_type(&[then_type, else_type])
-                        .unwrap_or(TypeTable::UNIT);
+                    let agreed_chain = self.agreed_branch_type(&[then_type, else_type]);
+                    let chain_type = agreed_chain.unwrap_or(TypeTable::UNIT);
                     match (
-                        self.agreed_branch_type(&[chain_type, else_type]),
+                        agreed_chain.or_else(|| self.agreed_branch_type(&[chain_type, else_type])),
                         &if_expr.else_block,
                     ) {
                         (Some(agreed), _) => agreed,

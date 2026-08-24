@@ -128,19 +128,6 @@ pub struct WirPackage {
     pub cm_import_violations: Vec<CmImportViolation>,
 }
 
-/// A call to a `#[cm("...")]` member that reached WIR build with no import
-/// behind it. The CM interface registry is built from the stdlib and from
-/// component dependencies, so a binding declared anywhere else — a hand-written
-/// `#[cm(...)]` resource — registers nothing to call.
-#[derive(Debug, Clone)]
-pub struct CmImportViolation {
-    /// The receiver and method as source spells them.
-    pub call_display: String,
-    /// The CM name the declaration carries.
-    pub cm_name: String,
-    pub span: crate::token::Span,
-}
-
 /// A `Type^Trait::method` call left unresolved at WIR build because `Type` does
 /// not implement `Trait` — a forwarded generic parameter's bound that escaped
 /// earlier checks.
@@ -152,6 +139,17 @@ pub struct TraitBoundViolation {
     /// re-deriving both halves from a string built for Wasm.
     pub type_display: String,
     pub trait_display: String,
+    pub span: crate::token::Span,
+}
+
+/// A call to a `#[cm("...")]` member left unresolved at WIR build: only the
+/// stdlib and component dependencies register an import to call.
+#[derive(Debug, Clone)]
+pub struct CmImportViolation {
+    /// The receiver and method as source spells them, like
+    /// [`TraitBoundViolation::type_display`].
+    pub call_display: String,
+    pub cm_name: String,
     pub span: crate::token::Span,
 }
 

@@ -1037,12 +1037,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         // The nearest declaration answers, keeping its own signature. Only the
         // receiver's takes type arguments — a generic resource is rejected.
-        let chain: Vec<crate::defs::DefId> =
-            self.tysys.type_table.borrow().resource_chain(def).collect();
-        chain.into_iter().enumerate().find_map(|(step, current)| {
-            let args = if step == 0 { receiver_type_args } else { None };
-            self.resource_method_info_on(current, method_name, args)
-        })
+        self.resource_chain_of(def)
+            .into_iter()
+            .enumerate()
+            .find_map(|(step, current)| {
+                let args = if step == 0 { receiver_type_args } else { None };
+                self.resource_method_info_on(current, method_name, args)
+            })
+    }
+
+    /// `def` and every resource it extends. Collected, so the walk's own
+    /// lookups can borrow the type table again.
+    fn resource_chain_of(&self, def: crate::defs::DefId) -> Vec<crate::defs::DefId> {
+        self.tysys.type_table.borrow().resource_chain(def).collect()
     }
 
     /// The resource that declares `method_name` as an instance method for a
@@ -1054,9 +1061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         def: crate::defs::DefId,
         method_name: &str,
     ) -> Option<(crate::defs::DefId, super::sig::MethodSig)> {
-        let chain: Vec<crate::defs::DefId> =
-            self.tysys.type_table.borrow().resource_chain(def).collect();
-        chain.into_iter().find_map(|current| {
+        self.resource_chain_of(def).into_iter().find_map(|current| {
             let info = self.tysys.all_resource_types.get(&current)?;
             let sig = self
                 .tysys
