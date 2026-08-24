@@ -1035,6 +1035,75 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
+        // The nearest declaration answers, keeping its own signature. Only the
+        // receiver's takes type arguments — a generic resource is rejected.
+        self.resource_chain_of(def)
+            .into_iter()
+            .enumerate()
+            .find_map(|(step, current)| {
+                let args = if step == 0 { receiver_type_args } else { None };
+                self.resource_method_info_on(current, method_name, args)
+            })
+    }
+
+    /// `def` and every resource it extends. Collected, so the walk's own
+    /// lookups can borrow the type table again.
+    fn resource_chain_of(&self, def: crate::defs::DefId) -> Vec<crate::defs::DefId> {
+        self.tysys.type_table.borrow().resource_chain(def).collect()
+    }
+
+    /// The resource that declares `method_name` as an instance method for a
+    /// receiver declared by `def` — itself or the nearest ancestor — and what
+    /// it declares. A static belongs to its declaring resource alone, so the
+    /// walk passes it by.
+    pub(super) fn resource_instance_method(
+        &self,
+        def: crate::defs::DefId,
+        method_name: &str,
+    ) -> Option<(crate::defs::DefId, super::sig::MethodSig)> {
+        self.resource_chain_of(def).into_iter().find_map(|current| {
+            let info = self.tysys.all_resource_types.get(&current)?;
+            let sig = self
+                .tysys
+                .signatures
+                .resource_method_sig(info.defined_at, method_name)?;
+            (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
+        })
+    }
+
+    /// The trait whose impl for `type_key` declares `method_name`, if one does.
+    /// Direct impls only: a blanket impl answers for every type, so counting it
+    /// here would make every prelude-provided name collide.
+    pub(super) fn trait_impl_declaring(
+        &self,
+        type_key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<String> {
+        for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
+            let Some(header) = self
+                .tysys
+                .trait_env
+                .impl_headers
+                .get(&(impl_ref.0.clone(), impl_ref.1))
+            else {
+                continue;
+            };
+            if header.methods.iter().any(|m| m.name == method_name)
+                && let Some(trait_name) = &header.trait_name
+            {
+                return Some(trait_name.clone());
+            }
+        }
+        None
+    }
+
+    /// [`Self::find_resource_method_info`] without the `extends` walk.
+    fn resource_method_info_on(
+        &mut self,
+        def: crate::defs::DefId,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
         let decl_id = self.tysys.all_resource_types.get(&def)?.defined_at;
         let sig = self
             .tysys

@@ -2147,7 +2147,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Reify the else block before the pattern bindings enter scope: the
         // else arm must not see them. It diverges, so its result type is Never.
         let else_block = self.reify_block(else_ast, ctx, None);
-        let else_type = crate::tir::block_result_type(&else_block);
+        let else_type = crate::tir::block_result_type(&self.tysys.type_table.borrow(), &else_block);
         let else_span = else_block.span;
 
         let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
@@ -2155,10 +2155,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cont_stmts =
             self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
         let cont_block = TirBlock::new(cont_stmts, block_span);
-        let then_type = crate::tir::block_result_type(&cont_block);
+        let then_type = crate::tir::block_result_type(&self.tysys.type_table.borrow(), &cont_block);
 
         let match_type =
-            crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+            crate::tir::agree_branch_types(&self.tysys.type_table.borrow(), then_type, else_type)
+                .unwrap_or(TypeTable::UNIT);
         let then_body = TirExpr::new(TirExprKind::Block(cont_block), then_type, span);
         let else_body = TirExpr::new(TirExprKind::Block(else_block), else_type, else_span);
         let arms = vec![
@@ -3758,8 +3759,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let break_body = TirExpr::new(TirExprKind::Block(break_block), TypeTable::UNIT, span);
 
-        let match_type =
-            crate::tir::agree_branch_types(body_type, TypeTable::UNIT).unwrap_or(TypeTable::UNIT);
+        let match_type = crate::tir::agree_branch_types(
+            &self.tysys.type_table.borrow(),
+            body_type,
+            TypeTable::UNIT,
+        )
+        .unwrap_or(TypeTable::UNIT);
         let arms = vec![
             TirMatchArm {
                 pattern: some_pattern,
@@ -4578,14 +4583,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // "last stmt is Expr" check would mis-classify those
                 // trailing forms as `Unit`, collapsing the Match's
                 // `match_type` to `Unit` and dropping the branch values.
-                let then_type = crate::tir::block_result_type(&inner_block);
+                let tt = self.tysys.type_table.borrow();
+                let then_type = crate::tir::block_result_type(&tt, &inner_block);
                 let else_tir = else_block.cloned();
                 let else_type = else_tir
                     .as_ref()
-                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
+                    .map_or(TypeTable::UNIT, |b| crate::tir::block_result_type(&tt, b));
                 let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
-                let match_type =
-                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                let match_type = crate::tir::agree_branch_types(&tt, then_type, else_type)
+                    .unwrap_or(TypeTable::UNIT);
+                drop(tt);
                 let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
                 let else_body = match else_tir {
                     Some(b) => {
@@ -4691,12 +4698,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .else_block
                     .as_ref()
                     .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
-                let then_type = crate::tir::block_result_type(&then_branch);
+                let tt = self.tysys.type_table.borrow();
+                let then_type = crate::tir::block_result_type(&tt, &then_branch);
                 let else_type = else_branch
                     .as_ref()
-                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
-                let result_type =
-                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                    .map_or(TypeTable::UNIT, |b| crate::tir::block_result_type(&tt, b));
+                let result_type = crate::tir::agree_branch_types(&tt, then_type, else_type)
+                    .unwrap_or(TypeTable::UNIT);
+                drop(tt);
                 let if_expr = TirExpr::new(
                     TirExprKind::If {
                         condition: Box::new(condition),

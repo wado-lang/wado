@@ -29,6 +29,254 @@ use super::types::{
 };
 use super::tysys::TypeSystem;
 
+/// Whether a resource may take the extern-ref backing yet: while the lowering
+/// is unbuilt, only the namespace the declaration spells keeps it out of a
+/// resource the compiler does lower. See the WEP linked from
+/// [`resolve_resource_extends`].
+fn extern_ref_backing_allowed(attr: &crate::ast::Attribute) -> bool {
+    attr.as_cm_import().is_some_and(|cm| cm.namespace == "web")
+}
+
+/// One `resource Child extends Parent` clause, held until every resource has
+/// been collected: a parent may be declared after its child, or elsewhere.
+struct PendingExtends {
+    child: crate::defs::DefId,
+    child_name: String,
+    child_is_generic: bool,
+    parent: Type,
+    module: ModuleSource,
+    span: crate::token::Span,
+}
+
+/// Every resource's declared instance-method names, by declaration.
+type ResourceMethodNames = IndexMap<crate::defs::DefId, Vec<(String, crate::token::Span)>>;
+
+/// Resolve every `extends` clause and record the ones that hold.
+/// See `docs/wep-2026-04-28-resource-inheritance.md`.
+fn resolve_resource_extends<H: CompilerHost>(
+    pending: &[PendingExtends],
+    method_names: &ResourceMethodNames,
+    generic_resources: &IndexSet<crate::defs::DefId>,
+    resolutions: &crate::resolve::Resolutions,
+    type_table: &RefCell<TypeTable>,
+    logger: &Logger<'_, H>,
+) {
+    let reject = |clause: &PendingExtends, message: String| {
+        let _ = logger.error_in(
+            &clause.module,
+            TypeError::ResourceExtends {
+                message,
+                span: clause.span,
+            },
+        );
+    };
+
+    let mut links: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
+    for clause in pending {
+        let Some(site) = crate::resolve::head_site(&clause.parent) else {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends a shape that names no resource",
+                    clause.child_name
+                ),
+            );
+            continue;
+        };
+        let parent = match resolutions.get(site) {
+            crate::resolve::Resolution::Def(def) => def,
+            crate::resolve::Resolution::Binder(_) => {
+                reject(
+                    clause,
+                    format!(
+                        "`{}` extends a type parameter; a parent must be a resource declaration",
+                        clause.child_name
+                    ),
+                );
+                continue;
+            }
+            crate::resolve::Resolution::Unresolved => {
+                let mut spelled = String::new();
+                crate::unparse::unparse_type_into(&clause.parent, &mut spelled);
+                reject(
+                    clause,
+                    format!(
+                        "`{}` extends `{spelled}`, which names nothing",
+                        clause.child_name
+                    ),
+                );
+                continue;
+            }
+        };
+        let defs = resolutions.defs();
+        // Keyed on the declaration, not the written shape: `Base` and
+        // `Base<i32>` name one resource, and only it knows its arity.
+        if clause.child_is_generic || generic_resources.contains(&parent) {
+            let generic = if clause.child_is_generic {
+                clause.child_name.clone()
+            } else {
+                defs.name(parent).to_string()
+            };
+            reject(
+                clause,
+                format!("`{generic}` is generic; `extends` does not support generic resources yet"),
+            );
+            continue;
+        }
+        // The head is what names the parent, and `head_site` reaches it
+        // through a reference and through a generic application — so the
+        // shape around it has to be rejected here or it is silently dropped.
+        if !matches!(clause.parent, Type::Named(_)) {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends a shape that is not a plain resource name",
+                    clause.child_name
+                ),
+            );
+            continue;
+        }
+        if defs.kind(parent) != crate::defs::DefKind::Resource {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends `{}`, which is not a resource",
+                    clause.child_name,
+                    defs.name(parent)
+                ),
+            );
+            continue;
+        }
+        let tt = type_table.borrow();
+        let child_is_extern_ref = tt.is_extern_ref_resource(clause.child);
+        let parent_is_extern_ref = tt.is_extern_ref_resource(parent);
+        drop(tt);
+        if !child_is_extern_ref || !parent_is_extern_ref {
+            let lacking = if child_is_extern_ref {
+                defs.name(parent).to_string()
+            } else {
+                clause.child_name.clone()
+            };
+            reject(
+                clause,
+                format!(
+                    "`extends` requires `#[cm(..., type = \"extern-ref\")]` on both resources; `{lacking}` does not declare it"
+                ),
+            );
+            continue;
+        }
+        // Absence means the collect pass never walked the declaration, which
+        // it skips for a module the stdlib snapshot covers: no method names,
+        // no arity, so the checks that need them would pass by default.
+        // Nothing in the stdlib declares a backing yet; when Tide's `web:*`
+        // modules do, this says so instead of accepting what it cannot check.
+        if !method_names.contains_key(&parent) {
+            reject(
+                clause,
+                format!(
+                    "`{}` extends `{}`, which a prebuilt module declares; `extends` across that boundary is not supported yet",
+                    clause.child_name,
+                    defs.name(parent)
+                ),
+            );
+            continue;
+        }
+        links.insert(clause.child, parent);
+    }
+
+    let mut committed: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
+    for clause in pending {
+        let Some(&parent) = links.get(&clause.child) else {
+            continue;
+        };
+        if reaches(&links, parent, clause.child) {
+            reject(
+                clause,
+                format!("`{}` extends itself through a cycle", clause.child_name),
+            );
+            continue;
+        }
+        type_table
+            .borrow_mut()
+            .set_resource_parent(clause.child, parent);
+        committed.insert(clause.child, parent);
+    }
+
+    // Against the committed relation, not `links`: a link a cycle rejected is
+    // still in there, and an ancestor reached only through one is inherited
+    // from nowhere.
+    for clause in pending {
+        if let Some(&parent) = committed.get(&clause.child) {
+            reject_overrides(
+                clause,
+                parent,
+                method_names,
+                resolutions,
+                &committed,
+                logger,
+            );
+        }
+    }
+}
+
+/// A child may not redeclare a method an ancestor declares: one name must
+/// reach one declaration.
+fn reject_overrides<H: CompilerHost>(
+    clause: &PendingExtends,
+    parent: crate::defs::DefId,
+    method_names: &ResourceMethodNames,
+    resolutions: &crate::resolve::Resolutions,
+    committed: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    logger: &Logger<'_, H>,
+) {
+    let own = method_names
+        .get(&clause.child)
+        .map_or(&[][..], Vec::as_slice);
+    let mut ancestor = Some(parent);
+    while let Some(current) = ancestor {
+        let inherited = method_names.get(&current).map_or(&[][..], Vec::as_slice);
+        for (name, span) in own {
+            if inherited.iter().any(|(other, _)| other == name) {
+                let _ = logger.error_in(
+                    &clause.module,
+                    TypeError::ResourceExtends {
+                        message: format!(
+                            "`{}` redeclares `{name}`, which it inherits from `{}`",
+                            clause.child_name,
+                            resolutions.defs().name(current)
+                        ),
+                        span: *span,
+                    },
+                );
+            }
+        }
+        ancestor = committed.get(&current).copied();
+    }
+}
+
+/// Whether `target` is `from` or lies on its parent chain.
+fn reaches(
+    links: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    from: crate::defs::DefId,
+    target: crate::defs::DefId,
+) -> bool {
+    let mut seen: Vec<crate::defs::DefId> = Vec::new();
+    let mut current = from;
+    loop {
+        if current == target {
+            return true;
+        }
+        if seen.contains(&current) {
+            return false;
+        }
+        seen.push(current);
+        match links.get(&current) {
+            Some(&next) => current = next,
+            None => return false,
+        }
+    }
+}
+
 /// Analysis state produced by [`Elaborator::annotate_modules`] and consumed by
 /// [`Elaborator::build_tir_from_state`]. The [`TypeSystem`] internals are
 /// reference-counted so per-module elaborators clone them cheaply, and the
@@ -152,6 +400,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut all_resource_types: IndexMap<crate::defs::DefId, ResourceInfo> = snapshot_state
             .map(|s| (*s.tysys.all_resource_types).clone())
             .unwrap_or_default();
+
+        let mut pending_extends: Vec<PendingExtends> = Vec::new();
+        let mut resource_method_names: ResourceMethodNames = IndexMap::default();
+        let mut generic_resources: IndexSet<crate::defs::DefId> = IndexSet::default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -288,6 +540,51 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
+                            if let Some(attr) = resource_decl.attrs.iter().find(|a| {
+                                a.cm_resource_backing()
+                                    == Some(crate::ast::CmResourceBacking::ExternRef)
+                            }) {
+                                if extern_ref_backing_allowed(attr) {
+                                    type_table.borrow_mut().mark_extern_ref_resource(def);
+                                } else {
+                                    let _ = logger.error_in(
+                                        module_source,
+                                        TypeError::ResourceBacking {
+                                            message: format!(
+                                                "`{}` declares `type = \"extern-ref\"` outside `web:*`; that lowering is not built yet",
+                                                resource_decl.name
+                                            ),
+                                            span: resource_decl.span,
+                                        },
+                                    );
+                                }
+                            }
+                            let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
+                            if is_generic {
+                                generic_resources.insert(def);
+                            }
+                            // A static is not inherited, so it shadows nothing.
+                            resource_method_names.insert(
+                                def,
+                                resource_decl
+                                    .methods
+                                    .iter()
+                                    .filter(|m| {
+                                        m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
+                                    })
+                                    .map(|m| (m.name.clone(), m.span))
+                                    .collect(),
+                            );
+                            if let Some(parent) = &resource_decl.parent {
+                                pending_extends.push(PendingExtends {
+                                    child: def,
+                                    child_name: resource_decl.name.clone(),
+                                    child_is_generic: is_generic,
+                                    parent: parent.clone(),
+                                    module: module_source.clone(),
+                                    span: resource_decl.span,
+                                });
+                            }
                         }
                         super::item::register_resource_compiler_item(
                             &type_table,
@@ -895,6 +1192,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
         }
+
+        resolve_resource_extends(
+            &pending_extends,
+            &resource_method_names,
+            &generic_resources,
+            &resolutions,
+            &type_table,
+            logger,
+        );
 
         // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
         let all_newtypes = Rc::new(all_newtypes);

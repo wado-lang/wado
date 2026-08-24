@@ -108,6 +108,31 @@ pub use token::Span;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
+/// Report one diagnostic per distinct violation, and bail if there was any.
+/// A call lowered more than once reaches here once per lowering.
+fn report_violations<H: CompilerHost>(
+    logger: &Logger<'_, H>,
+    entry_filename: &str,
+    code: compiler_host::Code,
+    violations: impl IntoIterator<Item = (crate::token::Span, String)>,
+) -> Result<(), Bail> {
+    let mut seen = crate::hashmap::IndexSet::default();
+    for (span, message) in violations {
+        if seen.insert((span, message.clone())) {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code,
+                message,
+                span: Some(compiler_host::DiagnosticSpan::from_span(
+                    &span,
+                    Some(entry_filename),
+                )),
+            });
+        }
+    }
+    if seen.is_empty() { Ok(()) } else { Err(Bail) }
+}
+
 fn trait_bound_violation_message(
     violation: &wir::TraitBoundViolation,
     display_trait_name: &str,
@@ -1572,9 +1597,8 @@ fn compile_after_load<H: CompilerHost>(
         wir_build::build_wir_package(&nir)
     };
 
-    // Unresolved `Type^Trait::method` calls are unsatisfied trait bounds that
-    // escaped the front end; report cleanly and bail instead of trapping. Empty
-    // for well-formed programs.
+    // Programs the front end admits and WIR build cannot lower. Empty for
+    // well-formed programs.
     if !wir_package.trait_bound_violations.is_empty() {
         let display_trait_name = nir
             .type_table
@@ -1582,23 +1606,32 @@ fn compile_after_load<H: CompilerHost>(
             .compiler_items()
             .trait_name(compiler_item::CompilerItem::Display)
             .to_string();
-        // Dedup by (call, site) so distinct sites each report their own location.
-        let mut seen = crate::hashmap::IndexSet::default();
-        for v in &wir_package.trait_bound_violations {
-            if seen.insert((v.type_display.clone(), v.trait_display.clone(), v.span)) {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::TypeMismatch,
-                    message: trait_bound_violation_message(v, &display_trait_name),
-                    span: Some(compiler_host::DiagnosticSpan::from_span(
-                        &v.span,
-                        Some(&entry_filename),
-                    )),
-                });
-            }
-        }
-        return Err(Bail);
+        report_violations(
+            logger,
+            &entry_filename,
+            compiler_host::Code::TypeMismatch,
+            wir_package.trait_bound_violations.iter().map(|v| {
+                (
+                    v.span,
+                    trait_bound_violation_message(v, &display_trait_name),
+                )
+            }),
+        )?;
     }
+    report_violations(
+        logger,
+        &entry_filename,
+        compiler_host::Code::UnsupportedFeature,
+        wir_package.cm_import_violations.iter().map(|v| {
+            (
+                v.span,
+                format!(
+                    "`{}` binds `{}`, which no bundled interface declares; a `#[cm(...)]` member is only callable from the stdlib and from component dependencies",
+                    v.call_display, v.cm_name
+                ),
+            )
+        }),
+    )?;
 
     // === Phase 13: Optimize WIR ===
     {

@@ -160,6 +160,29 @@ fn assert_format_preserves_ast(source: &str) {
 }
 
 #[test]
+fn test_format_keeps_resource_extends() {
+    let source = concat!(
+        "#[cm(\"web:dom/node\", type=\"extern-ref\")]\n",
+        "pub resource Node extends EventTarget {\n",
+        "    #[cm(\"web:dom/node#[method]node.text-content\")]\n",
+        "    #[cm_params(\"self\")]\n",
+        "    fn text_content(&self) -> Option<String>;\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("resource Node extends EventTarget"),
+        "the parent must survive formatting, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("type = \"extern-ref\""),
+        "the backing must survive formatting, got:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
+#[test]
 fn test_format_idempotent_simple() {
     let source = r"
 fn run() {
