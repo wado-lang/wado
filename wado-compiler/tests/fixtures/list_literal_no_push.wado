@@ -1,0 +1,31 @@
+// A list literal pulls in no `List<T>::push` / `::grow` instantiation: `[w]`
+// denotes an `Array<Widget>` that `List<Widget>::from` takes ownership of
+// (WEP 2026-08-24), so `array.new_fixed` is the whole construction.
+//
+// The patterns below are the qualified suffix on purpose. A monomorphized name
+// reads `List<list_literal_no_push.wado/Widget>::push`, so a bare
+// `List<Widget>::push` matches nothing and would hold unconditionally.
+
+use { println, Stdout } from "core:cli";
+
+pub struct Widget {
+    pub id: i32,
+}
+
+export fn run() with Stdout {
+    let w = Widget { id: 7 };
+    let widgets: List<Widget> = [w];
+    println(`${widgets[0].id}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wir_not_expect:O2": [
+        "Widget>::push",
+        "Widget>::grow"
+    ],
+    "wir_expect:O2": [
+        "array.new_fixed"
+    ]
+}

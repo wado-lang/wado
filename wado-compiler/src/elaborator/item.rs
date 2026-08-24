@@ -1281,6 +1281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect(),
                     declaring_slot_count,
+                    declaring_impl: Some(impl_block.id),
                     own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
                         .attrs
@@ -1643,6 +1644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             })
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
+                        declaring_impl: None,
                         own_params: super::sig::own_params_of(&method.type_params),
                         cm_name: method
                             .attrs
@@ -1847,6 +1849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_kind,
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
+                    declaring_impl: None,
                     // An `interface` / `resource` operation declares no type
                     // parameters of its own.
                     own_params: Vec::new(),

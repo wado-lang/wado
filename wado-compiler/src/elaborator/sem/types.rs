@@ -72,10 +72,10 @@ pub(crate) enum CoercionKind {
     BytesNewtype,
     /// A closure literal retagged as a newtype over its fn-type.
     ClosureToFnNewtype,
-    /// A tuple literal lowered through `SequenceLiteralBuilder` (List
-    /// and user-defined sequence types).
+    /// A sequence literal built through `From<Array<E>>` (`List` and
+    /// user-defined sequence types).
     TupleToSequence,
-    /// An anonymous struct literal lowered through `KeyValueLiteralBuilder`.
+    /// A key-value literal built through `From<Array<[K, V]>>`.
     StructToMap,
 }
 
@@ -195,19 +195,20 @@ pub(crate) struct TypeAnnotations {
     /// drained from the looked-up signature, so reify rebuilds the `Call` without
     /// `locate_static_method_impl` or the trait-impl index.
     pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
-    /// `SequenceLiteralBuilder` coercion data for a tuple literal coerced into a
-    /// `List<T>` or user-defined sequence, keyed by the `Expr::TupleLiteral`'s
-    /// [`AstId`]. The desugar block `try_coerce_tuple_to_sequence` produces
-    /// depends on impl-lookup decisions reify cannot redo from the AST alone.
+    /// The `From<Array<E>>` a `[e0, e1, …]` literal coerces through, keyed by
+    /// the `Expr::TupleLiteral`'s [`AstId`]. The impl-lookup decisions behind
+    /// it are not reproducible from the AST alone, so reify reads them here.
     pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
-    /// `KeyValueLiteralBuilder` coercion data for an anonymous
-    /// struct literal coerced into a map-style type. Keyed by the
-    /// `Expr::StructLiteral`'s [`AstId`]. Counterpart to
-    /// [`Self::sequence_coercions`] — the elaborator's
-    /// `try_coerce_struct_to_map_inner` records the resolved impl
-    /// info so reify rebuilds the `__kv_lit:` desugar block
-    /// deterministically.
+    /// The `From<Array<[K, V]>>` a `{ k: v, … }` literal coerces through, keyed
+    /// by the `Expr::StructLiteral`'s [`AstId`]. Counterpart to
+    /// [`Self::sequence_coercions`].
     pub(crate) key_value_coercions: IndexMap<AstId, KeyValueCoercionFacts>,
+    /// The `From` a literal element converts through to reach its slot's type,
+    /// keyed by the element expression's [`AstId`] — `1` becoming a
+    /// `Value::Int` inside `[1, "x"] as List<Value>`. Implicit conversion is
+    /// confined to a literal position (WEP 2026-08-24), so only elements the
+    /// elaborator saw as literals leave an entry.
+    pub(crate) literal_conversions: IndexMap<AstId, LiteralFromCall>,
     /// `From<T>::from` call facts recorded at every site that synthesises
     /// a conversion call: the `?` operator's err-arm conversion, and the
     /// bodyless-impl static-call inline path. Keyed by the caller's
@@ -325,6 +326,7 @@ pub(crate) struct ElementOverlay {
     pub(crate) static_method_dispatch: IndexMap<AstId, StaticMethodDispatch>,
     pub(crate) sequence_coercions: IndexMap<AstId, SequenceCoercionFacts>,
     pub(crate) key_value_coercions: IndexMap<AstId, KeyValueCoercionFacts>,
+    pub(crate) literal_conversions: IndexMap<AstId, LiteralFromCall>,
     pub(crate) index_assign_dispatch: IndexMap<AstId, OperatorDispatch>,
 }
 
@@ -349,6 +351,7 @@ pub(crate) struct ElementOverlayLens {
     static_method_dispatch: usize,
     sequence_coercions: usize,
     key_value_coercions: usize,
+    literal_conversions: usize,
     index_assign_dispatch: usize,
 }
 
@@ -372,6 +375,7 @@ impl TypeAnnotations {
             static_method_dispatch: self.static_method_dispatch.len(),
             sequence_coercions: self.sequence_coercions.len(),
             key_value_coercions: self.key_value_coercions.len(),
+            literal_conversions: self.literal_conversions.len(),
             index_assign_dispatch: self.index_assign_dispatch.len(),
         }
     }
@@ -406,6 +410,7 @@ impl TypeAnnotations {
                 .split_off(base.static_method_dispatch),
             sequence_coercions: self.sequence_coercions.split_off(base.sequence_coercions),
             key_value_coercions: self.key_value_coercions.split_off(base.key_value_coercions),
+            literal_conversions: self.literal_conversions.split_off(base.literal_conversions),
             index_assign_dispatch: self
                 .index_assign_dispatch
                 .split_off(base.index_assign_dispatch),
@@ -449,130 +454,86 @@ pub(crate) struct FromCallFacts {
     pub(crate) from_trait_name: crate::name::FqTraitName,
 }
 
-/// Resolved `SequenceLiteralBuilder` impl data for a tuple-to-sequence
-/// coercion site. See [`TypeAnnotations::sequence_coercions`].
+/// The trait method a literal lowers to (WEP 2026-08-24): an
+/// `impl From<Array<…>>`'s `from`, or an `impl LiteralSpread`'s `spread_literal`.
+#[derive(Clone)]
+pub(crate) struct LiteralCallee {
+    /// Module that hosts the impl block.
+    pub(crate) impl_module_source: crate::module_source::ModuleSource,
+    /// The trait as the impl block declares it — the spelling the method
+    /// template is registered under, and what the mangled name discriminates
+    /// on. A generic impl writes its own parameter here (`From<Array<T>>`), so
+    /// it must not be rebuilt from the call's types.
+    pub(crate) trait_name: crate::name::FqTraitName,
+    /// The target's base head name, fq (e.g. `core:prelude/list.wado/List`).
+    pub(crate) target_base_name: crate::name::FqTypeName,
+    /// Type-arg `TypeId`s on the target (e.g. `[i32]` for `List<i32>`).
+    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
+    /// Type-arg names parallel to `type_arg_ids`, kept structured.
+    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
+    pub(crate) method: &'static str,
+    /// `Target^Trait::method`'s mangled name.
+    pub(crate) mangled_name: String,
+}
+
+impl LiteralCallee {
+    /// Recompute the names from the recorded `TypeId`s. They are a function of
+    /// the types alone, so the module-end sweep calls this once a solved
+    /// inference variable changes one.
+    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
+        self.type_arg_names = self
+            .type_arg_ids
+            .iter()
+            .map(|&t| tt.fq_type_name(t))
+            .collect();
+        let target = self
+            .target_base_name
+            .clone()
+            .with_args(self.type_arg_names.clone());
+        self.mangled_name =
+            crate::name::MethodName::format_local(&target, Some(&self.trait_name), self.method);
+    }
+}
+
+/// The `Output::from(value)` a literal, or one of its elements, lowers to.
+#[derive(Clone)]
+pub(crate) struct LiteralFromCall {
+    /// What `from` receives: the `Array<…>` a literal materializes, or a
+    /// leaf's own type where an element converts into its slot.
+    pub(crate) from_type: crate::tir::TypeId,
+    /// What `from` returns. Equal to [`Self::from_type`] when the target is an
+    /// `Array<E>` itself, which needs no conversion at all.
+    pub(crate) output_type: crate::tir::TypeId,
+    pub(crate) callee: LiteralCallee,
+}
+
+/// The `From<Array<E>>` a `[e0, e1, …]` literal coerces through (WEP
+/// 2026-08-24). See [`TypeAnnotations::sequence_coercions`].
 #[derive(Clone)]
 pub(crate) struct SequenceCoercionFacts {
-    /// The builder struct's [`crate::tir::TypeId`] (e.g.
-    /// `List<i32>`'s `SequenceLiteralBuilder` is `List<i32>` itself).
-    pub(crate) builder_type: crate::tir::TypeId,
-    /// The element type each `push_literal` call takes.
+    /// The type each element takes — `E`.
     pub(crate) element_type: crate::tir::TypeId,
-    /// `self` kind on the resolved `push_literal` method.
-    pub(crate) push_self_kind: crate::ast::SelfKind,
-    /// The builder trait, named by the module that declares it (e.g.
-    /// `core:prelude/list.wado/SequenceLiteralBuilder<i32>`).
-    pub(crate) trait_name: crate::name::FqTraitName,
-    /// The `Builder::build()` call's return type.
-    pub(crate) output_type: crate::tir::TypeId,
-    /// Module that hosts the impl block.
-    pub(crate) impl_module_source: crate::module_source::ModuleSource,
-    /// Builder's base struct name, fq (e.g. `core:prelude/list.wado/List`).
-    pub(crate) builder_base_name: crate::name::FqTypeName,
-    /// Type-arg `TypeId`s on the builder (e.g. `[i32]` for `List<i32>`).
-    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
-    /// Type-arg names parallel to `type_arg_ids`, kept structured.
-    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
-    /// When `Some`, the literal is being coerced into a newtype over
-    /// the builder's output — reify wraps the final `__b.build()` call
-    /// in a `Cast` to this newtype `TypeId`.
+    /// When `Some`, the literal targets a newtype over the call's output type
+    /// and reify casts the `from` result to it.
     pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
-    /// `Builder::new_literal` call's mangled name (the one
-    /// `MethodName::format_local(mangled_builder_name, trait_name,
-    /// "new_literal")` produces). Recorded so reify reads it instead
-    /// of running its own `format_local`.
-    pub(crate) new_mangled_name: String,
-    /// `Builder::push_literal` call's mangled name.
-    pub(crate) push_mangled_name: String,
-    /// `Builder::build` call's mangled name.
-    pub(crate) build_mangled_name: String,
+    pub(crate) call: LiteralFromCall,
 }
 
-impl SequenceCoercionFacts {
-    /// Recompute the type-argument names and the builder's per-method mangled
-    /// names from `type_arg_ids`. The names are a function of the arguments,
-    /// so anything that changes an argument — the module-end sweep, once an
-    /// inference variable is solved — calls this instead of rebuilding them
-    /// itself and risking one it forgot.
-    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
-        self.type_arg_names = self
-            .type_arg_ids
-            .iter()
-            .map(|&t| tt.fq_type_name(t))
-            .collect();
-        let builder = self
-            .builder_base_name
-            .clone()
-            .with_args(self.type_arg_names.clone());
-        let name = |method: &str| {
-            crate::name::MethodName::format_local(&builder, Some(&self.trait_name), method)
-        };
-        self.new_mangled_name = name("new_literal");
-        self.push_mangled_name = name("push_literal");
-        self.build_mangled_name = name("build");
-    }
-}
-
-/// Resolved `KeyValueLiteralBuilder` impl data for an anonymous
-/// struct-literal → map coercion site. See
-/// [`TypeAnnotations::key_value_coercions`].
+/// The `From<Array<[K, V]>>` a `{ k: v, … }` literal coerces through (WEP
+/// 2026-08-24). See [`TypeAnnotations::key_value_coercions`].
 #[derive(Clone)]
 pub(crate) struct KeyValueCoercionFacts {
-    /// The builder struct's [`crate::tir::TypeId`].
-    pub(crate) builder_type: crate::tir::TypeId,
-    /// The value-side [`crate::tir::TypeId`] each `insert_literal`
-    /// call takes.
+    /// `V` — the type each value takes.
     pub(crate) value_type: crate::tir::TypeId,
-    /// `self` kind on the resolved `insert_literal` method.
-    pub(crate) insert_self_kind: crate::ast::SelfKind,
-    /// The builder trait, named by the module that declares it.
-    pub(crate) trait_name: crate::name::FqTraitName,
-    /// The block's resulting type (= `target_type`).
-    pub(crate) target_type: crate::tir::TypeId,
-    /// Module that hosts the impl block.
-    pub(crate) impl_module_source: crate::module_source::ModuleSource,
-    /// Builder's base struct name, fq.
-    pub(crate) builder_base_name: crate::name::FqTypeName,
-    /// Type-arg `TypeId`s on the builder.
-    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
-    /// Type-arg names parallel to `type_arg_ids`, kept structured.
-    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
-    /// `true` when the trait is `KeyValueLiteralBuilder` (new API
-    /// taking a capacity arg + emitting `__b.build()`); `false` for
-    /// the legacy `KeyValueLiteral` shape that breaks with `__b`.
-    pub(crate) use_new_api: bool,
-    /// `Builder::new_literal` call's mangled name. Recorded so reify reads it
-    /// instead of running its own `MethodName::format_local`.
-    pub(crate) new_mangled_name: String,
-    /// `Builder::insert_literal` call's mangled name.
-    pub(crate) insert_mangled_name: String,
-    /// `Builder::insert_all` call's mangled name, for a `{ ..base, … }` spread.
-    pub(crate) insert_all_mangled_name: String,
-    /// `Builder::build` call's mangled name. `None` under the legacy API
-    /// where the block breaks with `__b` directly.
-    pub(crate) build_mangled_name: Option<String>,
-}
-
-impl KeyValueCoercionFacts {
-    /// [`SequenceCoercionFacts::remangle`] for the key-value builder.
-    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
-        self.type_arg_names = self
-            .type_arg_ids
-            .iter()
-            .map(|&t| tt.fq_type_name(t))
-            .collect();
-        let builder = self
-            .builder_base_name
-            .clone()
-            .with_args(self.type_arg_names.clone());
-        let name = |method: &str| {
-            crate::name::MethodName::format_local(&builder, Some(&self.trait_name), method)
-        };
-        self.new_mangled_name = name("new_literal");
-        self.insert_mangled_name = name("insert_literal");
-        self.insert_all_mangled_name = name("insert_all");
-        self.build_mangled_name = self.build_mangled_name.as_ref().map(|_| name("build"));
-    }
+    /// `[K, V]` — one entry of the array the literal materializes.
+    pub(crate) pair_type: crate::tir::TypeId,
+    /// When `Some`, the literal targets a newtype over the call's output type
+    /// and reify casts the `from` result to it.
+    pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
+    pub(crate) call: LiteralFromCall,
+    /// The merge a `..base` member lowers to; `None` when the literal has no
+    /// spread.
+    pub(crate) spread: Option<LiteralCallee>,
 }
 
 /// Static-method call dispatch decision. See

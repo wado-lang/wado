@@ -271,8 +271,8 @@ pub struct NirGlobal {
     pub module_source: ModuleSource,
     pub span: Span,
     /// Per-local metadata for the initializer expression. Populated when
-    /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
-    /// coercion). Indexed by local index, like `NirFunction::locals`.
+    /// the initializer is non-trivial (e.g. a literal coercion). Indexed by
+    /// local index, like `NirFunction::locals`.
     pub locals: Vec<NirLocal>,
     /// True for a global `const_object_globalization` created from an
     /// `InlineRef` candidate (a hoisted `&`-literal call argument, rebuilt

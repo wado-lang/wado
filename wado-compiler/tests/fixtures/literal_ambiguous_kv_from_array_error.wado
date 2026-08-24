@@ -1,0 +1,27 @@
+// The `{ … }` form of an ambiguous literal conversion (WEP 2026-08-24): two
+// pair-shaped `From<Array<[K, V]>>` impls, so the literal alone does not say
+// which was meant. The ambiguity is the whole report — the "builds from no pair
+// array" fallback asks the target directly rather than reading the declined
+// coercion, which would contradict it.
+struct TwoMaps<V> {
+    n: i32,
+}
+
+impl From<Array<[String, i32]>> for TwoMaps<V> {
+    fn from(entries: Array<[String, i32]>) -> TwoMaps<V> {
+        return TwoMaps { n: builtin::array_len(&entries) };
+    }
+}
+
+impl From<Array<[String, bool]>> for TwoMaps<V> {
+    fn from(entries: Array<[String, bool]>) -> TwoMaps<V> {
+        return TwoMaps { n: builtin::array_len(&entries) };
+    }
+}
+
+export fn run() {
+    let m: TwoMaps<i32> = { a: 1 };
+}
+
+__DATA__
+{"compile_error": "literal is ambiguous"}

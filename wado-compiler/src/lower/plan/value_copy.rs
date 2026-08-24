@@ -281,12 +281,6 @@ fn needs_copy_in_env(
             if name == list_name {
                 return true;
             }
-            if type_table
-                .find_struct_type(crate::tir::StructDef::Decl(*def))
-                .is_some()
-            {
-                return true;
-            }
             if let Some(cases) = type_table.variant_template_cases(*def) {
                 let frame = EnvFrame {
                     args: type_args,
@@ -296,7 +290,11 @@ fn needs_copy_in_env(
                     needs_copy_in_env(*payload, Some(&frame), type_table, depth + 1)
                 });
             }
-            false
+            // Every other nominal instantiation is a struct, copied field by
+            // field. Answering from the declaration's fields would need a
+            // registry the type table does not keep, and `true` is the safe
+            // direction: a spurious copy costs, a missed one aliases.
+            true
         }
         // A variant is reference-shaped at the WIR level, so copying it
         // shares the payload storage: it needs a deep copy exactly when

@@ -662,6 +662,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A literal's target type admits more than one `From<Array<…>>`, so the
+    /// literal alone does not say which conversion was meant.
+    AmbiguousLiteralConversion {
+        type_name: String,
+        count: usize,
+        span: Span,
+    },
+
     /// Pattern expects different type kind (tuple, struct, variant, enum)
     PatternTypeMismatch {
         expected: String,
@@ -1496,6 +1504,18 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("type '{type_name}' does not implement {trait_name}"),
+                *span,
+            ),
+            TypeError::AmbiguousLiteralConversion {
+                type_name,
+                count,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "literal is ambiguous: '{type_name}' has {count} `From<Array<…>>` impls that \
+                     could build it — write `{type_name}::from(…)` to choose one"
+                ),
                 *span,
             ),
             TypeError::PatternTypeMismatch {
@@ -2577,6 +2597,8 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) trait_name: crate::name::FqTraitName,
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
+    /// Module that wrote the impl block — where the method body is registered.
+    pub(super) impl_module_source: ModuleSource,
 }
 
 /// Complete, Self-substituted description of a trait method lookup, produced by
@@ -2619,32 +2641,19 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) is_type_param_receiver: bool,
 }
 
-/// Info about a `KeyValueLiteralBuilder` trait implementation
-pub(super) struct KeyValueLiteralTraitInfo {
-    /// The Value associated type (element type for literal values)
-    pub(super) value_type: TypeId,
-    /// The Builder type (the type that accumulates key-value pairs)
-    pub(super) builder_type: TypeId,
-    /// Self kind for the `insert_literal` method (&mut self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-}
-
-/// Info about a `SequenceLiteralBuilder` trait implementation
-pub(super) struct SequenceLiteralTraitInfo {
-    /// The Element associated type (element type for literal values)
+/// A `From<Array<E>>` impl a literal can coerce through.
+#[derive(Clone)]
+pub(super) struct FromArrayInfo {
+    /// `E` — the type every element (or key-value pair) of the literal takes.
     pub(super) element_type: TypeId,
-    /// The Builder type (the type that accumulates elements)
-    pub(super) builder_type: TypeId,
-    /// The Output type (the final type after `build()`)
-    pub(super) output_type: TypeId,
-    /// Self kind for the `push_literal` method (&mut self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-    /// The module where the `SequenceLiteralBuilder` impl is defined.
+    /// `Array<E>` — the value the literal materializes and `from` receives.
+    pub(super) array_type: TypeId,
+    /// Module that wrote the impl block.
     pub(super) impl_module_source: ModuleSource,
+    /// `From<Array<…>>` as the impl block declares it — the spelling the
+    /// method template is registered under, so a generic impl's argument is
+    /// still written in its own parameters (`From<Array<T>>`).
+    pub(super) trait_name: crate::name::FqTraitName,
 }
 
 #[cfg(test)]

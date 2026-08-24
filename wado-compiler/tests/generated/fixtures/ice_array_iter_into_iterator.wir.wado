@@ -141,26 +141,26 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     let collected: ref "core:prelude//List<u8>";
     let handle: i32;
     let packed: i64;
-    let rx_31: i32;
-    let tx_32: i32;
+    let rx_18: i32;
+    let tx_19: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:ice_array_iter_into_iterator.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:ice_array_iter_into_iterator.wado::__modules_initialized = 1;
     };
-    arr = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111), used: 5 };
+    arr = struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("Hello"), used: 5 };
     bytes = struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: arr.repr, index: 0, end: 5 };
     collected = "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(bytes);
-    let __match_3_mv_0: i32;
-    let __match_3_mv_1: ref null "core:prelude/string.wado//String";
-    multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: collected.repr, start: 0, end: collected.used });
-    if __match_3_mv_0 == 0 {
-        s = ref.as_non_null(__match_3_mv_1);
-        rx_31 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-        tx_32 = builtin::i32_wrap_i64(packed >> 32_i64);
-        handle = "ice_array_iter_into_iterator.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
-        "core:cli/write_to_stream"(tx_32, s, 1);
+    let __match_2_mv_0: i32;
+    let __match_2_mv_1: ref null "core:prelude/string.wado//String";
+    multivalue_bind [__match_2_mv_0, __match_2_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: collected.repr, start: 0, end: collected.used });
+    if __match_2_mv_0 == 0 {
+        s = ref.as_non_null(__match_2_mv_1);
+        rx_18 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+        tx_19 = builtin::i32_wrap_i64(packed >> 32_i64);
+        handle = "ice_array_iter_into_iterator.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
+        "core:cli/write_to_stream"(tx_19, s, 1);
         "wasi/future-drop-readable:transmission-cli"(handle);
     } else {
     }
@@ -750,14 +750,16 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter) {
     let result: ref "core:prelude//List<u8>";
-    result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    let elements: ref Array<u8>;
+    elements = array.new_fixed<u8>();
+    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     b77: block {
         l78: loop {
-            let __match_4_mv_0: i32;
-            let __match_4_mv_1: u8;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
-            if __match_4_mv_0 == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_4_mv_1);
+            let __match_3_mv_0: i32;
+            let __match_3_mv_1: u8;
+            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
+            if __match_3_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_3_mv_1);
             } else {
                 break b77;
             }

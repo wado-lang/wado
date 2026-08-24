@@ -6,7 +6,6 @@
 
 mod alias;
 mod arena_query;
-mod array_literal;
 mod clone_forward;
 mod condition_implication;
 mod const_branch_prune;
@@ -565,10 +564,8 @@ fn run_optimization_passes(
                 }
             }
         }
-        // Peephole engine, post-inline run. `array_literal` fires only here: it
-        // needs inline to have expanded the builder methods into the raw
-        // `array_new(N) + N × push` window it matches. `elide_local` runs again
-        // over inline's freshly dead bindings. No `MatchToSwitchRule` — the
+        // Peephole engine, post-inline run. `elide_local` runs again over
+        // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
         gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`

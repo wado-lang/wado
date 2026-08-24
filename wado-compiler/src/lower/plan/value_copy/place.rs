@@ -265,6 +265,7 @@ impl<'a> Resolver<'a> {
             | TirExprKind::BytesLiteral(_)
             | TirExprKind::StructLiteral { .. }
             | TirExprKind::TupleLiteral { .. }
+            | TirExprKind::ArrayLiteral { .. }
             | TirExprKind::VariantConstruct { .. }
             | TirExprKind::EnumConstruct { .. }
             | TirExprKind::Binary { .. } => Names::Value,

@@ -103,7 +103,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:cast_newtype_of_generic.wado::__modules_initialized: bool = 0;
-global mut global:cast_newtype_of_generic.wado::__const_obj_0: ref null "core:prelude/slice.wado//Slice<u8>" = ref.null none;
+global global:cast_newtype_of_generic.wado::__const_obj_0: ref null "core:prelude/slice.wado//Slice<u8>" = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: array.new_fixed<u8>(104, 105), start: 0, end: 2 };
 global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "cast_newtype_of_generic.wado/run"() with Stdout {
@@ -122,15 +122,12 @@ fn "cast_newtype_of_generic.wado/run"() with Stdout {
     let packed: i64;
     let rx_47: i32;
     let tx_48: i32;
-    let repr_52: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:cast_newtype_of_generic.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cast_newtype_of_generic.wado::__modules_initialized = 1;
     };
-    repr_52 = array.new_fixed<u8>(104, 105);
-    global:cast_newtype_of_generic.wado::__const_obj_0 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_52, start: 0, end: 2 };
     a = global:cast_newtype_of_generic.wado::__const_obj_0.end - global:cast_newtype_of_generic.wado::__const_obj_0.start;
     len = select i32(a > 0, a, 0);
     repr_11 = "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::to_array"(global:cast_newtype_of_generic.wado::__const_obj_0);

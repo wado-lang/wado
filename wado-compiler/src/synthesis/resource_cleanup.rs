@@ -692,7 +692,7 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
                 scan_transfers(&field.value, true, consumed, cx);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 scan_transfers(elem, true, consumed, cx);
             }

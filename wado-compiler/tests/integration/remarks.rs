@@ -38,7 +38,8 @@ fn remarks_for(source: &str) -> Vec<String> {
 #[test]
 fn surviving_list_copy_is_remarked() {
     // `b` is a deep value-copy of `a` that is then mutated, so the copy of the
-    // backing array cannot be elided and survives to the final IR.
+    // backing array cannot be elided and survives to the final IR. The list
+    // spine scalarizes away, leaving the array itself as what is copied.
     let remarks = remarks_for(
         r#"
 use { println, Stdout } from "core:cli";
@@ -58,7 +59,7 @@ export fn run() with Stdout {
         "expected exactly one remark, got {remarks:?}"
     );
     assert!(
-        remarks[0].contains("a copy of") && remarks[0].contains("List<i32>"),
+        remarks[0].contains("a copy of") && remarks[0].contains("Array<i32>"),
         "unexpected remark text: {remarks:?}"
     );
     // The remark points at the copying statement `let mut b = a;` (line 6).
@@ -95,10 +96,10 @@ export fn run() with Stdout {
 
 #[test]
 fn struct_field_copy_remark_points_at_copy_statement() {
-    // `Bag` is SROA-decomposed and its `items` copy is reconstructed inside a
-    // synthesized block whose inner statements carry placeholder spans. The
-    // remark must anchor to the enclosing real statement `let mut b = a;`
-    // (line 8), not to the placeholder span of the inner synthesized statement.
+    // `Bag` is SROA-decomposed and its `items` array copy is reconstructed
+    // inside a synthesized block whose inner statements carry placeholder
+    // spans. The remark must anchor to the enclosing real statement
+    // `let mut b = a;` (line 8), not to the inner statement's placeholder span.
     let remarks = remarks_for(
         r#"
 use { println, Stdout } from "core:cli";
@@ -120,7 +121,7 @@ export fn run() with Stdout {
         "expected exactly one remark, got {remarks:?}"
     );
     assert!(
-        remarks[0].contains("a copy of") && remarks[0].contains("List<i32>"),
+        remarks[0].contains("a copy of") && remarks[0].contains("Array<i32>"),
         "unexpected remark text: {remarks:?}"
     );
     assert!(

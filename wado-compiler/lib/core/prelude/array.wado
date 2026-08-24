@@ -89,36 +89,8 @@ impl Default for Array<T> {
     }
 }
 
-// `[e0, e1, …]` fills an `Array<T>` of exactly the literal's length. A fixed
-// array cannot be its own builder — it has no cursor to append at — so the
-// builder carries one and hands back the finished array.
-internal struct ArrayLiteralBuilder<T> {
-    repr: Array<T>,
-    used: i32,
-}
-
-impl SequenceLiteralBuilder for ArrayLiteralBuilder<T> {
-    type Element = T;
-    type Output = Array<T>;
-
-    fn new_literal(capacity: i32) -> ArrayLiteralBuilder<T> {
-        return ArrayLiteralBuilder { repr: builtin::array_new(capacity), used: 0 };
-    }
-
-    fn push_literal(&mut self, value: T) with stores[value] {
-        builtin::array_set(&mut self.repr, self.used, value);
-        self.used += 1;
-    }
-
-    fn build(&self) -> Array<T> {
-        return self.repr;
-    }
-}
-
-impl SequenceLiteral for Array<T> {
-    type Element = T;
-    type Builder = ArrayLiteralBuilder<T>;
-}
+// No `From<Array<T>>` here: a `[e0, e1, …]` literal already denotes an
+// `Array<T>` of exactly its length (WEP 2026-08-24).
 
 impl<T> Sequence for Array<T> {
     type Elem = T;

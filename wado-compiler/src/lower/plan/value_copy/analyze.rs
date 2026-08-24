@@ -162,7 +162,7 @@ impl TirRefVisitor for SeedWalker<'_> {
                     self.record_if_wrap(&field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 for element in elements {
                     self.record_if_wrap(element);
                 }
@@ -240,6 +240,7 @@ pub(crate) fn is_owned_value(
         | TirExprKind::BytesLiteral(_)
         | TirExprKind::StructLiteral { .. }
         | TirExprKind::TupleLiteral { .. }
+        | TirExprKind::ArrayLiteral { .. }
         | TirExprKind::TupleSpread { .. }
         | TirExprKind::TupleZip { .. }
         | TirExprKind::TupleLen { .. }

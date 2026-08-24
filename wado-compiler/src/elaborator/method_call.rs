@@ -1590,8 +1590,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
                     _ => vec![],
                 };
-                let instantiated = sig.instantiate_call(
+                // `TreeMap::<String, i32>` spells the *target's* arguments;
+                // `impl … for TreeMap<String, V>` numbers only `V`. The
+                // declaring block is what aligns the two.
+                let declaring = sig
+                    .declaring_impl
+                    .and_then(|id| self.tysys.signatures.impl_sig(id));
+                let instantiated = sig.instantiate_call_with(
                     &self.tysys.type_table,
+                    declaring,
                     &declaring_args,
                     &method_type_args,
                 );
@@ -2202,8 +2209,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let (decl_params, method_params) =
                 self.static_method_slot_params(&struct_name, &static_call.method);
+            let decl_args =
+                self.aligned_declaring_args(&struct_name, &static_call.method, &struct_type_args);
             let subst_ctx = SubstitutionContext::new()
-                .bind(&decl_params, &struct_type_args)
+                .bind(&decl_params, &decl_args)
                 .bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
                 return_type =
@@ -2449,6 +2458,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let ids = |ps: &[(String, TypeId)]| ps.iter().map(|(_, id)| *id).collect();
         (ids(sig.declaring_type_params()), ids(sig.own_type_params()))
+    }
+
+    /// A receiver's spelled type arguments (`TreeMap::<String, i32>`) reordered
+    /// into the declaring block's slot order. `impl … for TreeMap<String, V>`
+    /// numbers only `V`, so a positional zip binds it to `String`; the block's
+    /// own alignment says position 1 fills it.
+    fn aligned_declaring_args(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let Some(slots) = self
+            .static_method_sig(struct_name, method_name)
+            .and_then(|sig| sig.declaring_impl)
+            .and_then(|id| self.tysys.signatures.impl_sig(id))
+            .and_then(|impl_sig| impl_sig.spelled_slots(&self.tysys.type_table, receiver_args))
+        else {
+            return receiver_args.to_vec();
+        };
+        let (decl_params, _) = self.static_method_slot_params(struct_name, method_name);
+        let table = self.tysys.type_table.borrow();
+        decl_params
+            .iter()
+            .filter_map(|slot| match table.get(*slot) {
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    slots.get(index).copied()
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Report an argument list the blanket template cannot accept, returning
@@ -3329,6 +3369,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
+    /// Whether `rendered` names `param` as a whole segment — the spelling-level
+    /// stand-in for "this type mentions the impl's type parameter".
+    fn mentions_type_param(rendered: &str, param: &str) -> bool {
+        rendered
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .any(|seg| seg == param)
+    }
+
     pub(super) fn locate_static_method_impl(
         &self,
         struct_name: &str,
@@ -3362,6 +3410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         let matches_arg_type = |trait_type: &ast::Type,
+                                impl_ty: &ast::Type,
                                 impl_module: &ModuleSource,
                                 type_params: &[ast::GenericParam]|
          -> bool {
@@ -3409,6 +3458,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let mut rendered = String::new();
                 crate::unparse::unparse_type_into(arg, &mut rendered);
+                // A source type generic in the impl's own parameters
+                // (`impl From<Array<T>> for List<T>`) is spelled with those
+                // parameters, so no instantiation ever equals it verbatim. The
+                // head is what separates it from a sibling impl, and the
+                // mangled name carries the impl's spelling either way.
+                let declared = self.tysys.build_declared_type_params(impl_ty, type_params);
+                if declared
+                    .iter()
+                    .any(|name| Self::mentions_type_param(&rendered, name))
+                {
+                    return true;
+                }
                 let full: String = match rendered.split_once('<') {
                     Some((_, args)) => format!("{head}<{args}"),
                     None => head,
@@ -3427,8 +3488,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
+<<<<<<< HEAD
             if super::trait_env::get_type_name_static(&header.ty) != declared_name
                 || !matches_arg_type(trait_type, impl_module, &header.type_params)
+||||||| a2e111909
+            if super::trait_env::get_type_name_static(&header.ty) != struct_name
+                || !matches_arg_type(trait_type, impl_module, &header.type_params)
+=======
+            if super::trait_env::get_type_name_static(&header.ty) != struct_name
+                || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
+>>>>>>> origin/main
             {
                 return None;
             }

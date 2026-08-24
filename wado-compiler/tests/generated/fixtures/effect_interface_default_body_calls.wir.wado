@@ -471,7 +471,9 @@ fn "effect_interface_default_body_calls.wado/__cm_export__run"() {
 }
 
 fn "effect_interface_default_body_calls.wado/__initialize_module"() {
-    global:effect_interface_default_body_calls.wado::TRACE = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+    let elements: ref "Array<core:prelude/string.wado/String>";
+    elements = array.new_fixed<ref "core:prelude/string.wado//String">();
+    global:effect_interface_default_body_calls.wado::TRACE = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: 0 };
 }
 
 fn "core:cli/write_to_stream"(tx, message, add_newline) {

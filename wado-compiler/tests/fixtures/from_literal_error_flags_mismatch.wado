@@ -1,4 +1,4 @@
-// KeyValueLiteral error: flags in concrete impl position rejects wrong type.
+// Key-value literal error: flags in concrete impl position rejects wrong type.
 // Before the is_known_type_name fix, Perms was treated as a free type parameter,
 // so PermsMap<String, i32> incorrectly matched the impl.
 flags Perms { Read, Write }
@@ -8,21 +8,14 @@ struct PermsMap<P, V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for PermsMap<Perms, V> {
-    type Value = V;
-    type Output = PermsMap<Perms, V>;
-
-    fn new_literal(capacity: i32) -> PermsMap<Perms, V> {
-        return PermsMap { keys: [], values: [] };
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> PermsMap<Perms, V> {
-        return *self;
+impl From<Array<[String, V]>> for PermsMap<Perms, V> {
+    fn from(entries: Array<[String, V]>) -> PermsMap<Perms, V> {
+        let mut out: PermsMap<Perms, V> = PermsMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 
@@ -32,4 +25,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "does not implement KeyValueLiteral"}
+{"compile_error": "cannot be built from an object literal"}

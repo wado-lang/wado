@@ -1,0 +1,25 @@
+// Every key an object literal writes is a field name, so a target that builds
+// from another key type has nothing the literal can hand it (WEP 2026-08-24).
+// Rejecting it here is what keeps the mismatch out of WIR build.
+struct IntMap<V> {
+    keys: List<i32>,
+    values: List<V>,
+}
+
+impl From<Array<[i32, V]>> for IntMap<V> {
+    fn from(entries: Array<[i32, V]>) -> IntMap<V> {
+        let mut out: IntMap<V> = IntMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
+    }
+}
+
+export fn run() {
+    let m: IntMap<i32> = { a: 1 };
+}
+
+__DATA__
+{"compile_error": "an object literal writes `String` keys"}

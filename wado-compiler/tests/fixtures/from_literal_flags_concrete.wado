@@ -10,21 +10,14 @@ struct PermsMap<P, V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for PermsMap<Perms, V> {
-    type Value = V;
-    type Output = PermsMap<Perms, V>;
-
-    fn new_literal(capacity: i32) -> PermsMap<Perms, V> {
-        return PermsMap { keys: [], values: [] };
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> PermsMap<Perms, V> {
-        return *self;
+impl From<Array<[String, V]>> for PermsMap<Perms, V> {
+    fn from(entries: Array<[String, V]>) -> PermsMap<Perms, V> {
+        let mut out: PermsMap<Perms, V> = PermsMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 

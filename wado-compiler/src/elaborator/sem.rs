@@ -61,6 +61,7 @@ impl ModuleSemantics {
             + t.static_method_dispatch.len()
             + t.sequence_coercions.len()
             + t.key_value_coercions.len()
+            + t.literal_conversions.len()
             + t.from_call_facts.len()
             + t.index_assign_dispatch.len()
             + t.tuple_overlays.len()

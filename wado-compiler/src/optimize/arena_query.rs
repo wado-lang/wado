@@ -288,16 +288,6 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
-/// Whether `idx` appears anywhere in the operand — in its skeleton subtree, or
-/// among the `Opaque(Local)` leaves of a promoted value. A guard that misses a
-/// mention lets a rewrite move or drop code the local is still read by.
-pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
-    match op {
-        Operand::Expr(e) => expr_mentions_local(body, e, idx),
-        Operand::Value(v) => body.values.value_reads_local(v, idx),
-    }
-}
-
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
 /// the coverage of the tree `expr_mentions_local` (every nested statement,
 /// block, and `ConstantValue` pattern expression is walked).

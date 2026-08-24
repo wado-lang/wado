@@ -377,14 +377,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 fn "effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/FixedRandom^wasi:random/random.wado/Random::get_random_bytes"(self, max_len) {
     let out: ref "core:prelude//List<u8>";
     let i: i32;
-    let _licm_byte_8: u8;
-    out = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    let elements: ref Array<u8>;
+    let _licm_byte_5: u8;
+    elements = array.new_fixed<u8>();
+    out = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     i = 0;
-    _licm_byte_8 = self.byte;
+    _licm_byte_5 = self.byte;
     b17: block {
         l18: loop {
             break_if b17 i >= builtin::i32_wrap_i64(max_len);
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(out, _licm_byte_8);
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(out, _licm_byte_5);
             i = i + 1;
             continue l18;
         };

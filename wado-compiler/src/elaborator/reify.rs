@@ -156,6 +156,117 @@ pub(super) struct ReifyAssertSlot {
     pub(super) seen_local_index: Option<u32>,
 }
 
+/// The callee a literal coercion names, as annotate resolved and mangled it
+/// (WEP 2026-08-24).
+fn literal_callee_ref(callee: &super::sem::types::LiteralCallee) -> crate::tir::FunctionRef {
+    use crate::tir::{FunctionRef, MonomorphInfo};
+
+    FunctionRef {
+        module_source: callee.impl_module_source.clone(),
+        name: callee.mangled_name.clone(),
+        monomorph_info: (!callee.type_arg_ids.is_empty()).then(|| MonomorphInfo {
+            generic_name: format!("{}::{}", callee.target_base_name, callee.method),
+            impl_type_args: callee.type_arg_ids.clone(),
+            method_type_args: vec![],
+            is_blanket: false,
+        }),
+        method_info: Some(
+            crate::name::LocalMethodName::new(
+                callee.target_base_name.clone(),
+                Some(callee.trait_name.clone()),
+                callee.method.to_string(),
+            )
+            .with_struct_type_args(&callee.type_arg_names),
+        ),
+    }
+}
+
+/// `Output::from(array)` for a literal coercion (WEP 2026-08-24). An `Array<E>`
+/// target needs no conversion — the array the literal materializes is already
+/// the result — and is returned unchanged.
+fn build_literal_from_call(
+    array: TirExpr,
+    call: &super::sem::types::LiteralFromCall,
+    span: crate::token::Span,
+) -> TirExpr {
+    if call.from_type == call.output_type {
+        return array;
+    }
+    TirExpr::new(
+        crate::tir::TirExprKind::Call {
+            func: Box::new(literal_callee_ref(&call.callee)),
+            type_args: vec![],
+            args: vec![crate::tir::CallArg::new(array, false)],
+            has_receiver: false,
+        },
+        call.output_type,
+        span,
+    )
+}
+
+/// Cast a `from` result to the newtype the literal targeted, where it targeted
+/// one.
+fn cast_to_newtype(
+    built: TirExpr,
+    newtype_cast_to: Option<crate::tir::TypeId>,
+    span: crate::token::Span,
+) -> TirExpr {
+    match newtype_cast_to {
+        Some(target_type) => TirExpr::new(
+            crate::tir::TirExprKind::Cast {
+                expr: Box::new(built),
+                target_type,
+            },
+            target_type,
+            span,
+        ),
+        None => built,
+    }
+}
+
+/// `Output::from([[k0, v0], …])` over one run of a key-value literal's explicit
+/// members.
+fn build_kv_from_call(
+    pairs: Vec<TirExpr>,
+    facts: &super::sem::types::KeyValueCoercionFacts,
+    span: crate::token::Span,
+) -> TirExpr {
+    let array = TirExpr::new(
+        crate::tir::TirExprKind::ArrayLiteral { elements: pairs },
+        facts.call.from_type,
+        span,
+    );
+    build_literal_from_call(array, &facts.call, span)
+}
+
+/// `__acc.spread_literal(base)` for one `..base` member.
+fn build_literal_spread_call(
+    acc_index: u32,
+    output_type: crate::tir::TypeId,
+    base: TirExpr,
+    spread: &super::sem::types::LiteralCallee,
+    span: crate::token::Span,
+) -> TirExpr {
+    let receiver = TirExpr::new(
+        crate::tir::TirExprKind::Local {
+            index: acc_index,
+            name: "__acc".to_string(),
+        },
+        output_type,
+        span,
+    );
+    TirExpr::new(
+        crate::tir::TirExprKind::method_call(
+            Box::new(receiver),
+            literal_callee_ref(spread),
+            vec![],
+            vec![crate::tir::CallArg::new(base, false)],
+        ),
+        crate::tir::TypeTable::UNIT,
+        span,
+    )
+}
+
 /// `target = value;` as a statement.
 fn assign_stmt(target: TirExpr, value: TirExpr, span: crate::token::Span) -> TirStmt {
     let type_id = value.type_id;
@@ -437,18 +548,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_static_method_dispatch => static_method_dispatch: super::sem::types::StaticMethodDispatch,
         ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
         ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
+        ann_literal_conversions => literal_conversions: super::sem::types::LiteralFromCall,
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
     }
 
-    /// Recorded type of an expression, honouring tuple-for-of overlays like
-    /// the macro-generated accessors. Unlike them it filters
-    /// `contains_unknown` recorded types to `None`: the
-    /// combined walk records UNKNOWN-containing types (so its AST analyses can
-    /// see unresolved-null branches), but reify must treat such an entry as
-    /// absent and fall back to the node's `expected_type` — exactly as when
-    /// the recording site skipped them. Without this a bare `null` would reify
-    /// with `Option<UNKNOWN>` and trap WIR translation
-    /// ("Null with unresolved Option inner type").
+    /// Recorded type of an expression, honouring tuple-for-of overlays like the
+    /// macro-generated accessors, but reporting an indefinite one as absent so
+    /// the node falls back to its `expected_type`.
+    ///
+    /// The combined walk records indefinite types for its own AST analyses;
+    /// building with one reifies a bare `null` as an `Option` nothing inhabits
+    /// and fails WIR validation.
     fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
         let raw = self
             .tuple_overlay_stack
@@ -456,11 +566,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .rev()
             .find_map(|overlay| overlay.expression_types.get(&id).copied())
             .or_else(|| self.sem.types.expression_types.get(&id).copied())?;
-        if self.tysys.type_table.borrow().contains_unknown(raw) {
-            None
-        } else {
-            Some(raw)
-        }
+        (!self.tysys.type_table.borrow().is_indefinite(raw)).then_some(raw)
     }
 
     // Decl/signature facts the combined walk records once per decl, read
@@ -2221,7 +2327,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Resolve `break label: value` against the target block's
                 // expected type so a `null` / bare literal value coerces to
                 // the block's result type (e.g. `Option<i32>`) rather than
-                // reaching WIR as an unresolved `Option<UNKNOWN>` / nullref.
+                // reaching WIR as an `Option<!>` nothing inhabits.
                 let break_expected = break_stmt.label.as_ref().and_then(|label| {
                     ctx.labeled_block_targets
                         .iter()
@@ -2580,13 +2686,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_tuple_comprehension(comp, ctx, recorded_type)
             }
             ast::Expr::TupleLiteral(tuple_lit) => {
-                // SequenceLiteralBuilder coercion: when the elaborator
-                // recorded `sequence_coercions[tuple.id]`, the literal
-                // was lowered through `Builder::new_literal` /
-                // `Builder::push_literal` / `Builder::build`. Reify
-                // replays the same desugar deterministically — the
-                // `__b` local lands at the same `FunctionContext`
-                // index reify reserves for it.
+                // A recorded `sequence_coercions[tuple.id]` means the
+                // literal builds an `Array<E>` for the target's `From`.
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
@@ -2595,10 +2696,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
                 // `resolve_cast` lands it on `expression_types` via the
-                // `resolve_expr` wrapper. Reify is a pure read.
-                let target_type = self.ann_expression_types(cast.id).expect(
-                    "resolve_cast records the target type on expression_types for every cast",
-                );
+                // `resolve_expr` wrapper. Reify is a pure read. An unresolved
+                // target type (`n as NoSuchType`) is the one absence: annotate
+                // reported it and records no ERROR entry, so reify carries the
+                // error type on rather than reading a missing one.
+                let target_type = self
+                    .ann_expression_types(cast.id)
+                    .unwrap_or(crate::tir::TypeTable::ERROR);
                 // `i128/u128 as T` lowers to prelude calls rather than a
                 // bare cast, since the 128-bit types are prelude structs:
                 // floats go through the correctly rounded `as_f64` /
@@ -2659,6 +2763,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::Unary(unary) => {
+                // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
+                // and annotate coerced the literal through the borrow and typed
+                // the whole unary as the target. Reify drops the wrapper to
+                // match: the call site auto-borrows the `List<i32>`, where a
+                // `&mut` around it would name the referent instead.
+                if matches!(unary.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
+                    && let ast::Expr::TupleLiteral(inner) = &unary.expr
+                    && self.ann_sequence_coercions(inner.id).is_some()
+                {
+                    return self.reify_expr(&unary.expr, ctx, expected_type);
+                }
                 let op = ast_unary_op_to_tir(unary.op);
                 // A `-<numeric literal>` operand shares the unary's type:
                 // propagate the expected/recorded type so the inner literal
@@ -5219,11 +5334,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TirStructField};
 
-        // `KeyValueLiteralBuilder` coercion: when the elaborator
-        // recorded `key_value_coercions[struct_lit.id]`, the literal
-        // was lowered through `Builder::new_literal` /
-        // `Builder::insert_literal` / `Builder::build`. Reify replays
-        // the same `__kv_lit:` desugar block deterministically.
+        // A recorded `key_value_coercions[struct_lit.id]` means the literal
+        // builds an `Array<[K, V]>` for the target's `From`.
         if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {
             return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
         }
@@ -6777,6 +6889,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Reify a `[e0, e1, …]` literal coerced through `From<Array<E>>` (WEP
+    /// 2026-08-24): materialize the array, hand it to `from`, and cast the
+    /// result when the target is a newtype over what `from` returns.
     fn reify_sequence_coercion(
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
@@ -6784,200 +6899,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::name::LocalMethodName;
-        use crate::tir::{
-            CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
-            TypeTable,
-        };
-
-        let label = "__seq_lit".to_string();
-        ctx.enter_scope();
-
-        // --- Builder::new_literal(capacity) ---
-        let new_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
-            Some(facts.trait_name.clone()),
-            "new_literal".to_string(),
-        )
-        .with_struct_type_args(&facts.type_arg_names);
-        let capacity = tuple_lit.elements.len() as u64;
-        let new_call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: facts.new_mangled_name.clone(),
-                    monomorph_info: if facts.type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{}::new_literal", facts.builder_base_name),
-                            impl_type_args: facts.type_arg_ids.clone(),
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(new_method_info),
-                }),
-                type_args: vec![],
-                args: vec![CallArg::new(
-                    TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: capacity,
-                            repr: (capacity as i64).to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    false,
-                )],
-                has_receiver: false,
-            },
-            facts.builder_type,
+        let elements = tuple_lit
+            .elements
+            .iter()
+            .map(|element| self.reify_literal_element(element, facts.element_type, ctx))
+            .collect();
+        let array = TirExpr::new(
+            crate::tir::TirExprKind::ArrayLiteral { elements },
+            facts.call.from_type,
             span,
         );
-
-        let builder_index = ctx.add_local("__b".to_string(), facts.builder_type, true, None);
-        let mut stmts = vec![TirStmt::new(
-            TirStmtKind::Let {
-                name: "__b".to_string(),
-                local_index: builder_index,
-                is_mut: true,
-                is_reactive: false,
-                type_id: facts.builder_type,
-                value: new_call,
-                skip_value_copy: false,
-            },
-            span,
-        )];
-
-        // --- For each element: __b.push_literal(elem) ---
-        let push_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
-            Some(facts.trait_name.clone()),
-            "push_literal".to_string(),
-        )
-        .with_struct_type_args(&facts.type_arg_names);
-
-        for element in &tuple_lit.elements {
-            let elem_expr = self.reify_expr(element, ctx, Some(facts.element_type));
-            let builder_local = TirExpr::new(
-                TirExprKind::Local {
-                    index: builder_index,
-                    name: "__b".to_string(),
-                },
-                facts.builder_type,
-                span,
-            );
-            let receiver = super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                builder_local,
-                facts.push_self_kind,
-                false,
-                span,
-                &self.tysys.type_table,
-            );
-            let push_call = super::Elaborator::<H>::build_tir_method_call(
-                receiver,
-                FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: facts.push_mangled_name.clone(),
-                    monomorph_info: if facts.type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{}::push_literal", facts.builder_base_name),
-                            impl_type_args: facts.type_arg_ids.clone(),
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(push_method_info.clone()),
-                },
-                vec![],
-                vec![CallArg::new(elem_expr, false)],
-                TypeTable::UNIT,
-                span,
-            );
-            stmts.push(TirStmt::new(TirStmtKind::Expr(push_call), span));
-        }
-
-        // --- break __seq_lit: __b.build(); ---
-        let builder_local_final = TirExpr::new(
-            TirExprKind::Local {
-                index: builder_index,
-                name: "__b".to_string(),
-            },
-            facts.builder_type,
-            span,
-        );
-        let build_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
-            Some(facts.trait_name.clone()),
-            "build".to_string(),
-        )
-        .with_struct_type_args(&facts.type_arg_names);
-        let build_call = super::Elaborator::<H>::build_tir_method_call(
-            builder_local_final,
-            FunctionRef {
-                module_source: facts.impl_module_source.clone(),
-                name: facts.build_mangled_name.clone(),
-                monomorph_info: if facts.type_arg_ids.is_empty() {
-                    None
-                } else {
-                    Some(MonomorphInfo {
-                        generic_name: format!("{}::build", facts.builder_base_name),
-                        impl_type_args: facts.type_arg_ids.clone(),
-                        method_type_args: vec![],
-                        is_blanket: false,
-                    })
-                },
-                method_info: Some(build_method_info),
-            },
-            vec![],
-            vec![],
-            facts.output_type,
-            span,
-        );
-
-        stmts.push(TirStmt::new(
-            TirStmtKind::Break {
-                label: Some(label.clone()),
-                value: Some(build_call),
-            },
-            span,
-        ));
-
-        ctx.exit_scope();
-
-        let block_expr = TirExpr::new(
-            TirExprKind::LabeledBlock {
-                label,
-                block: TirBlock::new(stmts, span),
-                result_type: facts.output_type,
-            },
-            facts.output_type,
-            span,
-        );
-
-        if let Some(target_type) = facts.newtype_cast_to {
-            TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(block_expr),
-                    target_type,
-                },
-                target_type,
-                span,
-            )
-        } else {
-            block_expr
-        }
+        let built = build_literal_from_call(array, &facts.call, span);
+        cast_to_newtype(built, facts.newtype_cast_to, span)
     }
 
-    /// Reify an anonymous-struct-to-map coercion. Mirrors
-    /// `try_coerce_struct_to_map_inner`: `__kv_lit: { let __b =
-    /// Builder::new_literal([N]); __b.insert_literal("k", v); ...;
-    /// break __kv_lit: __b.build() / __b; }`. Walk-order invariant
-    /// keeps `__b` at the same `FunctionContext` index reify
-    /// reserved.
+    /// Reify a `{ k: v, … }` literal coerced through `From<Array<[K, V]>>`
+    /// (WEP 2026-08-24). Without a spread it is one `from` call over the pair
+    /// array; with one it is a left-to-right fold, a run of consecutive `k: v`
+    /// members per `from` call and one `spread_literal` per `..base`.
     fn reify_key_value_coercion(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
@@ -6985,11 +6924,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: crate::token::Span,
     ) -> TirExpr {
-        use crate::name::LocalMethodName;
-        use crate::tir::{
-            CallArg, FunctionRef, MonomorphInfo, TirBlock, TirExprKind, TirStmt, TirStmtKind,
-            TypeTable,
-        };
+        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind};
 
         let string_type = self
             .tysys
@@ -6997,207 +6932,139 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .borrow_mut()
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
+        let output_type = facts.call.output_type;
+        let cast = |built: TirExpr| cast_to_newtype(built, facts.newtype_cast_to, span);
+
+        if struct_lit.spreads.is_empty() {
+            let pairs = struct_lit
+                .fields
+                .iter()
+                .map(|field| self.reify_kv_pair(field, &facts, string_type, ctx))
+                .collect();
+            return cast(build_kv_from_call(pairs, &facts, span));
+        }
+
+        // `{ ..a, x: 1, ..b }` — members in source order, last write wins. The
+        // accumulator is seeded with the first member so the common
+        // `{ ..base, … }` costs one copy and one merge.
         let label = "__kv_lit".to_string();
         ctx.enter_scope();
-
-        // --- Builder::new_literal([capacity]) ---
-        let new_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
-            Some(facts.trait_name.clone()),
-            "new_literal".to_string(),
-        )
-        .with_struct_type_args(&facts.type_arg_names);
-        let capacity = struct_lit.fields.len() as u64;
-        let new_args = if facts.use_new_api {
-            vec![CallArg::new(
-                TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: capacity,
-                        repr: (capacity as i64).to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                ),
-                false,
-            )]
-        } else {
-            vec![]
-        };
-        let new_call = TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: facts.new_mangled_name.clone(),
-                    monomorph_info: if facts.type_arg_ids.is_empty() {
-                        None
-                    } else {
-                        Some(MonomorphInfo {
-                            generic_name: format!("{}::new_literal", facts.builder_base_name),
-                            impl_type_args: facts.type_arg_ids.clone(),
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        })
-                    },
-                    method_info: Some(new_method_info),
-                }),
-                type_args: vec![],
-                args: new_args,
-                has_receiver: false,
-            },
-            facts.builder_type,
-            span,
-        );
-
-        let builder_index = ctx.add_local("__b".to_string(), facts.builder_type, true, None);
-        let mut stmts = vec![TirStmt::new(
-            TirStmtKind::Let {
-                name: "__b".to_string(),
-                local_index: builder_index,
-                is_mut: true,
-                is_reactive: false,
-                type_id: facts.builder_type,
-                value: new_call,
-                skip_value_copy: false,
-            },
-            span,
-        )];
-
-        // In source order, `insert_all(base)` per spread and `insert_literal` per
-        // field; later inserts override, giving explicit-over-base / last-wins.
-        let insert_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
-            Some(facts.trait_name.clone()),
-            "insert_literal".to_string(),
-        );
-        let insert_all_method_info = LocalMethodName::new(
-            facts.builder_base_name.clone(),
-            Some(facts.trait_name.clone()),
-            "insert_all".to_string(),
-        );
-        let builder_receiver = |this: &mut Self| {
-            let builder_local = TirExpr::new(
-                TirExprKind::Local {
-                    index: builder_index,
-                    name: "__b".to_string(),
-                },
-                facts.builder_type,
-                span,
-            );
-            super::Elaborator::<H>::adjust_receiver_for_self_kind_static(
-                builder_local,
-                facts.insert_self_kind,
-                false,
-                span,
-                &this.tysys.type_table,
-            )
-        };
-
+        let mut stmts: Vec<TirStmt> = Vec::new();
+        let mut acc: Option<u32> = None;
+        let mut run: Vec<TirExpr> = Vec::new();
+        let mut members: Vec<(TirExpr, crate::token::Span)> = Vec::new();
         for member in struct_lit.members() {
             match member {
-                ast::LiteralMember::Spread(_, sp) => {
-                    let base_expr = self.reify_expr(&sp.expr, ctx, Some(facts.target_type));
-                    let receiver = builder_receiver(self);
-                    let insert_all_call = super::Elaborator::<H>::build_tir_method_call(
-                        receiver,
-                        FunctionRef {
-                            module_source: facts.impl_module_source.clone(),
-                            name: facts.insert_all_mangled_name.clone(),
-                            monomorph_info: None,
-                            method_info: Some(insert_all_method_info.clone()),
-                        },
-                        vec![],
-                        vec![CallArg::new(base_expr, false)],
-                        TypeTable::UNIT,
-                        span,
-                    );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(insert_all_call), span));
+                ast::LiteralMember::Spread(_, spread) => {
+                    if !run.is_empty() {
+                        let pairs = std::mem::take(&mut run);
+                        members.push((build_kv_from_call(pairs, &facts, span), span));
+                    }
+                    let base = self.reify_expr(&spread.expr, ctx, Some(output_type));
+                    members.push((base, spread.span));
                 }
                 ast::LiteralMember::Field(_, field) => {
-                    let value = self.reify_expr(&field.value, ctx, Some(facts.value_type));
-                    let receiver = builder_receiver(self);
-                    let key_expr = TirExpr::new(
-                        TirExprKind::StringLiteral(field.name.clone()),
-                        string_type,
-                        span,
-                    );
-                    let insert_call = super::Elaborator::<H>::build_tir_method_call(
-                        receiver,
-                        FunctionRef {
-                            module_source: facts.impl_module_source.clone(),
-                            name: facts.insert_mangled_name.clone(),
-                            monomorph_info: None,
-                            method_info: Some(insert_method_info.clone()),
-                        },
-                        vec![],
-                        vec![CallArg::new(key_expr, false), CallArg::new(value, false)],
-                        TypeTable::UNIT,
-                        span,
-                    );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+                    run.push(self.reify_kv_pair(field, &facts, string_type, ctx));
                 }
             }
         }
-
-        // --- break __kv_lit: __b.build() (new API) or __b (legacy) ---
-        let builder_local_final = TirExpr::new(
-            TirExprKind::Local {
-                index: builder_index,
-                name: "__b".to_string(),
-            },
-            facts.builder_type,
-            span,
-        );
-        let result_expr = if let Some(build_mangled_name) = facts.build_mangled_name.clone() {
-            let build_method_info = LocalMethodName::new(
-                facts.builder_base_name.clone(),
-                Some(facts.trait_name.clone()),
-                "build".to_string(),
-            );
-            let build_monomorph = if facts.type_arg_ids.is_empty() {
-                None
-            } else {
-                Some(MonomorphInfo {
-                    generic_name: format!("{}::build", facts.builder_base_name),
-                    impl_type_args: facts.type_arg_ids.clone(),
-                    method_type_args: vec![],
-                    is_blanket: false,
-                })
-            };
-            super::Elaborator::<H>::build_tir_method_call(
-                builder_local_final,
-                FunctionRef {
-                    module_source: facts.impl_module_source.clone(),
-                    name: build_mangled_name,
-                    monomorph_info: build_monomorph,
-                    method_info: Some(build_method_info),
-                },
-                vec![],
-                vec![],
-                facts.target_type,
-                span,
-            )
-        } else {
-            builder_local_final
-        };
-
+        if !run.is_empty() {
+            members.push((build_kv_from_call(run, &facts, span), span));
+        }
+        for (value, member_span) in members {
+            match acc {
+                None => {
+                    let index = ctx.add_local("__acc".to_string(), output_type, true, None);
+                    stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: "__acc".to_string(),
+                            local_index: index,
+                            is_mut: true,
+                            is_reactive: false,
+                            type_id: output_type,
+                            value,
+                            skip_value_copy: false,
+                        },
+                        member_span,
+                    ));
+                    acc = Some(index);
+                }
+                Some(index) => {
+                    let spread = facts.spread.as_ref().expect(
+                        "annotate reports a literal whose target has no `LiteralSpread` impl",
+                    );
+                    let call =
+                        build_literal_spread_call(index, output_type, value, spread, member_span);
+                    stmts.push(TirStmt::new(TirStmtKind::Expr(call), member_span));
+                }
+            }
+        }
+        let index = acc.expect("a literal with a spread has at least one member");
         stmts.push(TirStmt::new(
             TirStmtKind::Break {
                 label: Some(label.clone()),
-                value: Some(result_expr),
+                value: Some(TirExpr::new(
+                    TirExprKind::Local {
+                        index,
+                        name: "__acc".to_string(),
+                    },
+                    output_type,
+                    span,
+                )),
             },
             span,
         ));
-
         ctx.exit_scope();
 
-        TirExpr::new(
+        cast(TirExpr::new(
             TirExprKind::LabeledBlock {
                 label,
                 block: TirBlock::new(stmts, span),
-                result_type: facts.target_type,
+                result_type: output_type,
             },
-            facts.target_type,
+            output_type,
             span,
+        ))
+    }
+
+    /// Reify one literal element, converting it into its slot's type through
+    /// the `From` annotate recorded (WEP 2026-08-24). Without a recorded
+    /// conversion the element already has the slot's type.
+    fn reify_literal_element(
+        &mut self,
+        element: &ast::Expr,
+        slot_type: crate::tir::TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let conversion = self.ann_literal_conversions(element.id());
+        let expected = conversion.as_ref().map_or(slot_type, |c| c.from_type);
+        let value = self.reify_expr(element, ctx, Some(expected));
+        match conversion {
+            Some(call) => build_literal_from_call(value, &call, element.span()),
+            None => value,
+        }
+    }
+
+    /// One `[key, value]` pair of a key-value literal.
+    fn reify_kv_pair(
+        &mut self,
+        field: &ast::StructLiteralField,
+        facts: &super::sem::types::KeyValueCoercionFacts,
+        string_type: crate::tir::TypeId,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let key = TirExpr::new(
+            crate::tir::TirExprKind::StringLiteral(field.name.clone()),
+            string_type,
+            field.name_span,
+        );
+        let value = self.reify_literal_element(&field.value, facts.value_type, ctx);
+        TirExpr::new(
+            crate::tir::TirExprKind::TupleLiteral {
+                elements: vec![key, value],
+            },
+            facts.pair_type,
+            field.span,
         )
     }
 

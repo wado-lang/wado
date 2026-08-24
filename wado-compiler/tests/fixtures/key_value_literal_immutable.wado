@@ -1,5 +1,5 @@
-// KeyValueLiteral with separate builder for immutable output
-// The output type (FrozenMap) has no mutation methods; construction uses a builder.
+// A key-value literal building an immutable output type: no builder, no
+// mutation methods — one `From<Array<[String, V]>>` impl.
 use { println, Stdout } from "core:cli";
 
 struct FrozenMap<V> {
@@ -24,32 +24,16 @@ impl FrozenMap<V> {
     }
 }
 
-struct FrozenMapBuilder<V> {
-    keys: List<String>,
-    values: List<V>,
-}
-
-impl KeyValueLiteralBuilder for FrozenMapBuilder<V> {
-    type Value = V;
-    type Output = FrozenMap<V>;
-
-    fn new_literal(capacity: i32) -> FrozenMapBuilder<V> {
-        return FrozenMapBuilder { keys: [], values: [] };
+impl From<Array<[String, V]>> for FrozenMap<V> {
+    fn from(entries: Array<[String, V]>) -> FrozenMap<V> {
+        let mut keys: List<String> = [];
+        let mut values: List<V> = [];
+        for let [key, value] of entries {
+            keys.push(key);
+            values.push(value);
+        }
+        return FrozenMap { keys, values };
     }
-
-    fn insert_literal(&mut self, key: String, value: V) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> FrozenMap<V> {
-        return FrozenMap { keys: self.keys, values: self.values };
-    }
-}
-
-impl KeyValueLiteral for FrozenMap<V> {
-    type Value = V;
-    type Builder = FrozenMapBuilder<V>;
 }
 
 export fn run() with Stdout {

@@ -11,6 +11,9 @@ struct Bag {
 }
 
 impl Bag {
+    // Opaque to the caller: the reloadable-hoist path keys on a `&mut` call it
+    // cannot see through, and an inlined store would be an ordinary clobber.
+    #[inline("never")]
     fn swap_out(&mut self) -> i32 {
         let old = self.items.len();
         self.items = [7, 7, 7];

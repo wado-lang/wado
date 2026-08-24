@@ -1,0 +1,25 @@
+// A target with two non-pair `From<Array<…>>` impls cannot be chosen between by
+// a `[ … ]` literal alone (WEP 2026-08-24); `Two::from(…)` written out settles
+// it by ordinary overload resolution.
+struct Two {
+    tag: i32,
+}
+
+impl From<Array<i32>> for Two {
+    fn from(a: Array<i32>) -> Two {
+        return Two { tag: builtin::array_len(&a) };
+    }
+}
+
+impl From<Array<i64>> for Two {
+    fn from(a: Array<i64>) -> Two {
+        return Two { tag: builtin::array_len(&a) };
+    }
+}
+
+export fn run() {
+    let t: Two = [1, 2];
+}
+
+__DATA__
+{"compile_error": "literal is ambiguous"}

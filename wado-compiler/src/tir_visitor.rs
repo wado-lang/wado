@@ -211,7 +211,7 @@ pub trait TirMutVisitor {
                     self.visit_expr(&mut field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     self.visit_expr(elem);
                 }
@@ -452,7 +452,7 @@ pub trait TirRefVisitor {
                     self.visit_expr(&field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     self.visit_expr(elem);
                 }
@@ -701,7 +701,7 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
                 changed |= visitor.visit_expr(&mut field.value);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 changed |= visitor.visit_expr(elem);
             }
@@ -845,7 +845,7 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         TirExprKind::VariantConstruct { payload, .. } => payload
             .as_ref()
             .is_some_and(|p| expr_has_break_to(label, p)),
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             elements.iter().any(|e| expr_has_break_to(label, e))
         }
         TirExprKind::StructLiteral { fields, .. } => {

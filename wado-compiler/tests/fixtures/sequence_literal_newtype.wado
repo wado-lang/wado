@@ -6,30 +6,10 @@ struct Vec3 {
     z: f64,
 }
 
-pub struct Vec3Builder {
-    values: List<f64>,
-}
-
-impl SequenceLiteralBuilder for Vec3Builder {
-    type Element = f64;
-    type Output = Vec3;
-
-    fn new_literal(capacity: i32) -> Vec3Builder {
-        return Vec3Builder { values: List::<f64>::with_capacity(capacity) };
+impl From<Array<f64>> for Vec3 {
+    fn from(values: Array<f64>) -> Vec3 {
+        return Vec3 { x: values[0], y: values[1], z: values[2] };
     }
-
-    fn push_literal(&mut self, value: f64) {
-        self.values.push(value);
-    }
-
-    fn build(&self) -> Vec3 {
-        return Vec3 { x: self.values[0], y: self.values[1], z: self.values[2] };
-    }
-}
-
-impl SequenceLiteral for Vec3 {
-    type Element = f64;
-    type Builder = Vec3Builder;
 }
 
 // Newtype of Vec3 — should also support tuple literal coercion

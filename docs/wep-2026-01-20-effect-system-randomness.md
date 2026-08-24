@@ -209,7 +209,7 @@ Rationale:
 
 ### Literal Coercion
 
-Following `wep-2026-01-18-iterator-based-literal-coercion.md`, object literals can coerce to both map types:
+Following `wep-2026-08-24-literal-from-array.md`, object literals can coerce to both map types:
 
 ```wado
 let tree: TreeMap<String, i32> = {"a": 1, "b": 2};
@@ -408,4 +408,4 @@ Deterministic test environments can:
 - WASI Key-Value specification: https://github.com/WebAssembly/wasi-keyvalue
 - wasmtime_wasi_keyvalue documentation: https://docs.wasmtime.dev/api/wasmtime_wasi_keyvalue/
 - wep-2026-01-12-ambient-logging.md (the `ambient` facility, contrasted with `#[benign]`)
-- wep-2026-01-18-iterator-based-literal-coercion.md
+- wep-2026-08-24-literal-from-array.md

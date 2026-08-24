@@ -1,15 +1,15 @@
-//! `const_object_globalization` must not hoist the literal a sequence builder
-//! borrows when that builder hands its referent back out.
+//! `const_object_globalization` must not hoist the array a `[]` literal builds
+//! when the list built over it is then pushed into.
 //!
-//! `[]` lowers to `let mut __b = SequenceLiteralBuilder::new_literal(0); let xs
-//! = __b.build()`, and `build(&self) -> List<T> { return *self; }` returns the
-//! referent — not a copy, because the literal `__b` held was fresh and the
-//! ownership analysis elided one. Hoisting `__b` into a module global therefore
-//! hands every call the same list to `push` into. `core:zlib`'s
-//! `build_huffman_tree` accumulated its `sym_list` across calls that way and
-//! wrote a literal-tree symbol index into the 30-element distance-tree lengths.
+//! `[]` lowers to `List<T>::from(array.new_fixed<T>())`, and `from` keeps the
+//! array it is handed as the list's spine — not a copy, because the literal was
+//! fresh and the ownership analysis elided one. Hoisting that array into a
+//! module global therefore hands every call the same storage to `push` into.
+//! `core:zlib`'s `build_huffman_tree` accumulated its `sym_list` across calls
+//! that way and wrote a literal-tree symbol index into the 30-element
+//! distance-tree lengths.
 //!
-//! `build` is small enough to inline at every stock level, which is what kept
+//! `from` is small enough to inline at every stock level, which is what kept
 //! the hole out of reach; a zero inline budget is the supported configuration
 //! that leaves the call standing.
 
@@ -52,12 +52,12 @@ fn wir_without_inlining() -> String {
 }
 
 #[test]
-fn builder_literal_is_not_hoisted_to_a_shared_global() {
+fn literal_storage_is_not_hoisted_to_a_shared_global() {
     let wir = wir_without_inlining();
     let globals: Vec<&str> = wir
         .lines()
         .filter(|line| line.starts_with("global "))
-        .filter(|line| line.contains("//List<i32>\""))
+        .filter(|line| line.contains("//List<i32>\"") || line.contains("Array<i32>"))
         .collect();
     assert!(
         globals.is_empty(),
@@ -67,12 +67,12 @@ fn builder_literal_is_not_hoisted_to_a_shared_global() {
 }
 
 #[test]
-fn the_builder_call_survives_so_the_alias_is_reachable() {
-    // Guards the fixture: if `build` were inlined here, the shape above would
+fn the_conversion_call_survives_so_the_alias_is_reachable() {
+    // Guards the fixture: if `from` were inlined here, the shape above would
     // not exercise the alias and the first test would pass vacuously.
     let wir = wir_without_inlining();
     assert!(
-        wir.contains("SequenceLiteralBuilder::build"),
-        "`build` was inlined, so this test no longer exercises the alias"
+        wir.contains("From<Array<T>>::from"),
+        "`from` was inlined, so this test no longer exercises the alias"
     );
 }

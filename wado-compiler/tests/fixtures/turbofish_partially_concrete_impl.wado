@@ -1,0 +1,44 @@
+// A turbofish spells the *target's* type arguments; an `impl … for T<Concrete,
+// V>` numbers only the parameters it wrote. Aligning the two positionally bound
+// `V` to the pinned argument, so `TreeMap::<String, i32>::from(…)` — the escape
+// hatch WEP 2026-08-24 names for an ambiguous literal — built a
+// `TreeMap<String, String>` and rejected its own entries.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+struct Pinned<K, V> {
+    tag: K,
+    value: V,
+}
+
+// Position 0 is pinned, so only `V` is a slot the receiver fills.
+impl From<Array<V>> for Pinned<i32, V> {
+    fn from(values: Array<V>) -> Pinned<i32, V> {
+        return Pinned { tag: builtin::array_len(&values), value: values[0] };
+    }
+}
+
+export fn run() with Stdout {
+    let m = TreeMap::<String, i32>::from([["a", 1], ["b", 2]]);
+    assert m.len() == 2;
+    assert m["a"] == 1;
+    assert m["b"] == 2;
+
+    let entries: Array<[String, i32]> = [["c", 3]];
+    let n = TreeMap::<String, i32>::from(entries);
+    assert n["c"] == 3;
+
+    let p = Pinned::<i32, String>::from(["x", "y"]);
+    assert p.tag == 2;
+    assert p.value == "x";
+
+    // A fully generic target keeps binding positionally.
+    let xs = List::<i32>::from([1, 2, 3]);
+    assert xs.len() == 3;
+    assert xs[1] == 2;
+
+    println("turbofish partially concrete impl: ok");
+}
+
+__DATA__
+{"stdout": "turbofish partially concrete impl: ok\n"}
