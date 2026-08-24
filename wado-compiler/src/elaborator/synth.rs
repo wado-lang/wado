@@ -4,6 +4,7 @@
 //! [`ArgClass`] must *contain* the real type, so an inexact premise widens
 //! rather than guessing, and synthesis leaves no trace but interning.
 
+use super::sig::AssocConstSig;
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -436,7 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 OpaqueReason::Unresolved
             });
         }
-        if let Some((_, ty, _)) = self.associated_constant_of_path(id) {
+        if let Some(AssocConstSig { ty, .. }) = self.associated_constant_of_path(id) {
             return self.class_of_type(ty);
         }
         let name = name.to_string();

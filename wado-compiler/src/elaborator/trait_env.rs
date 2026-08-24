@@ -406,6 +406,8 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
+    /// The member's declared rung; consulted only on an inherent impl.
+    pub(super) visibility: ast::Visibility,
 }
 
 /// Digest each method a `trait` or `impl` block declares. One producer, so the
@@ -574,6 +576,10 @@ pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 #[derive(Clone, Debug)]
 pub(super) struct StaticMethodEntry {
     pub(super) name: String,
+    /// The declaring module, and an inherent associated function's declared
+    /// rung; `None` on a trait impl's.
+    pub(super) module: ModuleSource,
+    pub(super) inherent_visibility: Option<ast::Visibility>,
     /// The method itself: the key into the signature digest, which carries
     /// everything a lookup needs — resolved in the impl's own frame and its
     /// own module's perspective.
@@ -886,6 +892,18 @@ impl SynthesisedImpls {
 }
 
 impl TraitEnv {
+    /// The entry `key`'s resource declares for a static named `method_name`.
+    pub(super) fn resource_static(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<&(String, ModuleSource, AstId, usize)> {
+        self.resource_static_method_index
+            .get(key)?
+            .iter()
+            .find(|(name, ..)| name == method_name)
+    }
+
     /// Build the trait indices from all loaded modules, once, before per-module
     /// resolution begins, and check the orphan rule on local impl blocks. Every
     /// receiver-type and trait-name reference in an `impl` header is resolved
@@ -1100,7 +1118,44 @@ impl TraitEnv {
                             name: trait_decl.name.clone(),
                             type_params: trait_decl.type_params.clone(),
                             supertraits: trait_decl.supertraits.clone(),
+<<<<<<< HEAD
                             methods: method_headers(defs, &trait_decl.methods),
+||||||| effa03c1d
+                            methods: trait_decl
+                                .methods
+                                .iter()
+                                .map(|m| ImplMethodHeader {
+                                    name: m.name.clone(),
+                                    ast_id: m.id,
+                                    type_params: m.type_params.clone(),
+                                    span: m.span,
+                                    name_span: m.name_span,
+                                    param_count: m
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                                        .count(),
+                                })
+                                .collect(),
+=======
+                            methods: trait_decl
+                                .methods
+                                .iter()
+                                .map(|m| ImplMethodHeader {
+                                    name: m.name.clone(),
+                                    ast_id: m.id,
+                                    type_params: m.type_params.clone(),
+                                    span: m.span,
+                                    name_span: m.name_span,
+                                    param_count: m
+                                        .params
+                                        .iter()
+                                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                                        .count(),
+                                    visibility: m.visibility,
+                                })
+                                .collect(),
+>>>>>>> origin/main
                             assoc_types: trait_decl.associated_types.clone(),
                             span: trait_decl.span,
                         },
@@ -1137,7 +1192,44 @@ impl TraitEnv {
                         trait_type: impl_block.trait_type.clone(),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
+<<<<<<< HEAD
                         methods: method_headers(defs, &impl_block.methods),
+||||||| effa03c1d
+                        methods: impl_block
+                            .methods
+                            .iter()
+                            .map(|m| ImplMethodHeader {
+                                name: m.name.clone(),
+                                ast_id: m.id,
+                                type_params: m.type_params.clone(),
+                                span: m.span,
+                                name_span: m.name_span,
+                                param_count: m
+                                    .params
+                                    .iter()
+                                    .filter(|p| p.self_kind == ast::SelfKind::None)
+                                    .count(),
+                            })
+                            .collect(),
+=======
+                        methods: impl_block
+                            .methods
+                            .iter()
+                            .map(|m| ImplMethodHeader {
+                                name: m.name.clone(),
+                                ast_id: m.id,
+                                type_params: m.type_params.clone(),
+                                span: m.span,
+                                name_span: m.name_span,
+                                param_count: m
+                                    .params
+                                    .iter()
+                                    .filter(|p| p.self_kind == ast::SelfKind::None)
+                                    .count(),
+                                visibility: m.visibility,
+                            })
+                            .collect(),
+>>>>>>> origin/main
                         associated_types: impl_block.associated_types.clone(),
                         is_synthesize_request: impl_block.is_synthesize_request,
                         span: impl_block.span,
@@ -1208,7 +1300,15 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
+<<<<<<< HEAD
                                     method_id: defs.def_at(method.id),
+||||||| effa03c1d
+                                    method_id: method.id,
+=======
+                                    module: module_source.clone(),
+                                    inherent_visibility: None,
+                                    method_id: method.id,
+>>>>>>> origin/main
                                 });
                         }
                     }
@@ -1227,7 +1327,15 @@ impl TraitEnv {
                                 .or_default()
                                 .push(StaticMethodEntry {
                                     name: method.name.clone(),
+<<<<<<< HEAD
                                     method_id: defs.def_at(method.id),
+||||||| effa03c1d
+                                    method_id: method.id,
+=======
+                                    module: module_source.clone(),
+                                    inherent_visibility: Some(method.visibility),
+                                    method_id: method.id,
+>>>>>>> origin/main
                                 });
                         }
                     }

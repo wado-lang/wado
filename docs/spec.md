@@ -111,13 +111,14 @@ Identifiers are case-sensitive.
 
 The following keywords are contextual — they act as keywords only in specific syntactic positions and can be used as variable names, field names, and function parameters elsewhere:
 
-| Keyword | Keyword context               | Identifier elsewhere                  |
-| ------- | ----------------------------- | ------------------------------------- |
-| `flags` | `flags` declaration           | Variable, field, parameter            |
-| `type`  | `type` declaration            | Variable, field, parameter            |
-| `of`    | `for let <pattern> of <expr>` | Variable, field, parameter            |
-| `from`  | `use { ... } from "..."`      | Variable, field, parameter, type name |
-| `test`  | `test "name" { ... }` block   | Variable, field, parameter            |
+| Keyword   | Keyword context                 | Identifier elsewhere                  |
+| --------- | ------------------------------- | ------------------------------------- |
+| `flags`   | `flags` declaration             | Variable, field, parameter            |
+| `type`    | `type` declaration              | Variable, field, parameter            |
+| `of`      | `for let <pattern> of <expr>`   | Variable, field, parameter            |
+| `from`    | `use { ... } from "..."`        | Variable, field, parameter, type name |
+| `test`    | `test "name" { ... }` block     | Variable, field, parameter            |
+| `extends` | `resource Child extends Parent` | Variable, field, parameter            |
 
 ```wado
 // 'of' as a variable name
@@ -3617,13 +3618,12 @@ For associative arrays, use `TreeMap` from `core:collections`:
 use { TreeMap } from "core:collections";
 
 let mut map = TreeMap::<String, i32>::new();
-map.insert("x", 10);
-map.insert("y", 20);
+map["x"] = 10;                   // insert or overwrite
+map["y"] = 20;
 
-// Index syntax
-map["z"] = 30;                    // assignment
-let v = map["x"];                 // panics if key not found
+let v = map["x"];                // panics if key not found
 let opt = map.get("x");          // returns Option<V>
+map.try_insert("x", 99);         // inserts only if absent; reports whether it did
 
 // Keys preserve insertion order
 let keys = map.keys();  // returns List<K> in insertion order
@@ -3820,13 +3820,19 @@ export fn run() { ... }
 A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
-The ladder applies to top-level items. Members of an `impl` block (methods,
-associated constants) accept the same file-private / `internal` / `pub` ladder;
-`export` on a member is a compile error (a method has no Component Model
-boundary). Member visibility is not yet enforced at call sites, so `internal` on
-a member currently records intent (package scope) rather than restricting
-access. A struct field accepts `pub` or `internal` (only `pub` widens access
-beyond the defining module; `internal` currently behaves like file-private).
+The ladder applies to top-level items, struct fields, and `impl` members
+(methods, associated constants); reaching one beyond its rung is a compile
+error. `export` on a member is an error — a method has no CM boundary. Only an
+_inherent_ member has a ladder; a trait impl's members reach as far as the
+trait.
+
+```wado
+impl Config {
+    fn parse_raw() { }         // this file only
+    internal fn reload() { }   // other files in this package
+    pub fn get() { }           // other packages
+}
+```
 
 #### Re-export visibility
 
@@ -3839,23 +3845,22 @@ as members of the importing module, at the modifier's reach:
 | `internal use { x } from "M"` | `x` is re-exported package-internal         |
 | `use { x } from "M"`          | file-private import; `x` is not re-exported |
 
-A re-export's reach is the re-export keyword's, not `x`'s own visibility. So
-a `pub use` publishes `x` even when `x` is `internal` in its defining module —
-the "internal implementation, public facade" pattern, where a package's entry
-module re-exports its internal submodules' items as the library API:
+A re-export cannot reach further than `x` itself, so `pub use { x }` requires
+`x` to be `pub`; claiming more is a compile error at the re-export. Narrowing is
+allowed, and the facade still names the API — a package's entry module publishes
+its items under its own names, so consumers never name the files behind them:
 
 ```wado
-// foo/impl.wado — package-internal implementation
-internal fn compute() -> i32 { ... }
+// foo/impl.wado — the implementation
+pub fn compute() -> i32 { ... }
 
-// foo.wado — the package's public entry module
-pub use { compute } from "./impl.wado";   // compute is now the library API
+// foo.wado — the package's entry module
+pub use { compute } from "./impl.wado";   // reached as foo's `compute`
 ```
 
-You may only re-export a name you can see: `pub use { x } from "M"` requires `x`
-to be importable here (`x` is `pub`, or `x` is `internal` and `M` is in this
-package). Re-exporting a file-private name is a visibility error, like any other
-import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
+You may also only re-export a name you can see: `x` must be importable here
+(`x` is `pub`, or `x` is `internal` and `M` is in this package). Re-exporting a
+file-private name is a visibility error, like any other import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 
 ### Module Source Types
 
@@ -3900,7 +3905,7 @@ A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query
 ```
 core:json#parse                      # free function / global
 core:math#f64::PI                    # associated const / static fn
-core:collections#TreeMap.insert      # instance method
+core:collections#TreeMap.get         # instance method
 core:collections#List<String>::len   # generics use Wado angle brackets
 core:fmt#Point^Display::fmt          # trait-impl member
 "./utils.wado"#Helper::new           # relative path — must be quoted
@@ -5167,6 +5172,42 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
     Pipe,             // Maps to WIT: pipe
 }
 ```
+
+#### Resource handle backing
+
+A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-ref"`, a handle to a host object. Omitting the field reads as `i32`. `extern-ref` is confined to `web:*` bindings until its lowering exists.
+
+An extern-ref handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+
+### Resource Inheritance
+
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `type = "extern-ref"`; single inheritance only, and a cycle is an error.
+
+```wado
+#[cm("web:dom/event-target", type = "extern-ref")]
+resource EventTarget {
+    fn add_event_listener(&self, kind: String);
+}
+
+#[cm("web:dom/node", type = "extern-ref")]
+resource Node extends EventTarget {
+    fn text_content(&self) -> Option<String>;
+}
+
+fn use_it(n: Node) {
+    n.add_event_listener("click");   // inherited, no cast
+    let t: EventTarget = n;          // upcast is implicit
+}
+```
+
+Rules:
+
+- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant, and there is no implicit downcast.
+- A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+- Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
+- Generic resources take no part in `extends` yet.
+
+See [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
 
 ## Compiler Attributes
 

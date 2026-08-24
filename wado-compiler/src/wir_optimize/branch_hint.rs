@@ -272,6 +272,7 @@ fn else_is_empty(else_body: &Option<Vec<WirInstr>>) -> bool {
 mod tests {
     use super::*;
     use crate::wir::WirType;
+    use std::assert_matches;
 
     fn local_get(name: &str) -> WirInstr {
         WirInstr::LocalGet {
@@ -449,10 +450,10 @@ mod tests {
         let WirInstr::BrIf { condition, .. } = &body[0] else {
             panic!("expected BrIf");
         };
-        assert!(matches!(
+        assert_matches!(
             condition.as_ref(),
             WirInstr::BranchHint { likely: true, .. }
-        ));
+        );
     }
 
     #[test]
@@ -479,7 +480,7 @@ mod tests {
             panic!("expected BrIf, got {instr:?}");
         };
         assert_eq!(*depth, 1);
-        assert!(matches!(condition.as_ref(), WirInstr::LocalGet { .. }));
+        assert_matches!(condition.as_ref(), WirInstr::LocalGet { .. });
     }
 
     #[test]
@@ -497,10 +498,10 @@ mod tests {
             panic!("expected BrIf, got {instr:?}");
         };
         assert_eq!(*depth, 0);
-        assert!(matches!(
+        assert_matches!(
             condition.as_ref(),
             WirInstr::BranchHint { likely: false, .. }
-        ));
+        );
     }
 
     #[test]
@@ -508,7 +509,7 @@ mod tests {
         // `br 0` targets the `if` itself; rewriting would change the target.
         let mut instr = if_instr(local_get("c"), vec![WirInstr::Br { depth: 0 }], None);
         select_in_instr(&mut instr);
-        assert!(matches!(instr, WirInstr::If { .. }));
+        assert_matches!(instr, WirInstr::If { .. });
     }
 
     #[test]
@@ -519,7 +520,7 @@ mod tests {
             Some(vec![WirInstr::Return { value: None }]),
         );
         select_in_instr(&mut instr);
-        assert!(matches!(instr, WirInstr::If { .. }));
+        assert_matches!(instr, WirInstr::If { .. });
     }
 
     #[test]
@@ -532,7 +533,7 @@ mod tests {
             Some(vec![WirInstr::Nop]),
         );
         select_in_instr(&mut instr);
-        assert!(matches!(instr, WirInstr::BrIf { depth: 0, .. }));
+        assert_matches!(instr, WirInstr::BrIf { depth: 0, .. });
     }
 
     #[test]
@@ -546,6 +547,6 @@ mod tests {
             Some(vec![WirInstr::ColdPath, WirInstr::Nop]),
         );
         select_in_instr(&mut instr);
-        assert!(matches!(instr, WirInstr::BrIf { depth: 0, .. }));
+        assert_matches!(instr, WirInstr::BrIf { depth: 0, .. });
     }
 }

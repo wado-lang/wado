@@ -87,7 +87,7 @@ The script:
      `(in <binary>)` filter works on both platforms.
 2. **Weights samples by `threadCPUDelta`** (real CPU), not wall-clock
    `weight` — otherwise parked tokio/rayon worker threads bury everything.
-3. **Reports** four views:
+3. **Reports** five views:
    - **CPU by library (self)** — where the leaf frames land. A high
      `libc.so.6 / libsystem_*` ratio means your hot path is in
      syscalls/`memcpy`, not Rust code.
@@ -100,6 +100,11 @@ The script:
      each non-`wado` leaf stack until it finds a `wado` frame and
      credits the cost there. This is how you find which Rust function
      is responsible for the `__memcpy` / `mmap` / mimalloc hot spots.
+   - **Allocation cost by requesting caller** — every sample crossing an
+     allocator entry, credited above the outermost one, skipping the
+     `Vec`/`HashMap` growth plumbing. The header is allocation's share of
+     total CPU, so "is this allocation-bound at all" is a number, not a
+     guess.
 
 Common invocations:
 

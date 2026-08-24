@@ -6,6 +6,7 @@
 //! accounted for, and downstream consumers (parser, LSP semantic tokens) can
 //! continue past errors.
 
+use std::assert_matches;
 use wado_compiler::lexer::{LexErrorKind, lex};
 use wado_compiler::token::TokenKind;
 
@@ -18,27 +19,21 @@ fn lex_never_returns_result() {
     // Pure API smoke check: lex returns LexResult by value.
     let r = lex("fn main() {}");
     assert!(r.errors.is_empty());
-    assert!(matches!(
-        r.tokens.first().map(|t| &t.kind),
-        Some(TokenKind::Fn)
-    ));
+    assert_matches!(r.tokens.first().map(|t| &t.kind), Some(TokenKind::Fn));
 }
 
 #[test]
 fn unexpected_char_emits_error_token_and_continues() {
     let r = lex("fn @ main()");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(
-        r.errors[0].kind,
-        LexErrorKind::UnexpectedChar('@')
-    ));
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnexpectedChar('@'));
     // The lexer must continue past the bad char and recognise `main()`.
     let kinds = r.tokens.iter().map(|t| &t.kind).collect::<Vec<_>>();
-    assert!(matches!(kinds[0], TokenKind::Fn));
-    assert!(matches!(kinds[1], TokenKind::Error(s) if s == "@"));
-    assert!(matches!(kinds[2], TokenKind::Ident(s) if s == "main"));
-    assert!(matches!(kinds[3], TokenKind::LParen));
-    assert!(matches!(kinds[4], TokenKind::RParen));
+    assert_matches!(kinds[0], TokenKind::Fn);
+    assert_matches!(kinds[1], TokenKind::Error(s) if s == "@");
+    assert_matches!(kinds[2], TokenKind::Ident(s) if s == "main");
+    assert_matches!(kinds[3], TokenKind::LParen);
+    assert_matches!(kinds[4], TokenKind::RParen);
 }
 
 #[test]
@@ -46,7 +41,7 @@ fn multiple_unexpected_chars_each_get_an_error() {
     let r = lex("@ @ @");
     assert_eq!(r.errors.len(), 3);
     for e in &r.errors {
-        assert!(matches!(e.kind, LexErrorKind::UnexpectedChar('@')));
+        assert_matches!(e.kind, LexErrorKind::UnexpectedChar('@'));
     }
 }
 
@@ -56,19 +51,19 @@ fn unterminated_string_keeps_preceding_tokens() {
     // but the `let x =` tokens before it must survive.
     let r = lex("let x = \"oops");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::UnterminatedString));
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnterminatedString);
     let kinds = token_kinds("let x = \"oops");
-    assert!(matches!(kinds[0], TokenKind::Let));
-    assert!(matches!(kinds[1], TokenKind::Ident(ref s) if s == "x"));
-    assert!(matches!(kinds[2], TokenKind::Eq));
-    assert!(matches!(kinds[3], TokenKind::StringLit(ref s) if s == "oops"));
+    assert_matches!(kinds[0], TokenKind::Let);
+    assert_matches!(kinds[1], TokenKind::Ident(ref s) if s == "x");
+    assert_matches!(kinds[2], TokenKind::Eq);
+    assert_matches!(kinds[3], TokenKind::StringLit(ref s) if s == "oops");
 }
 
 #[test]
 fn unterminated_char_emits_charlit_with_content() {
     let r = lex("let c = 'a");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::UnterminatedChar));
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnterminatedChar);
     assert!(
         r.tokens
             .iter()
@@ -83,7 +78,7 @@ fn multi_char_literal_recovers_as_single_charlit_too_long() {
     // consumes up to the closing quote and emits exactly one diagnostic.
     let r = lex("let c = 'abc';");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::CharLiteralTooLong));
+    assert_matches!(r.errors[0].kind, LexErrorKind::CharLiteralTooLong);
     let kinds: Vec<&TokenKind> = r.tokens.iter().map(|t| &t.kind).collect();
     // No stray Ident("bc") — the inner content stays inside the CharLit.
     assert!(
@@ -110,7 +105,7 @@ fn unterminated_char_stops_at_newline_not_eof() {
     // the next line still lexes cleanly.
     let r = lex("let c = 'ab\nlet d = 1;");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::UnterminatedChar));
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnterminatedChar);
     // `let d = 1;` after the broken line must still tokenise.
     assert!(
         r.tokens
@@ -124,7 +119,7 @@ fn empty_char_literal_emits_charlit_and_continues() {
     // `''` -> error + CharLit("") + subsequent tokens.
     let r = lex("let c = ''; fn main(){}");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::EmptyCharLiteral));
+    assert_matches!(r.errors[0].kind, LexErrorKind::EmptyCharLiteral);
     // The lexer must keep parsing after `''` so `fn main(){}` is still tokenised.
     assert!(r.tokens.iter().any(|t| matches!(t.kind, TokenKind::Fn)));
     assert!(
@@ -140,7 +135,7 @@ fn missing_hex_digits_recovers_to_following_ident() {
     // then continue and pick up `Z` as an identifier.
     let r = lex("let v = 0xZ;");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::MissingHexDigits));
+    assert_matches!(r.errors[0].kind, LexErrorKind::MissingHexDigits);
     assert!(
         r.tokens
             .iter()
@@ -152,10 +147,7 @@ fn missing_hex_digits_recovers_to_following_ident() {
 fn missing_binary_digits_recovers() {
     let r = lex("let v = 0b;");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(
-        r.errors[0].kind,
-        LexErrorKind::MissingBinaryDigits
-    ));
+    assert_matches!(r.errors[0].kind, LexErrorKind::MissingBinaryDigits);
     assert!(
         r.tokens
             .iter()
@@ -167,7 +159,7 @@ fn missing_binary_digits_recovers() {
 fn missing_octal_digits_recovers() {
     let r = lex("let v = 0o;");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(r.errors[0].kind, LexErrorKind::MissingOctalDigits));
+    assert_matches!(r.errors[0].kind, LexErrorKind::MissingOctalDigits);
     assert!(
         r.tokens
             .iter()
@@ -179,10 +171,7 @@ fn missing_octal_digits_recovers() {
 fn missing_exponent_digits_recovers() {
     let r = lex("let v = 1e;");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(
-        r.errors[0].kind,
-        LexErrorKind::MissingExponentDigits
-    ));
+    assert_matches!(r.errors[0].kind, LexErrorKind::MissingExponentDigits);
     assert!(
         r.tokens
             .iter()
@@ -196,26 +185,20 @@ fn unterminated_block_comment_does_not_lose_preceding_tokens() {
     // earlier tokens must survive (this was previously dropped on Err).
     let r = lex("fn main() /* oops");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(
-        r.errors[0].kind,
-        LexErrorKind::UnterminatedBlockComment
-    ));
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnterminatedBlockComment);
     let kinds = r.tokens.iter().map(|t| &t.kind).collect::<Vec<_>>();
-    assert!(matches!(kinds[0], TokenKind::Fn));
-    assert!(matches!(kinds[1], TokenKind::Ident(s) if s == "main"));
-    assert!(matches!(kinds[2], TokenKind::LParen));
-    assert!(matches!(kinds[3], TokenKind::RParen));
+    assert_matches!(kinds[0], TokenKind::Fn);
+    assert_matches!(kinds[1], TokenKind::Ident(s) if s == "main");
+    assert_matches!(kinds[2], TokenKind::LParen);
+    assert_matches!(kinds[3], TokenKind::RParen);
 }
 
 #[test]
 fn unterminated_template_string_keeps_preceding_tokens() {
     let r = lex("let s = `hello ${name");
     assert_eq!(r.errors.len(), 1);
-    assert!(matches!(
-        r.errors[0].kind,
-        LexErrorKind::UnterminatedTemplateString
-    ));
-    assert!(matches!(r.tokens[0].kind, TokenKind::Let));
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnterminatedTemplateString);
+    assert_matches!(r.tokens[0].kind, TokenKind::Let);
 }
 
 #[test]

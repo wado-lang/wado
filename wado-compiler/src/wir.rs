@@ -123,6 +123,9 @@ pub struct WirPackage {
     /// Trait-bound violations collected instead of trapping the build, so the
     /// driver can emit a clean diagnostic and bail. Empty in well-formed programs.
     pub trait_bound_violations: Vec<TraitBoundViolation>,
+    /// Calls to a `#[cm(...)]` member with no backing import, collected like
+    /// [`Self::trait_bound_violations`]. Empty in well-formed programs.
+    pub cm_import_violations: Vec<CmImportViolation>,
 }
 
 /// A `Type^Trait::method` call left unresolved at WIR build because `Type` does
@@ -136,6 +139,17 @@ pub struct TraitBoundViolation {
     /// re-deriving both halves from a string built for Wasm.
     pub type_display: String,
     pub trait_display: String,
+    pub span: crate::token::Span,
+}
+
+/// A call to a `#[cm("...")]` member left unresolved at WIR build: only the
+/// stdlib and component dependencies register an import to call.
+#[derive(Debug, Clone)]
+pub struct CmImportViolation {
+    /// The receiver and method as source spells them, like
+    /// [`TraitBoundViolation::type_display`].
+    pub call_display: String,
+    pub cm_name: String,
     pub span: crate::token::Span,
 }
 
@@ -296,6 +310,7 @@ impl WirPackage {
             import_plan: Vec::new(),
             defined_func_base: 0,
             trait_bound_violations: Vec::new(),
+            cm_import_violations: Vec::new(),
         }
     }
 }

@@ -5,18 +5,18 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
-    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
-    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
+    TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -1059,6 +1059,10 @@ impl Parser {
             false
         };
 
+        if !self.check(&TokenKind::Resource) {
+            reject_resource_backing(&attrs)?;
+        }
+
         // Check for contextual keyword "test" (identifier followed by string or block)
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "test"
@@ -1229,12 +1233,15 @@ impl Parser {
     fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
-            let arg = match self.peek_kind().clone() {
-                TokenKind::StringLit(raw) => {
+            // `as_ident_name`, so a contextual keyword can be a key:
+            // `#[cm(..., type="extern-ref")]`.
+            let key = self.peek_kind().as_ident_name().map(str::to_string);
+            let arg = match (key, self.peek_kind().clone()) {
+                (_, TokenKind::StringLit(raw)) => {
                     self.advance();
                     AttrArg::Str(raw)
                 }
-                TokenKind::Ident(value) => {
+                (Some(value), _) => {
                     self.advance();
                     // Check if this identifier is followed by '=' making it a key=value pair
                     if self.check(&TokenKind::Eq) {
@@ -1279,11 +1286,11 @@ impl Parser {
                         AttrArg::Ident(value)
                     }
                 }
-                TokenKind::NumberLit(value) => {
+                (None, TokenKind::NumberLit(value)) => {
                     self.advance();
                     AttrArg::Number(value)
                 }
-                _ => break,
+                (None, _) => break,
             };
             args.push(arg);
             if self.check(&TokenKind::Comma) {
@@ -1348,6 +1355,18 @@ impl Parser {
         // Parse optional generic type parameters: `resource Future<T> { ... }`
         let type_params = self.parse_generic_params()?;
 
+        let parent = if self.check(&TokenKind::Extends) {
+            self.advance();
+            let parent = self.parse_type()?;
+            if self.check(&TokenKind::Comma) {
+                let span = self.peek().span;
+                return Err(self.error_at_span(span, "a resource extends a single parent"));
+            }
+            Some(parent)
+        } else {
+            None
+        };
+
         // Either `resource Name;` (opaque) or `resource Name { ... }` (with methods)
         let (methods, end_span) = if self.check(&TokenKind::LBrace) {
             self.advance(); // consume '{'
@@ -1370,6 +1389,7 @@ impl Parser {
             name,
             visibility,
             type_params,
+            parent,
             attrs,
             methods,
             span: start_span.merge(&end_span),
@@ -1683,6 +1703,7 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
@@ -3007,6 +3028,10 @@ impl Parser {
                         break;
                     }
 
+                    // Alloc-at-start (like every other node) so a leading
+                    // comment attaches here and allocation order matches the
+                    // order `visit_pattern` walks.
+                    let field_id = self.alloc_ast_id();
                     let field_span = self.peek().span;
                     let field_name = if let TokenKind::StringLit(s) = self.peek_kind().clone() {
                         // Allow string literals as field names for JSON compatibility
@@ -3042,6 +3067,7 @@ impl Parser {
                     };
 
                     fields.push(StructPatternField {
+                        id: field_id,
                         field_name,
                         pattern,
                         span: field_span,
@@ -5130,6 +5156,7 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
+            reject_resource_backing(&attrs)?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let visibility = if self.check(&TokenKind::Pub) {
@@ -5221,6 +5248,7 @@ impl Parser {
     }
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -5257,6 +5285,7 @@ impl Parser {
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
+            reject_resource_backing(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
@@ -5332,6 +5361,7 @@ impl Parser {
     }
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -6253,6 +6283,20 @@ fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
     )
 }
 
+/// The backing is a property of the handle type, so it has one home: the
+/// `resource` declaration. Anything else carrying it is rejected.
+fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
+    match attrs.iter().find(|a| a.cm_resource_backing().is_some()) {
+        Some(attr) => Err(ParseError {
+            message: "#[cm(..., type=...)] declares a resource's handle backing; \
+                it belongs on a `resource` declaration"
+                .to_string(),
+            span: attr.span,
+        }),
+        None => Ok(()),
+    }
+}
+
 /// Populate `Attribute::cm_boundary` from the attribute name:
 /// `#[canonical("namespace", "name")]` gives `Canonical`,
 /// `#[cm("ns:pkg/iface[@v][#fn]")]` gives `Import`, and a `#[cm(…)]` that does
@@ -6275,15 +6319,33 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         }));
     }
     if name == "cm" {
-        let [arg] = args else {
-            return Err(format!(
-                "#[cm] expects exactly 1 string argument, got {}",
-                args.len()
-            ));
+        let [path, fields @ ..] = args else {
+            return Err("#[cm] expects a string argument".to_string());
         };
-        let AttrArg::Str(s) = arg else {
+        let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
+        let mut seen_type = false;
+        for field in fields {
+            let AttrArg::KeyValue(key, value) = field else {
+                return Err(
+                    "#[cm] takes a path string followed by `key = \"value\"` fields".to_string(),
+                );
+            };
+            if key != "type" {
+                return Err(format!(
+                    "unknown #[cm] field `{key}`; the only field is `type`"
+                ));
+            }
+            if std::mem::replace(&mut seen_type, true) {
+                return Err("#[cm] takes one `type` field".to_string());
+            }
+            if CmResourceBacking::parse(value).is_none() {
+                return Err(format!(
+                    "unknown #[cm] type `{value}`; expected \"extern-ref\" or \"i32\""
+                ));
+            }
+        }
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
             None => CmBoundary::Name(s.clone()),
@@ -6385,6 +6447,7 @@ mod tests {
     use super::*;
     use crate::ast::AstVisitor;
     use crate::lexer::lex;
+    use std::assert_matches;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
     /// `Result` (first recovered error as `Err`) so existing `.unwrap()` /
@@ -6438,10 +6501,10 @@ mod tests {
         let Expr::Matches(m) = e else {
             panic!("expected Matches at the top, got {e:?}");
         };
-        assert!(
-            matches!(&m.expr, Expr::Unary(u) if u.op == UnaryOp::Deref),
-            "scrutinee should be the deref, got {:?}",
-            m.expr
+        assert_matches!(
+            &m.expr,
+            Expr::Unary(u) if u.op == UnaryOp::Deref,
+            "scrutinee should be the deref"
         );
 
         // `x as i32 matches { P }`, `a + b matches { P }`, `f & M matches { P }`
@@ -6450,8 +6513,9 @@ mod tests {
             "fn r() -> bool { return a + b matches { 0 }; }",
             "fn r() -> bool { return f & m matches { 0 }; }",
         ] {
-            assert!(
-                matches!(return_expr(src), Expr::Matches(_)),
+            assert_matches!(
+                return_expr(src),
+                Expr::Matches(_),
                 "expected Matches at the top for `{src}`"
             );
         }
@@ -6466,11 +6530,7 @@ mod tests {
             panic!("expected a `!` unary at the top, got {e:?}");
         };
         assert_eq!(u.op, UnaryOp::Not);
-        assert!(
-            matches!(&u.expr, Expr::Matches(_)),
-            "`!` should wrap the matches, got {:?}",
-            u.expr
-        );
+        assert_matches!(&u.expr, Expr::Matches(_), "`!` should wrap the matches");
     }
 
     /// `!!x matches { P }` is right-associative on `!` and tighter on `matches`:
@@ -6486,11 +6546,7 @@ mod tests {
             panic!("expected inner `!`, got {:?}", outer.expr);
         };
         assert_eq!(inner.op, UnaryOp::Not);
-        assert!(
-            matches!(&inner.expr, Expr::Matches(_)),
-            "innermost should be matches, got {:?}",
-            inner.expr
-        );
+        assert_matches!(&inner.expr, Expr::Matches(_), "innermost should be matches");
     }
 
     #[test]
@@ -6501,11 +6557,11 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "core:cli");
             assert_eq!(use_decl.items.len(), 2);
-            assert!(
-                matches!(&use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.is_none())
+            assert_matches!(
+                &use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.is_none()
             );
-            assert!(
-                matches!(&use_decl.items[1], UseItem::Simple { name, alias, .. } if name == "Stdout" && alias.is_none())
+            assert_matches!(
+                &use_decl.items[1], UseItem::Simple { name, alias, .. } if name == "Stdout" && alias.is_none()
             );
             assert!(use_decl.attributes.is_none());
         } else {
@@ -6519,8 +6575,8 @@ mod tests {
 
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "core:cli");
-            assert!(
-                matches!(&use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.as_deref() == Some("print"))
+            assert_matches!(
+                &use_decl.items[0], UseItem::Simple { name, alias, .. } if name == "println" && alias.as_deref() == Some("print")
             );
         } else {
             panic!("expected use declaration");
@@ -6571,7 +6627,7 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "./utils.wado");
             assert_eq!(use_decl.items.len(), 1);
-            assert!(matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils"));
+            assert_matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils");
         } else {
             panic!("expected use declaration");
         }
@@ -6837,6 +6893,148 @@ mod tests {
     }
 
     #[test]
+    fn resource_declares_a_parent() {
+        let source = r#"
+            #[cm("web:dom/node", type="extern-ref")]
+            pub resource Node extends EventTarget {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        let Some(Type::Named(parent)) = &decl.parent else {
+            panic!("expected a named parent, got {:?}", decl.parent);
+        };
+        assert_eq!(parent.name, "EventTarget");
+    }
+
+    #[test]
+    fn resource_without_extends_has_no_parent() {
+        let module = parse("pub resource Node {}").unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert!(decl.parent.is_none());
+    }
+
+    #[test]
+    fn resource_takes_a_single_parent() {
+        let err = parse("resource Node extends A, B {}").unwrap_err();
+        assert!(
+            err.message.contains("single") || err.message.contains("one parent"),
+            "expected a single-parent error, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_carries_a_resource_backing() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref")]
+            pub resource Element {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        let attr = &decl.attrs[0];
+        assert_eq!(
+            attr.cm_resource_backing(),
+            Some(CmResourceBacking::ExternRef)
+        );
+        let cm = attr.as_cm_import().expect("cm boundary import");
+        assert_eq!(cm.interface, "element");
+    }
+
+    #[test]
+    fn cm_attribute_backing_defaults_to_none() {
+        let source = r#"
+            #[cm("wasi:http/types@0.3.0#request")]
+            pub resource Request {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert_eq!(decl.attrs[0].cm_resource_backing(), None);
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_backing() {
+        let source = r#"
+            #[cm("web:dom/element", type="handle")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("extern-ref") && err.message.contains("i32"),
+            "expected the allowed values in the message, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_backing_is_rejected_on_every_other_site() {
+        for source in [
+            "struct S { #[cm(\"a:b/c\", type=\"i32\")] f: i32 }",
+            "enum E { #[cm(\"a:b/c\", type=\"i32\")] Case }",
+            "variant V { #[cm(\"a:b/c\", type=\"i32\")] Case(i32) }",
+            "resource R { #[cm(\"a:b/c\", type=\"i32\")] fn m(&self); }",
+            "flags F { #[cm(\"a:b/c\", type=\"i32\")] A }",
+            "#[cm(\"a:b/c\", type=\"i32\")] test \"t\" { assert true; }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(
+                err.message.contains("`resource` declaration"),
+                "expected a placement error for {source}, got: {}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn cm_attribute_rejects_a_repeated_type_field() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref", type="i32")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("one `type` field"),
+            "a second value must not be silently dropped, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_field() {
+        let source = r#"
+            #[cm("web:dom/element", backing="extern-ref")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("backing"),
+            "expected the unknown field named, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_backing_belongs_on_a_resource() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref")]
+            pub struct Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("`resource` declaration"),
+            "expected a placement error, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
     fn test_canonical_attribute_populates_cm_boundary() {
         let source = r#"
             #[canonical("wasi", "stream-new")]
@@ -6903,8 +7101,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message
-                .contains("#[cm] expects exactly 1 string argument"),
+            err.message.contains("#[cm] expects a string argument"),
             "unexpected error: {}",
             err.message
         );
@@ -6922,8 +7119,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message
-                .contains("#[cm] expects exactly 1 string argument"),
+            err.message.contains("followed by `key = \"value\"` fields"),
             "unexpected error: {}",
             err.message
         );
@@ -7258,7 +7454,7 @@ mod tests {
             let body = func.body.as_ref().unwrap();
             if let Stmt::Assert(assert_stmt) = &body.stmts[0] {
                 // Check that condition is parsed
-                assert!(matches!(assert_stmt.condition, Expr::Binary(_)));
+                assert_matches!(assert_stmt.condition, Expr::Binary(_));
                 // Check that message is None
                 assert!(assert_stmt.message.is_none());
             } else {
@@ -7281,11 +7477,11 @@ mod tests {
             let body = func.body.as_ref().unwrap();
             if let Stmt::Assert(assert_stmt) = &body.stmts[0] {
                 // Check that condition is parsed
-                assert!(matches!(assert_stmt.condition, Expr::Binary(_)));
+                assert_matches!(assert_stmt.condition, Expr::Binary(_));
                 // Check that message is present and is a string literal
                 assert!(assert_stmt.message.is_some());
                 if let Some(Expr::Literal(lit)) = &assert_stmt.message {
-                    assert!(matches!(&lit.value, Literal::String(s) if s == "x must be positive"));
+                    assert_matches!(&lit.value, Literal::String(s) if s == "x must be positive");
                 } else {
                     panic!("expected string literal message");
                 }
@@ -7309,13 +7505,10 @@ mod tests {
             let body = func.body.as_ref().unwrap();
             if let Stmt::Assert(assert_stmt) = &body.stmts[0] {
                 // Check that condition is parsed
-                assert!(matches!(assert_stmt.condition, Expr::Binary(_)));
+                assert_matches!(assert_stmt.condition, Expr::Binary(_));
                 // Check that message is a template string
                 assert!(assert_stmt.message.is_some());
-                assert!(matches!(
-                    assert_stmt.message.as_ref(),
-                    Some(Expr::TemplateString(_))
-                ));
+                assert_matches!(assert_stmt.message.as_ref(), Some(Expr::TemplateString(_)));
             } else {
                 panic!("expected assert statement");
             }
@@ -7403,7 +7596,7 @@ __DATA__
 
         // Should have parsed the function
         assert_eq!(module.items.len(), 1);
-        assert!(matches!(&module.items[0], Item::Function(f) if f.name == "main"));
+        assert_matches!(&module.items[0], Item::Function(f) if f.name == "main");
 
         // Should have captured the data section
         let data = module.data_section().unwrap();
@@ -7601,13 +7794,13 @@ line 2
         // Both uppercase and lowercase identifiers followed by ( should parse as variant patterns
         let upper = parse_pattern_from("Some(x)");
         let lower = parse_pattern_from("some(x)");
-        assert!(
-            matches!(&upper, Pattern::Variant { variant_name, bindings, .. }
-            if variant_name == "Some" && bindings.len() == 1)
+        assert_matches!(
+            &upper, Pattern::Variant { variant_name, bindings, .. }
+            if variant_name == "Some" && bindings.len() == 1
         );
-        assert!(
-            matches!(&lower, Pattern::Variant { variant_name, bindings, .. }
-            if variant_name == "some" && bindings.len() == 1)
+        assert_matches!(
+            &lower, Pattern::Variant { variant_name, bindings, .. }
+            if variant_name == "some" && bindings.len() == 1
         );
     }
 
@@ -7617,8 +7810,8 @@ line 2
         // regardless of case — the elaborator disambiguates
         let upper = parse_pattern_from("None");
         let lower = parse_pattern_from("none");
-        assert!(matches!(&upper, Pattern::Ident { name, .. } if name == "None"));
-        assert!(matches!(&lower, Pattern::Ident { name, .. } if name == "none"));
+        assert_matches!(&upper, Pattern::Ident { name, .. } if name == "None");
+        assert_matches!(&lower, Pattern::Ident { name, .. } if name == "none");
     }
 
     #[test]
@@ -7626,8 +7819,8 @@ line 2
         // Both cases followed by { should parse as struct patterns
         let upper = parse_pattern_from("Point { x, y }");
         let lower = parse_pattern_from("point { x, y }");
-        assert!(matches!(&upper, Pattern::Struct { type_name: Some(n), .. } if n == "Point"));
-        assert!(matches!(&lower, Pattern::Struct { type_name: Some(n), .. } if n == "point"));
+        assert_matches!(&upper, Pattern::Struct { type_name: Some(n), .. } if n == "Point");
+        assert_matches!(&lower, Pattern::Struct { type_name: Some(n), .. } if n == "point");
     }
 
     #[test]
@@ -7674,11 +7867,11 @@ line 2
         {
             assert_eq!(variant_name, "Circle");
             assert_eq!(bindings.len(), 1);
-            assert!(matches!(
+            assert_matches!(
                 variant_qualifier,
                 Some(Type::NamespacedGeneric(ns))
                     if ns.namespace == "shapes" && ns.name == "Shape" && ns.args.is_empty()
-            ));
+            );
         } else {
             panic!("expected variant pattern");
         }
@@ -7696,10 +7889,10 @@ line 2
         {
             assert_eq!(variant_name, "Ok");
             assert_eq!(bindings.len(), 1);
-            assert!(matches!(
+            assert_matches!(
                 variant_qualifier,
                 Some(Type::Generic(g)) if g.name == "Result" && g.args.len() == 2
-            ));
+            );
         } else {
             panic!("expected variant pattern");
         }
@@ -7708,7 +7901,7 @@ line 2
     #[test]
     fn test_closure_params_trailing_comma() {
         let expr = parse_expr_from("|x: i32, y: i32,| x + y");
-        assert!(matches!(&expr, Expr::Closure(c) if c.params.len() == 2));
+        assert_matches!(&expr, Expr::Closure(c) if c.params.len() == 2);
     }
 
     #[test]
@@ -7716,7 +7909,7 @@ line 2
         let module = parse("fn foo() -> [] {}").unwrap();
         if let Item::Function(func) = &module.items[0] {
             let ret = func.return_type.as_ref().unwrap();
-            assert!(matches!(ret, Type::Tuple(types) if types.is_empty()));
+            assert_matches!(ret, Type::Tuple(types) if types.is_empty());
         }
     }
 
@@ -7806,13 +7999,13 @@ line 2
     #[test]
     fn test_empty_tuple_literal() {
         let expr = parse_expr_from("[]");
-        assert!(matches!(&expr, Expr::TupleLiteral(t) if t.elements.is_empty()));
+        assert_matches!(&expr, Expr::TupleLiteral(t) if t.elements.is_empty());
     }
 
     #[test]
     fn test_tuple_literal_trailing_comma() {
         let expr = parse_expr_from("[1, 2, 3,]");
-        assert!(matches!(&expr, Expr::TupleLiteral(t) if t.elements.len() == 3));
+        assert_matches!(&expr, Expr::TupleLiteral(t) if t.elements.len() == 3);
     }
 
     #[test]
@@ -8003,7 +8196,7 @@ line 2
     #[test]
     fn tuple_family_decl_still_parses() {
         let module = parse("internal type [..T];").unwrap();
-        assert!(matches!(&module.items[0], Item::TupleTypeDecl(_)));
+        assert_matches!(&module.items[0], Item::TupleTypeDecl(_));
     }
 
     #[test]
@@ -8076,7 +8269,7 @@ line 2
         let binding = &w.handlers[0];
         assert_eq!(binding_effect_name(binding), Some("Stdout"));
         // Handler must be a `&mut <expr>` unary expression.
-        assert!(matches!(binding.handler, Expr::Unary(_)));
+        assert_matches!(binding.handler, Expr::Unary(_));
         // Body has one statement.
         assert_eq!(w.body.stmts.len(), 1);
     }
@@ -8299,7 +8492,7 @@ line 2
         let Expr::Resume(r) = expr else {
             panic!("expected Resume");
         };
-        assert!(matches!(r.value, Expr::Literal(_)));
+        assert_matches!(r.value, Expr::Literal(_));
     }
 
     #[test]
@@ -8419,7 +8612,7 @@ line 2
         };
         let body = func.body.as_ref().unwrap();
         assert_eq!(body.stmts.len(), 1);
-        assert!(matches!(&body.stmts[0], Stmt::Return(r) if r.value.is_some()));
+        assert_matches!(&body.stmts[0], Stmt::Return(r) if r.value.is_some());
     }
 
     #[test]
@@ -8430,7 +8623,7 @@ line 2
         };
         let body = func.body.as_ref().unwrap();
         assert_eq!(body.stmts.len(), 1);
-        assert!(matches!(&body.stmts[0], Stmt::Return(r) if r.value.is_none()));
+        assert_matches!(&body.stmts[0], Stmt::Return(r) if r.value.is_none());
     }
 
     #[test]
@@ -8498,7 +8691,7 @@ line 2
             panic!("expected loop");
         };
         assert_eq!(loop_stmt.body.stmts.len(), 1);
-        assert!(matches!(&loop_stmt.body.stmts[0], Stmt::Continue(_)));
+        assert_matches!(&loop_stmt.body.stmts[0], Stmt::Continue(_));
     }
 
     #[test]
@@ -8509,7 +8702,7 @@ line 2
         };
         let body = func.body.as_ref().unwrap();
         assert_eq!(body.stmts.len(), 1);
-        assert!(matches!(&body.stmts[0], Stmt::TaskReturn(_)));
+        assert_matches!(&body.stmts[0], Stmt::TaskReturn(_));
     }
 
     #[test]
@@ -8674,10 +8867,7 @@ line 2
             panic!("expected a tuple type, got {:?}", func.params[0].ty);
         };
         assert_eq!(elems.len(), 3, "all three type slots survive");
-        assert!(
-            matches!(elems[1], Type::Error(_)),
-            "middle type is a placeholder"
-        );
+        assert_matches!(elems[1], Type::Error(_), "middle type is a placeholder");
     }
 
     #[test]
@@ -8704,8 +8894,9 @@ line 2
         };
         assert_eq!(g.name, "Map");
         assert_eq!(g.args.len(), 3, "all three type-argument slots survive");
-        assert!(
-            matches!(g.args[1], Type::Error(_)),
+        assert_matches!(
+            g.args[1],
+            Type::Error(_),
             "the broken middle type argument is a placeholder",
         );
     }
@@ -8744,8 +8935,9 @@ line 2
             panic!("expected a tuple pattern, got {:?}", let_stmt.pattern);
         };
         assert_eq!(elems.len(), 3, "all three pattern slots survive");
-        assert!(
-            matches!(elems[1], Pattern::Error(_)),
+        assert_matches!(
+            elems[1],
+            Pattern::Error(_),
             "broken middle pattern is a placeholder",
         );
     }
@@ -8921,12 +9113,13 @@ line 2
                 _ => None,
             })
             .expect("the let binding survives");
-        assert!(
-            matches!(&let_stmt.pattern, Pattern::Ident { name, .. } if name == "x"),
+        assert_matches!(
+            &let_stmt.pattern, Pattern::Ident { name, .. } if name == "x",
             "the binding name is preserved",
         );
-        assert!(
-            matches!(let_stmt.value, Some(Expr::Error(_))),
+        assert_matches!(
+            let_stmt.value,
+            Some(Expr::Error(_)),
             "the missing initializer is an Expr::Error placeholder",
         );
         assert!(
@@ -8954,8 +9147,9 @@ line 2
         let Some(Expr::Binary(bin)) = &let_stmt.value else {
             panic!("expected a binary expression, got {:?}", let_stmt.value);
         };
-        assert!(
-            matches!(bin.right, Expr::Error(_)),
+        assert_matches!(
+            bin.right,
+            Expr::Error(_),
             "the missing right operand is an Expr::Error placeholder",
         );
     }
@@ -8976,7 +9170,7 @@ line 2
         let Some(Expr::Binary(bin)) = &ret.value else {
             panic!("expected a binary expression, got {:?}", ret.value);
         };
-        assert!(matches!(bin.right, Expr::Error(_)));
+        assert_matches!(bin.right, Expr::Error(_));
     }
 
     #[test]
@@ -9056,16 +9250,19 @@ line 2
         assert!(!errors.is_empty(), "broken argument should be reported");
         let call = single_return_call(&module);
         assert_eq!(call.args.len(), 3, "all three argument slots survive");
-        assert!(
-            matches!(call.args[0], Expr::Literal(_)),
+        assert_matches!(
+            call.args[0],
+            Expr::Literal(_),
             "first argument is unaffected",
         );
-        assert!(
-            matches!(call.args[1], Expr::Error(_)),
+        assert_matches!(
+            call.args[1],
+            Expr::Error(_),
             "broken middle argument is an Expr::Error placeholder",
         );
-        assert!(
-            matches!(call.args[2], Expr::Literal(_)),
+        assert_matches!(
+            call.args[2],
+            Expr::Literal(_),
             "argument after the broken one still parses",
         );
         assert!(module.has_syntax_errors());
@@ -9080,8 +9277,8 @@ line 2
         assert!(!errors.is_empty(), "garbage argument should be reported");
         let call = single_return_call(&module);
         assert_eq!(call.args.len(), 2, "two argument slots survive");
-        assert!(matches!(call.args[0], Expr::Error(_)));
-        assert!(matches!(call.args[1], Expr::Literal(_)));
+        assert_matches!(call.args[0], Expr::Error(_));
+        assert_matches!(call.args[1], Expr::Literal(_));
     }
 
     #[test]
@@ -9112,7 +9309,7 @@ line 2
             panic!("expected a tuple/array literal, got {ret:?}");
         };
         assert_eq!(t.elements.len(), 3, "all three element slots survive");
-        assert!(matches!(t.elements[1], Expr::Error(_)));
+        assert_matches!(t.elements[1], Expr::Error(_));
     }
 
     fn first_let_stmt(module: &Module) -> &LetStmt {
@@ -9130,12 +9327,12 @@ line 2
         let source = "fn f() { let Some(x) = opt else { return; }; }";
         let module = parse(source).unwrap();
         let let_stmt = first_let_stmt(&module);
-        assert!(matches!(let_stmt.pattern, Pattern::Variant { .. }));
+        assert_matches!(let_stmt.pattern, Pattern::Variant { .. });
         let else_block = let_stmt
             .else_block
             .as_ref()
             .expect("let ... else should carry an else block");
-        assert!(matches!(else_block.stmts[0], Stmt::Return(_)));
+        assert_matches!(else_block.stmts[0], Stmt::Return(_));
     }
 
     #[test]

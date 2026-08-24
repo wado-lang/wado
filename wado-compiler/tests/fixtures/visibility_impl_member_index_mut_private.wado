@@ -1,0 +1,11 @@
+//! A `&mut self` method reached through an indexed place answers to the
+//! ladder, as one on a plain receiver does.
+use { make_items } from "./sub/impl_member_lib.wado";
+
+export fn run() {
+    let mut items = make_items();
+    assert items[0].bump() == 1;
+}
+
+__DATA__
+{"compile_error": "is private to"}

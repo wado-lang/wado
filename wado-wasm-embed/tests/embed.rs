@@ -1,3 +1,4 @@
+use std::assert_matches;
 use wado_wasm_embed::{Embed, Error, embed};
 
 fn prune(source: &str, keep: &[&str]) -> Vec<u8> {
@@ -196,7 +197,7 @@ fn two_memories_are_rejected() {
         },
     )
     .expect_err("two memories cannot share one component memory");
-    assert!(matches!(err, Error::Unsupported("more than one memory")));
+    assert_matches!(err, Error::Unsupported("more than one memory"));
 }
 
 #[test]
@@ -211,7 +212,7 @@ fn a_start_section_is_rejected() {
         },
     )
     .expect_err("a start section cannot run inside the embedding");
-    assert!(matches!(err, Error::Unsupported("start section")));
+    assert_matches!(err, Error::Unsupported("start section"));
 }
 
 /// `call_indirect` can reach anything the table holds, so an active segment

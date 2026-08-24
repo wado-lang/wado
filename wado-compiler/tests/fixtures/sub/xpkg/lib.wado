@@ -1,0 +1,29 @@
+//! The `xpkg` package entry module: `[package].lib`.
+
+use { shared_helper, make_secret } from "./util.wado";
+
+pub use { open_helper } from "./util.wado";
+
+internal use { shared_helper as pkg_only_helper } from "./util.wado";
+
+pub fn from_internal() -> i32 { return shared_helper() }
+
+pub fn secret_code() -> i32 { return make_secret().code }
+
+pub struct Gadget { pub open: i32, internal hidden: i32 }
+
+pub fn make_gadget() -> Gadget { return Gadget { open: 1, hidden: 2 } }
+
+impl Gadget {
+  fn file_private(&self) -> i32 { return self.hidden + 10 }
+
+  internal fn pkg_internal(&self) -> i32 { return self.hidden + 20 }
+
+  pub fn open_method(&self) -> i32 { return self.file_private() + self.pkg_internal() }
+
+  const FILE_PRIVATE_C: i32 = 100;
+
+  internal const PKG_INTERNAL_C: i32 = 200;
+
+  pub const OPEN_C: i32 = 300;
+}

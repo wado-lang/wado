@@ -1007,6 +1007,7 @@ fn build_registry_source(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn parse_minimal() {
@@ -1103,14 +1104,14 @@ router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let dep = &m.dependencies["router"];
-        assert!(matches!(
+        assert_matches!(
             &dep.source,
             DependencySource::Git {
                 url,
                 pin: GitPin::Version(v),
                 directory: None,
             } if url == "https://github.com/user/router.git" && v == "^1.0.0"
-        ));
+        );
     }
 
     #[test]
@@ -1124,14 +1125,14 @@ version = "0.1.0"
 "org:foo" = { git = "https://github.com/org/monorepo.git", version = "^1.0.0", directory = "packages/foo" }
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(matches!(
+        assert_matches!(
             &m.dependencies["org:foo"].source,
             DependencySource::Git {
                 pin: GitPin::Version(v),
                 directory: Some(dir),
                 ..
             } if v == "^1.0.0" && dir == "packages/foo"
-        ));
+        );
     }
 
     #[test]
@@ -1145,9 +1146,9 @@ version = "0.1.0"
 "lib:shared" = { path = "../shared", directory = "packages/foo" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(&err, ManifestError::ConflictingSource { message, .. } if message.contains("directory")),
-            "{err:?}"
+        assert_matches!(
+            &err,
+            ManifestError::ConflictingSource { message, .. } if message.contains("directory")
         );
     }
 
@@ -1181,14 +1182,14 @@ default = "https://wa.dev"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let dep = &m.dependencies["mizchi:brotli"];
-        assert!(matches!(
+        assert_matches!(
             &dep.source,
             DependencySource::Registry {
                 registry: None,
                 package,
                 version,
             } if package == "mizchi:brotli" && version == "^0.2.0"
-        ));
+        );
     }
 
     #[test]
@@ -1209,10 +1210,10 @@ default = "https://wa.dev"
         let m = toml.parse::<Manifest>().unwrap();
         let warnings = m.warnings();
         assert_eq!(warnings.len(), 1, "got {warnings:?}");
-        assert!(matches!(
+        assert_matches!(
             &warnings[0],
             ManifestWarning::BareDependencyKey { key } if key == "router"
-        ));
+        );
     }
 
     #[test]
@@ -1271,10 +1272,10 @@ version = "0.1.0"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let dep = &m.dependencies["lib:shared"];
-        assert!(matches!(
+        assert_matches!(
             &dep.source,
             DependencySource::Path { path, publish_source: None } if path == "../shared"
-        ));
+        );
     }
 
     #[test]
@@ -1292,14 +1293,14 @@ custom = "https://registry.example.com"
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let dep = &m.dependencies["mizchi:brotli"];
-        assert!(matches!(
+        assert_matches!(
             &dep.source,
             DependencySource::Registry {
                 registry: Some(reg),
                 package,
                 version,
             } if reg == "custom" && package == "mizchi:brotli" && version == "^0.2.0"
-        ));
+        );
     }
 
     #[test]
@@ -1316,10 +1317,7 @@ default = "oci://ghcr.io/acme"
 "mizchi:brotli" = { registry = "default" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(&err, ManifestError::MissingField { field, .. } if field == "version"),
-            "{err:?}"
-        );
+        assert_matches!(&err, ManifestError::MissingField { field, .. } if field == "version");
     }
 
     #[test]
@@ -1336,9 +1334,9 @@ default = "oci://ghcr.io/acme"
 foo = { version = "^1.0.0" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(&err, ManifestError::ConflictingSource { message, .. } if message.contains("coordinate key")),
-            "{err:?}"
+        assert_matches!(
+            &err,
+            ManifestError::ConflictingSource { message, .. } if message.contains("coordinate key")
         );
     }
 
@@ -1353,10 +1351,7 @@ version = "0.1.0"
 "mizchi:brotli" = { version = "^0.2.0" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::NoDefaultRegistry { .. }),
-            "expected NoDefaultRegistry, got {err:?}"
-        );
+        assert_matches!(err, ManifestError::NoDefaultRegistry { .. });
     }
 
     #[test]
@@ -1374,13 +1369,13 @@ router = { git = "https://github.com/user/router.git", ref = "main" }
 "#;
         let m = toml.parse::<Manifest>().unwrap();
         let dep = &m.dependencies["router"];
-        assert!(matches!(
+        assert_matches!(
             &dep.source,
             DependencySource::Git {
                 pin: GitPin::Ref(r),
                 ..
             } if r == "main"
-        ));
+        );
     }
 
     #[test]
@@ -1397,7 +1392,7 @@ version = "0.1.0"
 router = { git = "https://example.com/r.git", version = "^1.0.0", ref = "main" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::GitVersionRefConflict { .. }));
+        assert_matches!(err, ManifestError::GitVersionRefConflict { .. });
     }
 
     #[test]
@@ -1414,10 +1409,7 @@ version = "0.1.0"
 regex = { package = "docs:regex", version = "1.0.0" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::InvalidVersion { .. }),
-            "expected InvalidVersion, got {err:?}"
-        );
+        assert_matches!(err, ManifestError::InvalidVersion { .. });
     }
 
     #[test]
@@ -1442,10 +1434,10 @@ shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
             } => {
                 assert_eq!(path, "../shared");
                 assert!(publish_source.is_some());
-                assert!(matches!(
+                assert_matches!(
                     publish_source.as_deref(),
                     Some(DependencySource::Registry { .. })
-                ));
+                );
             }
             other => panic!("expected Path, got {other:?}"),
         }
@@ -1551,10 +1543,7 @@ lib = "src/lib.wado"
 json = { workspace = true }
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(matches!(
-            m.dependencies["json"].source,
-            DependencySource::Workspace
-        ));
+        assert_matches!(m.dependencies["json"].source, DependencySource::Workspace);
     }
 
     #[test]
@@ -1683,7 +1672,7 @@ license = "MIT"
 license-file = "LICENSE"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::ConflictingLicense), "{err:?}");
+        assert_matches!(err, ManifestError::ConflictingLicense);
     }
 
     #[test]
@@ -1695,10 +1684,7 @@ version = "0.1.0"
 wado-version = "not a req"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::InvalidWadoVersion { .. }),
-            "{err:?}"
-        );
+        assert_matches!(err, ManifestError::InvalidWadoVersion { .. });
     }
 
     #[test]
@@ -1734,10 +1720,7 @@ version = "0.1.0"
 license = "Definitely Not A License"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::InvalidLicense { .. }),
-            "{err:?}"
-        );
+        assert_matches!(err, ManifestError::InvalidLicense { .. });
     }
 
     const ROOT_WS: &str = r#"
@@ -1782,9 +1765,10 @@ lib = "src/lib.wado"
         ] {
             let member = format!("[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n{line}\n");
             let err = resolve_member(&member, ROOT_WS).unwrap_err();
-            assert!(
-                matches!(&err, ManifestError::WorkspaceFieldOverride { field: f } if f == field),
-                "field {field}: {err:?}"
+            assert_matches!(
+                &err,
+                ManifestError::WorkspaceFieldOverride { field: f } if f == field,
+                "field {field}"
             );
         }
     }
@@ -1828,10 +1812,7 @@ repository = "https://github.com/org/monorepo"
 "#;
         let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
         let err = resolve_member(member, root).unwrap_err();
-        assert!(
-            matches!(&err, ManifestError::MissingField { field, .. } if field == "version"),
-            "{err:?}"
-        );
+        assert_matches!(&err, ManifestError::MissingField { field, .. } if field == "version");
     }
 
     #[test]
@@ -1870,15 +1851,9 @@ license-file = "LICENSE"
 "#;
         let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
         let err = resolve_member(member, root).unwrap_err();
-        assert!(
-            matches!(err, ManifestError::WorkspaceConflictingLicense),
-            "{err:?}"
-        );
+        assert_matches!(err, ManifestError::WorkspaceConflictingLicense);
         let err = root.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::WorkspaceConflictingLicense),
-            "{err:?}"
-        );
+        assert_matches!(err, ManifestError::WorkspaceConflictingLicense);
     }
 
     #[test]
@@ -1892,10 +1867,7 @@ version = "0.1.0"
 license = "Not A License"
 "#;
         let err = root.parse::<Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::WorkspaceInvalidLicense { .. }),
-            "{err:?}"
-        );
+        assert_matches!(err, ManifestError::WorkspaceInvalidLicense { .. });
     }
 
     #[test]

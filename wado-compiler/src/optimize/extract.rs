@@ -779,6 +779,7 @@ mod tests {
     use crate::nir_engine::{EngineBuffers, Rule};
     use crate::tir::TypeTable;
     use crate::token::Span;
+    use std::assert_matches;
 
     fn e(body: &mut Body, kind: ExprKind) -> ExprId {
         ei(body, kind, TypeTable::UNIT)
@@ -834,7 +835,7 @@ mod tests {
         let rules: Vec<&dyn Rule> = vec![&rule];
         let changed = eng.run(&rules);
         assert!(!changed);
-        assert!(matches!(eng.body.exprs[sum].kind, ExprKind::Binary { .. }));
+        assert_matches!(eng.body.exprs[sum].kind, ExprKind::Binary { .. });
     }
 
     /// A read `Local` statement, returning the statement id and the value-read

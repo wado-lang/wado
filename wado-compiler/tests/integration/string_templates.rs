@@ -3,6 +3,7 @@
 //! String templates use backticks and allow interpolation with ${expr} syntax.
 //! They also support Python-like format specifiers, e.g., {pi:.2f}
 
+use std::assert_matches;
 use wado_compiler::{Parser, lex};
 
 /// Parse a simple expression and return the AST
@@ -129,26 +130,26 @@ fn test_template_string_multiple_interpolations() {
             assert_eq!(template.parts.len(), 5, "expected 5 parts");
 
             // Verify it's alternating interpolations and strings
-            assert!(matches!(
+            assert_matches!(
                 &template.parts[0],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
-            assert!(matches!(
+            );
+            assert_matches!(
                 &template.parts[1],
                 wado_compiler::ast::TemplatePart::String(_)
-            ));
-            assert!(matches!(
+            );
+            assert_matches!(
                 &template.parts[2],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
-            assert!(matches!(
+            );
+            assert_matches!(
                 &template.parts[3],
                 wado_compiler::ast::TemplatePart::String(_)
-            ));
-            assert!(matches!(
+            );
+            assert_matches!(
                 &template.parts[4],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
+            );
         }
         other => panic!("expected TemplateString, got {other:?}"),
     }
@@ -166,7 +167,7 @@ fn test_template_string_expression_interpolation() {
             match &template.parts[1] {
                 wado_compiler::ast::TemplatePart::Interpolation { expr, .. } => {
                     // Should be a binary expression (x + y)
-                    assert!(matches!(&**expr, wado_compiler::ast::Expr::Binary(_)));
+                    assert_matches!(&**expr, wado_compiler::ast::Expr::Binary(_));
                 }
                 other => panic!("expected Interpolation with binary expr, got {other:?}"),
             }
@@ -254,7 +255,7 @@ fn test_template_double_colon_not_format() {
                     );
 
                     // The expression should be a function call
-                    assert!(matches!(&**expr, wado_compiler::ast::Expr::Call(_)));
+                    assert_matches!(&**expr, wado_compiler::ast::Expr::Call(_));
                 }
                 other => panic!("expected Interpolation, got {other:?}"),
             }
@@ -310,10 +311,7 @@ fn test_template_nested() {
             match &template.parts[1] {
                 wado_compiler::ast::TemplatePart::Interpolation { expr, .. } => {
                     // The interpolated expression should itself be a template string
-                    assert!(matches!(
-                        &**expr,
-                        wado_compiler::ast::Expr::TemplateString(_)
-                    ));
+                    assert_matches!(&**expr, wado_compiler::ast::Expr::TemplateString(_));
                 }
                 other => panic!("expected Interpolation, got {other:?}"),
             }
@@ -331,14 +329,14 @@ fn test_template_consecutive_interpolations() {
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => {
             assert_eq!(template.parts.len(), 2, "expected 2 interpolations");
-            assert!(matches!(
+            assert_matches!(
                 &template.parts[0],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
-            assert!(matches!(
+            );
+            assert_matches!(
                 &template.parts[1],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
+            );
         }
         other => panic!("expected TemplateString, got {other:?}"),
     }
@@ -352,10 +350,10 @@ fn test_template_starts_with_interpolation() {
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => {
             assert_eq!(template.parts.len(), 2);
-            assert!(matches!(
+            assert_matches!(
                 &template.parts[0],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
+            );
         }
         other => panic!("expected TemplateString, got {other:?}"),
     }
@@ -369,10 +367,10 @@ fn test_template_ends_with_interpolation() {
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => {
             assert_eq!(template.parts.len(), 2);
-            assert!(matches!(
+            assert_matches!(
                 &template.parts[1],
                 wado_compiler::ast::TemplatePart::Interpolation { .. }
-            ));
+            );
         }
         other => panic!("expected TemplateString, got {other:?}"),
     }
@@ -424,7 +422,7 @@ fn test_template_complex_expression() {
             match &template.parts[1] {
                 wado_compiler::ast::TemplatePart::Interpolation { expr, .. } => {
                     // Should parse as a binary expression
-                    assert!(matches!(&**expr, wado_compiler::ast::Expr::Binary(_)));
+                    assert_matches!(&**expr, wado_compiler::ast::Expr::Binary(_));
                 }
                 other => panic!("expected Interpolation, got {other:?}"),
             }
@@ -443,7 +441,7 @@ fn test_template_method_call() {
             match &template.parts[1] {
                 wado_compiler::ast::TemplatePart::Interpolation { expr, .. } => {
                     // Should be a method call
-                    assert!(matches!(&**expr, wado_compiler::ast::Expr::MethodCall(_)));
+                    assert_matches!(&**expr, wado_compiler::ast::Expr::MethodCall(_));
                 }
                 other => panic!("expected Interpolation, got {other:?}"),
             }

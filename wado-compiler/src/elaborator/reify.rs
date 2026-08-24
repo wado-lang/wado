@@ -4,6 +4,7 @@
 //! only reads them — never re-running inference, resolution, or dispatch. Its
 //! `FunctionContext` must land the same locals, at the same indices, annotate did.
 
+use super::sig::AssocConstSig;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -348,7 +349,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         owner: crate::defs::DefId,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<super::sig::AssocConstSig> {
         self.tysys
             .signatures
             .associated_constant(owner, name)
@@ -360,7 +361,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn associated_constant_of_path(
         &self,
         ident: &ast::IdentExpr,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<super::sig::AssocConstSig> {
         let owner = super::trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
@@ -372,7 +373,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         qualifier: Option<&ast::Type>,
         name: &str,
-    ) -> Option<(ModuleSource, TypeId, ast::Expr)> {
+    ) -> Option<super::sig::AssocConstSig> {
         let owner = super::trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
         self.associated_constant_of(owner, name)
     }
@@ -2145,7 +2146,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Reify the else block before the pattern bindings enter scope: the
         // else arm must not see them. It diverges, so its result type is Never.
         let else_block = self.reify_block(else_ast, ctx, None);
-        let else_type = crate::tir::block_result_type(&else_block);
+        let else_type = crate::tir::block_result_type(&self.tysys.type_table.borrow(), &else_block);
         let else_span = else_block.span;
 
         let tir_pattern = self.reify_pattern(&l.pattern, scrutinee_type, ctx);
@@ -2153,10 +2154,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cont_stmts =
             self.reify_positioned_stmts(rest, block_span, ctx, expected_type, tail_value);
         let cont_block = TirBlock::new(cont_stmts, block_span);
-        let then_type = crate::tir::block_result_type(&cont_block);
+        let then_type = crate::tir::block_result_type(&self.tysys.type_table.borrow(), &cont_block);
 
         let match_type =
-            crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+            crate::tir::agree_branch_types(&self.tysys.type_table.borrow(), then_type, else_type)
+                .unwrap_or(TypeTable::UNIT);
         let then_body = TirExpr::new(TirExprKind::Block(cont_block), then_type, span);
         let else_body = TirExpr::new(TirExprKind::Block(else_block), else_type, else_span);
         let arms = vec![
@@ -3756,8 +3758,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let break_body = TirExpr::new(TirExprKind::Block(break_block), TypeTable::UNIT, span);
 
-        let match_type =
-            crate::tir::agree_branch_types(body_type, TypeTable::UNIT).unwrap_or(TypeTable::UNIT);
+        let match_type = crate::tir::agree_branch_types(
+            &self.tysys.type_table.borrow(),
+            body_type,
+            TypeTable::UNIT,
+        )
+        .unwrap_or(TypeTable::UNIT);
         let arms = vec![
             TirMatchArm {
                 pattern: some_pattern,
@@ -4576,14 +4582,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // "last stmt is Expr" check would mis-classify those
                 // trailing forms as `Unit`, collapsing the Match's
                 // `match_type` to `Unit` and dropping the branch values.
-                let then_type = crate::tir::block_result_type(&inner_block);
+                let tt = self.tysys.type_table.borrow();
+                let then_type = crate::tir::block_result_type(&tt, &inner_block);
                 let else_tir = else_block.cloned();
                 let else_type = else_tir
                     .as_ref()
-                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
+                    .map_or(TypeTable::UNIT, |b| crate::tir::block_result_type(&tt, b));
                 let else_arm_span = else_tir.as_ref().map_or(span, |b| b.span);
-                let match_type =
-                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                let match_type = crate::tir::agree_branch_types(&tt, then_type, else_type)
+                    .unwrap_or(TypeTable::UNIT);
+                drop(tt);
                 let then_body = TirExpr::new(TirExprKind::Block(inner_block), then_type, span);
                 let else_body = match else_tir {
                     Some(b) => {
@@ -4689,12 +4697,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .else_block
                     .as_ref()
                     .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
-                let then_type = crate::tir::block_result_type(&then_branch);
+                let tt = self.tysys.type_table.borrow();
+                let then_type = crate::tir::block_result_type(&tt, &then_branch);
                 let else_type = else_branch
                     .as_ref()
-                    .map_or(TypeTable::UNIT, crate::tir::block_result_type);
-                let result_type =
-                    crate::tir::agree_branch_types(then_type, else_type).unwrap_or(TypeTable::UNIT);
+                    .map_or(TypeTable::UNIT, |b| crate::tir::block_result_type(&tt, b));
+                let result_type = crate::tir::agree_branch_types(&tt, then_type, else_type)
+                    .unwrap_or(TypeTable::UNIT);
+                drop(tt);
                 let if_expr = TirExpr::new(
                     TirExprKind::If {
                         condition: Box::new(condition),
@@ -9150,7 +9160,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    static expression in practice), so reify uses the
         //    surrounding `ctx` directly — matches the elaborator's
         //    `resolve_expr(&const_expr, ctx, …)`.
-        if let Some((const_module, type_id, const_expr)) = self.associated_constant_of_path(ident) {
+        if let Some(AssocConstSig {
+            module: const_module,
+            ty: type_id,
+            value: const_expr,
+            ..
+        }) = self.associated_constant_of_path(ident)
+        {
             // The constant's body lives in its *defining* module (e.g.
             // `pub const MAX: i32 = 2147483647;` in primitive.wado). Its
             // `AstId`s index that module's `ModuleSemantics`, not the use
@@ -9160,8 +9176,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // literal (e.g. `i32::MAX`'s `2147483647` as an f64). Reify the
             // body under the defining module's perspective so every
             // annotation lookup hits the right module's records.
-            let resolved = self.with_const_module_perspective(&const_module, |this| {
-                this.reify_expr(&const_expr, ctx, Some(type_id))
+            let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                self.with_const_module_perspective(&const_module, |this| {
+                    this.reify_expr(&const_expr, ctx, Some(type_id))
+                })
             });
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
@@ -9976,8 +9994,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<TirPattern> {
         use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirLiteralPattern};
 
-        let (const_module, type_id, const_expr) =
-            self.associated_constant_qualified(variant_qualifier, variant_name)?;
+        let AssocConstSig {
+            module: const_module,
+            ty: type_id,
+            value: const_expr,
+            ..
+        } = self.associated_constant_qualified(variant_qualifier, variant_name)?;
 
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
@@ -10046,8 +10068,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             {
                 return v;
             }
-            if let Some((const_module, type_id, const_expr)) =
-                self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+            if let Some(AssocConstSig {
+                module: const_module,
+                ty: type_id,
+                value: const_expr,
+                ..
+            }) = self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
             {
                 let resolved = self.with_const_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))

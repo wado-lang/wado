@@ -1,18 +1,13 @@
-//! Action-body stripper for ANTLR4 grammar source.
+//! Action-body stripper for ANTLR4 grammar source, for the Stage B′ oracle.
 //!
-//! The published ANTLR4 jar's Java target copies action-body source
-//! into the generated parser verbatim — it does not substitute the
-//! StringTemplate directives the testsuite uses (`<writeln("$text")>`,
-//! etc.). `javac` then rejects the body, making the oracle uninvocable.
-//! Stripping action bodies before handing the grammar to the oracle
-//! works because actions are side-effecting host code; they don't
-//! affect what the parser matches.
-//!
-//! The char-level region scanners (`scan_string`, `scan_char_class`,
-//! `scan_line_comment`, `scan_block_comment`, `scan_balanced`) are shared
-//! with the lexer and parser via `scan.wado`, so string-/comment-handling
-//! lives in one place. Here a region that must be preserved is copied to
-//! `out` verbatim; an action body is skipped by advancing `i` past it.
+//! The jar's Java target copies an action body verbatim without substituting
+//! the StringTemplate directives the testsuite writes (`<writeln("$text")>`),
+//! so `javac` rejects it and the oracle will not run. A plain action is
+//! side-effecting host code, so dropping it leaves what the parser matches
+//! alone. A `{ … }?` semantic predicate does not have that property — it gates
+//! an alternative, and stripping it widens what the grammar accepts. Such a
+//! descriptor is triaged out (`[stage_b_todo]`, `[stage_b_oracle_skip]`)
+//! rather than pinned against the oracle.
 
 use {
     scan_string,
@@ -24,46 +19,83 @@ use {
     is_id_continue_char,
 } from "./scan.wado";
 
+/// ANTLR's `currentRuleType`: which recognizer the rule being scanned belongs
+/// to, `Unknown` between rules.
+enum RuleType {
+    Unknown,
+    Lexer,
+    Parser,
+}
+
+/// The three keywords whose `{ … }` is a grammar prequel rather than an
+/// action body.
+global PREQUEL_KEYWORDS: List<String> = ["tokens", "options", "channels"];
+
+/// The `.g4` words ANTLR4 lexes as keywords rather than as an identifier,
+/// so none of them names a rule or fixes the rule type.
+global GRAMMAR_KEYWORDS: List<String> = [
+    "options", "tokens", "channels", "import", "fragment", "lexer", "parser", "grammar", "protected", "public",
+    "private", "returns", "locals", "throws", "catch", "finally", "mode",
+];
+
 pub fn strip_action_bodies(grammar: &String) -> String {
     let chars: List<char> = grammar.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(grammar.len());
+    let mut rule_type = RuleType::Unknown;
+    // Set only by the identifier branch, and cleared by every other token:
+    // ANTLR's `OPTIONS : 'options' WSNLCHARS* '{'` admits whitespace before
+    // the brace and nothing else, so a comment or a string between the two
+    // means the brace opens an action body.
+    let mut prequel_open = false;
     let mut i = 0;
     while i < n {
         let c = chars[i];
+        if c == ';' {
+            rule_type = RuleType::Unknown;
+            prequel_open = false;
+            out.push(c);
+            i += 1;
+            continue;
+        }
         if c == '\'' {
             // `.g4` lexer doesn't recognise `"..."` outside actions, so
             // only single-quote strings need top-level skip protection.
             let end = scan_string(&chars, i);
             push_span(&mut out, &chars, i, end);
+            prequel_open = false;
             i = end;
             continue;
         }
         if c == '[' {
-            // Treat `[...]` as transparent: char-class brackets, rule
-            // args, and `catch [...]` brackets never legitimately contain
-            // action-body `{`s. ANTLR4 char sets do NOT nest, so
-            // `scan_char_class` ends at the first unescaped `]` (a literal
-            // `[` inside is content). Depth tracking would stay "inside"
-            // past the real `]` for sets like TypeScript's `~[*...[]`,
-            // swallowing a following action.
-            let end = match scan_char_class(&chars, i) {
-                Some(e) => e,
-                None => n,
+            // Both regions are copied verbatim; only where they end differs.
+            // A lexer rule's char set does not nest — a literal `[` inside is
+            // content, so depth tracking would run past the real `]` for sets
+            // like TypeScript's `~[*...[]` and swallow the next action.
+            // Anywhere else the brackets are an argument list, which nests, so
+            // a `[]` host type does not end it.
+            let scanned = if rule_type matches { RuleType::Lexer } {
+                scan_char_class(&chars, i);
+            } else {
+                scan_balanced(&chars, i, '[', ']');
             };
+            let end = region_end(scanned, n);
             push_span(&mut out, &chars, i, end);
+            prequel_open = false;
             i = end;
             continue;
         }
         if c == '/' && i + 1 < n && chars[i + 1] == '/' {
             let end = scan_line_comment(&chars, i);
             push_span(&mut out, &chars, i, end);
+            prequel_open = false;
             i = end;
             continue;
         }
         if c == '/' && i + 1 < n && chars[i + 1] == '*' {
             let end = scan_block_comment(&chars, i);
             push_span(&mut out, &chars, i, end);
+            prequel_open = false;
             i = end;
             continue;
         }
@@ -97,6 +129,7 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 }
             }
             out.push(c);
+            prequel_open = false;
             i += 1;
             continue;
         }
@@ -133,14 +166,18 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             }
         }
         if c == '{' {
-            // `tokens { … }`, `options { … }`, `channels { … }` are
-            // grammar prequels, not action bodies — keep them.
-            if preceded_by_prequel_keyword(&out) {
-                out.push(c);
-                i += 1;
+            let scanned = scan_balanced(&chars, i, '{', '}');
+            // `tokens { … }`, `options { … }`, `channels { … }` are grammar
+            // prequels, not action bodies — keep them whole, so the names
+            // inside them never read as a rule name.
+            if prequel_open {
+                let end = region_end(scanned, n);
+                push_span(&mut out, &chars, i, end);
+                prequel_open = false;
+                i = end;
                 continue;
             }
-            match scan_balanced(&chars, i, '{', '}') {
+            match scanned {
                 Some(end) => {
                     let mut k = end;
                     // `{…}?` is a semantic predicate — strip the `?` too.
@@ -157,10 +194,38 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 },
             }
         }
+        if is_id_start_char(c) {
+            let mut j = i + 1;
+            while j < n && is_id_continue_char(chars[j]) {
+                j += 1;
+            }
+            let mut word = String::with_capacity(j - i);
+            push_span(&mut word, &chars, i, j);
+            prequel_open = PREQUEL_KEYWORDS.contains(&word);
+            if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains(&word) {
+                // ASCII-only, as ANTLR asks `Character.isUpperCase`: see
+                // TODO.md, blocked on ICU.
+                rule_type = if c.is_ascii_uppercase() { RuleType::Lexer } else { RuleType::Parser };
+            }
+            push_span(&mut out, &chars, i, j);
+            i = j;
+            continue;
+        }
+        if !c.is_ascii_whitespace() {
+            prequel_open = false;
+        }
         out.push(c);
         i += 1;
     }
     return out;
+}
+
+/// A region left unterminated runs to end-of-input, as ANTLR4's lexer treats it.
+fn region_end(scanned: Option<i32>, n: i32) -> i32 {
+    return match scanned {
+        Some(e) => e,
+        None => n,
+    };
 }
 
 fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
@@ -187,35 +252,6 @@ fn starts_with_word(chars: &List<char>, i: i32, word: &String) -> bool {
     }
     if i + wn < chars.len() && is_id_continue_char(chars[i + wn]) {
         return false;
-    }
-    return true;
-}
-
-fn preceded_by_prequel_keyword(out: &String) -> bool {
-    let out_chars: List<char> = out.chars().collect();
-    let mut j = out_chars.len();
-    while j > 0 && out_chars[j - 1].is_ascii_whitespace() {
-        j -= 1;
-    }
-    return ends_with_word(&out_chars, j, &"tokens")
-        || ends_with_word(&out_chars, j, &"options")
-        || ends_with_word(&out_chars, j, &"channels");
-}
-
-fn ends_with_word(chars: &List<char>, end: i32, word: &String) -> bool {
-    let w: List<char> = word.chars().collect();
-    let wn = w.len();
-    if end < wn {
-        return false;
-    }
-    let start = end - wn;
-    if start > 0 && is_id_continue_char(chars[start - 1]) {
-        return false;
-    }
-    for let mut k = 0; k < wn; k += 1 {
-        if chars[start + k] != w[k] {
-            return false;
-        }
     }
     return true;
 }

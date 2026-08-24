@@ -157,6 +157,29 @@ pub(crate) struct GenericNewtypeInfo {
     pub(super) base_type_ast: ast::Type,
 }
 
+/// Which kind of inherent impl member a visibility violation names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImplMemberKind {
+    Method,
+    AssociatedConstant,
+}
+
+impl ImplMemberKind {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Method => "method",
+            Self::AssociatedConstant => "associated constant",
+        }
+    }
+
+    fn verb(self) -> &'static str {
+        match self {
+            Self::Method => "called",
+            Self::AssociatedConstant => "read",
+        }
+    }
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -608,6 +631,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An inherent impl member (method or associated constant) reached from
+    /// beyond its declared visibility.
+    PrivateMemberAccess {
+        type_name: String,
+        member_name: String,
+        member_kind: ImplMemberKind,
+        visibility: crate::ast::Visibility,
+        span: Span,
+    },
+
     /// Method not found on type
     MethodNotFound {
         type_name: String,
@@ -777,6 +810,29 @@ pub enum TypeError {
     /// on a struct), or used outside a `core::*` module. The
     /// `message` carries the specific problem.
     CompilerItemAttr {
+        message: String,
+        span: Span,
+    },
+
+    /// One name reachable both as a resource's own or inherited method and
+    /// through a visible trait impl. The call must name which it means.
+    AmbiguousResourceMethod {
+        method: String,
+        resource: String,
+        trait_name: String,
+        span: Span,
+    },
+
+    /// A `#[cm(..., type = ...)]` backing the elaborator rejected.
+    ResourceBacking {
+        message: String,
+        span: Span,
+    },
+
+    /// A `resource Child extends Parent` clause the elaborator rejected: the
+    /// parent is not a resource, a backing does not match, the chain is
+    /// cyclic, or the parent carries generic arguments (out of scope in v1).
+    ResourceExtends {
         message: String,
         span: Span,
     },
@@ -1377,11 +1433,42 @@ impl TypeError {
                          package and cannot be accessed from another package; mark it `pub` to \
                          expose it across packages"
                     ),
-                    crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
+                    crate::ast::Visibility::Private => format!(
                         "field `{field_name}` of struct `{struct_name}` is private to its defining \
                          file; mark it `internal` (same package) or `pub` (cross package) to widen \
                          access"
                     ),
+                    crate::ast::Visibility::Public => {
+                        unreachable!("a `pub` field is reachable from every module")
+                    }
+                },
+                *span,
+            ),
+            TypeError::PrivateMemberAccess {
+                type_name,
+                member_name,
+                member_kind,
+                visibility,
+                span,
+            } => (
+                Code::PrivateSymbol,
+                {
+                    let kind = member_kind.noun();
+                    let verb = member_kind.verb();
+                    match visibility {
+                        crate::ast::Visibility::Internal => format!(
+                            "{kind} `{member_name}` of `{type_name}` is `internal` to its package \
+                             and cannot be {verb} from another package; mark it `pub` to \
+                             expose it across packages"
+                        ),
+                        crate::ast::Visibility::Private | crate::ast::Visibility::Public => {
+                            format!(
+                                "{kind} `{member_name}` of `{type_name}` is private to its defining \
+                                 file; mark it `internal` (same package) or `pub` (cross \
+                                 package) to widen access"
+                            )
+                        }
+                    }
                 },
                 *span,
             ),
@@ -1571,6 +1658,24 @@ impl TypeError {
             TypeError::CompilerItemAttr { message, span } => {
                 (Code::CompilerItemAttr, message.clone(), *span)
             }
+            TypeError::ResourceExtends { message, span } => {
+                (Code::ResourceExtends, message.clone(), *span)
+            }
+            TypeError::ResourceBacking { message, span } => {
+                (Code::ResourceBacking, message.clone(), *span)
+            }
+            TypeError::AmbiguousResourceMethod {
+                method,
+                resource,
+                trait_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
             TypeError::BareGenericFunctionRef { name, span } => (
                 Code::GenericFunctionRef,
                 format!(
@@ -1728,6 +1833,9 @@ pub(super) struct MethodInfo {
     /// Mirrors `resource_cleanup`'s `owned_self` at the semantic layer; the
     /// move check reads it to flag use-after-move through a consuming method.
     pub(super) consumes_self: bool,
+    /// An inherent member's declared rung. `None` where the member does not
+    /// decide its own reach: trait impls, resource methods, builtins.
+    pub(super) inherent_visibility: Option<crate::ast::Visibility>,
 }
 
 /// Labeled block expression target for tracking break types
@@ -1995,6 +2103,25 @@ impl FunctionContext {
             }
         }
         None
+    }
+
+    /// Run `body` with the surrounding frame's bindings out of scope, keeping
+    /// local allocation on this context — an inlined constant body resolves
+    /// names in its own module, but its locals live in the frame it lands in.
+    pub(super) fn with_caller_bindings_hidden<R>(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let scopes = std::mem::replace(&mut self.scopes, vec![IndexMap::default()]);
+        let outer_locals = std::mem::take(&mut self.outer_locals);
+        let deref_overrides = std::mem::take(&mut self.deref_overrides);
+        let outer_box_types = std::mem::take(&mut self.outer_box_types);
+        let result = body(self);
+        self.scopes = scopes;
+        self.outer_locals = outer_locals;
+        self.deref_overrides = deref_overrides;
+        self.outer_box_types = outer_box_types;
+        result
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.
@@ -2525,6 +2652,7 @@ mod tests {
     use super::*;
     use crate::compiler_host::Diagnostic;
     use crate::token::Span;
+    use std::assert_matches;
 
     fn span() -> Span {
         Span::new(0, 1, 7, 3)
@@ -2549,10 +2677,7 @@ mod tests {
     #[test]
     fn render_carries_diagnostic_code_and_span() {
         let (code, message, sp) = TypeError::ResumeOutsideHandler { span: span() }.render();
-        assert!(matches!(
-            code,
-            crate::compiler_host::Code::UnsupportedFeature
-        ));
+        assert_matches!(code, crate::compiler_host::Code::UnsupportedFeature);
         assert_eq!(
             message,
             "`resume` is only valid inside an effect handler method body"

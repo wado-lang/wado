@@ -437,6 +437,7 @@ fn is_ignored(rules: &[GitignoreRule], path: &Path, is_dir: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::collections::BTreeSet;
 
     fn names_of(root: &Path, paths: &[PathBuf]) -> BTreeSet<String> {
@@ -727,7 +728,7 @@ pathology = should-not-match\n\
     #[test]
     fn rejects_invalid_exclude_pattern() {
         let err = ExcludeSet::compile(&["[unterminated".to_string()]).unwrap_err();
-        assert!(matches!(err, WalkError::InvalidExclude { .. }));
+        assert_matches!(err, WalkError::InvalidExclude { .. });
     }
 
     #[cfg(unix)]

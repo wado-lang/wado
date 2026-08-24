@@ -1,6 +1,7 @@
 //! Expression resolution (literals, identifiers, field access, index,
 //! if-expressions, match, cast, struct/tuple literals, etc.).
 
+use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
@@ -612,12 +613,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some((_const_module, type_id, const_expr)) = self.associated_constant_of_path(ident)
-        {
+        if let Some(assoc) = self.associated_constant_of_path(ident) {
+            self.check_inherent_member_visibility(
+                assoc.inherent_visibility,
+                Some(&assoc.module),
+                MemberOwner::Named(assoc_const_owner_segment(ident)),
+                ident.segments.last().map_or(&ident.name, |s| &s.name),
+                super::types::ImplMemberKind::AssociatedConstant,
+                Some(ident.id),
+                ident.span,
+            );
             // Resolve the constant body for its fact-recording side effects;
             // reify re-reifies it (`reify_ident`). Not an l-value.
-            self.resolve_expr(&const_expr, ctx, Some(type_id));
-            return type_id;
+            let vantage = (assoc.module.clone(), assoc.value.id().space());
+            let const_module = assoc.module.clone();
+            self.with_default_scope_module(Some(const_module), |s| {
+                s.with_foreign_vantage(Some(vantage), |s| {
+                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                })
+            });
+            return assoc.ty;
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -1154,7 +1169,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_field_type(expr_type, &field_access.field, field_access.span);
 
         // Check field visibility: non-pub fields cannot be accessed from other modules
-        self.check_field_visibility(expr_type, &field_access.field, field_access.span);
+        self.check_field_visibility(
+            expr_type,
+            &field_access.field,
+            Some(field_access.id),
+            field_access.span,
+        );
 
         field_type
     }
@@ -1323,10 +1343,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
+    /// The module that wrote `node`, per [`super::scope::Scope::foreign_vantage`].
+    /// `None` judges here, for a site carrying no id.
+    pub(super) fn visibility_vantage(&self, node: Option<ast::AstId>) -> ModuleSource {
+        match (&self.annotate_ctx.foreign_vantage, node) {
+            (Some((module, space)), Some(id)) if id.space() == *space => module.clone(),
+            _ => self.current_module_source.clone(),
+        }
+    }
+
+    /// Enforce an inherent impl member's rung of the visibility ladder.
+    /// `owner` names the declaring type, resolved only to fill a diagnostic.
+    /// `visibility` is `None` where the member does not decide its own reach.
+    pub(super) fn check_inherent_member_visibility(
+        &mut self,
+        visibility: Option<crate::ast::Visibility>,
+        impl_module: Option<&ModuleSource>,
+        owner: MemberOwner<'_>,
+        member_name: &str,
+        member_kind: super::types::ImplMemberKind,
+        node: Option<ast::AstId>,
+        span: Span,
+    ) {
+        let (Some(visibility), Some(impl_module)) = (visibility, impl_module) else {
+            return;
+        };
+        let vantage = self.visibility_vantage(node);
+        if *impl_module == vantage {
+            return;
+        }
+        let same_package = impl_module.same_package(&vantage);
+        if visibility.reachable_from(same_package) {
+            return;
+        }
+        let type_name = match owner {
+            MemberOwner::Type(id) => self.tysys.type_id_to_string(id),
+            MemberOwner::Named(name) => name.to_string(),
+            MemberOwner::Written(Some(ty)) => self.get_type_name(ty),
+            MemberOwner::Written(None) => member_name.to_string(),
+        };
+        let _ = self.emit_in(
+            &vantage,
+            TypeError::PrivateMemberAccess {
+                type_name,
+                member_name: member_name.to_string(),
+                member_kind,
+                visibility,
+                span,
+            },
+        );
+    }
+
     pub(super) fn check_field_visibility(
         &mut self,
         struct_type: TypeId,
         field_name: &str,
+        node: Option<ast::AstId>,
         span: Span,
     ) {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
@@ -1338,22 +1410,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .nominal_head(struct_type)
                 .expect("a nominal type names a declaration"),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.check_field_visibility(inner, field_name, span);
+                self.check_field_visibility(inner, field_name, node, span);
                 return;
             }
             ResolvedType::Newtype { base_type, .. } => {
-                self.check_field_visibility(base_type, field_name, span);
+                self.check_field_visibility(base_type, field_name, node, span);
                 return;
             }
             _ => return,
         };
 
         // Same module — always allowed
-        if module_source == self.current_module_source {
+        let vantage = self.visibility_vantage(node);
+        if module_source == vantage {
             return;
         }
 
-        let same_package = module_source.same_package(&self.current_module_source);
+        let same_package = module_source.same_package(&vantage);
         if let Some(struct_info) = self.struct_fields_of_type(struct_type) {
             for (fname, _, vis) in &struct_info.fields {
                 if fname == field_name && !vis.reachable_from(same_package) {
@@ -1855,50 +1928,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`: the
-                    // normalized chain's result is `agree(then_block_result,
-                    // else_type)` collapsed to `Unit` on mismatch (the
-                    // per-level `unwrap_or(UNIT)` recursion reduces to exactly
-                    // this — equal for single- and multi-element chains). Then
-                    // the same agreement against the else block as before.
+                    // AST mirror of `block_result_type(chain_block)`, and the
+                    // same shape as the `Condition::Expr` arm below: the chain's
+                    // result is what the then block and the else block agree on.
                     let else_type = if_expr
                         .else_block
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-                    let chain_type = crate::tir::agree_branch_types(
-                        self.ast_block_result_type(&if_expr.then_block),
-                        else_type,
-                    )
-                    .unwrap_or(TypeTable::UNIT);
-                    if chain_type == else_type
-                        || chain_type == TypeTable::NEVER
-                        || else_type == TypeTable::NEVER
-                    {
-                        if chain_type == TypeTable::NEVER {
-                            else_type
-                        } else {
-                            chain_type
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    match (
+                        self.agreed_branch_type(&[then_type, else_type]),
+                        &if_expr.else_block,
+                    ) {
+                        (Some(agreed), _) => agreed,
+                        (None, None) => TypeTable::UNIT,
+                        (None, Some(else_block)) => {
+                            let (then_name, else_name) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .type_names_for_mismatch(then_type, else_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: then_name,
+                                found: else_name,
+                                span: else_block.span,
+                            });
+                            then_type
                         }
-                    } else if if_expr.else_block.is_none() {
-                        TypeTable::UNIT
-                    } else {
-                        let (chain_name, else_name) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(chain_type, else_type);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected: chain_name,
-                            found: else_name,
-                            span: if_expr.else_block.as_ref().unwrap().span,
-                        });
-                        chain_type
                     }
                 };
 
                 // An `if let` whose branches are all bare `null` leaves the
                 // type unresolved; report it rather than ICEing in codegen.
-                self.report_uninferable_result(type_id, if_expr.span, "if expression");
+                // When one branch resolved, the other's `null` tail is checked
+                // against it — the sibling's type is what agreement adopted.
+                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+                    if let Some(eb) = &if_expr.else_block {
+                        blocks.push(eb);
+                    }
+                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+                }
 
                 // Same arm-agreement rule as the `Condition::Expr` arm below:
                 // `expected_type = Some(X)` pins `type_id` unconditionally, so
@@ -1973,42 +2043,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
                     // inner type could not be inferred) defer to the sibling branch's
                     // resolved type. The unresolved branch's tail is patched below.
-                    let tt = self.tysys.type_table.borrow();
-                    let then_unknown = tt.contains_unknown(then_type);
-                    let else_unknown = tt.contains_unknown(else_type);
-                    drop(tt);
-                    if then_type == else_type {
-                        then_type
-                    } else if then_type == TypeTable::NEVER {
-                        else_type
-                    } else if else_type == TypeTable::NEVER {
-                        then_type
-                    } else if then_unknown && !else_unknown {
-                        else_type
-                    } else if else_unknown && !then_unknown {
-                        then_type
-                    } else if if_expr.else_block.is_none() {
-                        if then_type != TypeTable::UNIT {
-                            let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: "()".to_string(),
-                                found: type_name,
-                                span: if_expr.then_block.span,
-                            });
+                    match (
+                        self.agreed_branch_type(&[then_type, else_type]),
+                        &if_expr.else_block,
+                    ) {
+                        (Some(agreed), _) => agreed,
+                        (None, None) => {
+                            if then_type != TypeTable::UNIT {
+                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                                let _ = self.emit(TypeError::TypeMismatch {
+                                    expected: "()".to_string(),
+                                    found: type_name,
+                                    span: if_expr.then_block.span,
+                                });
+                            }
+                            TypeTable::UNIT
                         }
-                        TypeTable::UNIT
-                    } else {
-                        let (then_name, else_name) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(then_type, else_type);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected: then_name,
-                            found: else_name,
-                            span: if_expr.else_block.as_ref().unwrap().span,
-                        });
-                        then_type
+                        (None, Some(else_block)) => {
+                            let (then_name, else_name) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .type_names_for_mismatch(then_type, else_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: then_name,
+                                found: else_name,
+                                span: else_block.span,
+                            });
+                            then_type
+                        }
                     }
                 };
 
@@ -2227,6 +2290,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The type a set of branches agrees on, `None` when they disagree — the
+    /// caller reports that in its own terms. The one place branch agreement is
+    /// decided: `if`, `if let` and `match` all route here.
+    pub(super) fn agreed_branch_type(&self, branches: &[TypeId]) -> Option<TypeId> {
+        let mut agreed: Option<TypeId> = None;
+        for &branch in branches {
+            agreed = Some(match agreed {
+                None => branch,
+                Some(acc) => self.agree_two_branches(acc, branch)?,
+            });
+        }
+        agreed
+    }
+
+    fn agree_two_branches(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if a == b {
+            return Some(a);
+        }
+        if a == TypeTable::NEVER {
+            return Some(b);
+        }
+        if b == TypeTable::NEVER {
+            return Some(a);
+        }
+        let (a_unknown, b_unknown) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.contains_unknown(a), tt.contains_unknown(b))
+        };
+        if a_unknown && !b_unknown {
+            return Some(b);
+        }
+        if b_unknown && !a_unknown {
+            return Some(a);
+        }
+        self.tysys.type_table.borrow().resource_join(a, b)
+    }
+
     pub(super) fn resolve_match_expr(
         &mut self,
         match_expr: &ast::MatchExpr,
@@ -2301,6 +2401,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
+
+        // Whichever order the arms are written in: the first-arm pick above
+        // would make a parent-typed later arm a mismatch.
+        let type_id = if expected_type.is_some() {
+            type_id
+        } else {
+            arm_bodies.iter().fold(type_id, |acc, (arm_type, _)| {
+                self.agreed_branch_type(&[acc, *arm_type]).unwrap_or(acc)
+            })
+        };
 
         // Report any `null`-bodied arm whose `Option<???>` inner could not be
         // inferred against a resolved non-`Option` result — AST mirror of the
@@ -2657,8 +2767,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bindings.is_empty()
             && !self.is_known_case_of_type(scrutinee_type, &normalized, variant_qualifier)
         {
-            if let Some((_m, _type_id, const_expr)) =
-                self.associated_constant_qualified(variant_qualifier, variant_name)
+            if let Some(AssocConstSig {
+                value: const_expr, ..
+            }) = self.associated_constant_qualified(variant_qualifier, variant_name)
             {
                 if let ast::Expr::Literal(lit) = &const_expr {
                     match &lit.value {
@@ -3689,10 +3800,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the default is evaluated in the defining module, so encapsulation is
         // preserved — so only flag fields the user explicitly provided, not the
         // defaults synthesized above.
-        if struct_module_source != self.current_module_source
+        let vantage = self.visibility_vantage(Some(struct_lit.id));
+        if struct_module_source != vantage
             && let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl)
         {
-            let same_package = struct_module_source.same_package(&self.current_module_source);
+            let same_package = struct_module_source.same_package(&vantage);
             for (fname, _, vis) in &struct_info.fields {
                 // Flagged when explicitly set, or read from `base` via a spread.
                 let set_explicitly = provided_names.contains(fname);
@@ -3995,10 +4107,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some((module, fields)) = &base_info[base_idx].1 else {
                 continue;
             };
-            if *module == self.current_module_source {
+            let vantage = self.visibility_vantage(Some(struct_lit.id));
+            if *module == vantage {
                 continue;
             }
-            let same_package = module.same_package(&self.current_module_source);
+            let same_package = module.same_package(&vantage);
             let Some((.., vis)) = fields.iter().find(|(n, ..)| n == name) else {
                 continue;
             };
@@ -5200,4 +5313,21 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             _ => ast::walk_expr(self, expr),
         }
     }
+}
+
+/// How to name the type an impl member is declared on.
+pub(super) enum MemberOwner<'a> {
+    Type(TypeId),
+    Named(&'a str),
+    Written(Option<&'a ast::Type>),
+}
+
+/// The segment naming an associated constant's owner — `K` in `K::SECRET` and
+/// in `ns::K::SECRET`.
+fn assoc_const_owner_segment(ident: &ast::IdentExpr) -> &str {
+    ident
+        .segments
+        .len()
+        .checked_sub(2)
+        .map_or(ident.name.as_str(), |i| ident.segments[i].name.as_str())
 }

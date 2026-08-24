@@ -125,10 +125,11 @@ pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Typ
             // matches). The TIR walker reached it through the `Expr` arm.
             ast::Stmt::Match(m) => ctx.type_of_id(m.id),
             ast::Stmt::If(if_stmt) => if_stmt.else_block.as_ref().and_then(|else_block| {
-                crate::tir::agree_branch_types(
+                let (then_type, else_type) = (
                     block_result_type(ctx, &if_stmt.then_block),
                     block_result_type(ctx, else_block),
-                )
+                );
+                crate::tir::agree_branch_types(&ctx.type_table.borrow(), then_type, else_type)
             }),
             ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => {
                 Some(TypeTable::NEVER)

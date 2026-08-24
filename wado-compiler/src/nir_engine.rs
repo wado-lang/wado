@@ -1703,6 +1703,7 @@ mod tests {
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeTable;
     use crate::token::Span;
+    use std::assert_matches;
 
     /// Build a `Body` whose root block holds the statements `build` produces.
     fn mk_body(build: impl FnOnce(&mut Body) -> Vec<StmtId>) -> Body {
@@ -1909,10 +1910,10 @@ mod tests {
         let Operand::Value(v) = value else {
             panic!("expected folded constant operand, got {value:?}");
         };
-        assert!(matches!(
+        assert_matches!(
             body.values.kind(*v),
             crate::nir_value_graph::ValueKind::Int(12, _)
-        ));
+        );
     }
 
     #[test]
@@ -1997,8 +1998,8 @@ mod tests {
         // The `()` statement is gone; the `let` and `return` remain in order.
         let kept = &body.blocks[root].stmts;
         assert_eq!(kept.len(), 2);
-        assert!(matches!(body.stmts[kept[0]].kind, StmtKind::Let { .. }));
-        assert!(matches!(body.stmts[kept[1]].kind, StmtKind::Return { .. }));
+        assert_matches!(body.stmts[kept[0]].kind, StmtKind::Let { .. });
+        assert_matches!(body.stmts[kept[1]].kind, StmtKind::Return { .. });
     }
 
     #[test]
@@ -2070,11 +2071,8 @@ mod tests {
             eng.become_expr(add, lx);
             // After: `add` now holds the local read; `lx` is dead and dropped,
             // and the use index tracks the read at its new home.
-            assert!(matches!(
-                eng.body.exprs[add].kind,
-                ExprKind::Local { index: 0, .. }
-            ));
-            assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Dead));
+            assert_matches!(eng.body.exprs[add].kind, ExprKind::Local { index: 0, .. });
+            assert_matches!(eng.body.exprs[lx].kind, ExprKind::Dead);
             assert_eq!(eng.local_reads(0), &[add]);
         }
     }

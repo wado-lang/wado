@@ -14,22 +14,22 @@ use { Slice } from "core:prelude/slice.wado";
 use { String } from "core:prelude/string.wado";
 
 /// An owned, fixed-length byte buffer.
-internal type ByteArray = Array<u8>;
+pub type ByteArray = Array<u8>;
 
 /// An owned, growable byte buffer.
 #[compiler_item("byte_list")]
-internal type ByteList = List<u8>;
+pub type ByteList = List<u8>;
 
 /// A view referencing a byte buffer.
 #[compiler_item("byte_slice")]
-internal type ByteSlice = Slice<u8>;
+pub type ByteSlice = Slice<u8>;
 
 /// Conversion to a `ByteSlice` that copies no bytes.
 ///
 /// Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 /// UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 /// `core:json` `from_bytes`) accept any of them.
-internal trait AsByteSlice {
+pub trait AsByteSlice {
     fn as_byte_slice(&self) -> ByteSlice with stores[self];
 }
 

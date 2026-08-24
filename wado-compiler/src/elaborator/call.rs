@@ -15,6 +15,7 @@ use super::instantiate::Instantiation;
 use super::scope::Scope;
 use super::sig::MethodSig;
 use super::trait_env;
+use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::placeholder;
@@ -496,6 +497,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
+        if let Some((struct_name, _)) = effective_name.rsplit_once("::") {
+            let receiver = self.impl_target_at(receiver_site, struct_name);
+            self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
+        }
 
         // First, determine expected parameter types to handle coercion.
         let (mut param_types, callee_slots) = self.lookup_function_signature(
@@ -852,7 +857,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                let raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let mut raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let qualified_sig = self.static_method_sig(prefix, suffix);
+                // Written qualified, an instance method takes its receiver as
+                // the first argument — the one position the shared lookup
+                // leaves out, every other caller holding it separately.
+                if let Some(sig) = &qualified_sig
+                    && sig.self_kind != ast::SelfKind::None
+                    && let Some(&receiver) = sig.decl.param_types.first()
+                {
+                    raw_param_types.insert(0, receiver);
+                }
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
                         raw_param_types
@@ -865,6 +880,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
+                // Per-argument checking alone passes a call with too few
+                // arguments — the loop below simply does not reach them, and a
+                // qualified instance method whose receiver was dropped then
+                // reaches codegen as an invalid module.
+                // A defaulted parameter may be omitted here and is filled at
+                // reify, so only a signature without defaults has a count to
+                // check. Without this, a call missing its receiver passes and
+                // reaches codegen as an invalid module.
+                let counts_are_fixed = qualified_sig
+                    .as_ref()
+                    .is_some_and(|sig| sig.params.iter().all(|p| p.default.is_none()));
+                if counts_are_fixed && !substituted.is_empty() && args.len() != substituted.len() {
+                    let _ = self.emit(TypeError::ArgumentCountMismatch {
+                        expected: substituted.len(),
+                        found: args.len(),
+                        span: call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
                 for (i, arg) in args.iter().enumerate() {
                     if let Some(&expected) = substituted.get(i) {
                         self.typecheck(
@@ -1156,6 +1190,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|ty| self.resolve_type(ty))
                         .collect();
+
+                    // `ns::Type::method` never reaches the bare-spelling check,
+                    // so the ladder is enforced here. The receiver is named at
+                    // its own segment, which the walk answered for.
+                    {
+                        let receiver_site = ident
+                            .segments
+                            .len()
+                            .checked_sub(2)
+                            .map(|i| ident.segments[i].id);
+                        let receiver = self.impl_target_at(receiver_site, type_name);
+                        let qualified = format!("{type_name}::{method_name}");
+                        self.check_static_call_visibility(
+                            &receiver,
+                            &qualified,
+                            Some(call.id),
+                            call.span,
+                        );
+                    }
 
                     // Find the impl module via the trait env (global index)
                     let arg_type_hint = if (method_name == "from" || method_name == "try_from")
@@ -1831,9 +1884,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => break,
                 };
                 let mut default_expr = default_ast;
+                let vantage = s
+                    .annotate_ctx
+                    .default_scope_module
+                    .clone()
+                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
                 let expected_type = param_types[i];
-                let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                let resolved = s.with_foreign_vantage(vantage, |s| {
+                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                });
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
@@ -2608,6 +2668,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (inferred[..split].to_vec(), inferred[split..].to_vec())
     }
 
+    /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
+    /// `receiver` is the key the neighbouring lookups resolved, not one
+    /// re-derived from the spelling, which a splice can make mean another type.
+    pub(super) fn check_static_call_visibility(
+        &mut self,
+        receiver: &super::trait_env::ImplTargetKey,
+        effective_name: &str,
+        node: Option<crate::ast::AstId>,
+        span: crate::token::Span,
+    ) {
+        let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
+            return;
+        };
+        let Some(entry) = self.static_method_entry(receiver, method_name) else {
+            return;
+        };
+        let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
+        let owner = struct_name.to_string();
+        self.check_inherent_member_visibility(
+            visibility,
+            Some(&module),
+            super::expr::MemberOwner::Named(&owner),
+            method_name,
+            super::types::ImplMemberKind::Method,
+            node,
+            span,
+        );
+    }
+
+    /// The static-method index entry `receiver::name` selects, for the
+    /// questions the signature alone cannot answer — which module declared it,
+    /// and at what visibility.
+    pub(super) fn static_method_entry(
+        &self,
+        receiver: &super::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<&super::trait_env::StaticMethodEntry> {
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(receiver)?
+            .iter()
+            .find(|e| e.name == method_name)
+    }
+
     /// The canonical signature of the receiver-less method `method_name` on
     /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
     /// hold a name split out of a mangled spelling, so there is no site to take.
@@ -2625,15 +2730,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        let (_, _, decl_id, _) = trait_env
-            .resource_static_method_index
-            .get(&key)?
-            .iter()
-            .find(|(name, ..)| name == method_name)?;
-        self.tysys
-            .signatures
-            .resource_method_sig(*decl_id, method_name)
-            .cloned()
+        if let Some((_, _, decl_id, _)) = trait_env.resource_static(&key, method_name) {
+            return self
+                .tysys
+                .signatures
+                .resource_method_sig(*decl_id, method_name)
+                .cloned();
+        }
+        // The qualified form disambiguates a colliding name, so it reaches an
+        // inherited method too.
+        let ImplTargetKey::Decl(def) = key else {
+            return None;
+        };
+        self.resource_instance_method(def, method_name)
+            .map(|(_, sig)| sig)
     }
 
     /// Look up function parameter types with type args substituted.

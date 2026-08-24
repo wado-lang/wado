@@ -1,0 +1,13 @@
+//! An `internal` field reaches its own package, not another: a `pub` struct
+//! does not lift its fields' visibility.
+use { make_gadget } from "xpkg";
+
+export fn run() {
+    assert make_gadget().hidden == 2;
+}
+
+__DATA__
+{
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" },
+  "compile_error": "is `internal` to its package and cannot be accessed from another package"
+}

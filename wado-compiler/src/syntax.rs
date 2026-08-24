@@ -145,6 +145,7 @@ keyword_registry! {
     "trait" => Trait : StorageType,
     "type" => Type : StorageType,
     "resource" => Resource : StorageType,
+    "extends" => Extends : StorageModifier,
     "world" => World : StorageType,
     "effect" => Effect : StorageType,
     "interface" => Interface : StorageType,
@@ -390,6 +391,7 @@ impl SyntaxDefinition {
 mod tests {
     use super::*;
     use crate::token::TokenKind;
+    use std::assert_matches;
 
     #[test]
     fn test_syntax_definition() {
@@ -437,8 +439,9 @@ mod tests {
                 "contextual keyword '{text}' must not be a lexer keyword"
             );
             let r = crate::lexer::lex(text);
-            assert!(
-                matches!(r.tokens[0].kind, TokenKind::Ident(_)),
+            assert_matches!(
+                r.tokens[0].kind,
+                TokenKind::Ident(_),
                 "contextual keyword '{text}' should lex as an identifier"
             );
         }

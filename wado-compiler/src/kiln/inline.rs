@@ -583,6 +583,7 @@ mod tests {
     use super::*;
     use crate::ast::{AstId, ImportAttributes, Item, UseDecl, UseItem};
     use crate::token::Span;
+    use std::assert_matches;
 
     fn span() -> Span {
         Span::new(0, 0, 1, 1)
@@ -633,7 +634,7 @@ mod tests {
         assert_eq!(result[0].from.as_str(), "src/schema.proto");
         // The literal source string is preserved for the loader redirect key.
         assert_eq!(result[0].source.as_str(), "schema.proto");
-        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "ns:gen@1.0.0"));
+        assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "ns:gen@1.0.0");
         assert_eq!(result[0].decl_site.module, "src/main.wado");
     }
 
@@ -652,7 +653,7 @@ mod tests {
             "",
         )
         .unwrap();
-        assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen"));
+        assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen");
     }
 
     #[test]

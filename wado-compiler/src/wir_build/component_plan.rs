@@ -442,6 +442,7 @@ fn sanitize_kebab_export_name(function_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     #[test]
     fn test_sanitize_kebab_export_name() {
         // Simple case
@@ -526,24 +527,24 @@ mod tests {
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // Bare unit forms
-        assert!(matches!(
+        assert_matches!(
             resolve_cm_export_type(&unit_named(), &registry, None),
             CmExportType::Unit
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             resolve_cm_export_type(&empty_tuple(), &registry, None),
             CmExportType::Unit
-        ));
+        );
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
-        assert!(matches!(
+        assert_matches!(
             resolve_cm_export_type(&result_of(unit_named(), unit_named()), &registry, None),
             CmExportType::Unit
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), &registry, None),
             CmExportType::Unit
-        ));
+        );
     }
 
     #[test]
@@ -556,13 +557,13 @@ mod tests {
         let http = result_of(named("Response"), named("ErrorCode"));
         match resolve_cm_export_type(&http, &registry, Some("wasi:http/")) {
             CmExportType::HandlerResult { ok, err } => {
-                assert!(
-                    matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "response" && interface_fq.starts_with("wasi:http/types"))
+                assert_matches!(
+                    *ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "response" && interface_fq.starts_with("wasi:http/types")
                 );
-                assert!(
-                    matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "error-code" && interface_fq.starts_with("wasi:http/types"))
+                assert_matches!(
+                    *err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "error-code" && interface_fq.starts_with("wasi:http/types")
                 );
             }
             other => panic!("expected HandlerResult, got {other:?}"),
@@ -574,13 +575,13 @@ mod tests {
         let kiln = result_of(named("Response"), named("Error"));
         match resolve_cm_export_type(&kiln, &registry, Some("core:kiln/")) {
             CmExportType::HandlerResult { ok, err } => {
-                assert!(
-                    matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "response" && interface_fq.starts_with("core:kiln/types"))
+                assert_matches!(
+                    *ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "response" && interface_fq.starts_with("core:kiln/types")
                 );
-                assert!(
-                    matches!(*err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
-                    if cm_name == "error" && interface_fq.starts_with("core:kiln/types"))
+                assert_matches!(
+                    *err, CmExportType::Named { ref cm_name, ref interface_fq, .. }
+                    if cm_name == "error" && interface_fq.starts_with("core:kiln/types")
                 );
             }
             other => panic!("expected HandlerResult, got {other:?}"),
