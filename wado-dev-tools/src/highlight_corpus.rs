@@ -27,7 +27,9 @@ use std::fs;
 
 use lexopt::Arg::{Long, Value};
 use wado_compiler::hashmap::IndexMap;
-use wado_lsp::semantic_tokens::{ClassifiedToken, classify_all, token_modifier, token_type};
+use wado_lsp::semantic_tokens::{
+    ClassifiedToken, TOKEN_TYPES, classify_all, token_modifier, token_type,
+};
 
 /// The vocabulary both sides are projected onto. Everything above `Ident` is
 /// decidable from syntax alone; `Ident` is where semantics starts.
@@ -103,6 +105,10 @@ struct Piece {
     start: usize,
     end: usize,
     class: Class,
+    /// What the side that produced it called this span, before the projection
+    /// onto [`Class`] flattened it: the LSP legend name for a compiler token,
+    /// and the class name for a Gale capture, which carries nothing finer.
+    kind: &'static str,
 }
 
 /// How one of the compiler's spans lines up with the Gale side.
@@ -137,6 +143,9 @@ struct Divergence {
     relation: Relation,
     compiler: Option<Class>,
     gale: Option<Class>,
+    /// The unflattened name from whichever side has a span here — the one that
+    /// says whether a gap is closable. See [`Piece::kind`].
+    kind: &'static str,
     text: String,
 }
 
@@ -236,6 +245,7 @@ fn read_gale_dump(path: &str) -> IndexMap<String, GaleFile> {
                         start,
                         end,
                         class: captures[id],
+                        kind: captures[id].name(),
                     });
             }
         }
@@ -255,6 +265,7 @@ fn compiler_pieces(source: &str) -> Vec<Piece> {
             start: token.span.start,
             end: token.span.end,
             class: class_of_token(token),
+            kind: TOKEN_TYPES[token.token_type as usize],
         })
         .collect()
 }
@@ -274,7 +285,7 @@ fn to_byte_offsets(source: &str, pieces: &[Piece]) -> Vec<Piece> {
         .map(|piece| Piece {
             start: at(piece.start),
             end: at(piece.end),
-            class: piece.class,
+            ..*piece
         })
         .collect()
 }
@@ -335,6 +346,7 @@ fn diverge(path: &str, source: &str, mine: &[Piece], theirs: &[Piece]) -> (Vec<D
             relation,
             compiler: Some(piece.class),
             gale: by_start.get(&piece.start).map(|p| p.class),
+            kind: piece.kind,
             text: text_of(source, piece),
         });
     }
@@ -359,6 +371,7 @@ fn diverge(path: &str, source: &str, mine: &[Piece], theirs: &[Piece]) -> (Vec<D
             relation: Relation::Unexpected,
             compiler: None,
             gale: Some(piece.class),
+            kind: piece.kind,
             text: text_of(source, piece),
         });
     }
@@ -401,6 +414,7 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         divergences.len(),
         patterns.len(),
     );
+    print!("{}", render_capability_gap(&divergences));
 
     let gated: Vec<&(usize, Divergence)> = patterns.iter().filter(|(_, d)| d.is_gated()).collect();
     if gated.is_empty() {
@@ -416,6 +430,33 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
     }
     // A check verdict, not a programming error: no backtrace.
     std::process::exit(1);
+}
+
+/// What the grammar leaves uncoloured, by the kind the compiler resolved it
+/// to — the only view that says which gaps are worth closing.
+///
+/// A `type` or `typeParameter` sits in a syntactic position the query could
+/// name (`(typeRef (IDENTIFIER) @type)`). A `function` or `parameter` does
+/// not: telling one from a plain variable takes name resolution, which is
+/// exactly what a context-free grammar cannot do. Reported, never gated.
+fn render_capability_gap(divergences: &[Divergence]) -> String {
+    let mut counts: IndexMap<&'static str, usize> = IndexMap::default();
+    for divergence in divergences {
+        if divergence.relation == Relation::Uncovered && divergence.compiler == Some(Class::Ident) {
+            *counts.entry(divergence.kind).or_insert(0) += 1;
+        }
+    }
+    if counts.is_empty() {
+        return String::new();
+    }
+    let mut rows: Vec<(&str, usize)> = counts.into_iter().collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+
+    let mut out = String::from("uncoloured by the grammar, by resolved kind:\n");
+    for (kind, count) in rows {
+        writeln!(out, "  {count:>7}  {kind}").unwrap();
+    }
+    out
 }
 
 /// Collapse divergences onto their patterns, most frequent first, keeping one

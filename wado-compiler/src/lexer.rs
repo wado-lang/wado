@@ -107,6 +107,10 @@ pub struct LexResult {
     pub comments: Vec<Comment>,
     pub shebang: Option<String>,
     pub data_section: Option<String>,
+    /// The `__DATA__` marker through end of file, when there is one. The
+    /// content is not Wado, so nothing downstream of the lexer carries a span
+    /// for it; the highlighter needs one to say so.
+    pub data_section_span: Option<Span>,
 }
 
 /// What [`Lexer::collect_interpolation_source`] is currently inside of. Only
@@ -147,6 +151,8 @@ pub(crate) struct Lexer<'a> {
     column: usize,
     /// Content of the __DATA__ section, if present
     data_section: Option<String>,
+    /// The `__DATA__` marker through end of file, if present.
+    data_section_span: Option<Span>,
     /// Collected comments (not discarded, for formatter use)
     comments: Vec<Comment>,
     /// Shebang line, if present (e.g., "#!/usr/bin/env wado")
@@ -231,6 +237,7 @@ impl<'a> Lexer<'a> {
             line: 1,
             column: 1,
             data_section: None,
+            data_section_span: None,
             comments: Vec::new(),
             shebang: None,
             errors: Vec::new(),
@@ -246,6 +253,7 @@ impl<'a> Lexer<'a> {
             line,
             column: 1,
             data_section: None,
+            data_section_span: None,
             comments: Vec::new(),
             shebang: None,
             errors: Vec::new(),
@@ -272,6 +280,7 @@ impl<'a> Lexer<'a> {
             comments: self.comments,
             shebang: self.shebang,
             data_section: self.data_section,
+            data_section_span: self.data_section_span,
         }
     }
 
@@ -775,6 +784,9 @@ impl<'a> Lexer<'a> {
         }
 
         // Found __DATA__ marker - consume it
+        let marker_start = self.pos;
+        let marker_line = self.line;
+        let marker_column = self.column;
         for _ in 0..DATA_MARKER.len() {
             self.advance();
         }
@@ -798,6 +810,7 @@ impl<'a> Lexer<'a> {
         // Move position to end of input
         while self.advance().is_some() {}
 
+        self.data_section_span = Some(self.span_from(marker_start, marker_line, marker_column));
         true
     }
 

@@ -177,6 +177,16 @@ pub fn classify_all(source: &str, sem: Option<&Semantics>) -> Vec<ClassifiedToke
             modifiers: 0,
         });
     }
+    // A `__DATA__` tail is not Wado, so no token carries it. Muting it says so.
+    // In an editor the run spans lines and `compute` drops it, leaving the
+    // `TextMate` grammar's embedded-JSON highlighting in place.
+    if let Some(span) = lex_result.data_section_span {
+        result.push(ClassifiedToken {
+            span,
+            token_type: token_type::COMMENT,
+            modifiers: 0,
+        });
+    }
 
     result.sort_by_key(|token| token.span.start);
     result
@@ -1041,6 +1051,25 @@ mod tests {
                 .unwrap_or_else(|| panic!("no token at 2:{col}"));
             assert_eq!((token.token_type, token.modifiers), CONSTANT);
         }
+    }
+
+    /// A `__DATA__` tail is not Wado, and no token carries it. `classify_all`
+    /// mutes it; `compute` drops the run because it spans lines, which is what
+    /// leaves the editor's embedded-JSON highlighting in place.
+    #[test]
+    fn data_section_is_muted() {
+        let src = "fn run() {}\n__DATA__\n{ \"expect\": 1 }\n";
+        let marker = src.find("__DATA__").expect("marker");
+        let muted = classify_all(src, None)
+            .into_iter()
+            .find(|t| t.span.start == marker)
+            .expect("the data section is classified");
+        assert_eq!(muted.token_type, token_type::COMMENT);
+        assert_eq!(muted.span.end, src.len());
+        assert!(
+            compute(src, None).iter().all(|t| t.line < 1),
+            "a multi-line run cannot go on the LSP wire",
+        );
     }
 
     /// `b'0'` lexes as its own token kind, which the literal arm did not

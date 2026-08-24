@@ -64,9 +64,28 @@ src/
   lib.wado              re-exports the generated parse/highlight API
   main.wado             CLI (delegates to gale-highlight's run_cli)
   lib_test.wado         highlight regression tests
+tools/
+  corpus.wado           shared: the path list and reading a file
+  corpus_check.wado     parse verdicts, for `mise run check-grammar`
+  highlight_dump.wado   capture spans, for `mise run check-highlight`
 example/
   standalone.wado       styled full-page demo / CSS-class reference
 ```
+
+## Held to the compiler
+
+Two checks keep this package from drifting away from `wado-compiler`, which
+owns Wado's syntax:
+
+- `mise run check-grammar` — the grammar must accept exactly what the
+  compiler's parser accepts, over the stdlib + fixture corpus.
+- `mise run check-highlight` — the two must _colour_ that corpus the same.
+  Comment / string / number / keyword / constant / operator are decidable
+  without name resolution, so any disagreement there fails. Identifier kinds
+  are not: the compiler resolves `function` from `variable` and a
+  context-free grammar cannot, so those are reported as a capability gap and
+  never gated. `mise run check-highlight-vocab` is the cheap first half —
+  vocabulary only, no corpus.
 
 ## The gale-highlight framework
 
