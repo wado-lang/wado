@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787526721952,
+  "lastUpdate": 1787566189877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50613,6 +50613,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f2805468f38a06a2d2b3dd71b362bdca988b02bd"
         },
         "date": 1787526721084,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16727,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254755,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9fe9af1299d172faa02f287651b3b668804c5bc3",
+          "message": "Merge pull request #1889 from wado-lang/claude/rust-1-98-upgrade-5zk8mq\n\nchore: upgrade to Rust 1.98 and adopt its stabilized std APIs",
+          "timestamp": "2026-08-24T18:53:45+09:00",
+          "tree_id": "9d3ac79522253abdf5218c81ebb1ca1830ef2b84",
+          "url": "https://github.com/wado-lang/wado/commit/9fe9af1299d172faa02f287651b3b668804c5bc3"
+        },
+        "date": 1787566189045,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
