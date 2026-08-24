@@ -607,14 +607,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if type_id == TypeTable::ERROR {
             return;
         }
-        // UNKNOWN-containing types ARE recorded: a bare `null` is
-        // `Option<UNKNOWN>`, and the AST-level block-result-type analysis the
-        // combined walk uses (in place of reading the body TIR) needs to see
-        // an unresolved-null branch to type it the same way the TIR walker
-        // did. Readers that want a *definite* type filter `contains_unknown`
-        // explicitly: reify's `ann_expression_types` (so a null still falls
-        // back to its `expected_type`) and the missing-return walk in
-        // `control_flow.rs`.
+        // A type that names no type of its own IS recorded — one holding
+        // UNKNOWN, and a bare `null`'s `Option<!>` — because the AST-level
+        // block-result-type analysis the combined walk uses (in place of
+        // reading the body TIR) needs to see an unresolved-null branch to type
+        // it the same way the TIR walker did. Readers that want a *definite*
+        // type filter `contains_unknown` / `contains_never_arg` explicitly:
+        // reify's `ann_expression_types` (so a null still falls back to its
+        // `expected_type`) and the missing-return walk in `control_flow.rs`.
         self.sem.types.expression_types.insert(ast_id, type_id);
     }
 

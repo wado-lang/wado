@@ -24,6 +24,11 @@ export fn run() with Stdout {
         Ok(s) && s == "{\"name\":\"Alice\",\"scores\":[10,20],\"meta\":{\"active\":true}}"
     };
 
+    // JSON's `null` is a leaf like any other: `Value` converts from the
+    // `Option<!>` a bare `null` is.
+    let with_null: Value = { name: "Alice", nickname: null };
+    assert with_null matches { Object(fields) && fields.len() == 2 };
+
     // A non-identifier key is a field name like any other.
     let headers: Value = { "content-type": "text/plain" };
     assert headers matches { Object(fields) && fields.len() == 1 };

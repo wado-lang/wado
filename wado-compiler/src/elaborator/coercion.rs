@@ -12,14 +12,6 @@ use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
-/// Whether `expr` is the `null` literal. Its type is `Option<Unknown>`, which
-/// the shared assignability check defers on rather than refuses, so a slot that
-/// is no `Option` has to ask by name — otherwise a null ref reaches WIR where
-/// the slot's type is not nullable.
-fn is_null_literal(expr: &Expr) -> bool {
-    matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
-}
-
 /// Whether `expr` is a literal — the only position implicit conversion reaches
 /// (WEP 2026-08-24). A template string, a variable, and a call are not.
 fn is_literal_expr(expr: &Expr) -> bool {
@@ -628,7 +620,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // an undecided value type — a callee's slot the call site
                     // instantiated — defers to its solver instead of rejecting
                     // every value.
-                    let incompatible = self.slot_refuses(&field.value, value, value_type);
+                    // Route through the shared check rather than comparing
+                    // ids: an undecided value type — a callee's slot the call
+                    // site instantiated — defers to its solver instead of
+                    // rejecting every value.
+                    let incompatible = matches!(
+                        super::typecheck::check_assignable(
+                            value,
+                            value_type,
+                            &self.tysys.type_table.borrow(),
+                        ),
+                        super::typecheck::TypeCheckResult::Incompatible
+                    );
                     if incompatible {
                         self.convert_literal_element(&field.value, value, value_type);
                     } else {
@@ -736,29 +739,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Implicit conversion is confined to a literal position: only an element
     /// the source wrote as a literal is offered one, so `[1, "x"] as
     /// List<Value>` compiles while `[a, b]` still asks for `Value::from(a)`.
-    /// Whether `slot_type` refuses what `element` resolved to. Routed through
-    /// the shared check rather than comparing ids: a rigid `T` element type
-    /// rejects a concrete element (it is the enclosing body's own parameter),
-    /// while a variable or a pack defers to its solver.
-    fn slot_refuses(&mut self, element: &Expr, found_type: TypeId, slot_type: TypeId) -> bool {
-        if is_null_literal(element) {
-            return self
-                .tysys
-                .type_table
-                .borrow()
-                .as_option(slot_type)
-                .is_none();
-        }
-        matches!(
-            super::typecheck::check_assignable(
-                found_type,
-                slot_type,
-                &self.tysys.type_table.borrow(),
-            ),
-            super::typecheck::TypeCheckResult::Incompatible
-        )
-    }
-
     fn convert_literal_element(&mut self, element: &Expr, found_type: TypeId, slot_type: TypeId) {
         if self.record_literal_conversion(element, found_type, slot_type) {
             return;
@@ -767,9 +747,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             (tt.type_name(found_type), tt.type_name(slot_type))
         };
-        if is_null_literal(element) {
+        // `null`'s own type is what a target converts from to accept it, and
+        // `Option<!>` reads badly in the message that says none was found.
+        if self.tysys.is_null_literal(element) {
             let _ = self.emit(TypeError::InvalidLiteral {
-                message: format!("`null` names no value of `{slot}`; only an `Option` accepts it"),
+                message: format!(
+                    "`null` names no value of `{slot}`; an `Option` accepts it, and any other \
+                     type by implementing `From<Option<!>>`"
+                ),
                 span: element.span(),
             });
             return;
@@ -970,7 +955,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // rigid `T` element type rejects a concrete element (it is the
             // enclosing body's own parameter), while a variable or a pack
             // defers to its solver.
-            let incompatible = self.slot_refuses(element, elem_expr, element_type);
+            // Route through the shared check rather than comparing ids: a
+            // rigid `T` element type rejects a concrete element (it is the
+            // enclosing body's own parameter), while a variable or a pack
+            // defers to its solver.
+            let incompatible = matches!(
+                super::typecheck::check_assignable(
+                    elem_expr,
+                    element_type,
+                    &self.tysys.type_table.borrow(),
+                ),
+                super::typecheck::TypeCheckResult::Incompatible
+            );
             if incompatible {
                 self.convert_literal_element(element, elem_expr, element_type);
             } else {

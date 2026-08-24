@@ -3316,6 +3316,37 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` carries `!` in an argument position — `Option<!>`, the type
+    /// of a bare `null`, being the case that matters. Such a type names a value
+    /// of every sibling that agrees on the head, so a branch carrying one tells
+    /// the reader nothing a sibling does not tell it better. `!` itself is not
+    /// an argument position and answers `false`; callers that mean "diverges"
+    /// compare against [`Self::NEVER`].
+    pub fn contains_never_arg(&self, id: TypeId) -> bool {
+        fn mentions(tt: &TypeTable, id: TypeId) -> bool {
+            if id == TypeTable::NEVER {
+                return true;
+            }
+            match tt.get(id) {
+                ResolvedType::BuiltinArray(inner)
+                | ResolvedType::Ref(inner)
+                | ResolvedType::MutRef(inner)
+                | ResolvedType::Reactive(inner) => mentions(tt, *inner),
+                ResolvedType::Function {
+                    params,
+                    return_type,
+                    ..
+                } => params.iter().any(|p| mentions(tt, *p)) || mentions(tt, *return_type),
+                ResolvedType::GenericInstance { type_args, .. }
+                | ResolvedType::GenericResource { type_args, .. } => {
+                    type_args.iter().any(|t| mentions(tt, *t))
+                }
+                _ => false,
+            }
+        }
+        id != TypeTable::NEVER && mentions(self, id)
+    }
+
     /// Whether `id` (recursively) mentions anything a type check cannot decide
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.

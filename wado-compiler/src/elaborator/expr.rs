@@ -341,7 +341,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     branch_types
                         .iter()
                         .copied()
-                        .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                        .find(|&t| {
+                            t != TypeTable::NEVER
+                                && !tt.contains_unknown(t)
+                                && !tt.contains_never_arg(t)
+                        })
                         .or_else(|| {
                             branch_types
                                 .iter()
@@ -462,11 +466,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TypeTable::U8
             }
+            // A bare `null` is an `Option` of the bottom type: it names a
+            // value of every `Option<T>` and of no other type. `Unknown` here
+            // instead would defer every check it meets, which is how a `null`
+            // used to reach a non-nullable slot.
             Literal::Null => self
                 .tysys
                 .type_table
                 .borrow_mut()
-                .make_option(TypeTable::UNKNOWN),
+                .make_option(TypeTable::NEVER),
             Literal::Unit => TypeTable::UNIT,
             Literal::LocationFile => {
                 // #file - returns the current module source as a string
@@ -1981,12 +1989,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
                     //
-                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
-                    // inner type could not be inferred) defer to the sibling branch's
-                    // resolved type. The unresolved branch's tail is patched below.
+                    // A branch that tells the reader nothing a sibling does not
+                    // tell it better defers to the sibling's resolved type: one
+                    // still holding UNKNOWN, or a bare `null` literal, whose
+                    // `Option<!>` names a value of every `Option`. The deferring
+                    // branch's tail is patched below.
                     let tt = self.tysys.type_table.borrow();
-                    let then_unknown = tt.contains_unknown(then_type);
-                    let else_unknown = tt.contains_unknown(else_type);
+                    let then_unknown =
+                        tt.contains_unknown(then_type) || tt.contains_never_arg(then_type);
+                    let else_unknown =
+                        tt.contains_unknown(else_type) || tt.contains_never_arg(else_type);
                     drop(tt);
                     if then_type == else_type {
                         then_type
@@ -2099,18 +2111,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports a `CannotInferType` error when a branch construct's result
-    /// type could not be inferred — it still contains UNKNOWN because every
-    /// branch produced an un-typeable value (e.g. a bare `null`). Returns
-    /// `true` when an error was reported, so the caller can skip the
-    /// `null`-patching pass (which requires a resolved target type).
+    /// Reports a `CannotInferType` error when a branch construct's result type
+    /// could not be inferred — every branch produced a value that names no type
+    /// of its own, so the result still holds UNKNOWN or is the `Option<!>` of a
+    /// bare `null`. Returns `true` when an error was reported, so the caller can
+    /// skip the `null`-patching pass (which requires a resolved target type).
     fn report_uninferable_result(
         &mut self,
         result_type: TypeId,
         span: Span,
         construct: &str,
     ) -> bool {
-        if !self.tysys.type_table.borrow().contains_unknown(result_type) {
+        let tt = self.tysys.type_table.borrow();
+        let uninferable = tt.contains_unknown(result_type) || tt.contains_never_arg(result_type);
+        drop(tt);
+        if !uninferable {
             return false;
         }
         let _ = self.emit(TypeError::CannotInferType {
@@ -2288,16 +2303,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
             //
-            // Also skip arms whose type still contains UNKNOWN — typically a bare
-            // `null` literal whose `Option<...>` inner could not be inferred from
-            // the arm body alone. A sibling arm with a fully-resolved type
-            // (e.g. `Option::Some(s)` where `s: String`) wins; we then patch the
-            // unresolved `null` arm bodies below.
+            // Also skip arms whose type tells the reader nothing a sibling does
+            // not tell it better — one still holding UNKNOWN, or a bare `null`
+            // literal, whose `Option<!>` names a value of every `Option`. A
+            // sibling arm with a fully-resolved type (e.g. `Option::Some(s)`
+            // where `s: String`) wins; we then patch the unresolved arm bodies
+            // below.
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
                 .map(|(t, _)| *t)
-                .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                .find(|&t| {
+                    t != TypeTable::NEVER && !tt.contains_unknown(t) && !tt.contains_never_arg(t)
+                })
                 .or_else(|| {
                     arm_bodies
                         .iter()

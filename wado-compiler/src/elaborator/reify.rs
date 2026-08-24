@@ -486,14 +486,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Recorded type of an expression, honouring tuple-for-of overlays like
-    /// the macro-generated accessors. Unlike them it filters
-    /// `contains_unknown` recorded types to `None`: the
-    /// combined walk records UNKNOWN-containing types (so its AST analyses can
-    /// see unresolved-null branches), but reify must treat such an entry as
-    /// absent and fall back to the node's `expected_type` — exactly as when
-    /// the recording site skipped them. Without this a bare `null` would reify
-    /// with `Option<UNKNOWN>` and trap WIR translation
-    /// ("Null with unresolved Option inner type").
+    /// the macro-generated accessors. Unlike them it filters a recorded type
+    /// that is not definite enough to build with — one holding UNKNOWN, or a
+    /// bare `null`'s `Option<!>`, which names a value of every `Option` — to
+    /// `None`: the combined walk records them so its AST analyses can see an
+    /// unresolved branch, but reify must treat such an entry as absent and fall
+    /// back to the node's `expected_type`, exactly as when the recording site
+    /// skipped them. Without this a bare `null` reifies as the `Option` of a
+    /// type nothing inhabits and fails WIR validation.
     fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
         let raw = self
             .tuple_overlay_stack
@@ -501,7 +501,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .rev()
             .find_map(|overlay| overlay.expression_types.get(&id).copied())
             .or_else(|| self.sem.types.expression_types.get(&id).copied())?;
-        if self.tysys.type_table.borrow().contains_unknown(raw) {
+        let tt = self.tysys.type_table.borrow();
+        if tt.contains_unknown(raw) || tt.contains_never_arg(raw) {
             None
         } else {
             Some(raw)
@@ -2266,7 +2267,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Resolve `break label: value` against the target block's
                 // expected type so a `null` / bare literal value coerces to
                 // the block's result type (e.g. `Option<i32>`) rather than
-                // reaching WIR as an unresolved `Option<UNKNOWN>` / nullref.
+                // reaching WIR as an `Option<!>` nothing inhabits.
                 let break_expected = break_stmt.label.as_ref().and_then(|label| {
                     ctx.labeled_block_targets
                         .iter()

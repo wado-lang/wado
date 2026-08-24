@@ -73,6 +73,13 @@ One rule governs implicit conversion in the language:
 (`b'x'`, `b"…"`), and an `[…]` or `{…}` literal. A template string, a
 variable, and a call are not literals.
 
+A bare `null` is an `Option<!>`: a value of every `Option<T>` and of no other
+type. That is what a target converts from to accept it, so `null` reaches a
+literal slot exactly where an `Option` does or where the slot's type writes
+`impl From<Option<!>>` — which is how `core:value::Value` takes JSON's `null`.
+Typing it `Unknown` instead would defer every check it meets, which is how a
+`null` used to reach a slot whose type is not nullable.
+
 ```wado
 let v: List<Value> = [1, "x"];   // OK — every element is a literal
 let v: List<Value> = [a, b];     // ERROR — write [Value::from(a), Value::from(b)]
@@ -195,8 +202,8 @@ else { 0 }`, folded away since the length is a constant), preserving today's
 `[1, 2, 3] as i32x4` behaviour.
 
 `core:value` gains the two array impls plus the leaf conversions
-(`From<i32>`, `From<f64>`, `From<String>`, `From<bool>`, …), which is what makes
-a JSON-shaped literal compile.
+(`From<i32>`, `From<f64>`, `From<String>`, `From<bool>`, `From<Option<!>>` for
+`null`, …), which is what makes a JSON-shaped literal compile.
 
 ### Compiler shape
 
@@ -237,6 +244,11 @@ mechanism needs.
   MyVec`, with no vocabulary specific to literals.
 - Heterogeneous literals work, so `core:value::Value` is constructible from a
   JSON-shaped literal for the first time.
+- `null` becomes a typed value rather than a deferral hole. Every place that
+  used to skip a branch "still holding UNKNOWN" — the `if` / `match` /
+  labeled-block result-type pick, the missing-return walk, reify's recorded-type
+  read — now asks the same question of `Option<!>` too, and a `null` that fits
+  nowhere is reported instead of reaching WIR.
 - A list literal is cheaper at every optimization level: one `array.new_fixed`
   instead of a capacity allocation and N bounds-checked pushes.
 - A key-value literal allocates one pair per entry where the builder allocated
@@ -271,11 +283,6 @@ mechanism needs.
   other trait. A generic _instantiation_ is a different case and works: an open
   `Array<E>`, `List<T>` or `TreeMap<String, V>` slot is decided by the
   elements.
-- `null` in an element position. It is a value of an `Option` slot and of
-  nothing else — its own type is `Option<Unknown>`, which names no conversion
-  source — so `[null] as List<Value>` is refused where `[1] as List<Value>`
-  builds a `Value::Int`. Closing it means giving `null` a type the target can
-  convert from, or a rule of its own.
 - Deep-copy elision on the array handed to `From` is left to `lower` and
   `value_copy_demote`. No benchmark's `-O2` WIR carries a `$value_copy$Array`
   at a literal site; if one appears, the copy analysis is extended rather than

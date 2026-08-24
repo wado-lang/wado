@@ -1,10 +1,19 @@
-// A `null` element in a slot that is no `Option` is refused where it is
-// written; it used to reach WIR as a null ref in a non-nullable field.
-use { Value } from "core:value";
+// A `null` element in a slot that is neither an `Option` nor a type converting
+// from one is refused where it is written; it used to reach WIR as a null ref
+// in a non-nullable field.
+struct Plain {
+    n: i32,
+}
+
+impl From<Array<i32>> for Plain {
+    fn from(a: Array<i32>) -> Plain {
+        return Plain { n: builtin::array_len(&a) };
+    }
+}
 
 export fn run() {
-    let a: List<Value> = [null];
+    let p: List<Plain> = [null];
 }
 
 __DATA__
-{"compile_error": "`null` names no value of `Value`"}
+{"compile_error": "`null` names no value of `Plain`"}

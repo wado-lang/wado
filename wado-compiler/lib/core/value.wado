@@ -82,6 +82,14 @@ impl From<Array<[String, Value]>> for Value {
     }
 }
 
+// A bare `null` is an `Option<!>` — a value of every `Option` and of nothing
+// else — so a type accepts `null` in a literal by converting from it.
+impl From<Option<!>> for Value {
+    fn from(value: Option<!>) -> Value {
+        return Value::Null;
+    }
+}
+
 impl From<bool> for Value {
     fn from(value: bool) -> Value {
         return Value::Bool(value);

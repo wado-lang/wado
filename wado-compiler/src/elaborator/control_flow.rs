@@ -13,9 +13,9 @@ use crate::token::Span;
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table; `expression_types` is keyed by globally-unique `AstId`,
-/// so no module qualifier is needed. `type_table` backs the
-/// `contains_unknown` filter the missing-return walk applies, since
-/// `expression_types` records UNKNOWN-containing types.
+/// so no module qualifier is needed. `type_table` backs the definite-type
+/// filter the missing-return walk applies, since `expression_types` records
+/// types that name no type of their own.
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
     pub(super) expression_types: &'a IndexMap<crate::ast::AstId, TypeId>,
@@ -31,14 +31,17 @@ impl CtrlFlowCtx<'_> {
         self.expression_types.get(&id).copied()
     }
 
-    /// `type_of`, but an UNKNOWN-containing recorded type counts as "no
-    /// definite type" (`None`). The missing-return walk uses this so an
-    /// unresolved-`null` return value does not masquerade as a concrete
-    /// return type — preserving the behaviour from when the recording site
-    /// skipped UNKNOWN types entirely.
+    /// `type_of`, but a recorded type that names no type of its own counts as
+    /// "no definite type" (`None`): one holding UNKNOWN, or a bare `null`'s
+    /// `Option<!>`. The missing-return walk uses this so an unresolved-`null`
+    /// return value does not masquerade as a concrete return type — preserving
+    /// the behaviour from when the recording site skipped UNKNOWN types
+    /// entirely.
     fn definite_type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
-        self.type_of(expr)
-            .filter(|t| !self.type_table.borrow().contains_unknown(*t))
+        self.type_of(expr).filter(|t| {
+            let tt = self.type_table.borrow();
+            !tt.contains_unknown(*t) && !tt.contains_never_arg(*t)
+        })
     }
 
     fn is_never(&self, expr: &ast::Expr) -> bool {
@@ -111,8 +114,8 @@ pub(super) fn expr_always_exits(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr) -> bool 
 /// Result type of `block` — its trailing expression's type, or `Unit`. The AST
 /// mirror of [`crate::tir::block_result_type`], reading
 /// `expression_types[(module, id)]` so a block's value type needs no body TIR.
-/// Unlike the missing-return walk it does *not* filter `contains_unknown`: an
-/// unresolved-`null` tail stays `Option<UNKNOWN>`, as the TIR walker saw it.
+/// Unlike the missing-return walk it does *not* filter an indefinite type: an
+/// unresolved-`null` tail stays `Option<!>`, as the TIR walker saw it.
 pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> TypeId {
     block
         .stmts
@@ -152,10 +155,10 @@ pub(super) fn collect_unresolved_null_tails(
 ) {
     match expr {
         ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null) => {
-            if ctx
-                .type_of_id(lit.id)
-                .is_some_and(|t| ctx.type_table.borrow().contains_unknown(t))
-            {
+            if ctx.type_of_id(lit.id).is_some_and(|t| {
+                let tt = ctx.type_table.borrow();
+                tt.contains_unknown(t) || tt.contains_never_arg(t)
+            }) {
                 out.push(lit.span);
             }
         }

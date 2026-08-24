@@ -1567,6 +1567,18 @@ assert null == None;
 
 Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
 
+A bare `null` — one no expected type has pinned — has the type `Option<!>`: a value of every `Option<T>` and of no other type. That is what a type converts from to accept `null` where an `Option` is not expected, which is how `core:value::Value` takes JSON's `null` in a literal:
+
+```wado
+impl From<Option<!>> for Value {
+    fn from(value: Option<!>) -> Value {
+        return Value::Null;
+    }
+}
+
+let doc: Value = { name: "Alice", nickname: null };
+```
+
 #### Character Literals
 
 Character literals use single quotes and represent a Unicode scalar value. While internally represented as a 32-bit value (like `u32`), `char` is a distinct type with Unicode semantics—similar to how `String` differs from `List<u8>`:

@@ -129,7 +129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its
             // type to the bare `null` so it resolves to a concrete
-            // `Option<T>` instead of `Option<UNKNOWN>`.
+            // `Option<T>` instead of `Option<!>`.
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let right = self.resolve_expr(right_ast, ctx, Some(left));
             (

@@ -1,8 +1,9 @@
-// `null` is a value of an `Option` slot and of nothing else. Its own type is
-// `Option<Unknown>`, which the assignability check defers on rather than
-// refuses, so a slot that is no `Option` used to take it and emit a null ref
-// where the slot's type is not nullable.
+// `null` is an `Option<!>` — a value of every `Option` and of nothing else — so
+// a slot that is no `Option` takes it only by converting from that type. `Value`
+// does, which is what puts JSON's `null` in a literal.
 use { println, Stdout } from "core:cli";
+use { Value } from "core:value";
+use { to_string } from "core:json";
 
 export fn run() with Stdout {
     let opts: List<Option<i32>> = [null, null];
@@ -11,6 +12,13 @@ export fn run() with Stdout {
 
     let fields: List<Option<String>> = [null];
     assert fields[0] matches { None };
+
+    let v: Value = [1, null, "x"];
+    assert v matches { List(items) && items.len() == 3 };
+    assert v matches { List(items) && items[1] matches { Null } };
+
+    let doc: Value = { name: "Alice", nickname: null };
+    assert to_string(&doc) matches { Ok(s) && s == "{\"name\":\"Alice\",\"nickname\":null}" };
 
     println("literal null element: ok");
 }
