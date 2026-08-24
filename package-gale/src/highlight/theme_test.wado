@@ -48,6 +48,14 @@ test "unstyled is empty when the theme covers the vocabulary" {
     assert t.unstyled(&vocabulary).is_empty();
 }
 
+test "unknown is sorted, not in the order the theme was built" {
+    let mut t = Theme::new();
+    t.set("zeta", "#111");
+    t.set("alpha", "#222");
+    let vocabulary: List<String> = [];
+    assert t.unknown(&vocabulary) == ["alpha", "zeta"], `${t.unknown(&vocabulary):?}`;
+}
+
 test "unknown names the theme classes no grammar emits" {
     let mut t = Theme::new();
     t.set("keyword", "#111");

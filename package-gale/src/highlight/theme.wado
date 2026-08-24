@@ -38,7 +38,7 @@ impl Theme {
     pub fn unstyled(&self, vocabulary: &List<String>) -> List<String> {
         let mut out: List<String> = [];
         for let class of vocabulary {
-            if self.colors.get(*class) matches { None } {
+            if !self.colors.contains_key(*class) {
                 out.push(*class);
             }
         }
@@ -46,14 +46,16 @@ impl Theme {
     }
 
     /// The classes this theme colors that `vocabulary` never emits — a
-    /// mistyped or stale key. Sorted, since `colors` is keyed.
+    /// mistyped or stale key. Sorted, so the answer does not depend on the
+    /// order the theme was built in.
     pub fn unknown(&self, vocabulary: &List<String>) -> List<String> {
         let mut out: List<String> = [];
-        for let [class, _color] of self.colors.entries() {
+        for let class of self.colors.keys() {
             if !vocabulary.contains(class) {
                 out.push(*class);
             }
         }
+        out.sort();
         return out;
     }
 }

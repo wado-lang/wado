@@ -220,8 +220,8 @@ pub fn strip_action_bodies(grammar: &String) -> String {
 /// `starts_with_word` already demands a non-identifier char after the
 /// match, so a hit means the identifier at `start` *is* the keyword.
 fn is_grammar_keyword(chars: &List<char>, start: i32) -> bool {
-    for let kw of GRAMMAR_KEYWORDS {
-        if starts_with_word(chars, start, &kw) {
+    for let kw of &GRAMMAR_KEYWORDS {
+        if starts_with_word(chars, start, kw) {
             return true;
         }
     }
