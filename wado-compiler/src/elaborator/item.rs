@@ -1185,6 +1185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instantiates a recorded signature instead of re-resolving the method
     /// AST under the *caller's* perspective (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
+        let impl_def = self.def_at(impl_block.id);
         let mut block = self.enter_inherited_type_param_scope();
         block.annotate_ctx.trait_ctx.type_params.clear();
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
@@ -1281,7 +1282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .collect(),
                     declaring_slot_count,
-                    declaring_impl: Some(impl_block.id),
+                    declaring_impl: Some(impl_def),
                     own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
                         .attrs

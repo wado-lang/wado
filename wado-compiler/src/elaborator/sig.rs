@@ -157,7 +157,7 @@ pub(crate) struct MethodSig {
     /// The `impl` block that declares this method, where one does. How a caller
     /// reaches [`ImplSig::spelled_slots`], which aligns a spelled turbofish
     /// with the block's slots.
-    pub(crate) declaring_impl: Option<AstId>,
+    pub(crate) declaring_impl: Option<crate::defs::DefId>,
     /// The method's own slots as the declaration wrote them, parallel to
     /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
     /// live nowhere else, and a use site needs them to enforce the one and

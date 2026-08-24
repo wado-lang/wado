@@ -3488,16 +3488,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-<<<<<<< HEAD
             if super::trait_env::get_type_name_static(&header.ty) != declared_name
-                || !matches_arg_type(trait_type, impl_module, &header.type_params)
-||||||| a2e111909
-            if super::trait_env::get_type_name_static(&header.ty) != struct_name
-                || !matches_arg_type(trait_type, impl_module, &header.type_params)
-=======
-            if super::trait_env::get_type_name_static(&header.ty) != struct_name
                 || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
->>>>>>> origin/main
             {
                 return None;
             }
