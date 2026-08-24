@@ -344,6 +344,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().newtype(name)
     }
 
+    /// [`Self::lookup_newtype`] for a receiver written at a reference site; see
+    /// [`Self::impl_target_at`].
+    pub(super) fn lookup_newtype_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<TypeId> {
+        self.type_lookup().newtype_at(site, name)
+    }
+
     pub(super) fn lookup_variant_case_of_decl(
         &self,
         def: crate::defs::DefId,

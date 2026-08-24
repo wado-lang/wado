@@ -2399,6 +2399,15 @@ impl<'a> TypeLookup<'a> {
         self.newtype_of(self.declaration(name)?)
     }
 
+    /// [`Self::variant_cases_at`] for a newtype (or `flags` type).
+    pub(super) fn newtype_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<TypeId> {
+        self.newtype_of(self.declaration_at(site, name)?)
+    }
+
     /// The fields of the struct `def` declares.
     ///
     /// The declaration is the key: nothing here re-resolves a spelling, so a

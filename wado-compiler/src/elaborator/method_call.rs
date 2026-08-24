@@ -3474,6 +3474,72 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// The type a newtype (or `flags` type) forwards its statics to:
+    /// `type Headers = Fields` answers `Fields`, a `flags` type answers `u32`.
+    fn newtype_static_base_at(
+        &self,
+        site: Option<crate::ast::AstId>,
+        name: &str,
+    ) -> Option<TypeId> {
+        let newtype_id = self.lookup_newtype_at(site, name)?;
+        let resolved = self.tysys.type_table.borrow().get(newtype_id).clone();
+        match resolved {
+            ResolvedType::Newtype { .. } => Some(
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .get_ultimate_base_type(newtype_id),
+            ),
+            ResolvedType::Flags { .. } => Some(TypeTable::U32),
+            _ => None,
+        }
+    }
+
+    /// Whether `receiver` declares `method_name` as a static.
+    ///
+    /// Both the key and the mangled name are already resolved, so the answer
+    /// does not depend on what the calling module imported.
+    fn receiver_declares_static_method(
+        &self,
+        static_key: &super::trait_env::ImplTargetKey,
+        receiver: &FqTypeName,
+        method_name: &str,
+    ) -> bool {
+        if self
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&MethodName::format_local(receiver, None, method_name))
+        {
+            return true;
+        }
+        if let Some(methods) = self.tysys.trait_env.static_method_index.get(static_key)
+            && methods.iter().any(|e| e.name == method_name)
+        {
+            return true;
+        }
+        // The index holds only what `TraitEnv::build` classified as a static
+        // method; ask the headers directly for the rest.
+        if self.keys_declare_static_method(
+            &self.tysys.trait_env.all_impl_keys(static_key),
+            method_name,
+        ) {
+            return true;
+        }
+        if self
+            .tysys
+            .trait_env
+            .resource_static(static_key, method_name)
+            .is_some()
+        {
+            return true;
+        }
+        // Same walk as `lookup_static_method_return_type`: the index holds
+        // only the declaring resource's own methods.
+        matches!(static_key, super::trait_env::ImplTargetKey::Decl(def)
+            if self.resource_instance_method(*def, method_name).is_some())
+    }
+
     /// Get the operator trait and method name for a binary operator.
     pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
         self.is_static_method_at(None, struct_name, method_name)
@@ -3488,73 +3554,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> bool {
-        let mangled_name = MethodName::format_local(
-            &self.qualified_receiver_name(struct_name),
-            None,
-            method_name,
-        );
-
-        // Check if it's registered in function_return_types (static methods are registered there)
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&mangled_name)
-        {
-            return true;
-        }
-
-        // O(1) lookup via pre-built static method index (impl blocks).
-        // Canonicalise so a same-named struct in another module doesn't
-        // accidentally claim this name.
         let static_key = self.impl_target_at(site, struct_name);
-        if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
-            && methods.iter().any(|e| e.name == method_name)
-        {
-            return true;
-        }
-
-        // The index holds only what `TraitEnv::build` classified as a static
-        // method; ask the headers directly for the rest.
-        if self.keys_declare_static_method(
-            &self
-                .tysys
-                .trait_env
-                .all_impl_keys(&self.impl_target_at(site, struct_name)),
+        if self.receiver_declares_static_method(
+            &static_key,
+            &self.qualified_receiver_name(struct_name),
             method_name,
         ) {
             return true;
         }
 
-        if self
-            .tysys
-            .trait_env
-            .resource_static(&static_key, method_name)
-            .is_some()
-        {
-            return true;
-        }
-
-        // Same walk as `lookup_static_method_return_type`: the index holds
-        // only the declaring resource's own methods.
-        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
-            && self.resource_instance_method(*def, method_name).is_some()
-        {
-            return true;
-        }
-
-        // For newtypes/flags, check if the base type has the static method
-        if let Some(newtype_id) = self.lookup_newtype(struct_name) {
-            let base_name = match self.tysys.type_table.borrow().get(newtype_id).clone() {
-                ResolvedType::Newtype { base_type, .. } => {
-                    Some(self.tysys.get_ultimate_base_struct_name(base_type))
-                }
-                ResolvedType::Flags { .. } => Some("u32".to_string()),
-                _ => None,
-            };
-            if let Some(base_name) = base_name
-                && self.is_static_method(&base_name, method_name)
-            {
+        // A newtype forwards its base's statics. The base is reached through
+        // the type, not through a second spelling, so a module that imported
+        // the newtype alone still resolves them.
+        if let Some(base) = self.newtype_static_base_at(site, struct_name) {
+            let base_name = self.tysys.get_ultimate_base_struct_name(base);
+            let base_key = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
+            if self.receiver_declares_static_method(
+                &base_key,
+                &self.tysys.fq_receiver_head(base),
+                method_name,
+            ) {
                 return true;
             }
         }
@@ -3712,13 +3731,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let method_ref = resolved.unwrap_or_else(|| {
-            StaticMethodRef::new(
-                self.declaring_module_of(&actual_struct_name),
-                &actual_struct_name,
-                method_name,
-                None,
-                None,
-            )
+            // A newtype's base carries its own declaring module. Looking the
+            // name up instead would answer from the calling module, which need
+            // not have imported the base — only the newtype it wrote.
+            let module = newtype_dispatch
+                .as_ref()
+                .and_then(|(_, base, _)| self.tysys.type_table.borrow().nominal_head(*base))
+                .map_or_else(
+                    || self.declaring_module_of(&actual_struct_name),
+                    |(_, module)| module,
+                );
+            StaticMethodRef::new(module, &actual_struct_name, method_name, None, None)
         });
 
         // Use trait-qualified mangled name if this is a trait method

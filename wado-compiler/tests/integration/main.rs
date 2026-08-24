@@ -41,6 +41,7 @@ mod lib_sync_lift_post_return;
 mod literals;
 mod loader_canonical_identity;
 mod match_place_scrutinee;
+mod newtype_static_forwarding;
 mod niri;
 mod opt_loop_convergence;
 mod redundant_bce;
