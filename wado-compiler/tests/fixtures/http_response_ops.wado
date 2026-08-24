@@ -9,14 +9,14 @@
 // - response.get_status_code() - read the status code back
 // - Returning Ok(response) from the handler
 
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // 1. Create a trailers future pair
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     // 2. Create headers
-    let headers = Fields::new();
+    let headers = Headers::new();
 
     // 3. Construct a Response
     let [response, _tx_future] = Response::new(headers, null, trailers_future);

@@ -6,13 +6,13 @@
 // - Request.set_authority with None → Ok (clearing is valid)
 // - Request.set_method with Method::Other("") → may Err
 
-use { Request, Response, ErrorCode, Fields, Method, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode>
     with Client
 {
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);
 

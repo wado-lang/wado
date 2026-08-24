@@ -2754,6 +2754,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
             return sig.decl.param_types[sig.first_value_param()..].to_vec();
         }
+        // Resource statics live in their own index, keyed the same way; same
+        // walk as `lookup_static_method_return_type`.
+        if let Some((name, _, item_id, _)) = self
+            .tysys
+            .trait_env
+            .resource_static(&static_key, method_name)
+            && let Some(sig) = self.tysys.signatures.resource_method_sig(*item_id, name)
+        {
+            return sig.decl.param_types[sig.first_value_param()..].to_vec();
+        }
         // The index holds only the declaring resource's own methods, so an
         // inherited one is reached by walking the chain. Instance methods
         // only: a static is not inherited, and answering for one here would
@@ -3769,10 +3779,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = self.substitute_type_params(return_type, &combined);
         }
 
-        if let Some((newtype_id, base_type_id, _)) = newtype_dispatch
-            && return_type == base_type_id
-        {
-            return_type = newtype_id;
+        // A static reached through a newtype returns the newtype, wherever the
+        // base stands in the return type: `Headers::from_list` yields
+        // `Result<Headers, HeaderError>`. Instance methods substitute the same
+        // way, so the two spellings agree.
+        if let Some((newtype_id, base_type_id, _)) = newtype_dispatch {
+            return_type =
+                self.tysys
+                    .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
         // Build monomorph_info for impl-level and/or method-level generic instantiation

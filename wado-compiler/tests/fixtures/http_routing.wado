@@ -1,13 +1,13 @@
 // HTTP path-based routing test
 // Tests conditional logic based on request path to return different responses.
 
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let path = request.get_path_with_query();
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
 
     if let Some(p) = path {

@@ -7,9 +7,11 @@ use wado_compiler::semantics::semantics;
 
 fn diagnostics(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
-    let _ = tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(semantics(source, &host, Some("entry.wado")));
+    let _ = tokio::runtime::Runtime::new().unwrap().block_on(semantics(
+        source,
+        &host,
+        Some("entry.wado"),
+    ));
     host.diagnostics()
         .into_iter()
         .map(|d| format!("{:?}: {}", d.code, d.message))
@@ -64,6 +66,27 @@ fn make() -> Headers {
         diags
             .iter()
             .any(|d| d.contains("expected 'Headers', found 'Fields'")),
+        "{diags:?}"
+    );
+}
+
+#[test]
+fn the_newtype_replaces_the_base_wherever_it_stands_in_the_return() {
+    // `Fields::from_list` returns `Result<Fields, HeaderError>`, so through
+    // the newtype it returns `Result<Headers, HeaderError>`.
+    let diags = diagnostics(
+        r#"
+use { Headers, Fields, FieldName, FieldValue, HeaderError } from "wasi:http";
+
+fn make(entries: List<[FieldName, FieldValue]>) -> Result<Fields, HeaderError> {
+    return Headers::from_list(entries);
+}
+"#,
+    );
+    assert!(
+        diags.iter().any(|d| d.contains(
+            "expected 'Result<Fields, HeaderError>', found 'Result<Headers, HeaderError>'"
+        )),
         "{diags:?}"
     );
 }

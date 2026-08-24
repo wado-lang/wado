@@ -2400,11 +2400,7 @@ impl<'a> TypeLookup<'a> {
     }
 
     /// [`Self::variant_cases_at`] for a newtype (or `flags` type).
-    pub(super) fn newtype_at(
-        &self,
-        site: Option<crate::ast::AstId>,
-        name: &str,
-    ) -> Option<TypeId> {
+    pub(super) fn newtype_at(&self, site: Option<crate::ast::AstId>, name: &str) -> Option<TypeId> {
         self.newtype_of(self.declaration_at(site, name)?)
     }
 

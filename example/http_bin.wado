@@ -17,19 +17,7 @@
 //   GET  /base64/:val   — decodes base64-encoded value
 //   *    /anything      — returns request info for any method (incl. custom)
 
-use {
-    Request,
-    Response,
-    ErrorCode,
-    Fields,
-    Headers,
-    FieldName,
-    FieldValue,
-    Trailers,
-    StatusCode,
-    Method,
-    Scheme,
-} from "wasi:http";
+use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Trailers, StatusCode, Method, Scheme } from "wasi:http";
 use { TreeMap } from "core:collections";
 use { decode } from "core:base64";
 use { Serialize } from "core:serde";
@@ -345,7 +333,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
 
-    let resp_headers = Fields::new();
+    let resp_headers = Headers::new();
     resp_headers.append("server", #file.bytes().collect() as FieldValue);
     resp_headers.append("content-type", resp.content_type.bytes().collect() as FieldValue);
     resp_headers.append("trailer", "server-timing".bytes().collect() as FieldValue);

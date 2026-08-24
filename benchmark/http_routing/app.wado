@@ -9,7 +9,7 @@
 // Run with wado serve:
 //   cargo run --bin wado -- serve benchmark/http_routing/app.wado
 
-use { Request, Response, ErrorCode, Fields, FieldValue, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, FieldValue, Trailers, StatusCode } from "wasi:http";
 use { Router, PathParams } from "core:router";
 use { Serialize } from "core:serde";
 use json from "core:json";
@@ -77,7 +77,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
 
-    let resp_headers = Fields::new();
+    let resp_headers = Headers::new();
     resp_headers.append("content-type", b"application/json" as FieldValue);
     // Without this the body streams out chunked, where the Axum, Node and Bun
     // servers all send a length. The header value's allocation is what it

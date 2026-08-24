@@ -7,7 +7,7 @@
 //   wado run example/llm.wado
 
 use { println, env, Stdout, Stderr, Environment } from "core:cli";
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
 use { Serialize, Deserialize } from "core:serde";
 use { to_bytes, from_bytes } from "core:json";
@@ -41,7 +41,7 @@ fn send_post<B: AsByteSlice>(api_key: String, body: B) -> Response with Client {
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
-    let headers = Fields::new();
+    let headers = Headers::new();
     headers.append(
         "authorization" as FieldName,
         `Bearer ${api_key}`.bytes().collect() as FieldValue,

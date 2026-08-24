@@ -4,7 +4,7 @@
 // so the homonym never masks the unregistered user record — without that, the
 // user record would be mistaken for the WASI struct, pass the check, and panic
 // in codegen with a struct-layout mismatch.
-use { Request, Response, ErrorCode, Fields } from "wasi:http";
+use { Request, Response, ErrorCode, Headers } from "wasi:http";
 
 struct DnsErrorPayload {
     x: f64,
@@ -16,7 +16,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     tx.write(DnsErrorPayload { x: 1.0, y: 2.0 });
     rx.drop();
 
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, null);
     task return Result::<Response, ErrorCode>::Ok(response);
 }

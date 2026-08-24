@@ -1,17 +1,17 @@
-// Extracting a resource out of a `Result<Headers, E>` via `.unwrap()` is a
-// by-value `self` call (WEP 2026-05-21): it consumes the whole `Result`, moving
-// the inner `Headers` to the caller. The extracted handle has a single owner
-// (`headers`), which is transferred into the `Response`, so no resource leaks
-// and none is dropped twice. This replaced the `is_resource_aggregate`
-// extraction heuristic: the by-value receiver now carries the transfer directly.
-
+// `Headers::from_list` is inherited from the `Fields` CM resource, and its
+// return nests the base: `Result<Fields, HeaderError>`. The front end retypes
+// an inherited return to the newtype wherever the base stood, so the call site
+// is `Result<Headers, HeaderError>` — which the shared adapter must normalize
+// back to the base resource. Normalizing only a newtype at the *head* left the
+// adapter retyped to a generic instance its body never builds, and WIR build
+// tripped on the mismatch.
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let name = "x-probe" as FieldName;
-    let value: List<u8> = [118 as u8];
-    let entries: List<[FieldName, FieldValue]> = [[name, value as FieldValue]];
+    let entries: List<[FieldName, FieldValue]> = [[name, [118 as u8] as FieldValue]];
     let headers = Headers::from_list(entries).unwrap();
+    assert headers.has("x-probe");
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);

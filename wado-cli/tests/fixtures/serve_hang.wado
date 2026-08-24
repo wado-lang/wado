@@ -1,4 +1,4 @@
-use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Trailers, StatusCode } from "wasi:http";
 
 // Used by `wado serve` timeout tests: the handler enters a CPU loop that
 // only exits on i64 overflow, which never happens in any reasonable
@@ -14,7 +14,7 @@ export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
     }
     let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, _body_tx] = Stream::<u8>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
     response.set_status_code(200);
     task return Result::<Response, ErrorCode>::Ok(response);

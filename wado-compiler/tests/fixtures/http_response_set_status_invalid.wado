@@ -5,11 +5,11 @@
 // - Response.set_status_code with invalid value (0) → Err
 // - Response.set_status_code with invalid value (65535) → Err
 
-use { Request, Response, ErrorCode, Fields, StatusCode, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, StatusCode, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
 
     // Valid status code → Ok

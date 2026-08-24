@@ -681,16 +681,7 @@ fn fixup_adapter_return_from_call_site(
     if is_streaming {
         return;
     }
-    // A newtype over a CM resource (`type Trailers = Fields`) shares the base's
-    // canonical binding, so normalize to the underlying resource.
-    let call_site_type = {
-        let tt = type_table.borrow();
-        if matches!(tt.get(call_site_type), ResolvedType::Newtype { .. }) {
-            tt.get_ultimate_base_type(call_site_type)
-        } else {
-            call_site_type
-        }
-    };
+    let call_site_type = erase_newtypes(type_table, call_site_type);
     if let Some(prev) = record_applied_return(applied_returns, adapter_key, call_site_type) {
         let tt = type_table.borrow();
         panic!(
@@ -707,6 +698,55 @@ fn fixup_adapter_return_from_call_site(
     let old_return_type = adapter.return_type;
     adapter.return_type = call_site_type;
     fixup_return_type_in_body(adapter, old_return_type, call_site_type);
+}
+
+/// Erase every newtype in `type_id` down to the resource it wraps.
+///
+/// A newtype over a CM resource (`type Trailers = Fields`) shares the base's
+/// canonical binding, and so does one nested inside a generic
+/// (`Result<Headers, HeaderError>`) — the front end retypes an inherited
+/// return to the newtype wherever the base stood.
+fn erase_newtypes(type_table: &RefCell<TypeTable>, type_id: TypeId) -> TypeId {
+    let resolved = type_table.borrow().get(type_id).clone();
+    match resolved {
+        ResolvedType::Newtype { .. } => {
+            let base = type_table.borrow().get_ultimate_base_type(type_id);
+            erase_newtypes(type_table, base)
+        }
+        ResolvedType::Ref(inner) => {
+            let erased = erase_newtypes(type_table, inner);
+            if erased == inner {
+                type_id
+            } else {
+                type_table.borrow_mut().intern(ResolvedType::Ref(erased))
+            }
+        }
+        ResolvedType::MutRef(inner) => {
+            let erased = erase_newtypes(type_table, inner);
+            if erased == inner {
+                type_id
+            } else {
+                type_table.borrow_mut().intern(ResolvedType::MutRef(erased))
+            }
+        }
+        ResolvedType::GenericInstance { def, type_args } => {
+            let erased: Vec<TypeId> = type_args
+                .iter()
+                .map(|&arg| erase_newtypes(type_table, arg))
+                .collect();
+            if erased == type_args {
+                type_id
+            } else {
+                type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::GenericInstance {
+                        def,
+                        type_args: erased,
+                    })
+            }
+        }
+        _ => type_id,
+    }
 }
 
 /// Record `call_site_type` as the applied return for `adapter_key`. Returns
