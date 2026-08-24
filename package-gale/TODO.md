@@ -10,7 +10,7 @@ This file lists what is **not yet done** at a behavioral level; find the code vi
 
 ## Order of attack
 
-1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. Empty right now.
+1. **Soundness and compatibility divergence** — these mis-parse valid input, so they outrank every feature below. One entry, blocked on ICU.
 2. **A descriptor re-extract** whenever a JDK and the `vendor/antlr4` submodule are at hand. The skip buckets were re-triaged this way on 2026-08-21 and are now small; the standing value is that a re-extract is what proves an entry is still blocked rather than merely old.
 3. **Stage C**: the largest block, and the gate for drop-in ANTLR4 replacement. What is left is the paths that still warn and the surface gaps below.
 4. Everything else, in whatever order a live case surfaces it.
@@ -27,11 +27,11 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-Empty right now.
+- [ ] **Blocked on ICU.** A rule name whose first character is outside ASCII is rejected: `ÀBC : [0-9]+ ;` fails as `unexpected character "À"`, though ANTLR4's `NameStartChar` admits `\u00C0` upwards. Widening the g4 lexer's identifier predicates alone is not the fix and was measured as such: the grammar then parses, but `is_lexer_rule_name` asks `is_ascii_uppercase` where ANTLR asks `Character.isUpperCase`, so `ÀBC` silently becomes a parser rule — accepting by guessing, which the compatibility principle forbids. Both halves land together once `char::is_uppercase` exists (see Stage C below). No corpus grammar hits this.
 
 ### Pipeline and tooling correctness
 
-- [ ] A rule-argument action whose host type contains `[]` (`r[int[] arr]`) ends early and its remainder leaks into the grammar text: the action stripper ends a `[...]` at the first unescaped `]`, which is right for the char sets the corpus does exercise. No corpus grammar hits this.
+Empty right now.
 
 ## Stage C — action / predicate execution
 
@@ -50,7 +50,7 @@ Then the surface gaps:
 - `@lexer::members` for a `language = Java` grammar. A Java member method takes `&mut self`, but a lexer predicate runs inside `try_<rule>(lx: &Lexer, ...)` — the tournament must not mutate through a losing candidate. Java lexer bodies therefore see no members, and a reference is reported. Wiring them needs a split between members a predicate may read and members only an action may touch.
 - The recognizer accessors ANTLR exposes to an action that Gale does not model: `getExpectedTokens()` and `getVocabulary()` (live case: the `ParserErrors/LL1ErrorInfo` descriptor, one of the `[stage_c_todo]` entries, prints the expected set), and `PredictionMode` / `dumpDFA`, which describe ANTLR's simulator rather than the grammar — decide whether those two are ever in scope.
 - Two same-named rule labels bound to _different_ rules in different alternatives (`x=a | x=b`). Per-alternative resolution disambiguates token-vs-rule, which is all the binding records, so a `.field` read still resolves against the first-declared rule's value channel. `$<label>.text` is unaffected — it reads the call's own span.
-- `char::is_uppercase` in the Wado prelude — Unicode-wide, as `is_whitespace` already is. ANTLR retypes a grammar's rule name by `Character.isUpperCase`, and `NameStartChar` admits `\u00C0` upwards, so an ANTLRv4 base can only answer for ASCII names until this lands.
+- `char::is_uppercase` in the Wado prelude — **blocked on ICU**. ANTLR retypes a grammar's rule name by `Character.isUpperCase`, and `NameStartChar` admits `\u00C0` upwards, so an ANTLRv4 base can only answer for ASCII names. The `Uppercase` property belongs to `core:icu` ([WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md) — the `properties` interface carries it, and character-property tries are ~44 KB of the spike's data); a UCD table generated into the prelude alongside it would be a second source of truth. Start when `wado-bundled-icu/` is wired.
 - The ATN-class lexer path.
 - java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it — lowest priority here. A proper fix threads Java's promotion rules through the translator.
 
@@ -69,7 +69,7 @@ Stage B′ is the **fallback** for descriptors Stage B cannot compare, not a par
 Remaining:
 
 - **Pin the `superClass` lexers as their own Stage B′ key.** `antlr4-oracle.sh --super` now answers for `RustLexer` against the same base class `driver_cst_rust_test` models, so its token stream can be oracle-pinned the way `sqlite` and `json` pin trees. `regen-oracle.sh` pins `to_string_tree()` output only, so a token-stream key is new plumbing rather than config.
-- **`TypeScriptLexer` and `ANTLRv4Lexer` have no oracle at all** until each has a base class on both sides. The Wado `impl` exists for both (in their driver tests), but the `tests/grammars/java/` twin does not, and each port still has one gap a pin would fix in place: ANTLR4's retypes a rule name by `is_ascii_uppercase` where upstream asks `Character.isUpperCase` (marked `#[TODO]` in its driver test), and TypeScript's approximates `IsStrictMode`, which has no lexer-visible answer. `--probe-super` does not substitute; until then those grammars are pinned only by parse-success.
+- **`TypeScriptLexer` and `ANTLRv4Lexer` have no oracle at all** until each has a base class on both sides. The Wado `impl` exists for both (in their driver tests), but the `tests/grammars/java/` twin does not, and each port still has one gap a pin would fix in place: ANTLR4's retypes a rule name by `is_ascii_uppercase` where upstream asks `Character.isUpperCase` (marked `#[TODO]` in its driver test, blocked on ICU as above), and TypeScript's approximates `IsStrictMode`, which has no lexer-visible answer. `--probe-super` does not substitute; until then those grammars are pinned only by parse-success.
 - **The `[skip]` bucket is down to three, each held by a directive that changes what the parser produces**: `ParseTrees/AltNum` (`contextSuperClass` + `<TreeNodeWithAltNumField>` render alt numbers into node names), `ParserExec/ParserProperty` (`<ParserPropertyMember()>` declares the member a semantic predicate calls), `LexerExec/PositionAdjustingLexer` (`<PositionAdjustingLexer()>` overrides `nextToken()`). Expanding any of them away would leave a test that no longer tests what the descriptor is for, so each needs the host-side construct genuinely modelled — or the judgement that it is target-language-specific and stays skipped.
 - **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does — it lost a real divergence that way (a token whose own text ends in a space). Stage B is exposed to the same class of masking; no committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live.
 
@@ -79,12 +79,6 @@ Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the pr
 
 - **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files. Kiln already supports multi-input; lift the short-circuit once resolution lands. Actionable on its own, ahead of Stage C.
 - **Host-side output (Stage C).** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Re-evaluate once Stage C lands.
-
-## gale-highlight — theme vocabulary
-
-`gale-highlight` provides a grammar-agnostic `Theme` (capture-class → CSS color), `stylesheet`, and `default_theme`. The _color → class_ half is covered; the _rule → class_ half is not: the set of capture classes is grammar-defined (the `.scm` highlight query), so a theme author keys colors by hand-typed class names with nothing to validate against, and a class the grammar emits but the theme omits is silently unstyled.
-
-- **Expose a grammar's capture vocabulary from the generator.** Gale already parses the `.scm` at generation time; emit the capture names it uses as a generated artefact (e.g. a `pub const CAPTURES: List<String>`, or a class → default-color map) alongside the parser. A grammar package could then build or validate a `Theme` against the real class set, turning a mistyped or dropped class into a signal instead of silent unstyled output.
 
 ## LL prediction — parked gaps
 

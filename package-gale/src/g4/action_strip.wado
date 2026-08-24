@@ -13,6 +13,13 @@
 //! with the lexer and parser via `scan.wado`, so string-/comment-handling
 //! lives in one place. Here a region that must be preserved is copied to
 //! `out` verbatim; an action body is skipped by advancing `i` past it.
+//!
+//! A `[` means one of two things, and ANTLR4's own lexer decides by the
+//! rule it is in: a char set inside a lexer rule (no nesting, ends at the
+//! first unescaped `]`), an argument list anywhere else (nests, so a
+//! `[]` host type stays inside it). `RuleType` mirrors ANTLR's
+//! `currentRuleType` — set by the first non-keyword identifier of a rule,
+//! reset by `;`.
 
 use {
     scan_string,
@@ -24,13 +31,36 @@ use {
     is_id_continue_char,
 } from "./scan.wado";
 
+/// Which recognizer the rule being scanned belongs to. `Unknown` covers
+/// the span between rules, where ANTLR4 also reads a `[` as an argument
+/// list.
+enum RuleType {
+    Unknown,
+    Lexer,
+    Parser,
+}
+
+/// The `.g4` words ANTLR4 lexes as keywords rather than as an identifier,
+/// so none of them names a rule or fixes the rule type.
+global GRAMMAR_KEYWORDS: List<String> = [
+    "options", "tokens", "channels", "import", "fragment", "lexer", "parser", "grammar", "protected", "public",
+    "private", "returns", "locals", "throws", "catch", "finally", "mode",
+];
+
 pub fn strip_action_bodies(grammar: &String) -> String {
     let chars: List<char> = grammar.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(grammar.len());
+    let mut rule_type = RuleType::Unknown;
     let mut i = 0;
     while i < n {
         let c = chars[i];
+        if c == ';' {
+            rule_type = RuleType::Unknown;
+            out.push(c);
+            i += 1;
+            continue;
+        }
         if c == '\'' {
             // `.g4` lexer doesn't recognise `"..."` outside actions, so
             // only single-quote strings need top-level skip protection.
@@ -40,14 +70,19 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             continue;
         }
         if c == '[' {
-            // Treat `[...]` as transparent: char-class brackets, rule
-            // args, and `catch [...]` brackets never legitimately contain
-            // action-body `{`s. ANTLR4 char sets do NOT nest, so
-            // `scan_char_class` ends at the first unescaped `]` (a literal
-            // `[` inside is content). Depth tracking would stay "inside"
-            // past the real `]` for sets like TypeScript's `~[*...[]`,
-            // swallowing a following action.
-            let end = match scan_char_class(&chars, i) {
+            // Either way the region is copied verbatim; only where it ends
+            // matters. A lexer rule's char set does NOT nest — a literal
+            // `[` inside is content — so depth tracking there would stay
+            // "inside" past the real `]` for sets like TypeScript's
+            // `~[*...[]`, swallowing a following action. Everywhere else
+            // the brackets are an argument list, which does nest, so a
+            // `[]` host type does not end it.
+            let scanned = if rule_type matches { RuleType::Lexer } {
+                scan_char_class(&chars, i);
+            } else {
+                scan_balanced(&chars, i, '[', ']');
+            };
+            let end = match scanned {
                 Some(e) => e,
                 None => n,
             };
@@ -134,10 +169,15 @@ pub fn strip_action_bodies(grammar: &String) -> String {
         }
         if c == '{' {
             // `tokens { … }`, `options { … }`, `channels { … }` are
-            // grammar prequels, not action bodies — keep them.
+            // grammar prequels, not action bodies — keep them whole, so
+            // the names inside them never read as a rule name.
             if preceded_by_prequel_keyword(&out) {
-                out.push(c);
-                i += 1;
+                let end = match scan_balanced(&chars, i, '{', '}') {
+                    Some(e) => e,
+                    None => n,
+                };
+                push_span(&mut out, &chars, i, end);
+                i = end;
                 continue;
             }
             match scan_balanced(&chars, i, '{', '}') {
@@ -157,10 +197,35 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 },
             }
         }
+        if is_id_start_char(c) {
+            let mut j = i + 1;
+            while j < n && is_id_continue_char(chars[j]) {
+                j += 1;
+            }
+            if rule_type matches { RuleType::Unknown } && !is_grammar_keyword(&chars, i) {
+                // ASCII-only, as ANTLR asks `Character.isUpperCase`: see
+                // TODO.md, blocked on ICU.
+                rule_type = if c.is_ascii_uppercase() { RuleType::Lexer } else { RuleType::Parser };
+            }
+            push_span(&mut out, &chars, i, j);
+            i = j;
+            continue;
+        }
         out.push(c);
         i += 1;
     }
     return out;
+}
+
+/// `starts_with_word` already demands a non-identifier char after the
+/// match, so a hit means the identifier at `start` *is* the keyword.
+fn is_grammar_keyword(chars: &List<char>, start: i32) -> bool {
+    for let kw of GRAMMAR_KEYWORDS {
+        if starts_with_word(chars, start, &kw) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {

@@ -1,6 +1,7 @@
 use { Span, Token, LexerSlice } from "../runtime/lex.wado";
 use { G4Token } from "./token.wado";
 use { scan_line_comment, scan_block_comment, scan_char_class } from "./scan.wado";
+use { is_id_start_char, is_id_continue_char } from "./scan.wado";
 
 pub struct G4Lexer {
     chars: &List<char>,
@@ -142,7 +143,7 @@ impl G4Lexer {
         let mut buf: List<char> = List::with_capacity(16);
         while !self.at_end() {
             let c = self.chars[self.pos];
-            if is_ident_char(c) {
+            if is_id_continue_char(c) {
                 buf.push(c);
                 self.pos += 1;
             } else {
@@ -179,7 +180,7 @@ impl G4Lexer {
         if c == '[' {
             return self.read_char_class();
         }
-        if is_ident_start(c) {
+        if is_id_start_char(c) {
             return self.read_identifier();
         }
         if '0' <= c <= '9' {
@@ -265,14 +266,6 @@ fn buf_eq(buf: &List<char>, lit: &String) -> bool {
         i += 1;
     }
     return i == buf.len();
-}
-
-fn is_ident_start(c: char) -> bool {
-    return 'a' <= c <= 'z' || 'A' <= c <= 'Z' || c == '_';
-}
-
-fn is_ident_char(c: char) -> bool {
-    return is_ident_start(c) || '0' <= c <= '9';
 }
 
 /// Decode one escape body — the chars *after* the `\` — into a code point.
