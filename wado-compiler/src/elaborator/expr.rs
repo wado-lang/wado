@@ -341,11 +341,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     branch_types
                         .iter()
                         .copied()
-                        .find(|&t| {
-                            t != TypeTable::NEVER
-                                && !tt.contains_unknown(t)
-                                && !tt.contains_never_arg(t)
-                        })
+                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
                         .or_else(|| {
                             branch_types
                                 .iter()
@@ -466,10 +462,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TypeTable::U8
             }
-            // A bare `null` is an `Option` of the bottom type: it names a
-            // value of every `Option<T>` and of no other type. `Unknown` here
-            // instead would defer every check it meets, which is how a `null`
-            // used to reach a non-nullable slot.
+            // `Option` of the bottom type: a value of every `Option<T>` and of
+            // no other type. `Unknown` here would instead defer every check it
+            // meets, which is how a `null` used to reach a non-nullable slot.
             Literal::Null => self
                 .tysys
                 .type_table
@@ -1989,16 +1984,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
                     //
-                    // A branch that tells the reader nothing a sibling does not
-                    // tell it better defers to the sibling's resolved type: one
-                    // still holding UNKNOWN, or a bare `null` literal, whose
-                    // `Option<!>` names a value of every `Option`. The deferring
-                    // branch's tail is patched below.
+                    // An indefinite branch defers to its sibling's resolved
+                    // type; its tail is patched below.
                     let tt = self.tysys.type_table.borrow();
-                    let then_unknown =
-                        tt.contains_unknown(then_type) || tt.contains_never_arg(then_type);
-                    let else_unknown =
-                        tt.contains_unknown(else_type) || tt.contains_never_arg(else_type);
+                    let then_unknown = tt.is_indefinite(then_type);
+                    let else_unknown = tt.is_indefinite(else_type);
                     drop(tt);
                     if then_type == else_type {
                         then_type
@@ -2111,21 +2101,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports a `CannotInferType` error when a branch construct's result type
-    /// could not be inferred — every branch produced a value that names no type
-    /// of its own, so the result still holds UNKNOWN or is the `Option<!>` of a
-    /// bare `null`. Returns `true` when an error was reported, so the caller can
-    /// skip the `null`-patching pass (which requires a resolved target type).
+    /// Reports a `CannotInferType` error when every branch of a construct
+    /// produced an indefinite type, leaving the result one too. Returns `true`
+    /// when an error was reported, so the caller can skip the `null`-patching
+    /// pass (which requires a resolved target type).
     fn report_uninferable_result(
         &mut self,
         result_type: TypeId,
         span: Span,
         construct: &str,
     ) -> bool {
-        let tt = self.tysys.type_table.borrow();
-        let uninferable = tt.contains_unknown(result_type) || tt.contains_never_arg(result_type);
-        drop(tt);
-        if !uninferable {
+        if !self.tysys.type_table.borrow().is_indefinite(result_type) {
             return false;
         }
         let _ = self.emit(TypeError::CannotInferType {
@@ -2303,19 +2289,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
             //
-            // Also skip arms whose type tells the reader nothing a sibling does
-            // not tell it better — one still holding UNKNOWN, or a bare `null`
-            // literal, whose `Option<!>` names a value of every `Option`. A
-            // sibling arm with a fully-resolved type (e.g. `Option::Some(s)`
-            // where `s: String`) wins; we then patch the unresolved arm bodies
-            // below.
+            // Also skip arms whose type is indefinite: a sibling arm with a
+            // fully-resolved type (e.g. `Option::Some(s)` where `s: String`)
+            // wins, and we patch the unresolved arm bodies below.
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
                 .map(|(t, _)| *t)
-                .find(|&t| {
-                    t != TypeTable::NEVER && !tt.contains_unknown(t) && !tt.contains_never_arg(t)
-                })
+                .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
                 .or_else(|| {
                     arm_bodies
                         .iter()
@@ -3066,14 +3047,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
-        // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
+        // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced.type_id;
         }
 
-        // Special case: struct literal cast to a type implementing KeyValueLiteral
-        // { a: 1, b: 2 } as TreeMap<String, i32>
+        // `{ a: 1, b: 2 } as TreeMap<String, i32>`
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
             return coerced.type_id;
         }
@@ -4059,9 +4038,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
-            .clone()
-            .into_iter()
-            .map(|t| {
+            .iter()
+            .map(|&t| {
                 let is_map = self.is_key_value_literal_target(t);
                 let fields = if is_map {
                     None

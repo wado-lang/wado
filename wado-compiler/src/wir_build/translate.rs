@@ -1236,39 +1236,34 @@ impl FunctionTranslator<'_, '_> {
         (type_id, fields)
     }
 
-    /// Lower an `ArrayLiteral`. A raw `Array<T>` — what a `[e0, e1, …]` literal
-    /// denotes (WEP 2026-08-24) — is `array.new_fixed<T>(e0, …)`; a `List<T>`,
-    /// which `optimize::array_literal` still materializes from a builder
-    /// window, wraps that in `struct.new List<T> { repr, used: N }`, mirroring
-    /// the structurally identical `String { repr, used }` that `seq_literal`
-    /// builds. The element type is read off the type rather than tracked again
-    /// on the NIR node.
+    /// Lower an `ArrayLiteral`: `array.new_fixed<T>(e0, …)` for the raw
+    /// `Array<T>` a `[e0, e1, …]` literal denotes (WEP 2026-08-24), wrapped in
+    /// `struct.new List<T> { repr, used: N }` where the node is `List`-typed.
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
         elements: &[Operand],
     ) -> WirInstr {
-        let element_instrs = |s: &mut Self| -> Vec<WirInstr> {
-            elements.iter().map(|e| s.translate_operand(*e)).collect()
-        };
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
-        if matches!(
-            self.type_table.get(array_type_id),
-            crate::tir::ResolvedType::BuiltinArray(_)
-        ) {
-            let WirType::Ref { type_id, .. } = wir_type else {
-                panic!(
-                    "[WIR] ArrayLiteral expected Ref WirType for Array<T>, got {wir_type:?} (type_id={array_type_id:?})"
-                );
-            };
-            let elements = element_instrs(self);
-            return WirInstr::ArrayNewFixed { type_id, elements };
-        }
         let WirType::Ref { type_id, .. } = wir_type else {
             panic!(
-                "[WIR] ArrayLiteral expected Ref WirType for List<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
+                "[WIR] ArrayLiteral expected Ref WirType, got {wir_type:?} (type_id={array_type_id:?})"
             );
         };
+        let is_raw_array = matches!(
+            self.type_table.get(array_type_id),
+            crate::tir::ResolvedType::BuiltinArray(_)
+        );
+        let element_instrs: Vec<WirInstr> = elements
+            .iter()
+            .map(|e| self.translate_operand(*e))
+            .collect();
+        if is_raw_array {
+            return WirInstr::ArrayNewFixed {
+                type_id,
+                elements: element_instrs,
+            };
+        }
         // The `repr` field is a non-nullable ref to the raw `Array<T>`.
         let WirType::Ref {
             type_id: raw_array_type_id,
@@ -1277,7 +1272,6 @@ impl FunctionTranslator<'_, '_> {
         else {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
-        let element_instrs = element_instrs(self);
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(

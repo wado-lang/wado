@@ -72,10 +72,10 @@ pub(crate) enum CoercionKind {
     BytesNewtype,
     /// A closure literal retagged as a newtype over its fn-type.
     ClosureToFnNewtype,
-    /// A tuple literal lowered through `SequenceLiteralBuilder` (List
-    /// and user-defined sequence types).
+    /// A sequence literal built through `From<Array<E>>` (`List` and
+    /// user-defined sequence types).
     TupleToSequence,
-    /// An anonymous struct literal lowered through `KeyValueLiteralBuilder`.
+    /// A key-value literal built through `From<Array<[K, V]>>`.
     StructToMap,
 }
 
@@ -454,34 +454,29 @@ pub(crate) struct FromCallFacts {
     pub(crate) from_trait_name: crate::name::FqTraitName,
 }
 
-/// The `Output::from(Array<E>)` call a literal lowers to (WEP 2026-08-24) —
-/// shared by both literal forms, which differ only in what `E` is.
+/// The trait method a literal lowers to (WEP 2026-08-24): an
+/// `impl From<Array<…>>`'s `from`, or an `impl LiteralSpread`'s `spread_literal`.
 #[derive(Clone)]
-pub(crate) struct LiteralFromCall {
-    /// What `from` receives: the `Array<…>` a literal materializes, or a
-    /// leaf's own type where an element converts into its slot.
-    pub(crate) from_type: crate::tir::TypeId,
-    /// What `from` returns. Equal to [`Self::from_type`] when the target is an
-    /// `Array<E>` itself, which needs no conversion at all.
-    pub(crate) output_type: crate::tir::TypeId,
-    /// Module that hosts the `impl From<Array<E>> for Output` block.
+pub(crate) struct LiteralCallee {
+    /// Module that hosts the impl block.
     pub(crate) impl_module_source: crate::module_source::ModuleSource,
-    /// `From<Array<…>>` as the impl block declares it — the spelling the
-    /// method template is registered under, and what the mangled name
-    /// discriminates on. A generic impl writes its own parameter here
-    /// (`From<Array<T>>`), so it must not be rebuilt from the call's types.
-    pub(crate) from_trait: crate::name::FqTraitName,
+    /// The trait as the impl block declares it — the spelling the method
+    /// template is registered under, and what the mangled name discriminates
+    /// on. A generic impl writes its own parameter here (`From<Array<T>>`), so
+    /// it must not be rebuilt from the call's types.
+    pub(crate) trait_name: crate::name::FqTraitName,
     /// The target's base head name, fq (e.g. `core:prelude/list.wado/List`).
     pub(crate) target_base_name: crate::name::FqTypeName,
     /// Type-arg `TypeId`s on the target (e.g. `[i32]` for `List<i32>`).
     pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
     /// Type-arg names parallel to `type_arg_ids`, kept structured.
     pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
-    /// `Output^From<Array<…>>::from`'s mangled name.
+    pub(crate) method: &'static str,
+    /// `Target^Trait::method`'s mangled name.
     pub(crate) mangled_name: String,
 }
 
-impl LiteralFromCall {
+impl LiteralCallee {
     /// Recompute the names from the recorded `TypeId`s. They are a function of
     /// the types alone, so the module-end sweep calls this once a solved
     /// inference variable changes one.
@@ -496,8 +491,20 @@ impl LiteralFromCall {
             .clone()
             .with_args(self.type_arg_names.clone());
         self.mangled_name =
-            crate::name::MethodName::format_local(&target, Some(&self.from_trait), "from");
+            crate::name::MethodName::format_local(&target, Some(&self.trait_name), self.method);
     }
+}
+
+/// The `Output::from(value)` a literal, or one of its elements, lowers to.
+#[derive(Clone)]
+pub(crate) struct LiteralFromCall {
+    /// What `from` receives: the `Array<…>` a literal materializes, or a
+    /// leaf's own type where an element converts into its slot.
+    pub(crate) from_type: crate::tir::TypeId,
+    /// What `from` returns. Equal to [`Self::from_type`] when the target is an
+    /// `Array<E>` itself, which needs no conversion at all.
+    pub(crate) output_type: crate::tir::TypeId,
+    pub(crate) callee: LiteralCallee,
 }
 
 /// The `From<Array<E>>` a `[e0, e1, …]` literal coerces through (WEP
@@ -512,49 +519,10 @@ pub(crate) struct SequenceCoercionFacts {
     pub(crate) call: LiteralFromCall,
 }
 
-/// The `LiteralSpread::spread_literal` call a `..base` member lowers to.
-#[derive(Clone)]
-pub(crate) struct LiteralSpreadCall {
-    /// Module that hosts the `impl LiteralSpread for Output` block.
-    pub(crate) impl_module_source: crate::module_source::ModuleSource,
-    /// `LiteralSpread` as the impl block declares it.
-    pub(crate) trait_name: crate::name::FqTraitName,
-    /// The target's base head name, fq.
-    pub(crate) target_base_name: crate::name::FqTypeName,
-    /// Type-arg `TypeId`s on the target.
-    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
-    /// Type-arg names parallel to `type_arg_ids`, kept structured.
-    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
-    /// `Output^LiteralSpread::spread_literal`'s mangled name.
-    pub(crate) mangled_name: String,
-}
-
-impl LiteralSpreadCall {
-    /// [`LiteralFromCall::remangle`] for the spread call.
-    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
-        self.type_arg_names = self
-            .type_arg_ids
-            .iter()
-            .map(|&t| tt.fq_type_name(t))
-            .collect();
-        let target = self
-            .target_base_name
-            .clone()
-            .with_args(self.type_arg_names.clone());
-        self.mangled_name = crate::name::MethodName::format_local(
-            &target,
-            Some(&self.trait_name),
-            "spread_literal",
-        );
-    }
-}
-
 /// The `From<Array<[K, V]>>` a `{ k: v, … }` literal coerces through (WEP
 /// 2026-08-24). See [`TypeAnnotations::key_value_coercions`].
 #[derive(Clone)]
 pub(crate) struct KeyValueCoercionFacts {
-    /// `K` — the type each key takes.
-    pub(crate) key_type: crate::tir::TypeId,
     /// `V` — the type each value takes.
     pub(crate) value_type: crate::tir::TypeId,
     /// `[K, V]` — one entry of the array the literal materializes.
@@ -565,7 +533,7 @@ pub(crate) struct KeyValueCoercionFacts {
     pub(crate) call: LiteralFromCall,
     /// The merge a `..base` member lowers to; `None` when the literal has no
     /// spread.
-    pub(crate) spread: Option<LiteralSpreadCall>,
+    pub(crate) spread: Option<LiteralCallee>,
 }
 
 /// Static-method call dispatch decision. See

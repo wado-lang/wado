@@ -691,8 +691,16 @@ fn sub_literal_from_call(
 ) {
     call.from_type = sub(tt, call.from_type, subst);
     call.output_type = sub(tt, call.output_type, subst);
-    sub_vec(tt, &mut call.type_arg_ids, subst);
-    call.remangle(tt);
+    sub_literal_callee(tt, &mut call.callee, subst);
+}
+
+fn sub_literal_callee(
+    tt: &mut TypeTable,
+    callee: &mut super::sem::types::LiteralCallee,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    sub_vec(tt, &mut callee.type_arg_ids, subst);
+    callee.remangle(tt);
 }
 
 fn sub_key_value_coercion(
@@ -700,13 +708,11 @@ fn sub_key_value_coercion(
     kv: &mut super::sem::types::KeyValueCoercionFacts,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
-    kv.key_type = sub(tt, kv.key_type, subst);
     kv.value_type = sub(tt, kv.value_type, subst);
     kv.pair_type = sub(tt, kv.pair_type, subst);
     kv.newtype_cast_to = kv.newtype_cast_to.map(|t| sub(tt, t, subst));
     sub_literal_from_call(tt, &mut kv.call, subst);
     if let Some(spread) = kv.spread.as_mut() {
-        sub_vec(tt, &mut spread.type_arg_ids, subst);
-        spread.remangle(tt);
+        sub_literal_callee(tt, spread, subst);
     }
 }

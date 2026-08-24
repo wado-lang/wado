@@ -141,6 +141,12 @@ pub(crate) struct MethodSig {
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
     pub(crate) declaring_slot_count: u32,
+    /// The `impl` block that declares this method, where one does. A use site
+    /// spells the *receiver's* type arguments (`TreeMap::<String, i32>`), which
+    /// are in the target's declaration order, not the block's slot order —
+    /// [`ImplSig::slots`] is the alignment between them, and this is how a
+    /// caller reaches it.
+    pub(crate) declaring_impl: Option<AstId>,
     /// The method's own slots as the declaration wrote them, parallel to
     /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
     /// live nowhere else, and a use site needs them to enforce the one and
@@ -248,13 +254,35 @@ impl MethodSig {
         declaring_args: &[TypeId],
         method_args: &[TypeId],
     ) -> InstantiatedSig {
-        let mut substitution = IndexMap::default();
+        self.instantiate_call_with(type_table, None, declaring_args, method_args)
+    }
+
+    /// [`Self::instantiate_call`] with the declaring block's own alignment.
+    ///
+    /// `declaring_args` are the *receiver's* type arguments, in the target
+    /// type's declaration order. Where the block is `impl … for Map<String, V>`
+    /// those do not line up with its slots at all — position 0 is pinned and
+    /// binds nothing — so [`ImplSig::slots`] is what reads them. Without an
+    /// `ImplSig` the two orders are assumed to coincide, which is true of a
+    /// fully generic target and of every non-impl declaration.
+    pub(crate) fn instantiate_call_with(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        declaring: Option<&ImplSig>,
+        declaring_args: &[TypeId],
+        method_args: &[TypeId],
+    ) -> InstantiatedSig {
+        let mut substitution = match declaring {
+            Some(impl_sig) => impl_sig.slots(type_table, declaring_args),
+            None => IndexMap::default(),
+        };
         {
             let table = type_table.borrow();
-            let pairs = self
-                .declaring_type_params()
-                .iter()
-                .zip(declaring_args)
+            let pairs = declaring
+                .is_none()
+                .then(|| self.declaring_type_params().iter().zip(declaring_args))
+                .into_iter()
+                .flatten()
                 .chain(self.own_type_params().iter().zip(method_args));
             for ((_, slot), &arg) in pairs {
                 if let crate::tir::ResolvedType::TypeParam { index, .. }

@@ -98,8 +98,8 @@ fn collect_and_validate(
         let is_trait_method = func.is_trait_method();
         for (pi, param) in func.params.iter().enumerate() {
             // A trait method's `self` receiver stays pinned. Scalarizing a
-            // single-field-struct receiver (e.g. a `SequenceLiteralBuilder`
-            // wrapper like `SeqVec { items: List<T> }`) changes the receiver
+            // single-field-struct receiver (e.g. a sequence wrapper like
+            // `SeqVec { items: List<T> }`) changes the receiver
             // shape that later collapse passes match on. Non-receiver params —
             // notably serde's boxed `value: &T` — are still unwrapped, which is
             // where the box-per-scalar win comes from.

@@ -1492,8 +1492,7 @@ internal trait FromIterator {
 }
 
 /// `..base` inside a `{ … }` literal: merge `base` into `self`, last write
-/// wins. Implement this to let a literal targeting `Self` carry a spread; a
-/// type without it rejects `..base` where it is written.
+/// wins. A target without this impl rejects `..base` where it is written.
 #[compiler_item("literal_spread")]
 internal trait LiteralSpread {
     fn spread_literal(&mut self, base: Self);

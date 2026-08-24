@@ -98,9 +98,8 @@ export fn run() with Stdout {
 fn struct_field_copy_remark_points_at_copy_statement() {
     // `Bag` is SROA-decomposed and its `items` array copy is reconstructed
     // inside a synthesized block whose inner statements carry placeholder
-    // spans. The
-    // remark must anchor to the enclosing real statement `let mut b = a;`
-    // (line 8), not to the placeholder span of the inner synthesized statement.
+    // spans. The remark must anchor to the enclosing real statement
+    // `let mut b = a;` (line 8), not to the inner statement's placeholder span.
     let remarks = remarks_for(
         r#"
 use { println, Stdout } from "core:cli";

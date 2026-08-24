@@ -155,6 +155,31 @@ pub(super) struct ReifyAssertSlot {
     pub(super) seen_local_index: Option<u32>,
 }
 
+/// The callee a literal coercion names, as annotate resolved and mangled it
+/// (WEP 2026-08-24).
+fn literal_callee_ref(callee: &super::sem::types::LiteralCallee) -> crate::tir::FunctionRef {
+    use crate::tir::{FunctionRef, MonomorphInfo};
+
+    FunctionRef {
+        module_source: callee.impl_module_source.clone(),
+        name: callee.mangled_name.clone(),
+        monomorph_info: (!callee.type_arg_ids.is_empty()).then(|| MonomorphInfo {
+            generic_name: format!("{}::{}", callee.target_base_name, callee.method),
+            impl_type_args: callee.type_arg_ids.clone(),
+            method_type_args: vec![],
+            is_blanket: false,
+        }),
+        method_info: Some(
+            crate::name::LocalMethodName::new(
+                callee.target_base_name.clone(),
+                Some(callee.trait_name.clone()),
+                callee.method.to_string(),
+            )
+            .with_struct_type_args(&callee.type_arg_names),
+        ),
+    }
+}
+
 /// `Output::from(array)` for a literal coercion (WEP 2026-08-24). An `Array<E>`
 /// target needs no conversion — the array the literal materializes is already
 /// the result — and is returned unchanged.
@@ -163,39 +188,80 @@ fn build_literal_from_call(
     call: &super::sem::types::LiteralFromCall,
     span: crate::token::Span,
 ) -> TirExpr {
-    use crate::tir::{CallArg, FunctionRef, MonomorphInfo};
-
     if call.from_type == call.output_type {
         return array;
     }
-    let method_info = crate::name::LocalMethodName::new(
-        call.target_base_name.clone(),
-        Some(call.from_trait.clone()),
-        "from".to_string(),
-    )
-    .with_struct_type_args(&call.type_arg_names);
     TirExpr::new(
         crate::tir::TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: call.impl_module_source.clone(),
-                name: call.mangled_name.clone(),
-                monomorph_info: if call.type_arg_ids.is_empty() {
-                    None
-                } else {
-                    Some(MonomorphInfo {
-                        generic_name: format!("{}::from", call.target_base_name),
-                        impl_type_args: call.type_arg_ids.clone(),
-                        method_type_args: vec![],
-                        is_blanket: false,
-                    })
-                },
-                method_info: Some(method_info),
-            }),
+            func: Box::new(literal_callee_ref(&call.callee)),
             type_args: vec![],
-            args: vec![CallArg::new(array, false)],
+            args: vec![crate::tir::CallArg::new(array, false)],
             has_receiver: false,
         },
         call.output_type,
+        span,
+    )
+}
+
+/// Cast a `from` result to the newtype the literal targeted, where it targeted
+/// one.
+fn cast_to_newtype(
+    built: TirExpr,
+    newtype_cast_to: Option<crate::tir::TypeId>,
+    span: crate::token::Span,
+) -> TirExpr {
+    match newtype_cast_to {
+        Some(target_type) => TirExpr::new(
+            crate::tir::TirExprKind::Cast {
+                expr: Box::new(built),
+                target_type,
+            },
+            target_type,
+            span,
+        ),
+        None => built,
+    }
+}
+
+/// `Output::from([[k0, v0], …])` over one run of a key-value literal's explicit
+/// members.
+fn build_kv_from_call(
+    pairs: Vec<TirExpr>,
+    facts: &super::sem::types::KeyValueCoercionFacts,
+    span: crate::token::Span,
+) -> TirExpr {
+    let array = TirExpr::new(
+        crate::tir::TirExprKind::ArrayLiteral { elements: pairs },
+        facts.call.from_type,
+        span,
+    );
+    build_literal_from_call(array, &facts.call, span)
+}
+
+/// `__acc.spread_literal(base)` for one `..base` member.
+fn build_literal_spread_call(
+    acc_index: u32,
+    output_type: crate::tir::TypeId,
+    base: TirExpr,
+    spread: &super::sem::types::LiteralCallee,
+    span: crate::token::Span,
+) -> TirExpr {
+    let receiver = TirExpr::new(
+        crate::tir::TirExprKind::Local {
+            index: acc_index,
+            name: "__acc".to_string(),
+        },
+        output_type,
+        span,
+    );
+    TirExpr::new(
+        crate::tir::TirExprKind::method_call(
+            Box::new(receiver),
+            literal_callee_ref(spread),
+            vec![],
+            vec![crate::tir::CallArg::new(base, false)],
+        ),
+        crate::tir::TypeTable::UNIT,
         span,
     )
 }
@@ -485,15 +551,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
     }
 
-    /// Recorded type of an expression, honouring tuple-for-of overlays like
-    /// the macro-generated accessors. Unlike them it filters a recorded type
-    /// that is not definite enough to build with — one holding UNKNOWN, or a
-    /// bare `null`'s `Option<!>`, which names a value of every `Option` — to
-    /// `None`: the combined walk records them so its AST analyses can see an
-    /// unresolved branch, but reify must treat such an entry as absent and fall
-    /// back to the node's `expected_type`, exactly as when the recording site
-    /// skipped them. Without this a bare `null` reifies as the `Option` of a
-    /// type nothing inhabits and fails WIR validation.
+    /// Recorded type of an expression, honouring tuple-for-of overlays like the
+    /// macro-generated accessors, but reporting an indefinite one as absent so
+    /// the node falls back to its `expected_type`.
+    ///
+    /// The combined walk records indefinite types for its own AST analyses;
+    /// building with one reifies a bare `null` as an `Option` nothing inhabits
+    /// and fails WIR validation.
     fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
         let raw = self
             .tuple_overlay_stack
@@ -501,12 +565,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .rev()
             .find_map(|overlay| overlay.expression_types.get(&id).copied())
             .or_else(|| self.sem.types.expression_types.get(&id).copied())?;
-        let tt = self.tysys.type_table.borrow();
-        if tt.contains_unknown(raw) || tt.contains_never_arg(raw) {
-            None
-        } else {
-            Some(raw)
-        }
+        (!self.tysys.type_table.borrow().is_indefinite(raw)).then_some(raw)
     }
 
     // Decl/signature facts the combined walk records once per decl, read
@@ -2626,13 +2685,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_tuple_comprehension(comp, ctx, recorded_type)
             }
             ast::Expr::TupleLiteral(tuple_lit) => {
-                // SequenceLiteralBuilder coercion: when the elaborator
-                // recorded `sequence_coercions[tuple.id]`, the literal
-                // was lowered through `Builder::new_literal` /
-                // `Builder::push_literal` / `Builder::build`. Reify
-                // replays the same desugar deterministically — the
-                // `__b` local lands at the same `FunctionContext`
-                // index reify reserves for it.
+                // A recorded `sequence_coercions[tuple.id]` means the
+                // literal builds an `Array<E>` for the target's `From`.
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
@@ -2641,10 +2695,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
                 // `resolve_cast` lands it on `expression_types` via the
-                // `resolve_expr` wrapper. Reify is a pure read.
-                let target_type = self.ann_expression_types(cast.id).expect(
-                    "resolve_cast records the target type on expression_types for every cast",
-                );
+                // `resolve_expr` wrapper. Reify is a pure read. An unresolved
+                // target type (`n as NoSuchType`) is the one absence: annotate
+                // reported it and records no ERROR entry, so reify carries the
+                // error type on rather than reading a missing one.
+                let target_type = self
+                    .ann_expression_types(cast.id)
+                    .unwrap_or(crate::tir::TypeTable::ERROR);
                 // `i128/u128 as T` lowers to prelude calls rather than a
                 // bare cast, since the 128-bit types are prelude structs:
                 // floats go through the correctly rounded `as_f64` /
@@ -2705,6 +2762,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::Unary(unary) => {
+                // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
+                // and annotate coerced the literal through the borrow and typed
+                // the whole unary as the target. Reify drops the wrapper to
+                // match: the call site auto-borrows the `List<i32>`, where a
+                // `&mut` around it would name the referent instead.
+                if matches!(unary.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
+                    && let ast::Expr::TupleLiteral(inner) = &unary.expr
+                    && self.ann_sequence_coercions(inner.id).is_some()
+                {
+                    return self.reify_expr(&unary.expr, ctx, expected_type);
+                }
                 let op = ast_unary_op_to_tir(unary.op);
                 // A `-<numeric literal>` operand shares the unary's type:
                 // propagate the expected/recorded type so the inner literal
@@ -5257,11 +5325,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TirStructField};
 
-        // `KeyValueLiteralBuilder` coercion: when the elaborator
-        // recorded `key_value_coercions[struct_lit.id]`, the literal
-        // was lowered through `Builder::new_literal` /
-        // `Builder::insert_literal` / `Builder::build`. Reify replays
-        // the same `__kv_lit:` desugar block deterministically.
+        // A recorded `key_value_coercions[struct_lit.id]` means the literal
+        // builds an `Array<[K, V]>` for the target's `From`.
         if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {
             return self.reify_key_value_coercion(struct_lit, facts, ctx, struct_lit.span);
         }
@@ -6836,17 +6901,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let built = build_literal_from_call(array, &facts.call, span);
-        match facts.newtype_cast_to {
-            Some(target_type) => TirExpr::new(
-                crate::tir::TirExprKind::Cast {
-                    expr: Box::new(built),
-                    target_type,
-                },
-                target_type,
-                span,
-            ),
-            None => built,
-        }
+        cast_to_newtype(built, facts.newtype_cast_to, span)
     }
 
     /// Reify a `{ k: v, … }` literal coerced through `From<Array<[K, V]>>`
@@ -6869,17 +6924,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         let output_type = facts.call.output_type;
-        let cast = |built: TirExpr| match facts.newtype_cast_to {
-            Some(target_type) => TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(built),
-                    target_type,
-                },
-                target_type,
-                span,
-            ),
-            None => built,
-        };
+        let cast = |built: TirExpr| cast_to_newtype(built, facts.newtype_cast_to, span);
 
         if struct_lit.spreads.is_empty() {
             let pairs = struct_lit
@@ -6887,7 +6932,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .iter()
                 .map(|field| self.reify_kv_pair(field, &facts, string_type, ctx))
                 .collect();
-            return cast(self.build_kv_from_call(pairs, &facts, span));
+            return cast(build_kv_from_call(pairs, &facts, span));
         }
 
         // `{ ..a, x: 1, ..b }` — members in source order, last write wins. The
@@ -6904,7 +6949,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::LiteralMember::Spread(_, spread) => {
                     if !run.is_empty() {
                         let pairs = std::mem::take(&mut run);
-                        members.push((self.build_kv_from_call(pairs, &facts, span), span));
+                        members.push((build_kv_from_call(pairs, &facts, span), span));
                     }
                     let base = self.reify_expr(&spread.expr, ctx, Some(output_type));
                     members.push((base, spread.span));
@@ -6915,7 +6960,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
         if !run.is_empty() {
-            members.push((self.build_kv_from_call(run, &facts, span), span));
+            members.push((build_kv_from_call(run, &facts, span), span));
         }
         for (value, member_span) in members {
             match acc {
@@ -6936,13 +6981,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     acc = Some(index);
                 }
                 Some(index) => {
-                    let call = self.build_literal_spread_call(
-                        index,
-                        output_type,
-                        value,
-                        &facts,
-                        member_span,
+                    let spread = facts.spread.as_ref().expect(
+                        "annotate reports a literal whose target has no `LiteralSpread` impl",
                     );
+                    let call =
+                        build_literal_spread_call(index, output_type, value, spread, member_span);
                     stmts.push(TirStmt::new(TirStmtKind::Expr(call), member_span));
                 }
             }
@@ -7013,74 +7056,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             facts.pair_type,
             field.span,
-        )
-    }
-
-    /// `Output::from([[k0, v0], …])` over one run of explicit members.
-    fn build_kv_from_call(
-        &mut self,
-        pairs: Vec<TirExpr>,
-        facts: &super::sem::types::KeyValueCoercionFacts,
-        span: crate::token::Span,
-    ) -> TirExpr {
-        let array = TirExpr::new(
-            crate::tir::TirExprKind::ArrayLiteral { elements: pairs },
-            facts.call.from_type,
-            span,
-        );
-        build_literal_from_call(array, &facts.call, span)
-    }
-
-    /// `__acc.spread_literal(base)` for one `..base` member.
-    fn build_literal_spread_call(
-        &mut self,
-        acc_index: u32,
-        output_type: crate::tir::TypeId,
-        base: TirExpr,
-        facts: &super::sem::types::KeyValueCoercionFacts,
-        span: crate::token::Span,
-    ) -> TirExpr {
-        use crate::tir::{FunctionRef, MonomorphInfo, TirExprKind, TypeTable};
-
-        let spread = facts
-            .spread
-            .as_ref()
-            .expect("annotate reports a literal whose target has no `LiteralSpread` impl");
-        let receiver = TirExpr::new(
-            TirExprKind::Local {
-                index: acc_index,
-                name: "__acc".to_string(),
-            },
-            output_type,
-            span,
-        );
-        let method_info = crate::name::LocalMethodName::new(
-            spread.target_base_name.clone(),
-            Some(spread.trait_name.clone()),
-            "spread_literal".to_string(),
-        )
-        .with_struct_type_args(&spread.type_arg_names);
-        super::Elaborator::<H>::build_tir_method_call(
-            receiver,
-            FunctionRef {
-                module_source: spread.impl_module_source.clone(),
-                name: spread.mangled_name.clone(),
-                monomorph_info: if spread.type_arg_ids.is_empty() {
-                    None
-                } else {
-                    Some(MonomorphInfo {
-                        generic_name: format!("{}::spread_literal", spread.target_base_name),
-                        impl_type_args: spread.type_arg_ids.clone(),
-                        method_type_args: vec![],
-                        is_blanket: false,
-                    })
-                },
-                method_info: Some(method_info),
-            },
-            vec![],
-            vec![crate::tir::CallArg::new(base, false)],
-            TypeTable::UNIT,
-            span,
         )
     }
 

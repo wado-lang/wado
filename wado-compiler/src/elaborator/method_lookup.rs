@@ -2730,11 +2730,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Find `KeyValueLiteralBuilder` trait implementation for a type.
-    ///
-    /// Checks first for an explicit `impl KeyValueLiteralBuilder for T` (with `Output = T`
-    /// check for blanket-style self-as-builder usage), then falls back to checking whether
-    /// `T` implements the `KeyValueLiteral` trait (separate builder pattern).
     /// The `From<Array<E>>` impls a literal in a position of type
     /// `base_type_id` could coerce through (WEP 2026-08-24).
     ///
@@ -2749,13 +2744,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_type_id: TypeId,
         want_pair: bool,
     ) -> Vec<FromArrayInfo> {
-        if let ResolvedType::BuiltinArray(element_type) =
+        let candidates = if let ResolvedType::BuiltinArray(element_type) =
             *self.tysys.type_table.borrow().get(base_type_id)
         {
             // No conversion runs for an `Array<E>` target, so the module and
             // trait name are never read; the array the literal builds is the
             // result.
-            let info = FromArrayInfo {
+            vec![FromArrayInfo {
                 element_type,
                 array_type: base_type_id,
                 impl_module_source: self.current_module_source.clone(),
@@ -2764,63 +2759,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .compiler_trait_fq(crate::compiler_item::CompilerItem::From),
-            };
-            let is_pair = self
+            }]
+        } else {
+            let Some(from_def) = self
                 .tysys
-                .type_table
-                .borrow()
-                .as_tuple(element_type)
-                .is_some_and(|elems| elems.len() == 2);
-            return if want_pair && !is_pair {
-                Vec::new()
-            } else {
-                vec![info]
-            };
-        }
-
-        let Some(from_def) = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::From)
-        else {
-            return Vec::new();
-        };
-        let mut pairs = Vec::new();
-        let mut plain = Vec::new();
-        for info in
-            self.find_arithmetic_trait_impls(struct_name, base_type_id, from_def, "from", None)
-        {
-            let Some(array_type) = info.rhs_type else {
-                continue;
-            };
-            let ResolvedType::BuiltinArray(element_type) =
-                *self.tysys.type_table.borrow().get(array_type)
+                .compiler_trait_def(crate::compiler_item::CompilerItem::From)
             else {
-                continue;
+                return Vec::new();
             };
-            let found = FromArrayInfo {
-                element_type,
-                array_type,
-                impl_module_source: info.impl_module_source.clone(),
-                trait_name: info.trait_name.clone(),
-            };
-            if self
-                .tysys
-                .type_table
-                .borrow()
-                .as_tuple(element_type)
-                .is_some_and(|elems| elems.len() == 2)
-            {
-                pairs.push(found);
-            } else {
-                plain.push(found);
-            }
-        }
+            self.find_arithmetic_trait_impls(struct_name, base_type_id, from_def, "from", None)
+                .into_iter()
+                .filter_map(|info| {
+                    let array_type = info.rhs_type?;
+                    let ResolvedType::BuiltinArray(element_type) =
+                        *self.tysys.type_table.borrow().get(array_type)
+                    else {
+                        return None;
+                    };
+                    Some(FromArrayInfo {
+                        element_type,
+                        array_type,
+                        impl_module_source: info.impl_module_source,
+                        trait_name: info.trait_name,
+                    })
+                })
+                .collect()
+        };
+
+        let (pairs, plain): (Vec<_>, Vec<_>) = candidates
+            .into_iter()
+            .partition(|found| self.is_pair_type(found.element_type));
         if want_pair {
             return pairs;
         }
         // A sequence literal prefers the non-pair reading; the pair impls are
         // its only candidates when the type offers nothing else.
         if plain.is_empty() { pairs } else { plain }
+    }
+
+    /// Whether `type_id` is a `[K, V]` — the element a `{ k: v, … }` literal
+    /// writes, and what separates a map's `From` impl from a sequence's.
+    fn is_pair_type(&self, type_id: TypeId) -> bool {
+        self.tysys
+            .type_table
+            .borrow()
+            .as_tuple(type_id)
+            .is_some_and(|elems| elems.len() == 2)
     }
 
     pub(super) fn find_index_assign_trait_impl(

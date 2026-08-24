@@ -3316,12 +3316,10 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` carries `!` in an argument position — `Option<!>`, the type
-    /// of a bare `null`, being the case that matters. Such a type names a value
-    /// of every sibling that agrees on the head, so a branch carrying one tells
-    /// the reader nothing a sibling does not tell it better. `!` itself is not
-    /// an argument position and answers `false`; callers that mean "diverges"
-    /// compare against [`Self::NEVER`].
+    /// Whether `id` carries `!` in an argument position — `Option<!>`, a bare
+    /// `null`'s type, names a value of every `Option` and so decides nothing.
+    /// `!` itself is not an argument position and answers `false`; callers that
+    /// mean "diverges" compare against [`Self::NEVER`].
     pub fn contains_never_arg(&self, id: TypeId) -> bool {
         fn mentions(tt: &TypeTable, id: TypeId) -> bool {
             if id == TypeTable::NEVER {
@@ -3345,6 +3343,13 @@ impl TypeTable {
             }
         }
         id != TypeTable::NEVER && mentions(self, id)
+    }
+
+    /// Whether `id` names no type of its own: it still holds UNKNOWN, or it is
+    /// a bare `null`'s `Option<!>`. Such a type never decides a branch
+    /// construct's result — a sibling with a definite type does.
+    pub fn is_indefinite(&self, id: TypeId) -> bool {
+        self.contains_unknown(id) || self.contains_never_arg(id)
     }
 
     /// Whether `id` (recursively) mentions anything a type check cannot decide
@@ -5223,8 +5228,8 @@ pub struct TirGlobal {
     pub module_source: ModuleSource,
     pub span: Span,
     /// Per-local metadata for the initializer expression. Populated when
-    /// the initializer is non-trivial (e.g., `SequenceLiteralBuilder`
-    /// coercion). Indexed by local index, like `TirFunction::locals`.
+    /// the initializer is non-trivial (e.g. a literal coercion). Indexed by
+    /// local index, like `TirFunction::locals`.
     pub locals: Vec<TirLocal>,
 }
 

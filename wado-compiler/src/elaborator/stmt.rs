@@ -588,15 +588,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         (coerced.type_id, target_type)
                     } else {
-                        // The target builds from no `Array<[K, V]>` at all.
-                        let type_name = self.tysys.type_table.borrow().type_name(target_type);
-                        let _ = self.emit(TypeError::MissingTraitImpl {
-                            type_name,
-                            trait_name:
-                                "From<Array<[K, V]>>, so it cannot be built from an object literal"
-                                    .to_string(),
-                            span: struct_lit.span,
-                        });
+                        self.report_not_a_map_target(target_type, struct_lit.span);
                         let value_type = self.resolve_expr(ast_value, ctx, None);
                         (value_type, target_type)
                     }

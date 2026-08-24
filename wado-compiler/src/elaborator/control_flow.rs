@@ -15,7 +15,7 @@ use crate::token::Span;
 /// type table; `expression_types` is keyed by globally-unique `AstId`,
 /// so no module qualifier is needed. `type_table` backs the definite-type
 /// filter the missing-return walk applies, since `expression_types` records
-/// types that name no type of their own.
+/// indefinite types too.
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
     pub(super) expression_types: &'a IndexMap<crate::ast::AstId, TypeId>,
@@ -31,17 +31,12 @@ impl CtrlFlowCtx<'_> {
         self.expression_types.get(&id).copied()
     }
 
-    /// `type_of`, but a recorded type that names no type of its own counts as
-    /// "no definite type" (`None`): one holding UNKNOWN, or a bare `null`'s
-    /// `Option<!>`. The missing-return walk uses this so an unresolved-`null`
-    /// return value does not masquerade as a concrete return type — preserving
-    /// the behaviour from when the recording site skipped UNKNOWN types
-    /// entirely.
+    /// `type_of`, but an indefinite recorded type counts as "no definite type"
+    /// (`None`), so an unresolved-`null` return value does not masquerade as a
+    /// concrete return type in the missing-return walk.
     fn definite_type_of(&self, expr: &ast::Expr) -> Option<TypeId> {
-        self.type_of(expr).filter(|t| {
-            let tt = self.type_table.borrow();
-            !tt.contains_unknown(*t) && !tt.contains_never_arg(*t)
-        })
+        self.type_of(expr)
+            .filter(|t| !self.type_table.borrow().is_indefinite(*t))
     }
 
     fn is_never(&self, expr: &ast::Expr) -> bool {
@@ -155,10 +150,10 @@ pub(super) fn collect_unresolved_null_tails(
 ) {
     match expr {
         ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null) => {
-            if ctx.type_of_id(lit.id).is_some_and(|t| {
-                let tt = ctx.type_table.borrow();
-                tt.contains_unknown(t) || tt.contains_never_arg(t)
-            }) {
+            if ctx
+                .type_of_id(lit.id)
+                .is_some_and(|t| ctx.type_table.borrow().is_indefinite(t))
+            {
                 out.push(lit.span);
             }
         }

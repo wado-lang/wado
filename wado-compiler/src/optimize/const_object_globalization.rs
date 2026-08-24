@@ -449,8 +449,8 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
 ///
 /// A borrow reads, which is why that case has no other callee gate, and holds
 /// only while the callee keeps it a borrow.
-/// `SequenceLiteralBuilder::build(self: &List<T>) { return *self; }` returns the
-/// referent, and the caller keeps no copy because the literal it borrowed was
+/// `List::from(elements: Array<T>)` keeps the array it is handed as the list's
+/// spine, and the caller keeps no copy because the literal it borrowed was
 /// fresh — so hoisting it hands every caller the same object to mutate.
 ///
 /// Two ways in: a direct call argument, or a local bound to the borrow first

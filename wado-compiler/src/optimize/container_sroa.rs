@@ -68,6 +68,13 @@ enum ListMethodKind {
     /// Rewrite: N parallel calls, one per field, each constructing an
     /// `List<T_k>` with the same capacity.
     Constructor,
+    /// `fn(Array<T>) -> List<T>` (static, no receiver) — builds the container
+    /// from the array a `[e0, …]` literal denotes (WEP 2026-08-24).
+    ///
+    /// Rewrite: only the empty literal, as N per-field `with_capacity(0)`
+    /// calls. A non-empty one carries elements this pass would have to split
+    /// per field.
+    FromArray,
     /// `fn(&List<T>) -> i32 | bool` — length-invariant query with no element
     /// argument (e.g. `len`, `is_empty`, `capacity`). Rewritten to field 0's
     /// method: every rewrite keeps the per-field arrays in lockstep. The
@@ -108,6 +115,7 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         )
     };
     let is_t = |ty: TypeId| ty == elem_ty;
+    let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if *inner == elem_ty);
     let is_i32 = |ty: TypeId| ty == TypeTable::I32;
     let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
     // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
@@ -118,6 +126,8 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         [p0] if is_ref_list_of_t(*p0) && is_query_return(ret) => Some(ListMethodKind::Query),
         // fn(i32) -> List<T> — Constructor (static)
         [p0] if is_i32(*p0) && is_list_of_t(ret) => Some(ListMethodKind::Constructor),
+        // fn(Array<T>) -> List<T> — FromArray (static)
+        [p0] if is_array_of_t(*p0) && is_list_of_t(ret) => Some(ListMethodKind::FromArray),
         // fn(&mut List<T>, T) -> () — ElementWriter
         [p0, p1] if is_mut_ref_list_of_t(*p0) && is_t(*p1) && is_unit(ret) => {
             Some(ListMethodKind::ElementWriter)
@@ -678,10 +688,11 @@ fn peel_value_copy(
     cur
 }
 
-/// Recognize the supported initializer form, matched structurally: a direct
-/// `Constructor` call whose argument is side-effect-free (so it can be cloned
-/// per field), or the empty `[]` literal, which is a one-argument call handed a
-/// zero-length `ArrayLiteral` (WEP 2026-08-24). No method name is inspected.
+/// Recognize the supported initializer form, matched structurally: a
+/// `Constructor` call whose capacity argument is side-effect-free (so it can be
+/// cloned per field), or a `FromArray` call handed the empty `[]` literal
+/// (WEP 2026-08-24). Both are classified by signature; no method name is
+/// inspected.
 fn recognize_init(
     body: &Body,
     value: ExprId,
@@ -699,15 +710,17 @@ fn recognize_init(
         return None;
     }
     let cap = args[0].expr;
-    // Only the empty literal qualifies: a non-empty one carries elements this
-    // pass would have to decompose per field.
-    if cap
-        .as_expr()
-        .is_some_and(|e| matches!(&body.exprs[e].kind, ExprKind::ArrayLiteral { elements } if elements.is_empty()))
-    {
-        return Some(CandidateInit { capacity: None });
+    let kind = list_method_kind(*func_id, sig)?;
+    if kind == ListMethodKind::FromArray {
+        // Only the empty literal qualifies: a non-empty one carries elements
+        // this pass would have to decompose per field.
+        let empty_literal = matches!(
+            cap.as_expr().map(|e| &body.exprs[e].kind),
+            Some(ExprKind::ArrayLiteral { elements }) if elements.is_empty()
+        );
+        return empty_literal.then_some(CandidateInit { capacity: None });
     }
-    if list_method_kind(*func_id, sig) != Some(ListMethodKind::Constructor) {
+    if kind != ListMethodKind::Constructor {
         return None;
     }
     // The capacity expression is cloned once per per-field constructor

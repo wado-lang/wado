@@ -5,7 +5,7 @@
 NIR gives two of the three aggregate constructors a first-class, analyzable
 value form: `StructLiteral` and `TupleLiteral`. Arrays were the missing third.
 
-An array literal such as `[1, 2, 3] as List<i32>` used not to reach NIR as a
+An array literal such as `[1, 2, 3] as List<i32>` did not reach NIR as a
 literal. Elaboration coerced it through a builder-trait path, so once that path
 was inlined the construction arrived as an imperative sequence over a fresh
 local — a `with_capacity` call bound by a `Let`, followed by N `push`
@@ -74,10 +74,10 @@ than for one.
   `TupleLiteral`, and would force the node to carry a value representation NIR
   does not otherwise use.
 - Reconstruct the node in the optimizer from an inlined `array_new(N) + N ×
-  push` window, as `optimize::array_literal` did while literals lowered through
-  a builder protocol. Rejected once `lower` could emit it: the matcher was
-  shape-sensitive to a lowering that no longer exists, and removing it left
-  every benchmark's `-O2` WIR byte-identical.
+  push` window. Rejected: `lower` emits the node directly, so the matcher would
+  only be re-deriving what it was already told, and a shape-sensitive matcher
+  breaks whenever the lowering it keys on moves. Every benchmark's `-O2` WIR is
+  identical without it.
 
 ## See also
 

@@ -336,53 +336,32 @@ impl Shr for i8x16 {
 
 // A lane the literal does not write stays zero. `array_len` is a constant at
 // every literal site, so the guard folds away (WEP 2026-08-24).
-fn lane_i32(lanes: &Array<i32>, index: i32) -> i32 {
+fn lane<T: Default>(lanes: &Array<T>, index: i32) -> T {
     if index < builtin::array_len(lanes) {
         return builtin::array_get_value(lanes, index);
     }
-    return 0;
-}
-
-fn lane_i64(lanes: &Array<i64>, index: i32) -> i64 {
-    if index < builtin::array_len(lanes) {
-        return builtin::array_get_value(lanes, index);
-    }
-    return 0;
-}
-
-fn lane_f32(lanes: &Array<f32>, index: i32) -> f32 {
-    if index < builtin::array_len(lanes) {
-        return builtin::array_get_value(lanes, index);
-    }
-    return 0.0;
-}
-
-fn lane_f64(lanes: &Array<f64>, index: i32) -> f64 {
-    if index < builtin::array_len(lanes) {
-        return builtin::array_get_value(lanes, index);
-    }
-    return 0.0;
+    return T::default();
 }
 
 impl From<Array<i32>> for i8x16 {
     fn from(lanes: Array<i32>) -> i8x16 {
         let mut v = builtin::i8x16_splat(0);
-        v = builtin::i8x16_replace_lane(0, v, lane_i32(&lanes, 0));
-        v = builtin::i8x16_replace_lane(1, v, lane_i32(&lanes, 1));
-        v = builtin::i8x16_replace_lane(2, v, lane_i32(&lanes, 2));
-        v = builtin::i8x16_replace_lane(3, v, lane_i32(&lanes, 3));
-        v = builtin::i8x16_replace_lane(4, v, lane_i32(&lanes, 4));
-        v = builtin::i8x16_replace_lane(5, v, lane_i32(&lanes, 5));
-        v = builtin::i8x16_replace_lane(6, v, lane_i32(&lanes, 6));
-        v = builtin::i8x16_replace_lane(7, v, lane_i32(&lanes, 7));
-        v = builtin::i8x16_replace_lane(8, v, lane_i32(&lanes, 8));
-        v = builtin::i8x16_replace_lane(9, v, lane_i32(&lanes, 9));
-        v = builtin::i8x16_replace_lane(10, v, lane_i32(&lanes, 10));
-        v = builtin::i8x16_replace_lane(11, v, lane_i32(&lanes, 11));
-        v = builtin::i8x16_replace_lane(12, v, lane_i32(&lanes, 12));
-        v = builtin::i8x16_replace_lane(13, v, lane_i32(&lanes, 13));
-        v = builtin::i8x16_replace_lane(14, v, lane_i32(&lanes, 14));
-        v = builtin::i8x16_replace_lane(15, v, lane_i32(&lanes, 15));
+        v = builtin::i8x16_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i8x16_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::i8x16_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::i8x16_replace_lane(3, v, lane(&lanes, 3));
+        v = builtin::i8x16_replace_lane(4, v, lane(&lanes, 4));
+        v = builtin::i8x16_replace_lane(5, v, lane(&lanes, 5));
+        v = builtin::i8x16_replace_lane(6, v, lane(&lanes, 6));
+        v = builtin::i8x16_replace_lane(7, v, lane(&lanes, 7));
+        v = builtin::i8x16_replace_lane(8, v, lane(&lanes, 8));
+        v = builtin::i8x16_replace_lane(9, v, lane(&lanes, 9));
+        v = builtin::i8x16_replace_lane(10, v, lane(&lanes, 10));
+        v = builtin::i8x16_replace_lane(11, v, lane(&lanes, 11));
+        v = builtin::i8x16_replace_lane(12, v, lane(&lanes, 12));
+        v = builtin::i8x16_replace_lane(13, v, lane(&lanes, 13));
+        v = builtin::i8x16_replace_lane(14, v, lane(&lanes, 14));
+        v = builtin::i8x16_replace_lane(15, v, lane(&lanes, 15));
         return v as i8x16;
     }
 }
@@ -642,14 +621,14 @@ impl Shr for i16x8 {
 impl From<Array<i32>> for i16x8 {
     fn from(lanes: Array<i32>) -> i16x8 {
         let mut v = builtin::i16x8_splat(0);
-        v = builtin::i16x8_replace_lane(0, v, lane_i32(&lanes, 0));
-        v = builtin::i16x8_replace_lane(1, v, lane_i32(&lanes, 1));
-        v = builtin::i16x8_replace_lane(2, v, lane_i32(&lanes, 2));
-        v = builtin::i16x8_replace_lane(3, v, lane_i32(&lanes, 3));
-        v = builtin::i16x8_replace_lane(4, v, lane_i32(&lanes, 4));
-        v = builtin::i16x8_replace_lane(5, v, lane_i32(&lanes, 5));
-        v = builtin::i16x8_replace_lane(6, v, lane_i32(&lanes, 6));
-        v = builtin::i16x8_replace_lane(7, v, lane_i32(&lanes, 7));
+        v = builtin::i16x8_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i16x8_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::i16x8_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::i16x8_replace_lane(3, v, lane(&lanes, 3));
+        v = builtin::i16x8_replace_lane(4, v, lane(&lanes, 4));
+        v = builtin::i16x8_replace_lane(5, v, lane(&lanes, 5));
+        v = builtin::i16x8_replace_lane(6, v, lane(&lanes, 6));
+        v = builtin::i16x8_replace_lane(7, v, lane(&lanes, 7));
         return v as i16x8;
     }
 }
@@ -892,10 +871,10 @@ impl Shr for i32x4 {
 impl From<Array<i32>> for i32x4 {
     fn from(lanes: Array<i32>) -> i32x4 {
         let mut v = builtin::i32x4_splat(0);
-        v = builtin::i32x4_replace_lane(0, v, lane_i32(&lanes, 0));
-        v = builtin::i32x4_replace_lane(1, v, lane_i32(&lanes, 1));
-        v = builtin::i32x4_replace_lane(2, v, lane_i32(&lanes, 2));
-        v = builtin::i32x4_replace_lane(3, v, lane_i32(&lanes, 3));
+        v = builtin::i32x4_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i32x4_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::i32x4_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::i32x4_replace_lane(3, v, lane(&lanes, 3));
         return v as i32x4;
     }
 }
@@ -1072,8 +1051,8 @@ impl Shr for i64x2 {
 impl From<Array<i64>> for i64x2 {
     fn from(lanes: Array<i64>) -> i64x2 {
         let mut v = builtin::i64x2_splat(0);
-        v = builtin::i64x2_replace_lane(0, v, lane_i64(&lanes, 0));
-        v = builtin::i64x2_replace_lane(1, v, lane_i64(&lanes, 1));
+        v = builtin::i64x2_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i64x2_replace_lane(1, v, lane(&lanes, 1));
         return v as i64x2;
     }
 }
@@ -1284,22 +1263,22 @@ impl Shr for u8x16 {
 impl From<Array<i32>> for u8x16 {
     fn from(lanes: Array<i32>) -> u8x16 {
         let mut v = builtin::i8x16_splat(0);
-        v = builtin::i8x16_replace_lane(0, v, lane_i32(&lanes, 0));
-        v = builtin::i8x16_replace_lane(1, v, lane_i32(&lanes, 1));
-        v = builtin::i8x16_replace_lane(2, v, lane_i32(&lanes, 2));
-        v = builtin::i8x16_replace_lane(3, v, lane_i32(&lanes, 3));
-        v = builtin::i8x16_replace_lane(4, v, lane_i32(&lanes, 4));
-        v = builtin::i8x16_replace_lane(5, v, lane_i32(&lanes, 5));
-        v = builtin::i8x16_replace_lane(6, v, lane_i32(&lanes, 6));
-        v = builtin::i8x16_replace_lane(7, v, lane_i32(&lanes, 7));
-        v = builtin::i8x16_replace_lane(8, v, lane_i32(&lanes, 8));
-        v = builtin::i8x16_replace_lane(9, v, lane_i32(&lanes, 9));
-        v = builtin::i8x16_replace_lane(10, v, lane_i32(&lanes, 10));
-        v = builtin::i8x16_replace_lane(11, v, lane_i32(&lanes, 11));
-        v = builtin::i8x16_replace_lane(12, v, lane_i32(&lanes, 12));
-        v = builtin::i8x16_replace_lane(13, v, lane_i32(&lanes, 13));
-        v = builtin::i8x16_replace_lane(14, v, lane_i32(&lanes, 14));
-        v = builtin::i8x16_replace_lane(15, v, lane_i32(&lanes, 15));
+        v = builtin::i8x16_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i8x16_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::i8x16_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::i8x16_replace_lane(3, v, lane(&lanes, 3));
+        v = builtin::i8x16_replace_lane(4, v, lane(&lanes, 4));
+        v = builtin::i8x16_replace_lane(5, v, lane(&lanes, 5));
+        v = builtin::i8x16_replace_lane(6, v, lane(&lanes, 6));
+        v = builtin::i8x16_replace_lane(7, v, lane(&lanes, 7));
+        v = builtin::i8x16_replace_lane(8, v, lane(&lanes, 8));
+        v = builtin::i8x16_replace_lane(9, v, lane(&lanes, 9));
+        v = builtin::i8x16_replace_lane(10, v, lane(&lanes, 10));
+        v = builtin::i8x16_replace_lane(11, v, lane(&lanes, 11));
+        v = builtin::i8x16_replace_lane(12, v, lane(&lanes, 12));
+        v = builtin::i8x16_replace_lane(13, v, lane(&lanes, 13));
+        v = builtin::i8x16_replace_lane(14, v, lane(&lanes, 14));
+        v = builtin::i8x16_replace_lane(15, v, lane(&lanes, 15));
         return v as u8x16;
     }
 }
@@ -1458,14 +1437,14 @@ impl Shr for u16x8 {
 impl From<Array<i32>> for u16x8 {
     fn from(lanes: Array<i32>) -> u16x8 {
         let mut v = builtin::i16x8_splat(0);
-        v = builtin::i16x8_replace_lane(0, v, lane_i32(&lanes, 0));
-        v = builtin::i16x8_replace_lane(1, v, lane_i32(&lanes, 1));
-        v = builtin::i16x8_replace_lane(2, v, lane_i32(&lanes, 2));
-        v = builtin::i16x8_replace_lane(3, v, lane_i32(&lanes, 3));
-        v = builtin::i16x8_replace_lane(4, v, lane_i32(&lanes, 4));
-        v = builtin::i16x8_replace_lane(5, v, lane_i32(&lanes, 5));
-        v = builtin::i16x8_replace_lane(6, v, lane_i32(&lanes, 6));
-        v = builtin::i16x8_replace_lane(7, v, lane_i32(&lanes, 7));
+        v = builtin::i16x8_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i16x8_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::i16x8_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::i16x8_replace_lane(3, v, lane(&lanes, 3));
+        v = builtin::i16x8_replace_lane(4, v, lane(&lanes, 4));
+        v = builtin::i16x8_replace_lane(5, v, lane(&lanes, 5));
+        v = builtin::i16x8_replace_lane(6, v, lane(&lanes, 6));
+        v = builtin::i16x8_replace_lane(7, v, lane(&lanes, 7));
         return v as u16x8;
     }
 }
@@ -1604,10 +1583,10 @@ impl Shr for u32x4 {
 impl From<Array<i32>> for u32x4 {
     fn from(lanes: Array<i32>) -> u32x4 {
         let mut v = builtin::i32x4_splat(0);
-        v = builtin::i32x4_replace_lane(0, v, lane_i32(&lanes, 0));
-        v = builtin::i32x4_replace_lane(1, v, lane_i32(&lanes, 1));
-        v = builtin::i32x4_replace_lane(2, v, lane_i32(&lanes, 2));
-        v = builtin::i32x4_replace_lane(3, v, lane_i32(&lanes, 3));
+        v = builtin::i32x4_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i32x4_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::i32x4_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::i32x4_replace_lane(3, v, lane(&lanes, 3));
         return v as u32x4;
     }
 }
@@ -1720,8 +1699,8 @@ impl Shr for u64x2 {
 impl From<Array<i64>> for u64x2 {
     fn from(lanes: Array<i64>) -> u64x2 {
         let mut v = builtin::i64x2_splat(0);
-        v = builtin::i64x2_replace_lane(0, v, lane_i64(&lanes, 0));
-        v = builtin::i64x2_replace_lane(1, v, lane_i64(&lanes, 1));
+        v = builtin::i64x2_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::i64x2_replace_lane(1, v, lane(&lanes, 1));
         return v as u64x2;
     }
 }
@@ -1880,10 +1859,10 @@ impl Neg for f32x4 {
 impl From<Array<f32>> for f32x4 {
     fn from(lanes: Array<f32>) -> f32x4 {
         let mut v = builtin::f32x4_splat(0.0);
-        v = builtin::f32x4_replace_lane(0, v, lane_f32(&lanes, 0));
-        v = builtin::f32x4_replace_lane(1, v, lane_f32(&lanes, 1));
-        v = builtin::f32x4_replace_lane(2, v, lane_f32(&lanes, 2));
-        v = builtin::f32x4_replace_lane(3, v, lane_f32(&lanes, 3));
+        v = builtin::f32x4_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::f32x4_replace_lane(1, v, lane(&lanes, 1));
+        v = builtin::f32x4_replace_lane(2, v, lane(&lanes, 2));
+        v = builtin::f32x4_replace_lane(3, v, lane(&lanes, 3));
         return v as f32x4;
     }
 }
@@ -2040,8 +2019,8 @@ impl Neg for f64x2 {
 impl From<Array<f64>> for f64x2 {
     fn from(lanes: Array<f64>) -> f64x2 {
         let mut v = builtin::f64x2_splat(0.0);
-        v = builtin::f64x2_replace_lane(0, v, lane_f64(&lanes, 0));
-        v = builtin::f64x2_replace_lane(1, v, lane_f64(&lanes, 1));
+        v = builtin::f64x2_replace_lane(0, v, lane(&lanes, 0));
+        v = builtin::f64x2_replace_lane(1, v, lane(&lanes, 1));
         return v as f64x2;
     }
 }

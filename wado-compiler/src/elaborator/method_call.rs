@@ -1520,8 +1520,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
                     _ => vec![],
                 };
-                let instantiated = sig.instantiate_call(
+                // `TreeMap::<String, i32>` spells the *target's* arguments;
+                // `impl … for TreeMap<String, V>` numbers only `V`. The
+                // declaring block is what aligns the two.
+                let declaring = sig
+                    .declaring_impl
+                    .and_then(|id| self.tysys.signatures.impl_sig(id));
+                let instantiated = sig.instantiate_call_with(
                     &self.tysys.type_table,
+                    declaring,
                     &declaring_args,
                     &method_type_args,
                 );
@@ -2115,8 +2122,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let (decl_params, method_params) =
                 self.static_method_slot_params(&struct_name, &static_call.method);
+            let decl_args =
+                self.aligned_declaring_args(&struct_name, &static_call.method, &struct_type_args);
             let subst_ctx = SubstitutionContext::new()
-                .bind(&decl_params, &struct_type_args)
+                .bind(&decl_params, &decl_args)
                 .bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
                 return_type =
@@ -2362,6 +2371,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let ids = |ps: &[(String, TypeId)]| ps.iter().map(|(_, id)| *id).collect();
         (ids(sig.declaring_type_params()), ids(sig.own_type_params()))
+    }
+
+    /// A receiver's spelled type arguments (`TreeMap::<String, i32>`) reordered
+    /// into the declaring block's slot order. `impl … for TreeMap<String, V>`
+    /// numbers only `V`, so a positional zip binds it to `String`; the block's
+    /// own alignment says position 1 fills it.
+    fn aligned_declaring_args(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let Some(impl_sig) = self
+            .static_method_sig(struct_name, method_name)
+            .and_then(|sig| sig.declaring_impl)
+            .and_then(|id| self.tysys.signatures.impl_sig(id))
+        else {
+            return receiver_args.to_vec();
+        };
+        let slots = impl_sig.slots(&self.tysys.type_table, receiver_args);
+        let (decl_params, _) = self.static_method_slot_params(struct_name, method_name);
+        let table = self.tysys.type_table.borrow();
+        decl_params
+            .iter()
+            .filter_map(|slot| match table.get(*slot) {
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    slots.get(index).copied()
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Report an argument list the blanket template cannot accept, returning

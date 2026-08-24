@@ -2,11 +2,11 @@
 
 ## Context
 
-Wado coerces `[…]` and `{…}` literals to collection types through a four-trait
+Wado coerced `[…]` and `{…}` literals to collection types through a four-trait
 builder protocol — `SequenceLiteralBuilder` / `SequenceLiteral` and
 `KeyValueLiteralBuilder` / `KeyValueLiteral`, plus two blanket impls
 ([Literal-to-Collection Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md)).
-The compiler expands a literal into `new_literal(capacity)`, N ×
+The compiler expanded a literal into `new_literal(capacity)`, N ×
 `push_literal` / `insert_literal`, and `build()`, synthesizing the TIR for that
 block by hand.
 
@@ -21,19 +21,17 @@ Three things have changed since that design.
   data section.
 - `From<T>` landed ([Conversion Traits](./wep-2026-03-16-conversion-traits.md)),
   with a compiler-provided reflexive `impl From<T> for T`.
-- The builder protocol never grew heterogeneous elements. `Element` / `Value` is
-  a single type, so `core:value::Value` implements neither trait and
-  `let v: Value = { name: "Alice", scores: [10, 20] }` does not compile — the
+- The builder protocol never grew heterogeneous elements. `Element` / `Value` was
+  a single type, so `core:value::Value` implemented neither trait and
+  `let v: Value = { name: "Alice", scores: [10, 20] }` did not compile — the
   literal shape [JSON Literal Compatibility](./wep-2026-01-18-json-literal-compatibility.md)
   was written for.
 
-The protocol is also the largest piece of hand-written lowering in the
-elaborator: the coercions in `elaborator/coercion.rs`, the TIR synthesis in
-`elaborator/reify.rs`, the `SequenceCoercionFacts` / `KeyValueCoercionFacts`
-records and their name remangling in `elaborator/sem/types.rs`, the remangle
-sweep in `elaborator/infer_hole.rs`, and the impl search in
-`elaborator/method_lookup.rs` — about 1,100 lines that exist because a literal
-is not an expression the rest of the pipeline can see.
+The protocol was also the largest piece of hand-written lowering in the
+elaborator — the coercions, the TIR synthesis, the coercion-fact records and
+their name remangling, the remangle sweep, and the impl search: about 1,100
+lines that existed because a literal was not an expression the rest of the
+pipeline could see.
 
 ## Decision
 
@@ -173,7 +171,7 @@ impl From<Array<T>> for List<T> {
 impl<T: Ord> From<Array<T>> for TreeSet<T> {
     fn from(elements: Array<T>) -> TreeSet<T> {
         let mut s = TreeSet::<T>::new();
-        for let e of elements { s.insert(e); }
+        for let e of elements { s.insert(e); }   // last duplicate ignored
         return s;
     }
 }

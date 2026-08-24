@@ -2075,7 +2075,8 @@ internal trait LiteralSpread {
 }
 ```
 
-A type without the impl rejects `..base` where it is written.
+A type without the impl rejects `..base` where it is written, and a sequence
+literal cannot carry one at all — `[..xs, 4]` is a tuple spread.
 
 See [`docs/wep-2026-08-24-literal-from-array.md`](./wep-2026-08-24-literal-from-array.md)
 for the lowering, the impl-selection rule, and the newtype peel.
