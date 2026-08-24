@@ -1394,11 +1394,7 @@ mod tests {
     fn test_byte_string_literal() {
         // `b"..."` is a byte string; raw content is kept (escapes uninterpreted).
         let bs = tokens(r#"b"a\x00b""#);
-        assert_matches!(
-            &bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b",
-            "got {:?}",
-            bs[0].kind
-        );
+        assert_matches!(&bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b");
 
         // A bare `b` not followed by `"` is still an identifier.
         let ident = tokens("b + 1");
@@ -1413,18 +1409,10 @@ mod tests {
     #[test]
     fn test_byte_literal() {
         let a = tokens("b'A'");
-        assert_matches!(
-            &a[0].kind, TokenKind::ByteCharLit(raw) if raw == "A",
-            "got {:?}",
-            a[0].kind
-        );
+        assert_matches!(&a[0].kind, TokenKind::ByteCharLit(raw) if raw == "A");
 
         let esc = tokens(r"b'\xff'");
-        assert_matches!(
-            &esc[0].kind, TokenKind::ByteCharLit(raw) if raw == r"\xff",
-            "got {:?}",
-            esc[0].kind
-        );
+        assert_matches!(&esc[0].kind, TokenKind::ByteCharLit(raw) if raw == r"\xff");
 
         let suffixed = tokens("crab'A'");
         assert_matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "crab");
@@ -1676,30 +1664,24 @@ test data";
     fn test_template_malformed_unicode_escape_keeps_delimiter() {
         let short = tokens(r"`\u12`");
         assert_matches!(
-            &short[0].kind, TokenKind::TemplateStringLit(parts)
-                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())],
-            "got {:?}",
-            short[0].kind
+            &short[0].kind,
+            TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())]
         );
 
         // `\u{…}` scans hex digits only, so an unclosed brace stops at the
         // backtick instead of running to EOF.
         let unclosed = tokens(r"`\u{12` + 1");
         assert_matches!(
-            &unclosed[0].kind, TokenKind::TemplateStringLit(parts)
-                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())],
-            "got {:?}",
-            unclosed[0].kind
+            &unclosed[0].kind,
+            TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())]
         );
         assert_matches!(unclosed[1].kind, TokenKind::Plus);
 
         // A plain string behaves the same way.
         let plain = tokens(r#""\u{12" + 1"#);
-        assert_matches!(
-            &plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12",
-            "got {:?}",
-            plain[0].kind
-        );
+        assert_matches!(&plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12");
         assert_matches!(plain[1].kind, TokenKind::Plus);
     }
 
@@ -1806,13 +1788,9 @@ test data";
     fn test_template_escapes_preserved_raw() {
         let t = tokens(r"`a\`b\{c\$d\u{1F600}eAf`");
         assert_matches!(
-            &t[0].kind, TokenKind::TemplateStringLit(parts)
-            if parts.as_slice()
-                == [TemplateTokenPart::Literal(
-                    r"a\`b\{c\$d\u{1F600}eAf".to_string()
-                )],
-            "got {:?}",
-            t[0].kind
+            &t[0].kind,
+            TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal( r"a\`b\{c\$d\u{1F600}eAf".to_string() )]
         );
     }
 

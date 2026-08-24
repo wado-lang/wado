@@ -1009,6 +1009,7 @@ fn copy_field_knowledge(known: &mut FieldKnowledge<'_>, from: &str, to: &str) {
 mod tests {
     use super::*;
     use crate::wir::{WirField, WirFuncId, WirMeta, WirName, WirStructType, WirType};
+    use std::assert_matches;
 
     fn local_set(name: &str, value: WirInstr) -> WirInstr {
         WirInstr::LocalSet {
@@ -1125,10 +1126,10 @@ mod tests {
 
         run_forward(&mut body, &types);
 
-        assert!(
-            matches!(set_value(&body[2]), WirInstr::LocalGet { name, .. } if name == "a"),
-            "reassigned `a` must not fold to the stale constant, got {:?}",
-            set_value(&body[2])
+        assert_matches!(
+            set_value(&body[2]),
+            WirInstr::LocalGet { name, .. } if name == "a",
+            "reassigned `a` must not fold to the stale constant"
         );
     }
 
@@ -1156,11 +1157,11 @@ mod tests {
 
         run_forward(&mut body, &types);
 
-        assert!(
-            matches!(set_value(&body[2]), WirInstr::StructGet { .. }),
+        assert_matches!(
+            set_value(&body[2]),
+            WirInstr::StructGet { .. },
             "a.f after the block is 3 or 4 depending on the exit; it must \
-             not fold, got {:?}",
-            set_value(&body[2])
+             not fold"
         );
     }
 
@@ -1187,10 +1188,10 @@ mod tests {
 
         run_forward(&mut body, &types);
 
-        assert!(
-            matches!(set_value(&body[1]), WirInstr::I32Const(3)),
-            "a.f is 3 on both block exits and must fold, got {:?}",
-            set_value(&body[1])
+        assert_matches!(
+            set_value(&body[1]),
+            WirInstr::I32Const(3),
+            "a.f is 3 on both block exits and must fold"
         );
     }
 
@@ -1211,10 +1212,10 @@ mod tests {
 
         run_forward(&mut body, &types);
 
-        assert!(
-            matches!(set_value(&body[2]), WirInstr::StructGet { .. }),
-            "a.f must not fold to the stale 1 after the nested tee, got {:?}",
-            set_value(&body[2])
+        assert_matches!(
+            set_value(&body[2]),
+            WirInstr::StructGet { .. },
+            "a.f must not fold to the stale 1 after the nested tee"
         );
     }
 
@@ -1247,10 +1248,10 @@ mod tests {
             &IndexMap::default(),
         );
 
-        assert!(
-            matches!(set_value(&body[2]), WirInstr::StructGet { .. }),
-            "a.f may be mutated by the conditional call and must not fold, got {:?}",
-            set_value(&body[2])
+        assert_matches!(
+            set_value(&body[2]),
+            WirInstr::StructGet { .. },
+            "a.f may be mutated by the conditional call and must not fold"
         );
     }
 
@@ -1279,10 +1280,10 @@ mod tests {
             &IndexMap::default(),
         );
 
-        assert!(
-            matches!(set_value(&body[2]), WirInstr::StructGet { .. }),
-            "a.f may be mutated by the nested call and must not fold, got {:?}",
-            set_value(&body[2])
+        assert_matches!(
+            set_value(&body[2]),
+            WirInstr::StructGet { .. },
+            "a.f may be mutated by the nested call and must not fold"
         );
     }
 
@@ -1309,15 +1310,15 @@ mod tests {
 
         run_forward(&mut body, &types);
 
-        assert!(
-            matches!(set_value(&body[2]), WirInstr::I32Const(1)),
-            "b.f before the mutation must fold through the plain copy, got {:?}",
-            set_value(&body[2])
+        assert_matches!(
+            set_value(&body[2]),
+            WirInstr::I32Const(1),
+            "b.f before the mutation must fold through the plain copy"
         );
-        assert!(
-            matches!(set_value(&body[4]), WirInstr::StructGet { .. }),
-            "a.f after the mutation through the copy `b` must not fold, got {:?}",
-            set_value(&body[4])
+        assert_matches!(
+            set_value(&body[4]),
+            WirInstr::StructGet { .. },
+            "a.f after the mutation through the copy `b` must not fold"
         );
     }
 }

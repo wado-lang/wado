@@ -757,7 +757,7 @@ default = "https://wa.dev"
                 );
             }
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert_matches!(err, ResolveError::NoSolution { .. }, "{err:?}");
+            assert_matches!(err, ResolveError::NoSolution { .. });
         });
     }
 
@@ -886,7 +886,7 @@ default = "https://wa.dev"
                 leaf_info("pkg", "1.0.0", "sha256:x"),
             );
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert_matches!(err, ResolveError::NoSolution { .. }, "{err:?}");
+            assert_matches!(err, ResolveError::NoSolution { .. });
         });
     }
 
@@ -972,8 +972,7 @@ json = { workspace = true }
                 ResolveError::UnsupportedSource {
                     kind: "workspace",
                     ..
-                },
-                "{err:?}"
+                }
             );
         });
     }
@@ -1123,7 +1122,7 @@ version = "0.1.0"
                 },
             );
             let err = resolve(&manifest, &provider).await.unwrap_err();
-            assert_matches!(err, ResolveError::NoSolution { .. }, "{err:?}");
+            assert_matches!(err, ResolveError::NoSolution { .. });
         });
     }
 }

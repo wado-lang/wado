@@ -8,10 +8,10 @@
 //! give the interpreter a stable contract to refactor against, not to
 //! enumerate every operator.
 
+use std::assert_matches;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use std::assert_matches;
 use wado_compiler::Span;
 use wado_compiler::compiler_item::SeqField;
 use wado_compiler::const_eval::{MAX_SEQ_ELEMENTS, Value};
@@ -672,8 +672,7 @@ fn reduce_short_circuits_or_false() {
     assert_matches!(
         body.exprs[e].kind,
         ExprKind::Local { index: 0, .. },
-        "false || X should reduce to X, got {:?}",
-        body.exprs[e].kind
+        "false || X should reduce to X"
     );
 }
 
@@ -842,8 +841,7 @@ fn local_node_itself_is_not_rewritten_in_place() {
     assert_matches!(
         body.exprs[e].kind,
         ExprKind::Local { index: 0, .. },
-        "Local must stay structurally a Local; env lookup happens at parents only, got {:?}",
-        body.exprs[e].kind,
+        "Local must stay structurally a Local; env lookup happens at parents only"
     );
 }
 
@@ -1483,8 +1481,7 @@ fn reduce_local_rewrites_if_true_false_with_non_speculatable_cond() {
     assert_matches!(
         body.exprs[e].kind,
         ExprKind::Match { .. },
-        "expected the original Match condition to survive as the result, got {:?}",
-        body.exprs[e].kind
+        "expected the original Match condition to survive as the result"
     );
 }
 
@@ -6899,8 +6896,7 @@ fn a_binding_the_arm_body_reads_blocks_the_splice() {
     assert_matches!(
         body.exprs[e].kind,
         ExprKind::Match { .. },
-        "the match must survive: {:?}",
-        body.exprs[e].kind
+        "the match must survive"
     );
 }
 
@@ -7030,8 +7026,7 @@ fn an_unknown_guard_leaves_the_match_alone() {
     assert_matches!(
         body.exprs[e].kind,
         ExprKind::Match { .. },
-        "the match must survive: {:?}",
-        body.exprs[e].kind
+        "the match must survive"
     );
 }
 
@@ -7059,8 +7054,7 @@ fn a_guard_the_engine_cannot_evaluate_blocks_a_later_arm() {
     assert_matches!(
         body.exprs[e].kind,
         ExprKind::Match { .. },
-        "the match must survive: {:?}",
-        body.exprs[e].kind
+        "the match must survive"
     );
 }
 

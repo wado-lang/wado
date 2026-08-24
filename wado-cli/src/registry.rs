@@ -279,7 +279,7 @@ name = "app"
         let provider = FilesystemProvider::new(".".into());
         let err = block_on(provider.list_registry_versions("https://wa.dev", "mizchi:brotli"))
             .unwrap_err();
-        assert_matches!(err, ProviderError::NotFound { .. }, "{err:?}");
+        assert_matches!(err, ProviderError::NotFound { .. });
     }
 
     #[test]

@@ -186,8 +186,7 @@ export fn run() with Stdout {
     assert_matches!(
         sem.module_of_id(def_id),
         Some(ModuleSource::Core { .. } | ModuleSource::Wasi { .. }),
-        "println def should live in stdlib, got {:?}",
-        sem.module_of_id(def_id),
+        "println def should live in stdlib"
     );
 
     let def_symbol = sem

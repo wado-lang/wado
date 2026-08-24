@@ -1147,8 +1147,8 @@ version = "0.1.0"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
         assert_matches!(
-            &err, ManifestError::ConflictingSource { message, .. } if message.contains("directory"),
-            "{err:?}"
+            &err,
+            ManifestError::ConflictingSource { message, .. } if message.contains("directory")
         );
     }
 
@@ -1317,10 +1317,7 @@ default = "oci://ghcr.io/acme"
 "mizchi:brotli" = { registry = "default" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert_matches!(
-            &err, ManifestError::MissingField { field, .. } if field == "version",
-            "{err:?}"
-        );
+        assert_matches!(&err, ManifestError::MissingField { field, .. } if field == "version");
     }
 
     #[test]
@@ -1338,8 +1335,8 @@ foo = { version = "^1.0.0" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
         assert_matches!(
-            &err, ManifestError::ConflictingSource { message, .. } if message.contains("coordinate key"),
-            "{err:?}"
+            &err,
+            ManifestError::ConflictingSource { message, .. } if message.contains("coordinate key")
         );
     }
 
@@ -1354,11 +1351,7 @@ version = "0.1.0"
 "mizchi:brotli" = { version = "^0.2.0" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert_matches!(
-            err,
-            ManifestError::NoDefaultRegistry { .. },
-            "expected NoDefaultRegistry, got {err:?}"
-        );
+        assert_matches!(err, ManifestError::NoDefaultRegistry { .. });
     }
 
     #[test]
@@ -1416,11 +1409,7 @@ version = "0.1.0"
 regex = { package = "docs:regex", version = "1.0.0" }
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert_matches!(
-            err,
-            ManifestError::InvalidVersion { .. },
-            "expected InvalidVersion, got {err:?}"
-        );
+        assert_matches!(err, ManifestError::InvalidVersion { .. });
     }
 
     #[test]
@@ -1683,7 +1672,7 @@ license = "MIT"
 license-file = "LICENSE"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert_matches!(err, ManifestError::ConflictingLicense, "{err:?}");
+        assert_matches!(err, ManifestError::ConflictingLicense);
     }
 
     #[test]
@@ -1695,7 +1684,7 @@ version = "0.1.0"
 wado-version = "not a req"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert_matches!(err, ManifestError::InvalidWadoVersion { .. }, "{err:?}");
+        assert_matches!(err, ManifestError::InvalidWadoVersion { .. });
     }
 
     #[test]
@@ -1731,7 +1720,7 @@ version = "0.1.0"
 license = "Definitely Not A License"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
-        assert_matches!(err, ManifestError::InvalidLicense { .. }, "{err:?}");
+        assert_matches!(err, ManifestError::InvalidLicense { .. });
     }
 
     const ROOT_WS: &str = r#"
@@ -1777,8 +1766,9 @@ lib = "src/lib.wado"
             let member = format!("[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n{line}\n");
             let err = resolve_member(&member, ROOT_WS).unwrap_err();
             assert_matches!(
-                &err, ManifestError::WorkspaceFieldOverride { field: f } if f == field,
-                "field {field}: {err:?}"
+                &err,
+                ManifestError::WorkspaceFieldOverride { field: f } if f == field,
+                "field {field}"
             );
         }
     }
@@ -1822,10 +1812,7 @@ repository = "https://github.com/org/monorepo"
 "#;
         let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
         let err = resolve_member(member, root).unwrap_err();
-        assert_matches!(
-            &err, ManifestError::MissingField { field, .. } if field == "version",
-            "{err:?}"
-        );
+        assert_matches!(&err, ManifestError::MissingField { field, .. } if field == "version");
     }
 
     #[test]
@@ -1864,9 +1851,9 @@ license-file = "LICENSE"
 "#;
         let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
         let err = resolve_member(member, root).unwrap_err();
-        assert_matches!(err, ManifestError::WorkspaceConflictingLicense, "{err:?}");
+        assert_matches!(err, ManifestError::WorkspaceConflictingLicense);
         let err = root.parse::<Manifest>().unwrap_err();
-        assert_matches!(err, ManifestError::WorkspaceConflictingLicense, "{err:?}");
+        assert_matches!(err, ManifestError::WorkspaceConflictingLicense);
     }
 
     #[test]
@@ -1880,11 +1867,7 @@ version = "0.1.0"
 license = "Not A License"
 "#;
         let err = root.parse::<Manifest>().unwrap_err();
-        assert_matches!(
-            err,
-            ManifestError::WorkspaceInvalidLicense { .. },
-            "{err:?}"
-        );
+        assert_matches!(err, ManifestError::WorkspaceInvalidLicense { .. });
     }
 
     #[test]

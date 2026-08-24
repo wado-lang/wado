@@ -1400,7 +1400,7 @@ mod tests {
         assert_matches!(
             rhs.as_ref(),
             WirInstr::I32LtS(..),
-            "hint wrapper must be dropped from the folded operand: {rhs:?}"
+            "hint wrapper must be dropped from the folded operand"
         );
     }
 
@@ -1907,8 +1907,9 @@ mod tests {
             panic!("expected Select");
         };
         assert_matches!(
-            if_true.as_ref(), WirInstr::LocalGet { name, .. } if name == "alias",
-            "use before the copy executes must not be rewritten: {if_true:?}"
+            if_true.as_ref(),
+            WirInstr::LocalGet { name, .. } if name == "alias",
+            "use before the copy executes must not be rewritten"
         );
     }
 }

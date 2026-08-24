@@ -6445,9 +6445,9 @@ mod tests {
             panic!("expected Matches at the top, got {e:?}");
         };
         assert_matches!(
-            &m.expr, Expr::Unary(u) if u.op == UnaryOp::Deref,
-            "scrutinee should be the deref, got {:?}",
-            m.expr
+            &m.expr,
+            Expr::Unary(u) if u.op == UnaryOp::Deref,
+            "scrutinee should be the deref"
         );
 
         // `x as i32 matches { P }`, `a + b matches { P }`, `f & M matches { P }`
@@ -6473,12 +6473,7 @@ mod tests {
             panic!("expected a `!` unary at the top, got {e:?}");
         };
         assert_eq!(u.op, UnaryOp::Not);
-        assert_matches!(
-            &u.expr,
-            Expr::Matches(_),
-            "`!` should wrap the matches, got {:?}",
-            u.expr
-        );
+        assert_matches!(&u.expr, Expr::Matches(_), "`!` should wrap the matches");
     }
 
     /// `!!x matches { P }` is right-associative on `!` and tighter on `matches`:
@@ -6494,12 +6489,7 @@ mod tests {
             panic!("expected inner `!`, got {:?}", outer.expr);
         };
         assert_eq!(inner.op, UnaryOp::Not);
-        assert_matches!(
-            &inner.expr,
-            Expr::Matches(_),
-            "innermost should be matches, got {:?}",
-            inner.expr
-        );
+        assert_matches!(&inner.expr, Expr::Matches(_), "innermost should be matches");
     }
 
     #[test]

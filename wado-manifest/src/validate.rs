@@ -342,11 +342,7 @@ version = "0.1.0"
 regex = { package = "docs:regex", version = "^0.1.0" }
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
-        assert_matches!(
-            err,
-            ManifestError::NoDefaultRegistry { .. },
-            "expected NoDefaultRegistry, got {err:?}"
-        );
+        assert_matches!(err, ManifestError::NoDefaultRegistry { .. });
     }
 
     #[test]

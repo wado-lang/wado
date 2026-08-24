@@ -496,13 +496,11 @@ struct Dispatch {
 }
 
 /// The chosen worker's engine task has stopped, i.e. the server is shutting
-/// down. Carries nothing: `SendError` would hand back the whole `RequestJob`,
-/// and the caller has no use for a job no worker will run.
+/// down. Carries nothing: `SendError` would hand back the whole `RequestJob`.
 struct WorkerGone;
 
 impl Dispatch {
-    /// Hand `job` to the next worker in rotation. Errors only once that
-    /// worker's engine task has stopped (i.e. during shutdown).
+    /// Hand `job` to the next worker in rotation.
     async fn submit(&self, job: RequestJob) -> Result<(), WorkerGone> {
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % self.txs.len();
         self.txs[idx].send(job).await.map_err(|_| WorkerGone)

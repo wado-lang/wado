@@ -13,6 +13,7 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
+use std::assert_matches;
 
 /// Build `if condition { then_body } else { else_body }`, collapsing the
 /// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
@@ -1066,8 +1067,9 @@ impl FunctionTranslator<'_, '_> {
                         let PatKind::Binding { type_id, .. } = &arena.pats[*binding].kind else {
                             continue;
                         };
-                        assert!(
-                            matches!(self.wir_type(*type_id), WirType::Unit),
+                        assert_matches!(
+                            self.wir_type(*type_id),
+                            WirType::Unit,
                             "[WIR] case `{variant_key}::{variant_name}` carries no payload, \
                              so binding it to a non-unit local has nothing to read"
                         );

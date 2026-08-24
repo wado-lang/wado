@@ -3,9 +3,9 @@
 //! Tests `parse_args` functions directly without spawning processes,
 //! using `lexopt::Parser::from_args` to construct parsers from argument slices.
 
-use lexopt::Parser;
-
 use std::assert_matches;
+
+use lexopt::Parser;
 use wado_cli::args::CliExit;
 use wado_cli::build;
 use wado_cli::check;

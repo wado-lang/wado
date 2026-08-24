@@ -151,9 +151,9 @@ mod tests {
             &Nullability::new(&WirLocals::default())
         ));
         assert_matches!(
-            &body[0], WirInstr::LocalSet { name, .. } if name == "x",
-            "x is read by the sink copy and must survive: {:?}",
-            body[0]
+            &body[0],
+            WirInstr::LocalSet { name, .. } if name == "x",
+            "x is read by the sink copy and must survive"
         );
         // The sink itself is write-only and goes.
         assert_matches!(body[1], WirInstr::Nop);
@@ -190,8 +190,7 @@ mod tests {
         assert_matches!(
             then_body[0],
             WirInstr::Nop,
-            "write-only w inside the arm must elide: {:?}",
-            then_body[0]
+            "write-only w inside the arm must elide"
         );
     }
 }

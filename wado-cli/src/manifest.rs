@@ -827,9 +827,9 @@ authors = ["Alice"]
         );
         let err = discover(&outside).unwrap_err();
         assert_matches!(
-            &err, DiscoveryError::Parse(e)
-                if matches!(e, wado_manifest::ManifestError::MissingField { field, .. } if field == "version"),
-            "{err:?}"
+            &err,
+            DiscoveryError::Parse(e)
+                if matches!(e, wado_manifest::ManifestError::MissingField { field, .. } if field == "version")
         );
     }
 }
