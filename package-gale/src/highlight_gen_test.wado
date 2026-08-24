@@ -205,6 +205,17 @@ test "capture_vocabulary lists the query's distinct capture classes, sorted" {
     ) >= 0, out;
 }
 
+test "capture_vocabulary lists a capture shared by two selectors once" {
+    let out = highlight_output_q(
+        "grammar T; s : KW ID ; KW : 'if' ; ID : [a-z]+ ;",
+        "(KW) @keyword\n(ID) @keyword\n",
+    );
+    assert index_of(
+        &out,
+        "pub fn capture_vocabulary() -> List<String> {\n    return [\n        \"keyword\",\n    ];\n}",
+    ) >= 0, out;
+}
+
 test "capture_vocabulary is empty without a highlight query" {
     let out = highlight_output("grammar T; s : KW ; KW : 'if' ;");
     assert index_of(&out, "pub fn capture_vocabulary() -> List<String> {\n    return [];\n}") >= 0, out;

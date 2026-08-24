@@ -135,3 +135,9 @@ test "strip: a `tokens` prequel does not fix the rule type for the rules after i
     let result = strip_action_bodies(&g);
     assert result == "grammar T;\ntokens { A, B }\nr[int[] a] : 'x'  ;", `got '${result}'`;
 }
+
+test "strip: a line comment ending in `tokens` does not make the next action a prequel" {
+    let g = "r : 'a' // tokens\n { act(); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "r : 'a' // tokens\n  ;", `got '${result}'`;
+}
