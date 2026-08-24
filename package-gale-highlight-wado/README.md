@@ -21,6 +21,8 @@ Public API:
   (`.ok()`, `.diagnostics`).
 - `highlight_result(result: &ParseResult, src: &String) -> String` — render an
   already-parsed result.
+- `capture_vocabulary() -> List<String>` — the capture classes this grammar can
+  emit, sorted, for `gale-highlight`'s `Theme::unstyled` / `Theme::unknown`.
 
 The output is a bare fragment: bring your own CSS and page shell. Classes use
 the tree-sitter capture vocabulary, so any tree-sitter theme applies:

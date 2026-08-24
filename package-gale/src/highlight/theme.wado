@@ -29,6 +29,32 @@ impl Theme {
     pub fn color(&self, class: &String) -> Option<String> {
         return self.colors.get(*class);
     }
+
+    /// The classes in `vocabulary` this theme leaves without a color — they
+    /// render in the surrounding text color. Pass a grammar's generated
+    /// `capture_vocabulary()`.
+    pub fn unstyled(&self, vocabulary: &List<String>) -> List<String> {
+        let mut out: List<String> = [];
+        for let class of vocabulary {
+            if !self.colors.contains_key(*class) {
+                out.push(*class);
+            }
+        }
+        return out;
+    }
+
+    /// The classes this theme colors that `vocabulary` never emits — a mistyped
+    /// or stale key. Sorted, so the answer does not depend on build order.
+    pub fn unknown(&self, vocabulary: &List<String>) -> List<String> {
+        let mut out: List<String> = [];
+        for let class of self.colors.keys() {
+            if !vocabulary.contains(class) {
+                out.push(*class);
+            }
+        }
+        out.sort();
+        return out;
+    }
 }
 
 /// Render `theme` to a CSS stylesheet: one `color` rule per capture class. A

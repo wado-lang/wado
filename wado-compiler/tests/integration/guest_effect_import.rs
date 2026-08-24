@@ -4,6 +4,7 @@
 //! self-contained and imports nothing. `wit_component::decode` recovers the
 //! component's world so the import surface is asserted structurally.
 
+use std::assert_matches;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 use wit_parser::{InterfaceId, Resolve, WorldItem};
@@ -72,10 +73,10 @@ test "shape compiles" {}
         .get("highlight")
         .expect("imported interface exposes `highlight`");
     assert_eq!(func.params.len(), 2, "highlight takes (code, lang)");
-    assert!(
-        matches!(func.result, Some(wit_parser::Type::String)),
-        "highlight returns string, got {:?}",
-        func.result
+    assert_matches!(
+        func.result,
+        Some(wit_parser::Type::String),
+        "highlight returns string"
     );
 }
 

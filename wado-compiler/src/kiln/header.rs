@@ -141,7 +141,7 @@ fn split_top_level_commas(s: &str) -> Vec<&str> {
 }
 
 fn parse_quoted_string(s: &str) -> Option<String> {
-    let inner = s.strip_prefix('"')?.strip_suffix('"')?;
+    let inner = s.strip_circumfix('"', '"')?;
     let mut out = String::with_capacity(inner.len());
     let mut chars = inner.chars();
     while let Some(c) = chars.next() {
@@ -162,7 +162,7 @@ fn parse_quoted_string(s: &str) -> Option<String> {
 }
 
 fn parse_string_array(s: &str) -> Option<Vec<String>> {
-    let inner = s.strip_prefix('[')?.strip_suffix(']')?;
+    let inner = s.strip_circumfix('[', ']')?;
     let mut out = Vec::new();
     for part in split_top_level_commas(inner) {
         let part = part.trim();
