@@ -79,6 +79,10 @@ let v: List<Value> = [a, b];     // ERROR — write [Value::from(a), Value::from
 let v: List<i64>   = [x];        // ERROR — no implicit widening of `x: i32`
 ```
 
+An element that reaches no conversion says which of the two rules refused it —
+the element is not a literal, or the slot's type has no `From` from what the
+element is.
+
 Existing literal typing ([Literal Type Conversion Rules](./wep-2026-01-12-literal-type-conversion.md))
 runs first: an unsuffixed `42` against `i64` _is_ an `i64`, not an `i64::from`.
 `From` applies only where literal typing cannot reach the target, so `{n: 1}`
@@ -98,6 +102,11 @@ every element (and key).
   reporting how many, and `T::from(…)` written out resolves it by ordinary
   overload resolution — with a turbofish where the target is generic
   (`List::<i32>::from(…)`).
+
+The key side is settled by what a literal can write: every key is a field name,
+so the selected impl's `K` must accept a `String`. A target that builds from
+another key type is rejected at the literal — computed keys are what would give
+such a `K` something to be written from.
 
 The rule exists for types that accept both literal forms. `core:value::Value`
 is the case that motivates it:
@@ -254,10 +263,13 @@ mechanism needs.
 - Computed keys. `{ [Color::Red]: 1 }` needs the key expression to convert to
   `K`, which `Array<[K, V]>` already carries positionally; only the syntax and
   its elaboration are missing.
-- Passing a literal where the target type is a generic parameter
-  (`fn f<E, C: From<Array<E>>>(xs: C)` called as `f([1, 2, 3])`) resolves the
-  impl through a bound rather than a concrete type. Whether the existing
-  open-element-type inference carries over unchanged is unverified.
+- Passing a literal where the target type is a generic _parameter_
+  (`fn f<E, C: From<Array<E>>>(xs: C)`). A bound carries associated-type
+  bindings (`I: Iterator<Item = T>`) and no positional trait arguments — the
+  AST has no field for one — so the bound itself is unwritable, in this or any
+  other trait. A generic _instantiation_ is a different case and works: an open
+  `Array<E>`, `List<T>` or `TreeMap<String, V>` slot is decided by the
+  elements.
 - `null` in an element position. Its natural type is `Option<Unknown>`, which
   names no conversion source, so `[null] as List<Value>` does not compile where
   `[1] as List<Value>` does. Closing it means giving `null` a type the target

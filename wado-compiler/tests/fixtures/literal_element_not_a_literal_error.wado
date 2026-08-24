@@ -1,0 +1,12 @@
+// Implicit conversion reaches a literal position and nothing else (WEP
+// 2026-08-24): `[1]` builds a `List<Value>` where `[n]` does not.
+use { Value } from "core:value";
+
+export fn run() {
+    let ok: Value = [1, "x"];
+    let n = 7;
+    let bad: List<Value> = [n];
+}
+
+__DATA__
+{"compile_error": "only a literal converts implicitly"}

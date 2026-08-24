@@ -1,0 +1,55 @@
+// Impl selection for the two literal forms (WEP 2026-08-24): a `{ … }` literal
+// takes the impl whose element is a pair, a `[ … ]` literal prefers the one
+// whose element is not, and a target whose type arguments are still open lets
+// the elements decide them.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+use { Value } from "core:value";
+
+fn count_array<E>(xs: Array<E>) -> i32 {
+    return builtin::array_len(&xs);
+}
+
+fn count_list<T>(xs: List<T>) -> i32 {
+    return xs.len();
+}
+
+fn count_map<V>(m: TreeMap<String, V>) -> i32 {
+    return m.len();
+}
+
+export fn run() with Stdout {
+    // An `Array<E>` target needs no conversion: the literal is the result.
+    let raw: Array<i32> = [1, 2, 3];
+    assert raw.len() == 3;
+    assert raw[2] == 3;
+
+    // A key-value literal is an array of pairs, so both spellings build the
+    // same map.
+    let written: TreeMap<String, i32> = { a: 1, b: 2 };
+    let paired: TreeMap<String, i32> = [["a", 1], ["b", 2]];
+    assert written.len() == paired.len();
+    assert paired["a"] == 1;
+    assert paired["b"] == 2;
+
+    // `Value` accepts both forms, so the selection rule decides: `[ … ]` is a
+    // list even when its elements are pairs, `{ … }` is an object.
+    let list: Value = [1, 2];
+    assert list matches { List(items) && items.len() == 2 };
+    let object: Value = { a: 1 };
+    assert object matches { Object(fields) && fields.len() == 1 };
+    let pairs: Value = [["a", 1]];
+    assert pairs matches { List(outer) && outer.len() == 1 };
+    assert pairs matches { List(outer) && outer[0] matches { List(inner) && inner.len() == 2 } };
+
+    // The callee's slot is open at each of these call sites.
+    assert count_array([10, 20]) == 2;
+    assert count_list([1, 2, 3]) == 3;
+    assert count_list(["a", "b"]) == 2;
+    assert count_map({ x: 1, y: 2 }) == 2;
+
+    println("literal from-array selection: ok");
+}
+
+__DATA__
+{"stdout": "literal from-array selection: ok\n"}

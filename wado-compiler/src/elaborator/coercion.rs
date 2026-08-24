@@ -537,6 +537,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (pair[0], pair[1])
         };
 
+        // Every key a literal can write is a field name, so the impl's key type
+        // must accept a `String`. Refusing here is what keeps a `From<Array<[K,
+        // V]>>` with another `K` from reaching WIR build as a type mismatch;
+        // computed keys are what would give such a `K` a literal to be written
+        // from.
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+        let key_incompatible = matches!(
+            super::typecheck::check_assignable(
+                string_type,
+                key_type,
+                &self.tysys.type_table.borrow(),
+            ),
+            super::typecheck::TypeCheckResult::Incompatible
+        );
+        if key_incompatible {
+            let type_name = self.tysys.type_table.borrow().type_name(target_type);
+            let key_name = self.tysys.type_table.borrow().type_name(key_type);
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!(
+                    "`{type_name}` builds from keys of type `{key_name}`; an object literal \
+                     writes `String` keys"
+                ),
+                span,
+            });
+            // Recover as the target type: the literal named a real impl, so a
+            // second "not constructible" report would describe the same fault.
+            return Some(placeholder(target_type, span));
+        }
+        self.solve_infer_holes_against(key_type, string_type);
+
         let spread = (!struct_lit.spreads.is_empty())
             .then(|| self.literal_spread_call(output_type, span))
             .flatten();
@@ -561,14 +595,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 spread,
             },
         );
-
-        // Intern the `String` compiler struct so reify and downstream phases
-        // see the same canonical `TypeId` the elaborator picked. The result is
-        // not otherwise needed here — reify rebuilds the key literals.
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
 
         let mut seen_fields: IndexSet<&str> = IndexSet::default();
         for field in &struct_lit.fields {
@@ -603,13 +629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         super::typecheck::TypeCheckResult::Incompatible
                     );
                     if incompatible {
-                        if !self.record_literal_conversion(&field.value, value, value_type) {
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: self.tysys.type_table.borrow().type_name(value_type),
-                                found: self.tysys.type_table.borrow().type_name(value),
-                                span: field.value.span(),
-                            });
-                        }
+                        self.convert_literal_element(&field.value, value, value_type);
                     } else {
                         // The values are what decide an open value type.
                         self.solve_infer_holes_against(value_type, value);
@@ -710,11 +730,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Record the `From` a literal element converts through to reach its
-    /// slot's type, and answer whether one was found (WEP 2026-08-24).
+    /// slot's type, reporting why where none applies (WEP 2026-08-24).
     ///
     /// Implicit conversion is confined to a literal position: only an element
     /// the source wrote as a literal is offered one, so `[1, "x"] as
     /// List<Value>` compiles while `[a, b]` still asks for `Value::from(a)`.
+    fn convert_literal_element(&mut self, element: &Expr, found_type: TypeId, slot_type: TypeId) {
+        if self.record_literal_conversion(element, found_type, slot_type) {
+            return;
+        }
+        let (found, slot) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.type_name(found_type), tt.type_name(slot_type))
+        };
+        let reason = if is_literal_expr(element) {
+            format!("`{slot}` has no `From<{found}>`")
+        } else {
+            "only a literal converts implicitly".to_string()
+        };
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: format!(
+                "cannot use `{found}` where `{slot}` is expected: {reason}; \
+                 write `{slot}::from(…)`"
+            ),
+            span: element.span(),
+        });
+    }
+
+    /// [`Self::convert_literal_element`]'s lookup half: `true` once a `From`
+    /// is recorded for `element`.
     fn record_literal_conversion(
         &mut self,
         element: &Expr,
@@ -880,19 +924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 super::typecheck::TypeCheckResult::Incompatible
             );
             if incompatible {
-                if !self.record_literal_conversion(element, elem_expr, element_type) {
-                    let _ = self.emit(TypeError::TypeMismatch {
-                        expected: format!(
-                            "homogeneous elements of type '{}'",
-                            self.tysys.type_table.borrow().type_name(element_type)
-                        ),
-                        found: format!(
-                            "heterogeneous element of type '{}'",
-                            self.tysys.type_table.borrow().type_name(elem_expr)
-                        ),
-                        span: element.span(),
-                    });
-                }
+                self.convert_literal_element(element, elem_expr, element_type);
             } else {
                 // Where the target left the element type open — a callee's
                 // slot the call site instantiated — the elements decide it.
