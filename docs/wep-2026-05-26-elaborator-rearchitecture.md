@@ -518,7 +518,7 @@ and the surviving suppression is the argument-classification probe.
       logger, interner, invocations, entry module) behind one `ElabEnv` field,
       dissolve `AnnotateState` — `tysys` and `module_semantics` land on
       `Semantics`, the rest are driver locals — and collapse the per-module
-      construction site. Takes `Elaborator` from 11 fields to 7.
+      construction site.
 
 ## Consequences
 
