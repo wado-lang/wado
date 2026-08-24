@@ -51,6 +51,16 @@ test "highlight identifiers the grammar can place" {
     assert !html.contains(">p</span>"), "a bare identifier carries no span";
 }
 
+test "highlight contextual keyword used as a member name" {
+    // `memberName` spells `forward` out as a literal, so without an override it
+    // keeps the keyword class the token kind carries by default. The compiler
+    // lexes it as a plain identifier here.
+    let src = "fn f(h: H) -> i32 { return h.forward; }\n";
+    assert parse(&src).ok(), "parse failed";
+    let html = highlight(src);
+    assert html.contains("<span class=\"property\">forward</span>"), "member -> property";
+}
+
 test "highlight template format spec" {
     let src = "fn f() -> String { let x = 1.5; return `v = ${x:0.2}`; }\n";
     assert parse(&src).ok(), "parse failed";

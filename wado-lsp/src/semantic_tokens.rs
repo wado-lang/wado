@@ -253,9 +253,18 @@ fn expand_template(
         };
         push_run(out, cursor, expr_start, token_type::STRING);
         // A template nested in this interpolation expands the same way.
-        let inner = lex_interpolation(expr, *origin).tokens;
-        for i in 0..inner.len() {
-            classify_into(&inner, i, ast_spans, sem_classes, out);
+        let inner = lex_interpolation(expr, *origin);
+        for i in 0..inner.tokens.len() {
+            classify_into(&inner.tokens, i, ast_spans, sem_classes, out);
+        }
+        // `${ /* why */ x }` — the lexer keeps comments out of the token
+        // stream, so without this the comment falls through every span.
+        for comment in &inner.comments {
+            out.push(ClassifiedToken {
+                span: comment.span,
+                token_type: token_type::COMMENT,
+                modifiers: 0,
+            });
         }
         cursor = expr_end;
         // `:>8.2` is formatting metadata, not code. Left to the token stream
@@ -338,11 +347,11 @@ struct AstSpans {
     /// recovered structurally here). Declaration and use sites share the
     /// binding's definition id, so one set covers both.
     param_ids: IndexSet<AstId>,
-    /// byte start -> class for the contextual keywords, which lex as plain
-    /// identifiers: `test`, `do`, `resume`, `task`, `trap`, `forward`, and
-    /// `self`. Kept apart from `map` because it outranks symbol resolution —
-    /// `self` resolves to its parameter binding, and would otherwise colour as
-    /// a parameter rather than the constant the registry calls it.
+    /// byte start -> class for the contextual keywords that double as names,
+    /// which lex as plain identifiers and are only keywords where they sit:
+    /// `test`, `do`, `resume`, `task`, `trap`, and `forward`. Kept apart from
+    /// `map` because it outranks symbol resolution. `self` is not here — the
+    /// language reserves it, so [`classify_token`] recognises it lexically.
     contextual: IndexMap<usize, (u32, u32)>,
 }
 
@@ -503,9 +512,7 @@ fn classify_token(
             // start) and falls back to the lexer/AST heuristics.
             TokenKind::Ident(_) => ast_spans
                 .contextual_at(token.span.start)
-                .or_else(|| {
-                    sem_classes.and_then(|classes| classes.get(&token.span.start).copied())
-                })
+                .or_else(|| sem_classes.and_then(|classes| classes.get(&token.span.start).copied()))
                 .unwrap_or_else(|| classify_ident(tokens, index, ast_spans)),
 
             // Literals
@@ -611,7 +618,6 @@ fn classify_symbol(
     (token_type, modifiers)
 }
 
-/// Classify an identifier using AST type spans + lexer context heuristics.
 /// The class a keyword's editorial category implies. `Constant` and `Operator`
 /// exist in the registry precisely because those words must not be coloured as
 /// keywords.
@@ -626,6 +632,7 @@ fn classify_keyword(category: KeywordCategory) -> (u32, u32) {
     }
 }
 
+/// Classify an identifier using AST type spans + lexer context heuristics.
 fn classify_ident(tokens: &[Token], index: usize, ast_spans: &AstSpans) -> (u32, u32) {
     let token = &tokens[index];
 
@@ -1014,6 +1021,17 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 2, "n:>8"), token_type::VARIABLE);
         assert_eq!(kind_of(&tokens, src, 2, ":>8"), token_type::COMMENT);
         assert_eq!(kind_of(&tokens, src, 2, "}`"), token_type::STRING);
+    }
+
+    /// The lexer keeps comments out of the token stream, so an interpolation's
+    /// comment reaches the classifier only through the fragment's `comments`.
+    #[test]
+    fn template_interpolation_comment_is_a_comment() {
+        let src = "fn run() {\n    let n = 1;\n    let _ = `${ /* why */ n }`;\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "/* why */"), token_type::COMMENT);
+        assert_eq!(kind_of(&tokens, src, 2, "n }`"), token_type::VARIABLE);
     }
 
     /// `matches` lexes as a keyword but is a binary pattern-test operator.

@@ -41,13 +41,17 @@ Every AST walk goes through `wado_compiler::ast::AstVisitor` and its `walk_*`
 functions — never a hand-written traversal, which silently skips whatever a
 later AST node adds.
 
-The contextual keywords (`test`, `do`, `resume`, `task`, `trap`, `forward`,
-`self`) lex as identifiers, so only their declaring node's span can classify
-them: `TestDecl::span`, `ResumeExpr::span`, `WithHandlerExpr::do_span`,
-`TaskReturnStmt::span`, `RestClauseDecl::keyword_span`, and the `self`
-receiver's `Param::name_span`. `AstSpans` keeps them apart from the type spans
-because they outrank symbol resolution — `self` resolves to its parameter
-binding and would otherwise colour as a parameter.
+The contextual keywords lex as identifiers. `test`, `do`, `resume`, `task`,
+`trap`, and `forward` are also usable as names, so only their declaring node's
+span can classify them: `TestDecl::span`, `ResumeExpr::span`,
+`WithHandlerExpr::do_span`, `TaskReturnStmt::span`, and
+`RestClauseDecl::keyword_span`. `AstSpans::contextual` keeps those apart from
+the type spans because they outrank symbol resolution.
+
+`self` is the exception: the language reserves it (it is absent from
+`Wado.g4`'s `identifier` rule), so `classify_token` recognises it lexically and
+gives it the `Constant` class its `CONTEXTUAL_KEYWORDS` entry asks for. Without
+that it resolves to its parameter binding and colours as a parameter.
 
 ### Engine
 

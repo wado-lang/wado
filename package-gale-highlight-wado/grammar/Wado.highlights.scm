@@ -61,8 +61,16 @@
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.field`, `.method()`, a struct literal's field names, and — the minority
-; case this over-reaches on — the `::Case` of a variant path.
+; case this over-reaches on — the `::Case` of a variant path. `memberName`
+; also spells out every keyword usable as a member name; only the contextual
+; ones need listing, because those are the ones the compiler lexes as plain
+; identifiers (a real keyword stays a keyword on both sides).
 (memberName (IDENTIFIER) @property)
+(memberName "test" @property)
+(memberName "do" @property)
+(memberName "task" @property)
+(memberName "trap" @property)
+(memberName "forward" @property)
 ; The rest of an interpolation is a name the grammar cannot place further.
 (interpolation (IDENTIFIER) @variable)
 

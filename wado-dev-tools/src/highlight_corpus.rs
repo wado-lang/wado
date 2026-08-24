@@ -360,12 +360,26 @@ fn diverge(path: &str, source: &str, mine: &[Piece], theirs: &[Piece]) -> (Vec<D
             continue;
         }
         // Inside a compiler span the grammar splits further — the same
-        // refinement as above, seen from the other side. The compiler's spans
-        // are sorted and disjoint, so the only candidate container is the last
-        // one starting before this piece.
+        // refinement as above, seen from the other side, and on the same terms:
+        // a container of a *different* class is a disagreement the container
+        // would otherwise swallow, which is exactly how a mis-captured format
+        // specifier hides. The compiler's spans are sorted and disjoint, so the
+        // only candidate container is the last one starting before this piece.
         let before = mine.partition_point(|m| m.start < piece.start);
         if before > 0 && piece.end <= mine[before - 1].end {
-            refinements += 1;
+            if mine[before - 1].class == piece.class {
+                refinements += 1;
+                continue;
+            }
+            out.push(Divergence {
+                path: path.to_string(),
+                line: line_of(source, piece.start),
+                relation: Relation::ClassDiffers,
+                compiler: Some(mine[before - 1].class),
+                gale: Some(piece.class),
+                kind: piece.kind,
+                text: text_of(source, piece),
+            });
             continue;
         }
         out.push(Divergence {
@@ -519,4 +533,63 @@ fn render_report(patterns: &[(usize, Divergence)]) -> String {
         .unwrap();
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn piece(start: usize, end: usize, class: Class) -> Piece {
+        Piece {
+            start,
+            end,
+            class,
+            kind: class.name(),
+        }
+    }
+
+    /// The grammar splitting one compiler run into several of the same class is
+    /// how a template literal always looks: one `String` token against a
+    /// backtick, a text chunk, and a `${`.
+    #[test]
+    fn a_finer_split_of_the_same_class_is_a_refinement() {
+        let mine = [piece(0, 6, Class::String)];
+        let theirs = [
+            piece(0, 1, Class::String),
+            piece(1, 4, Class::String),
+            piece(4, 6, Class::String),
+        ];
+        let (found, refinements) = diverge("t.wado", "`ab${", &mine, &theirs);
+        assert!(found.is_empty(), "{found:?}");
+        assert_eq!(refinements, 3);
+    }
+
+    /// A span of a *different* class inside a compiler run is a disagreement,
+    /// not a refinement — the shape a mis-captured format specifier takes, and
+    /// the one a containment-only rule swallows. Here the compiler mutes
+    /// `:>8.2` as one comment while the grammar leaves the `>` an operator.
+    #[test]
+    fn a_nested_span_of_another_class_is_a_divergence() {
+        let mine = [piece(0, 5, Class::Comment)];
+        let theirs = [piece(0, 1, Class::Comment), piece(1, 2, Class::Operator)];
+        let (found, refinements) = diverge("t.wado", ":>8.2", &mine, &theirs);
+        assert_eq!(refinements, 1, "the leading `:` still refines");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].relation, Relation::ClassDiffers);
+        assert_eq!(found[0].compiler, Some(Class::Comment));
+        assert_eq!(found[0].gale, Some(Class::Operator));
+    }
+
+    /// Gale's spans are codepoint offsets; the compiler's are bytes. They agree
+    /// on ASCII and drift from the first multi-byte character onward.
+    #[test]
+    fn gale_offsets_convert_from_codepoints_to_bytes() {
+        let source = "//あ\nlet x = 1;";
+        // `let` is codepoints 4..7; `あ` is three bytes, so it is bytes 6..9.
+        let converted = to_byte_offsets(source, &[piece(4, 7, Class::Keyword)]);
+        assert_eq!(
+            source.get(converted[0].start..converted[0].end),
+            Some("let")
+        );
+    }
 }

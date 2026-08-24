@@ -38,8 +38,10 @@ pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
 ///
 /// A `${…}` interior is scanned as a fragment, so every span it produces
 /// starts at zero. `origin` is where the fragment's first byte sits in the
-/// file; this shifts the whole result back onto it — including the origins a
-/// nested template recorded, which were relative to the fragment too.
+/// file; this shifts every span in the result back onto it — including the
+/// origins a nested template recorded, which were relative to the fragment
+/// too. `shebang` and `data_section` are text, not positions, and pass
+/// through as the fragment lexer produced them.
 ///
 /// The parser uses this to build the AST, and the highlighter to reach the
 /// tokens inside an interpolation, which the outer template hides behind a
@@ -59,6 +61,12 @@ pub fn lex_interpolation(source: &str, origin: Position) -> LexResult {
     }
     for error in &mut result.errors {
         error.span = rebase_span(error.span, origin);
+    }
+    for comment in &mut result.comments {
+        comment.span = rebase_span(comment.span, origin);
+    }
+    if let Some(span) = &mut result.data_section_span {
+        *span = rebase_span(*span, origin);
     }
     result
 }
