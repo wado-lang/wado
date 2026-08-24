@@ -12,6 +12,14 @@ use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
+/// Whether `expr` is the `null` literal. Its type is `Option<Unknown>`, which
+/// the shared assignability check defers on rather than refuses, so a slot that
+/// is no `Option` has to ask by name — otherwise a null ref reaches WIR where
+/// the slot's type is not nullable.
+fn is_null_literal(expr: &Expr) -> bool {
+    matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
+}
+
 /// Whether `expr` is a literal — the only position implicit conversion reaches
 /// (WEP 2026-08-24). A template string, a variable, and a call are not.
 fn is_literal_expr(expr: &Expr) -> bool {
@@ -620,14 +628,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // an undecided value type — a callee's slot the call site
                     // instantiated — defers to its solver instead of rejecting
                     // every value.
-                    let incompatible = matches!(
-                        super::typecheck::check_assignable(
-                            value,
-                            value_type,
-                            &self.tysys.type_table.borrow(),
-                        ),
-                        super::typecheck::TypeCheckResult::Incompatible
-                    );
+                    let incompatible = self.slot_refuses(&field.value, value, value_type);
                     if incompatible {
                         self.convert_literal_element(&field.value, value, value_type);
                     } else {
@@ -735,6 +736,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Implicit conversion is confined to a literal position: only an element
     /// the source wrote as a literal is offered one, so `[1, "x"] as
     /// List<Value>` compiles while `[a, b]` still asks for `Value::from(a)`.
+    /// Whether `slot_type` refuses what `element` resolved to. Routed through
+    /// the shared check rather than comparing ids: a rigid `T` element type
+    /// rejects a concrete element (it is the enclosing body's own parameter),
+    /// while a variable or a pack defers to its solver.
+    fn slot_refuses(&mut self, element: &Expr, found_type: TypeId, slot_type: TypeId) -> bool {
+        if is_null_literal(element) {
+            return self
+                .tysys
+                .type_table
+                .borrow()
+                .as_option(slot_type)
+                .is_none();
+        }
+        matches!(
+            super::typecheck::check_assignable(
+                found_type,
+                slot_type,
+                &self.tysys.type_table.borrow(),
+            ),
+            super::typecheck::TypeCheckResult::Incompatible
+        )
+    }
+
     fn convert_literal_element(&mut self, element: &Expr, found_type: TypeId, slot_type: TypeId) {
         if self.record_literal_conversion(element, found_type, slot_type) {
             return;
@@ -743,6 +767,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             (tt.type_name(found_type), tt.type_name(slot_type))
         };
+        if is_null_literal(element) {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!("`null` names no value of `{slot}`; only an `Option` accepts it"),
+                span: element.span(),
+            });
+            return;
+        }
         let reason = if is_literal_expr(element) {
             format!("`{slot}` has no `From<{found}>`")
         } else {
@@ -886,6 +917,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.find_literal_from_array(target_type, false, span)?;
         let element_type = from_info.element_type;
 
+        // `[..a, b]` splices one tuple into another, and `[..T::method()]`
+        // expands a type pack (WEP 2026-03-14) — both stay with the tuple the
+        // literal already is. A sequence literal built through `From` has no
+        // such member, and `Array<T>` could not gain one: a fixed array does
+        // not grow. Reported only once the target is known to be
+        // literal-constructible, so a tuple target still takes the tuple path,
+        // and before the element walk, which would otherwise hand the spread to
+        // `resolve_expr`.
+        if let Some(spread) = tuple_lit
+            .elements
+            .iter()
+            .find(|element| matches!(element, Expr::Spread(..)))
+        {
+            let type_name = self.tysys.type_table.borrow().type_name(target_type);
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: format!(
+                    "`..base` is a tuple spread; a sequence literal building `{type_name}` \
+                     cannot carry one"
+                ),
+                span: spread.span(),
+            });
+            return Some(placeholder(target_type, span));
+        }
+
         // WEP 2026-08-24: record the resolved `From<Array<E>>` so reify
         // rebuilds the same array literal and `from` call. The names come from
         // `remangle`, the one place that derives them from the types — the
@@ -915,14 +970,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // rigid `T` element type rejects a concrete element (it is the
             // enclosing body's own parameter), while a variable or a pack
             // defers to its solver.
-            let incompatible = matches!(
-                super::typecheck::check_assignable(
-                    elem_expr,
-                    element_type,
-                    &self.tysys.type_table.borrow(),
-                ),
-                super::typecheck::TypeCheckResult::Incompatible
-            );
+            let incompatible = self.slot_refuses(element, elem_expr, element_type);
             if incompatible {
                 self.convert_literal_element(element, elem_expr, element_type);
             } else {

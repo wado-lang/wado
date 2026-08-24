@@ -1,0 +1,19 @@
+// `null` is a value of an `Option` slot and of nothing else. Its own type is
+// `Option<Unknown>`, which the assignability check defers on rather than
+// refuses, so a slot that is no `Option` used to take it and emit a null ref
+// where the slot's type is not nullable.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let opts: List<Option<i32>> = [null, null];
+    assert opts.len() == 2;
+    assert opts[0] matches { None };
+
+    let fields: List<Option<String>> = [null];
+    assert fields[0] matches { None };
+
+    println("literal null element: ok");
+}
+
+__DATA__
+{"stdout": "literal null element: ok\n"}

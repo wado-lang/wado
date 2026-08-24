@@ -1,0 +1,10 @@
+// A `null` element in a slot that is no `Option` is refused where it is
+// written; it used to reach WIR as a null ref in a non-nullable field.
+use { Value } from "core:value";
+
+export fn run() {
+    let a: List<Value> = [null];
+}
+
+__DATA__
+{"compile_error": "`null` names no value of `Value`"}

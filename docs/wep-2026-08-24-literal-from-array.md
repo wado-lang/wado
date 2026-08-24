@@ -258,7 +258,8 @@ mechanism needs.
 
 - Sequence spread. `[..xs, 4]` is expressible under `LiteralSpread` but is not
   adopted here, and `Array<T>` could not implement it in any case — a fixed
-  array does not grow, and `xs.len()` is not a compile-time constant. Closing it
+  array does not grow, and `xs.len()` is not a compile-time constant. A spread
+  in a coerced sequence literal is reported where it is written. Closing the gap
   means deciding whether the asymmetry with `Array` is acceptable.
 - Computed keys. `{ [Color::Red]: 1 }` needs the key expression to convert to
   `K`, which `Array<[K, V]>` already carries positionally; only the syntax and
@@ -270,13 +271,15 @@ mechanism needs.
   other trait. A generic _instantiation_ is a different case and works: an open
   `Array<E>`, `List<T>` or `TreeMap<String, V>` slot is decided by the
   elements.
-- `null` in an element position. Its natural type is `Option<Unknown>`, which
-  names no conversion source, so `[null] as List<Value>` does not compile where
-  `[1] as List<Value>` does. Closing it means giving `null` a type the target
-  can convert from, or a rule of its own.
+- `null` in an element position. It is a value of an `Option` slot and of
+  nothing else — its own type is `Option<Unknown>`, which names no conversion
+  source — so `[null] as List<Value>` is refused where `[1] as List<Value>`
+  builds a `Value::Int`. Closing it means giving `null` a type the target can
+  convert from, or a rule of its own.
 - Deep-copy elision on the array handed to `From` is left to `lower` and
-  `value_copy_demote`; if a `$value_copy$Array` survives into a list literal,
-  the copy analysis is extended rather than the design changed.
+  `value_copy_demote`. No benchmark's `-O2` WIR carries a `$value_copy$Array`
+  at a literal site; if one appears, the copy analysis is extended rather than
+  the design changed.
 
 ## Related WEPs
 
