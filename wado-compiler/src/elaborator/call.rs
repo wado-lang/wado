@@ -1296,7 +1296,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
-                    let param_is_mut = self.lookup_static_method_param_is_mut_keyed(
+                    let param_is_mut = self.lookup_static_method_param_is_mut(
                         type_name,
                         method_name,
                         ns_key.as_ref(),
@@ -1319,7 +1319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Recorded so reify replays this Call shape without re-running
                     // dispatch. Empty defaults would leave codegen a call short an
                     // argument; empty types would leave reify padding untyped.
-                    let param_defaults = self.lookup_static_method_param_defaults_keyed(
+                    let param_defaults = self.lookup_static_method_param_defaults(
                         type_name,
                         method_name,
                         ns_key.as_ref(),
@@ -1839,7 +1839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(&ns_key),
                     );
                     if !params.is_empty() {
-                        let slots = self.lookup_static_method_slots_keyed(method_name, &ns_key);
+                        let slots = self.lookup_static_method_slots(method_name, &ns_key);
                         return (params, slots);
                     }
                 }

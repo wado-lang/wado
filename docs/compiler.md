@@ -78,7 +78,7 @@ The AST is parser-immutable from this point on. The desugar-replacement surface 
 
 `semantics_of` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for the symbol table, then `elaborator/` for the phases below ([WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md)):
 
-- **Resolve** answers every reference site once, from the module that wrote it, and identifies every declaration (`defs.rs`, `resolve.rs`, [WEP 2026-08-12](./wep-2026-08-12-declaration-identity.md)). A reference site is answered nowhere else; the positions no site answers derive their `DefId` from a module the caller names.
+- **Resolve** answers every reference site once, from the module that wrote it, and identifies every declaration (`defs.rs`, `resolve.rs`, [WEP 2026-08-12](./wep-2026-08-12-declaration-identity.md)). Nothing else answers a site; a position that has none derives its `DefId` from a module the caller names.
 - **Annotate** runs a declaration pass over every module — types, `TraitEnv`, `Signatures` — then a body walk whose sole output is a populated `ModuleSemantics`.
 - **Liveness** computes source-level reachability, which gates what reify emits and feeds the unused diagnostics.
 - **Reify** reads the recorded facts back and emits one `TirModule` per module. No inference, no dispatch decisions.

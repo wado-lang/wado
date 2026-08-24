@@ -36,11 +36,8 @@ impl CalleeRef {
         }
     }
 
-    /// A callee reached through a namespace-qualified call `Prefix::name`
-    /// where `Prefix` names an effect or resource rather than a module. The
-    /// `prefix` is interned through the elaborator's
-    /// [`crate::module_source::ModuleSourceInterner`] and wrapped in a
-    /// `ModuleSource::Local`.
+    /// A callee reached through `Prefix::name` where `Prefix` names an effect
+    /// or resource rather than a module, so the prefix itself is the namespace.
     pub fn local_namespace(
         interner: &mut ModuleSourceInterner,
         prefix: &str,
