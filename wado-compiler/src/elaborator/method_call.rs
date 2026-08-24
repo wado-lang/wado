@@ -2248,7 +2248,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let param_is_mut = struct_name_for_lookup
             .as_deref()
-            .map(|name| self.lookup_static_method_param_is_mut(name, &static_call.method))
+            .map(|name| {
+                self.lookup_static_method_param_is_mut_keyed(
+                    name,
+                    &static_call.method,
+                    struct_key_for_lookup.as_ref(),
+                )
+            })
             .unwrap_or_default();
 
         // Build method_info with base struct name and trait name (if applicable)
@@ -2978,16 +2984,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default()
     }
 
-    /// Look up whether each parameter of a static method is `mut`.
-    /// Returns empty vec (conservative) for unknown methods.
-    pub(super) fn lookup_static_method_param_is_mut(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Vec<bool> {
-        self.lookup_static_method_param_is_mut_keyed(struct_name, method_name, None)
-    }
-
     /// The return type every static method under this name agrees on, `None` when
     /// they disagree. An overload set still answers: every `From` impl returns the
     /// receiver, so which one this call reaches cannot change the result.
@@ -3043,8 +3039,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default()
     }
 
-    /// Like [`Self::lookup_static_method_param_is_mut`] but takes a pre-resolved
-    /// receiver key, which a namespace member's bare spelling cannot reach.
+    /// Whether each parameter of a static method is `mut`, empty for an unknown
+    /// method. The receiver key is pre-resolved where the caller holds one — a
+    /// namespace member's bare spelling cannot reach it.
     pub(super) fn lookup_static_method_param_is_mut_keyed(
         &self,
         struct_name: &str,
@@ -3878,10 +3875,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
 
-        let param_is_mut = self.lookup_static_method_param_is_mut(&actual_struct_name, method_name);
+        let param_is_mut = self.lookup_static_method_param_is_mut_keyed(
+            &actual_struct_name,
+            method_name,
+            receiver_key.as_ref(),
+        );
 
-        let param_defaults =
-            self.lookup_static_method_param_defaults_keyed(&actual_struct_name, method_name, None);
+        let param_defaults = self.lookup_static_method_param_defaults_keyed(
+            &actual_struct_name,
+            method_name,
+            receiver_key.as_ref(),
+        );
 
         // Propagate #[cm("...")] from resource static methods. A method the
         // *resource* declares names it as its own owner; one an `impl` block
@@ -3921,8 +3925,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
             .map(|(_, is_mut)| is_mut)
             .collect();
-        let param_types =
-            self.lookup_static_method_param_types_keyed(&actual_struct_name, method_name, None);
+        let param_types = self.lookup_static_method_param_types_keyed(
+            &actual_struct_name,
+            method_name,
+            receiver_key.as_ref(),
+        );
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {
