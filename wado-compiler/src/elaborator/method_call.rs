@@ -3301,9 +3301,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             let base = super::trait_env::get_type_name_static(trait_type);
-            let head = self
-                .import_original_name(&super::trait_env::get_type_name_static(&header.ty), &module);
-            if head != declared_name
+            if self.impl_head_decl_name(header, &module) != declared_name
                 || (base != from_trait_name && base != "TryFrom")
                 || !header.methods.iter().any(|m| m.name == method_name)
             {
@@ -3367,6 +3365,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || name.to_string(),
                 |def| self.tysys.resolutions.defs().name(def).to_string(),
             )
+    }
+
+    /// An impl header's target head as a declaration name. The head is written
+    /// in the impl's own module, so its alias is un-aliased there — unless the
+    /// block's own type parameter binds the spelling, which shadows any import.
+    fn impl_head_decl_name(
+        &self,
+        header: &super::trait_env::ImplHeader,
+        impl_module: &ModuleSource,
+    ) -> String {
+        let head = super::trait_env::get_type_name_static(&header.ty);
+        if header.type_params.iter().any(|p| p.name == head) {
+            return head;
+        }
+        self.import_original_name(&head, impl_module)
     }
 
     /// Whether `rendered` names `param` as a whole segment — the spelling-level
@@ -3488,11 +3501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-            let head = self.import_original_name(
-                &super::trait_env::get_type_name_static(&header.ty),
-                impl_module,
-            );
-            if head != declared_name
+            if self.impl_head_decl_name(header, impl_module) != declared_name
                 || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
             {
                 return None;
