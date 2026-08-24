@@ -170,16 +170,11 @@ fn collect_resource_refs(
         ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
             // A `resource Child extends Parent` value is usable wherever the
             // parent is, so holding it holds every ancestor too.
-            let mut current = *def;
-            loop {
+            for ancestor in tt.resource_chain(*def) {
                 out.insert(EffectRef::Concrete {
-                    name: tt.def_name(current).to_string(),
-                    module_source: tt.def_module(current).clone(),
+                    name: tt.def_name(ancestor).to_string(),
+                    module_source: tt.def_module(ancestor).clone(),
                 });
-                match tt.resource_parent(current) {
-                    Some(parent) => current = parent,
-                    None => break,
-                }
             }
             if let ResolvedType::GenericResource { type_args, .. } = ty {
                 for ta in type_args {

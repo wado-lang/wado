@@ -158,14 +158,7 @@ fn extends_rejects_a_generic_parent_written_with_arguments() {
 
 /// Two extern-ref resources in a chain, plus whatever the case needs.
 fn chain(rest: &str) -> String {
-    format!(
-        "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
-         resource EventTarget {{}}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
-         resource Node extends EventTarget {{}}\n\
-         {rest}\n\
-         export fn run() {{}}\n"
-    )
+    chain_with_method("", rest)
 }
 
 #[test]
@@ -520,15 +513,10 @@ fn a_child_may_declare_a_static_the_parent_also_declares() {
 
 /// `&Child` / `&Parent` branches, for a case to write in either order.
 fn ref_branches(body: &str) -> String {
-    format!(
-        "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
-         resource EventTarget {{}}\n\
-         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
-         resource Node extends EventTarget {{}}\n\
-         fn pick(flag: bool, n: &Node, t: &EventTarget) -> i32 {{\n{body}\n}}\n\
-         fn size(e: &EventTarget) -> i32 {{ return 1; }}\n\
-         export fn run() {{}}\n"
-    )
+    chain(&format!(
+        "fn pick(flag: bool, n: &Node, t: &EventTarget) -> i32 {{\n{body}\n}}\n\
+         fn size(e: &EventTarget) -> i32 {{ return 1; }}"
+    ))
 }
 
 #[test]

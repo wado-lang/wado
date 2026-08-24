@@ -1037,39 +1037,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<MethodInfo> {
         // The nearest declaration answers, keeping its own signature. Only the
         // receiver's takes type arguments — a generic resource is rejected.
-        let mut current = def;
-        let mut args = receiver_type_args;
-        loop {
-            if let Some(info) = self.resource_method_info_on(current, method_name, args) {
-                return Some(info);
-            }
-            current = self.tysys.type_table.borrow().resource_parent(current)?;
-            args = None;
-        }
+        let chain: Vec<crate::defs::DefId> =
+            self.tysys.type_table.borrow().resource_chain(def).collect();
+        chain.into_iter().enumerate().find_map(|(step, current)| {
+            let args = if step == 0 { receiver_type_args } else { None };
+            self.resource_method_info_on(current, method_name, args)
+        })
     }
 
     /// The resource that declares `method_name` as an instance method for a
-    /// receiver declared by `def` — itself or the nearest ancestor. A static
-    /// is not reachable through a receiver, so the walk passes it by, exactly
-    /// as [`Self::find_resource_method_info`] does.
-    pub(super) fn resource_declaring(
+    /// receiver declared by `def` — itself or the nearest ancestor — and what
+    /// it declares. A static belongs to its declaring resource alone, so the
+    /// walk passes it by.
+    pub(super) fn resource_instance_method(
         &self,
         def: crate::defs::DefId,
         method_name: &str,
-    ) -> Option<crate::defs::DefId> {
-        let mut current = def;
-        loop {
-            if let Some(info) = self.tysys.all_resource_types.get(&current)
-                && self
-                    .tysys
-                    .signatures
-                    .resource_method_sig(info.defined_at, method_name)
-                    .is_some_and(|sig| sig.self_kind != ast::SelfKind::None)
-            {
-                return Some(current);
-            }
-            current = self.tysys.type_table.borrow().resource_parent(current)?;
-        }
+    ) -> Option<(crate::defs::DefId, super::sig::MethodSig)> {
+        let chain: Vec<crate::defs::DefId> =
+            self.tysys.type_table.borrow().resource_chain(def).collect();
+        chain.into_iter().find_map(|current| {
+            let info = self.tysys.all_resource_types.get(&current)?;
+            let sig = self
+                .tysys
+                .signatures
+                .resource_method_sig(info.defined_at, method_name)?;
+            (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
+        })
     }
 
     /// The trait whose impl for `type_key` declares `method_name`, if one does.

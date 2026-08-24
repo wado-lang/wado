@@ -2822,30 +2822,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ImplTargetKey::Decl(def) = key else {
             return None;
         };
-        let sig = self.resource_chain_method_sig(def, method_name)?;
-        (sig.self_kind != ast::SelfKind::None).then_some(sig)
-    }
-
-    /// The signature of `method_name` on `def` or the nearest ancestor that
-    /// declares it. A static is not inherited, so callers filter on
-    /// [`ast::SelfKind`].
-    pub(super) fn resource_chain_method_sig(
-        &self,
-        def: crate::defs::DefId,
-        method_name: &str,
-    ) -> Option<MethodSig> {
-        let mut current = def;
-        loop {
-            if let Some(info) = self.tysys.all_resource_types.get(&current)
-                && let Some(sig) = self
-                    .tysys
-                    .signatures
-                    .resource_method_sig(info.defined_at, method_name)
-            {
-                return Some(sig.clone());
-            }
-            current = self.tysys.type_table.borrow().resource_parent(current)?;
-        }
+        self.resource_instance_method(def, method_name)
+            .map(|(_, sig)| sig)
     }
 
     /// Look up function parameter types with type args substituted.

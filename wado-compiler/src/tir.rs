@@ -1147,19 +1147,18 @@ impl TypeTable {
         self.is_resource_subtype(*b_def, *a_def).then_some(a)
     }
 
+    /// `def` and every resource it extends, nearest first.
+    pub fn resource_chain(
+        &self,
+        def: crate::defs::DefId,
+    ) -> impl Iterator<Item = crate::defs::DefId> {
+        std::iter::successors(Some(def), |&current| self.resource_parent(current))
+    }
+
     /// Whether `sub` is `sup` or extends it, directly or transitively.
     #[must_use]
     pub fn is_resource_subtype(&self, sub: crate::defs::DefId, sup: crate::defs::DefId) -> bool {
-        let mut current = sub;
-        loop {
-            if current == sup {
-                return true;
-            }
-            match self.resource_parent(current) {
-                Some(parent) => current = parent,
-                None => return false,
-            }
-        }
+        self.resource_chain(sub).any(|current| current == sup)
     }
 
     /// Attach the program's declarations, so a nominal type can render its

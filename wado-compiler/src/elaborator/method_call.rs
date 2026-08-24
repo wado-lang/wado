@@ -349,7 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if required_trait.is_none()
             && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
             && self.tysys.type_table.borrow().is_extern_ref_resource(def)
-            && let Some(declaring) = self.resource_declaring(def, method_name)
+            && let Some((declaring, _)) = self.resource_instance_method(def, method_name)
             && let Some(trait_name) = colliding_trait(self)
         {
             let _ = self.emit(TypeError::AmbiguousResourceMethod {
@@ -2680,8 +2680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The index is keyed by the declaring resource, so an inherited
         // method is reachable only by walking the chain.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
-            && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
-            && sig.self_kind != ast::SelfKind::None
+            && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
             return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         }
@@ -2772,8 +2771,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // only: a static is not inherited, and answering for one here would
         // newly type-check calls this lookup has always left alone.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
-            && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
-            && sig.self_kind != ast::SelfKind::None
+            && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
             return sig.decl.param_types[sig.first_value_param()..].to_vec();
         }
@@ -3541,8 +3539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Same walk as `lookup_static_method_return_type`: the index holds
         // only the declaring resource's own methods.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
-            && let Some(sig) = self.resource_chain_method_sig(*def, method_name)
-            && sig.self_kind != ast::SelfKind::None
+            && self.resource_instance_method(*def, method_name).is_some()
         {
             return true;
         }
