@@ -662,6 +662,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A literal's target type admits more than one `From<Array<…>>`, so the
+    /// literal alone does not say which conversion was meant.
+    AmbiguousLiteralConversion {
+        type_name: String,
+        count: usize,
+        span: Span,
+    },
+
     /// Pattern expects different type kind (tuple, struct, variant, enum)
     PatternTypeMismatch {
         expected: String,
@@ -810,6 +818,29 @@ pub enum TypeError {
     /// on a struct), or used outside a `core::*` module. The
     /// `message` carries the specific problem.
     CompilerItemAttr {
+        message: String,
+        span: Span,
+    },
+
+    /// One name reachable both as a resource's own or inherited method and
+    /// through a visible trait impl. The call must name which it means.
+    AmbiguousResourceMethod {
+        method: String,
+        resource: String,
+        trait_name: String,
+        span: Span,
+    },
+
+    /// A `#[cm(..., type = ...)]` backing the elaborator rejected.
+    ResourceBacking {
+        message: String,
+        span: Span,
+    },
+
+    /// A `resource Child extends Parent` clause the elaborator rejected: the
+    /// parent is not a resource, a backing does not match, the chain is
+    /// cyclic, or the parent carries generic arguments (out of scope in v1).
+    ResourceExtends {
         message: String,
         span: Span,
     },
@@ -1475,6 +1506,18 @@ impl TypeError {
                 format!("type '{type_name}' does not implement {trait_name}"),
                 *span,
             ),
+            TypeError::AmbiguousLiteralConversion {
+                type_name,
+                count,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "literal is ambiguous: '{type_name}' has {count} `From<Array<…>>` impls that \
+                     could build it — write `{type_name}::from(…)` to choose one"
+                ),
+                *span,
+            ),
             TypeError::PatternTypeMismatch {
                 expected,
                 found,
@@ -1635,6 +1678,24 @@ impl TypeError {
             TypeError::CompilerItemAttr { message, span } => {
                 (Code::CompilerItemAttr, message.clone(), *span)
             }
+            TypeError::ResourceExtends { message, span } => {
+                (Code::ResourceExtends, message.clone(), *span)
+            }
+            TypeError::ResourceBacking { message, span } => {
+                (Code::ResourceBacking, message.clone(), *span)
+            }
+            TypeError::AmbiguousResourceMethod {
+                method,
+                resource,
+                trait_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
+                ),
+                *span,
+            ),
             TypeError::BareGenericFunctionRef { name, span } => (
                 Code::GenericFunctionRef,
                 format!(
@@ -1740,12 +1801,11 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// The declaring node of the method this lookup selected, taken from its
-    /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
-    /// recorded from here, so it names the impl dispatch actually chose.
-    /// `None` where no declaration backs the signature: the tuple builtins,
-    /// an auto-derived `Eq` / `Ord`, and the error-recovery placeholder.
-    pub(super) method_ast_id: Option<ast::AstId>,
+    /// The method this lookup selected. A call's use→def edge is recorded from
+    /// here, so it names the impl dispatch chose. `None` where no declaration
+    /// backs the signature: tuple builtins, auto-derived `Eq` / `Ord`, the
+    /// error-recovery placeholder.
+    pub(super) method_def: Option<crate::defs::DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)
@@ -2526,6 +2586,9 @@ pub(super) struct IndexValueTraitInfo {
 /// Info about an operator trait implementation
 #[derive(Clone)]
 pub(super) struct ArithmeticTraitInfo {
+    /// The `impl` block that matched. The module a dispatch is recorded
+    /// against is read off it, so no rendering is compared to find one.
+    pub(super) impl_def: crate::defs::DefId,
     /// The Output associated type
     pub(super) output_type: TypeId,
     /// Self kind for the method (&self)
@@ -2534,6 +2597,8 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) trait_name: crate::name::FqTraitName,
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
+    /// Module that wrote the impl block — where the method body is registered.
+    pub(super) impl_module_source: ModuleSource,
 }
 
 /// Complete, Self-substituted description of a trait method lookup, produced by
@@ -2548,6 +2613,10 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
+    /// The `impl` block dispatch matched. `None` where none is named: an
+    /// auto-derived `Eq` / `Ord`, and a method reached through a type
+    /// parameter's bound, whose block monomorphization picks.
+    pub(super) impl_def: Option<crate::defs::DefId>,
     /// Written name of the type whose impl matched — the impl-index key. For
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.
@@ -2572,32 +2641,19 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) is_type_param_receiver: bool,
 }
 
-/// Info about a `KeyValueLiteralBuilder` trait implementation
-pub(super) struct KeyValueLiteralTraitInfo {
-    /// The Value associated type (element type for literal values)
-    pub(super) value_type: TypeId,
-    /// The Builder type (the type that accumulates key-value pairs)
-    pub(super) builder_type: TypeId,
-    /// Self kind for the `insert_literal` method (&mut self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-}
-
-/// Info about a `SequenceLiteralBuilder` trait implementation
-pub(super) struct SequenceLiteralTraitInfo {
-    /// The Element associated type (element type for literal values)
+/// A `From<Array<E>>` impl a literal can coerce through.
+#[derive(Clone)]
+pub(super) struct FromArrayInfo {
+    /// `E` — the type every element (or key-value pair) of the literal takes.
     pub(super) element_type: TypeId,
-    /// The Builder type (the type that accumulates elements)
-    pub(super) builder_type: TypeId,
-    /// The Output type (the final type after `build()`)
-    pub(super) output_type: TypeId,
-    /// Self kind for the `push_literal` method (&mut self)
-    pub(super) self_kind: ast::SelfKind,
-    /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
-    /// The module where the `SequenceLiteralBuilder` impl is defined.
+    /// `Array<E>` — the value the literal materializes and `from` receives.
+    pub(super) array_type: TypeId,
+    /// Module that wrote the impl block.
     pub(super) impl_module_source: ModuleSource,
+    /// `From<Array<…>>` as the impl block declares it — the spelling the
+    /// method template is registered under, so a generic impl's argument is
+    /// still written in its own parameters (`From<Array<T>>`).
+    pub(super) trait_name: crate::name::FqTraitName,
 }
 
 #[cfg(test)]

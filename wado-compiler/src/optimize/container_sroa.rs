@@ -68,6 +68,13 @@ enum ListMethodKind {
     /// Rewrite: N parallel calls, one per field, each constructing an
     /// `List<T_k>` with the same capacity.
     Constructor,
+    /// `fn(Array<T>) -> List<T>` (static, no receiver) — builds the container
+    /// from the array a `[e0, …]` literal denotes (WEP 2026-08-24).
+    ///
+    /// Rewrite: only the empty literal, as N per-field `with_capacity(0)`
+    /// calls. A non-empty one carries elements this pass would have to split
+    /// per field.
+    FromArray,
     /// `fn(&List<T>) -> i32 | bool` — length-invariant query with no element
     /// argument (e.g. `len`, `is_empty`, `capacity`). Rewritten to field 0's
     /// method: every rewrite keeps the per-field arrays in lockstep. The
@@ -108,8 +115,15 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         )
     };
     let is_t = |ty: TypeId| ty == elem_ty;
+    let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if *inner == elem_ty);
     let is_i32 = |ty: TypeId| ty == TypeTable::I32;
     let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
+    // Names the impl exactly, the receiver being `List<T>` already: a second
+    // `From<Array<T>>` for it would overlap.
+    let is_from_impl = info
+        .trait_name
+        .as_ref()
+        .is_some_and(|t| t.base_name() == "From");
     // Length-invariant query return types: i32 (len, capacity) or bool (is_empty).
     let is_query_return = |ty: TypeId| ty == TypeTable::I32 || ty == TypeTable::BOOL;
 
@@ -118,6 +132,13 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
         [p0] if is_ref_list_of_t(*p0) && is_query_return(ret) => Some(ListMethodKind::Query),
         // fn(i32) -> List<T> — Constructor (static)
         [p0] if is_i32(*p0) && is_list_of_t(ret) => Some(ListMethodKind::Constructor),
+        // fn(Array<T>) -> List<T> on `impl From<…> for List<T>` — FromArray
+        // (static). The trait is matched, not just the shape: this rewrite
+        // drops the call rather than mirroring it per field, so a same-shaped
+        // method of another trait would lose whatever it did.
+        [p0] if is_array_of_t(*p0) && is_list_of_t(ret) && is_from_impl => {
+            Some(ListMethodKind::FromArray)
+        }
         // fn(&mut List<T>, T) -> () — ElementWriter
         [p0, p1] if is_mut_ref_list_of_t(*p0) && is_t(*p1) && is_unit(ret) => {
             Some(ListMethodKind::ElementWriter)
@@ -214,8 +235,9 @@ enum ElementLayout {
 struct CandidateInit {
     /// Capacity operand passed to each per-field `with_capacity(...)` call —
     /// a skeleton subtree (cloned per field) or a promoted constant
-    /// (re-materialised per field).
-    capacity: Operand,
+    /// (re-materialised per field). `None` for the `[]` literal, whose
+    /// capacity is zero and is materialised at rewrite time.
+    capacity: Option<Operand>,
 }
 
 /// Apply container SROA to all functions in the project.
@@ -677,11 +699,11 @@ fn peel_value_copy(
     cur
 }
 
-/// Recognize the supported initializer form, matched structurally: a direct
-/// `Constructor` call whose argument is side-effect-free (so it can be cloned
-/// per field), or the `SequenceLiteralBuilder` desugaring of `[]`, whose labeled
-/// block and `Let` are unwrapped down to that same constructor call. No label
-/// string or builder method name is inspected.
+/// Recognize the supported initializer form, matched structurally: a
+/// `Constructor` call whose capacity argument is side-effect-free (so it can be
+/// cloned per field), or a `FromArray` call handed the empty `[]` literal
+/// (WEP 2026-08-24). Both are classified by signature; no method name is
+/// inspected.
 fn recognize_init(
     body: &Body,
     value: ExprId,
@@ -690,101 +712,37 @@ fn recognize_init(
 ) -> Option<CandidateInit> {
     // The constructor result is fresh, so a `$value_copy$T` wrapping the whole
     // initializer (inserted for the by-value binding) is a no-op — see through
-    // it to reach the `Constructor` call.
-    let value = peel_value_copy(body, value, value_copy_ids);
-    let inner = unwrap_builder_labeled_block(body, value).unwrap_or(value);
-    let inner = peel_value_copy(body, inner, value_copy_ids);
+    // it to reach the call.
+    let inner = peel_value_copy(body, value, value_copy_ids);
     let ExprKind::Call { func_id, args, .. } = &body.exprs[inner].kind else {
         return None;
     };
-    if list_method_kind(*func_id, sig) != Some(ListMethodKind::Constructor) {
-        return None;
-    }
     if args.len() != 1 {
         return None;
     }
     let cap = args[0].expr;
+    let kind = list_method_kind(*func_id, sig)?;
+    if kind == ListMethodKind::FromArray {
+        // Only the empty literal qualifies: a non-empty one carries elements
+        // this pass would have to decompose per field.
+        let empty_literal = matches!(
+            cap.as_expr().map(|e| &body.exprs[e].kind),
+            Some(ExprKind::ArrayLiteral { elements }) if elements.is_empty()
+        );
+        return empty_literal.then_some(CandidateInit { capacity: None });
+    }
+    if kind != ListMethodKind::Constructor {
+        return None;
+    }
     // The capacity expression is cloned once per per-field constructor
     // call during rewrite, so it must be side-effect-free. A promoted constant
     // is trivially duplicable.
     if !cap.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
         return None;
     }
-    Some(CandidateInit { capacity: cap })
-}
-
-/// Unwrap a labeled block of shape
-/// `{ let __b = <X>; break label: <method on __b> }` and return `<X>`.
-///
-/// This is the structural shape of the `[]` literal desugaring via
-/// `SequenceLiteralBuilder`: the `Let` holds the constructor call, and the
-/// `Break` holds the `build()` method call on the freshly constructed local.
-/// We don't check the label, the binding name, or the break method's name —
-/// only that the `Break` exits this block by calling a zero-argument method
-/// whose receiver is the `Let`'s local (directly or via `&__b` / `&mut __b`).
-fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
-    let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[expr].kind else {
-        return None;
-    };
-    let block = *block;
-    if body.blocks[block].stmts.len() != 2 {
-        return None;
-    }
-    let s0 = body.blocks[block].stmts[0];
-    let s1 = body.blocks[block].stmts[1];
-    let StmtKind::Let {
-        local_index: b_local,
-        value: inner,
-        ..
-    } = &body.stmts[s0].kind
-    else {
-        return None;
-    };
-    let b_local = *b_local;
-    let inner = *inner;
-    let StmtKind::Break {
-        label: brk_label,
-        value: Some(brk_val),
-    } = &body.stmts[s1].kind
-    else {
-        return None;
-    };
-    if brk_label.as_deref() != Some(label.as_str()) {
-        return None;
-    }
-    let brk_val = *brk_val;
-    // Break value must be a zero-argument method call whose receiver is `__b`
-    // (possibly wrapped in `&`/`&mut`).
-    let ExprKind::Call {
-        args,
-        has_receiver: true,
-        ..
-    } = &body.exprs[brk_val.as_expr()?].kind
-    else {
-        return None;
-    };
-    let [receiver] = args.as_slice() else {
-        return None;
-    };
-    let receiver_local = match receiver.expr.as_expr().map(|re| &body.exprs[re].kind) {
-        Some(ExprKind::Local { index, .. }) => *index,
-        Some(ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner_ref,
-        }) => {
-            let Some(ExprKind::Local { index, .. }) =
-                inner_ref.as_expr().map(|ir| &body.exprs[ir].kind)
-            else {
-                return None;
-            };
-            *index
-        }
-        _ => return None,
-    };
-    if receiver_local != b_local {
-        return None;
-    }
-    inner.as_expr()
+    Some(CandidateInit {
+        capacity: Some(cap),
+    })
 }
 
 /// Look up the `ListMethodKind` of a call target by signature, via the
@@ -1279,7 +1237,13 @@ impl Rewriter<'_, '_> {
         let capacity = info.init.capacity;
         for k in 0..arity {
             let field = ctx.field_map[&(local_index, k as u32)].clone();
-            let cap = clone_or_dup(engine, capacity);
+            let cap = match capacity {
+                Some(capacity) => clone_or_dup(engine, capacity),
+                None => engine.const_operand(
+                    crate::nir_value_graph::ValueKind::Int(0, crate::tir::TypeTable::I32),
+                    crate::tir::TypeTable::I32,
+                ),
+            };
             let init = build_with_capacity_call(engine, &field, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
                 StmtKind::Let {

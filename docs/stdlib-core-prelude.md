@@ -4152,13 +4152,9 @@ Joins elements into a string with the given separator.
 
 ##### `fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T>`
 
-#### `impl SequenceLiteralBuilder for List<T>`
+#### `impl From<Array<T>> for List<T>`
 
-##### `fn new_literal(capacity: i32) -> List<T>`
-
-##### `fn push_literal(&mut self, value: T) with stores[value]`
-
-##### `fn build(&self) -> List<T>`
+##### `fn from(elements: Array<T>) -> List<T>`
 
 #### `impl Default for List<T>`
 

@@ -1570,7 +1570,7 @@ impl Analyzer<'_> {
                     self.walk_expr(&f.value, live, record);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 if record {
                     let children: Vec<&TirExpr> = elements.iter().collect();
                     self.collect_place_moves(&children, live);
@@ -1748,7 +1748,7 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
                 out.push(&f.value);
             }
         }
-        K::TupleLiteral { elements } => {
+        K::TupleLiteral { elements } | K::ArrayLiteral { elements } => {
             for e in elements {
                 out.push(e);
             }

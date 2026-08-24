@@ -67,6 +67,71 @@ pub variant Value {
     Unknown(ByteList),  // raw encoded bytes of an unrepresentable item
 }
 
+// A JSON-shaped literal builds a `Value` directly (WEP 2026-08-24): `[ … ]`
+// through the array impl, `{ … }` through the pair-array one, and each leaf
+// through its own `From`.
+impl From<Array<Value>> for Value {
+    fn from(elements: Array<Value>) -> Value {
+        return Value::List(List::<Value>::from(elements));
+    }
+}
+
+impl From<Array<[String, Value]>> for Value {
+    fn from(entries: Array<[String, Value]>) -> Value {
+        return Value::Object(TreeMap::<String, Value>::from(entries));
+    }
+}
+
+// A bare `null` is an `Option<!>` — a value of every `Option` and of nothing
+// else — so a type accepts `null` in a literal by converting from it.
+impl From<Option<!>> for Value {
+    fn from(value: Option<!>) -> Value {
+        return Value::Null;
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Value {
+        return Value::Bool(value);
+    }
+}
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Value {
+        return Value::Int(value as i64);
+    }
+}
+
+impl From<i64> for Value {
+    fn from(value: i64) -> Value {
+        return Value::Int(value);
+    }
+}
+
+impl From<u32> for Value {
+    fn from(value: u32) -> Value {
+        return Value::UInt(value as u64);
+    }
+}
+
+impl From<u64> for Value {
+    fn from(value: u64) -> Value {
+        return Value::UInt(value);
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Value {
+        return Value::Float(value);
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Value {
+        return Value::String(value);
+    }
+}
+
 impl Eq for Value {
     fn eq(&self, other: &Value) -> bool {
         return match [*self, *other] {

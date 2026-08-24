@@ -111,13 +111,14 @@ Identifiers are case-sensitive.
 
 The following keywords are contextual — they act as keywords only in specific syntactic positions and can be used as variable names, field names, and function parameters elsewhere:
 
-| Keyword | Keyword context               | Identifier elsewhere                  |
-| ------- | ----------------------------- | ------------------------------------- |
-| `flags` | `flags` declaration           | Variable, field, parameter            |
-| `type`  | `type` declaration            | Variable, field, parameter            |
-| `of`    | `for let <pattern> of <expr>` | Variable, field, parameter            |
-| `from`  | `use { ... } from "..."`      | Variable, field, parameter, type name |
-| `test`  | `test "name" { ... }` block   | Variable, field, parameter            |
+| Keyword   | Keyword context                 | Identifier elsewhere                  |
+| --------- | ------------------------------- | ------------------------------------- |
+| `flags`   | `flags` declaration             | Variable, field, parameter            |
+| `type`    | `type` declaration              | Variable, field, parameter            |
+| `of`      | `for let <pattern> of <expr>`   | Variable, field, parameter            |
+| `from`    | `use { ... } from "..."`        | Variable, field, parameter, type name |
+| `test`    | `test "name" { ... }` block     | Variable, field, parameter            |
+| `extends` | `resource Child extends Parent` | Variable, field, parameter            |
 
 ```wado
 // 'of' as a variable name
@@ -1196,7 +1197,7 @@ Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive typ
 
 All SIMD newtypes share the `v128` base and can be reinterpreted via `as` cast (zero-cost). Each type provides `splat()` construction, `extract_lane()` access, comparison methods (`eq`, `lt`, `gt`, `le`, `ge`, `ne`), and operator overloading (`+`, `-`, `*`, `/`, `&`, `|`, `^`, `~`, `<<`, `>>`).
 
-Tuple literal coercion is supported via the `SequenceLiteral` trait:
+Sequence literal coercion is supported via `impl From<Array<i32>> for i32x4`:
 
 ```wado
 use { i32x4, f64x2 } from "core:simd";
@@ -1566,6 +1567,18 @@ assert null == None;
 ```
 
 Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
+
+A bare `null` — one no expected type has pinned — has the type `Option<!>`: a value of every `Option<T>` and of no other type. That is what a type converts from to accept `null` where an `Option` is not expected, which is how `core:value::Value` takes JSON's `null` in a literal:
+
+```wado
+impl From<Option<!>> for Value {
+    fn from(value: Option<!>) -> Value {
+        return Value::Null;
+    }
+}
+
+let doc: Value = { name: "Alice", nickname: null };
+```
 
 #### Character Literals
 
@@ -2005,34 +2018,22 @@ let asc = orig.sorted();                // returns new sorted array
 #### Collection Literal Coercion
 
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
-coerced to any collection type by implementing the corresponding builder trait:
+coerced to any collection type through `From`. Coercing one materializes an
+`Array`, which the target's `From<Array<…>>` impl builds from:
 
-| Literal         | Trait                    | Example target       |
-| --------------- | ------------------------ | -------------------- |
-| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `List<T>`            |
-| `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
+| Literal         | Materializes    | Impl the target writes                            |
+| --------------- | --------------- | ------------------------------------------------- |
+| `[e0, e1, ...]` | `Array<E>`      | `From<Array<T>> for List<T>`                      |
+| `{ k: v, ... }` | `Array<[K, V]>` | `From<Array<[String, V]>> for TreeMap<String, V>` |
 
-##### Builder Traits
+This applies only where a coercion runs. The tuple and struct readings keep
+their priority: with no target type `[1, 2, 3]` is still the tuple
+`[i32, i32, i32]` (see [List Literals](#list-literals)), and `{ … }` against a
+nominal struct with matching fields is still a struct literal.
 
-```wado
-pub trait SequenceLiteralBuilder {
-    type Element;
-    type Output;
-    fn new_literal(capacity: i32) -> Self;
-    fn push_literal(&mut self, value: Self::Element);
-    fn build(&self) -> Self::Output;
-}
-
-pub trait KeyValueLiteralBuilder {
-    type Value;
-    type Output;
-    fn new_literal(capacity: i32) -> Self;
-    fn insert_literal(&mut self, key: String, value: Self::Value);
-    fn build(&self) -> Self::Output;
-}
-```
-
-When a type implements `SequenceLiteralBuilder<Output = Self>` or `KeyValueLiteralBuilder<Output = Self>`, a blanket impl provides the corresponding `SequenceLiteral` / `KeyValueLiteral` trait automatically (self-as-builder pattern).
+A key-value literal is an array of pairs, so `[["a", 1]]` builds the same map
+`{ a: 1 }` does. `Array<T>` itself needs no impl — the array the coercion
+materializes is already the result.
 
 ##### Usage
 
@@ -2043,10 +2044,48 @@ use { TreeMap } from "core:collections";
 let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
 ```
 
-Coercion is literal-only — it does not apply to bound variables. If the target type is a struct with matching fields, it is interpreted as a struct literal and coercion is not attempted.
+Making a user type literal-constructible is one ordinary impl:
 
-See [`docs/wep-2026-01-18-iterator-based-literal-coercion.md`](./wep-2026-01-18-iterator-based-literal-coercion.md)
-for desugaring rules, the immutable-output (separate builder) pattern, and concrete type validation.
+```wado
+impl From<Array<T>> for MyVec<T> {
+    fn from(elements: Array<T>) -> MyVec<T> { ... }
+}
+```
+
+Where a type accepts both literal forms, `{ … }` takes the impl whose element
+is a two-element tuple and `[ … ]` prefers the one whose element is not;
+several candidates for one form are an ambiguity error the site reports, and
+`T::from(…)` written out resolves it.
+
+##### Implicit conversion
+
+A literal is implicitly converted to its target type through `From`. No other
+expression is implicitly converted — a literal position is the whole of it.
+
+```wado
+let v: List<Value> = [1, "x"];   // OK — every element is a literal
+let v: List<Value> = [a, b];     // ERROR — write [Value::from(a), Value::from(b)]
+```
+
+Coercion is literal-only — it does not apply to bound variables. If the target
+type is a struct with matching fields, it is interpreted as a struct literal and
+coercion is not attempted.
+
+##### `..base` spread
+
+`..base` inside a literal merges through `LiteralSpread`, last write wins:
+
+```wado
+internal trait LiteralSpread {
+    fn spread_literal(&mut self, base: Self);
+}
+```
+
+A type without the impl rejects `..base` where it is written, and a sequence
+literal cannot carry one at all — `[..xs, 4]` is a tuple spread.
+
+See [`docs/wep-2026-08-24-literal-from-array.md`](./wep-2026-08-24-literal-from-array.md)
+for the lowering, the impl-selection rule, and the newtype peel.
 
 ### Compile-Time Location Literals
 
@@ -5171,6 +5210,42 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
     Pipe,             // Maps to WIT: pipe
 }
 ```
+
+#### Resource handle backing
+
+A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-ref"`, a handle to a host object. Omitting the field reads as `i32`. `extern-ref` is confined to `web:*` bindings until its lowering exists.
+
+An extern-ref handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+
+### Resource Inheritance
+
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `type = "extern-ref"`; single inheritance only, and a cycle is an error.
+
+```wado
+#[cm("web:dom/event-target", type = "extern-ref")]
+resource EventTarget {
+    fn add_event_listener(&self, kind: String);
+}
+
+#[cm("web:dom/node", type = "extern-ref")]
+resource Node extends EventTarget {
+    fn text_content(&self) -> Option<String>;
+}
+
+fn use_it(n: Node) {
+    n.add_event_listener("click");   // inherited, no cast
+    let t: EventTarget = n;          // upcast is implicit
+}
+```
+
+Rules:
+
+- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant, and there is no implicit downcast.
+- A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+- Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
+- Generic resources take no part in `extends` yet.
+
+See [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
 
 ## Compiler Attributes
 

@@ -137,7 +137,10 @@ impl TypeSystem {
         }
         visited.push(base);
         let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
-            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => return true,
+            ResolvedType::Resource { def } => {
+                return !self.type_table.borrow().is_extern_ref_resource(def);
+            }
+            ResolvedType::GenericResource { .. } => return true,
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
             ResolvedType::Struct { .. } => self.struct_field_type_ids_of(base).unwrap_or_default(),
             ResolvedType::GenericInstance { type_args, .. }
@@ -177,10 +180,11 @@ impl TypeSystem {
         declared.iter().any(|p| p.name == name) || !self.is_known_type_name_in(module, name)
     }
 
-    /// Whether `expr` is the bare `null` literal. A bare `null` initially
-    /// resolves to `Option<UNKNOWN>` and only acquires its inner type from an
-    /// expected-type context, so callers that can supply one (e.g. binary
-    /// operands) check this to route the type through.
+    /// Whether `expr` is the bare `null` literal. A bare `null` resolves to
+    /// `Option<!>` — a value of every `Option` and of nothing else — and
+    /// acquires its inner type from an expected-type context, so callers that
+    /// can supply one (e.g. binary operands) check this to route the type
+    /// through.
     pub(crate) fn is_null_literal(&self, expr: &Expr) -> bool {
         matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
     }

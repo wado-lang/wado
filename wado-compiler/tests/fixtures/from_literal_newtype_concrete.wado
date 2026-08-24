@@ -7,21 +7,14 @@ struct TagMap<K, V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for TagMap<Tag, V> {
-    type Value = V;
-    type Output = TagMap<Tag, V>;
-
-    fn new_literal(capacity: i32) -> TagMap<Tag, V> {
-        return TagMap { keys: [], values: [] };
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> TagMap<Tag, V> {
-        return *self;
+impl From<Array<[String, V]>> for TagMap<Tag, V> {
+    fn from(entries: Array<[String, V]>) -> TagMap<Tag, V> {
+        let mut out: TagMap<Tag, V> = TagMap { keys: [], values: [] };
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 

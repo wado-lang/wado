@@ -1236,11 +1236,9 @@ impl FunctionTranslator<'_, '_> {
         (type_id, fields)
     }
 
-    /// Lower an `ArrayLiteral` to
-    /// `struct.new List<T> { repr: array.new_fixed<T>(e0, …), used: N }`,
-    /// mirroring the structurally identical `String { repr, used }` that
-    /// `seq_literal` builds. The element type is read off the struct's `repr`
-    /// field rather than tracked again on the NIR node.
+    /// Lower an `ArrayLiteral`: `array.new_fixed<T>(e0, …)` for the raw
+    /// `Array<T>` a `[e0, e1, …]` literal denotes (WEP 2026-08-24), wrapped in
+    /// `struct.new List<T> { repr, used: N }` where the node is `List`-typed.
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
@@ -1249,9 +1247,23 @@ impl FunctionTranslator<'_, '_> {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
             panic!(
-                "[WIR] ArrayLiteral expected Ref WirType for List<T> struct, got {wir_type:?} (type_id={array_type_id:?})"
+                "[WIR] ArrayLiteral expected Ref WirType, got {wir_type:?} (type_id={array_type_id:?})"
             );
         };
+        let is_raw_array = matches!(
+            self.type_table.get(array_type_id),
+            crate::tir::ResolvedType::BuiltinArray(_)
+        );
+        let element_instrs: Vec<WirInstr> = elements
+            .iter()
+            .map(|e| self.translate_operand(*e))
+            .collect();
+        if is_raw_array {
+            return WirInstr::ArrayNewFixed {
+                type_id,
+                elements: element_instrs,
+            };
+        }
         // The `repr` field is a non-nullable ref to the raw `Array<T>`.
         let WirType::Ref {
             type_id: raw_array_type_id,
@@ -1260,10 +1272,6 @@ impl FunctionTranslator<'_, '_> {
         else {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
-        let element_instrs: Vec<WirInstr> = elements
-            .iter()
-            .map(|e| self.translate_operand(*e))
-            .collect();
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -1854,20 +1862,19 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Handle a `FunctionRef` that did not resolve to a generated function. A
-    /// `Type^Trait::method` name is an unsatisfied trait bound that escaped
-    /// earlier checks: record it and emit `Unreachable` so the build finishes
-    /// (the driver reports and bails). Any other name is an internal
-    /// inconsistency — `panic`.
-    fn unresolved_trait_call_or_trap(
+    /// Handle a `FunctionRef` that did not resolve to a generated function:
+    /// record the two cases the front end admits — an unsatisfied trait bound
+    /// and a `#[cm(...)]` member with no backing import — and `panic` on the rest.
+    fn unresolved_call_or_trap(
         &mut self,
         func: &crate::nir::FunctionRef,
         span: crate::token::Span,
         panic_msg: impl FnOnce() -> String,
     ) -> WirInstr {
-        if let Some(method) = func.method_info.as_ref()
-            && let Some(trait_name) = method.trait_name.as_ref()
-        {
+        let Some(method) = func.method_info.as_ref() else {
+            panic!("{}", panic_msg());
+        };
+        if let Some(trait_name) = method.trait_name.as_ref() {
             self.ctx
                 .trait_bound_violations
                 .push(crate::wir::TraitBoundViolation {
@@ -1875,10 +1882,23 @@ impl FunctionTranslator<'_, '_> {
                     trait_display: trait_name.to_display(),
                     span,
                 });
-            WirInstr::Unreachable
-        } else {
-            panic!("{}", panic_msg());
+            return WirInstr::Unreachable;
         }
+        if let Some(cm_name) = method.cm_name.as_ref() {
+            self.ctx
+                .cm_import_violations
+                .push(crate::wir::CmImportViolation {
+                    call_display: format!(
+                        "{}::{}",
+                        method.fq_struct_name().to_display(),
+                        method.method_name
+                    ),
+                    cm_name: cm_name.clone(),
+                    span,
+                });
+            return WirInstr::Unreachable;
+        }
+        panic!("{}", panic_msg());
     }
 
     /// Translate a TIR expression, wrapping a `never`-typed one in
@@ -2341,7 +2361,7 @@ impl FunctionTranslator<'_, '_> {
                     };
                     self.wrap_call_with_prelude(prelude, call, expr.type_id)
                 } else {
-                    self.unresolved_trait_call_or_trap(func, expr.span, || {
+                    self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
                             "[WIR] unresolved Call: name={:?} module={} builtin={:?} method_info={:?}",
                             func.name, func.module_source, builtin, func.method_info

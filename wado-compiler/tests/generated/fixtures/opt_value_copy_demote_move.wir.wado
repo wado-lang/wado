@@ -155,11 +155,11 @@ global global:opt_value_copy_demote_move.wado::__const_obj_16: ref null "core:pr
 global global:opt_value_copy_demote_move.wado::__const_obj_17: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
 global global:opt_value_copy_demote_move.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:opt_value_copy_demote_move.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:opt_value_copy_demote_move.wado::__const_obj_20: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:opt_value_copy_demote_move.wado::__const_obj_20: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:opt_value_copy_demote_move.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:opt_value_copy_demote_move.wado::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:opt_value_copy_demote_move.wado::__const_obj_32: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(33), used: 1 };
-global global:opt_value_copy_demote_move.wado::__const_obj_37: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 344 };
+global global:opt_value_copy_demote_move.wado::__const_obj_37: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 345 };
 global global:opt_value_copy_demote_move.wado::__const_obj_39: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 114, 101, 102, 95, 109, 117, 116), used: 19 };
 global global:core:prelude/format.wado::__const_obj_41: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
 global global:core:prelude/format.wado::__const_obj_42: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
@@ -228,19 +228,21 @@ fn "opt_value_copy_demote_move.wado/__cm_binding__Stdout_write_via_stream"(data)
 
 fn "opt_value_copy_demote_move.wado/__cm_export__run"() {
     let data: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let elements: ref "Array<core:prelude/string.wado/String>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:opt_value_copy_demote_move.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_value_copy_demote_move.wado::__modules_initialized = 1;
     };
-    __inline_run_0____inline___initialize_modules_0: block {
-        break_if __inline_run_0____inline___initialize_modules_0 @likely(global:opt_value_copy_demote_move.wado::__modules_initialized);
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:opt_value_copy_demote_move.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_value_copy_demote_move.wado::__modules_initialized = 1;
     };
-    data = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 };
+    elements = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
+    data = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: 2 };
     "opt_value_copy_demote_move.wado/process"(data);
     "wasi/task-return"(0);
 }

@@ -520,7 +520,7 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
                 remap_locals_in_expr(&mut field.value, remap);
             }
         }
-        TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             for elem in elements {
                 remap_locals_in_expr(elem, remap);
             }

@@ -5,6 +5,7 @@ use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AttrArg, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
     CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+<<<<<<< HEAD
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
     ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
     ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
@@ -13,6 +14,29 @@ use crate::ast::{
     MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
     RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+||||||| 3e70fcc5f
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
+    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
+    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl,
+    WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+=======
+    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+>>>>>>> origin/main
     StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type,
     UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
@@ -1059,6 +1083,10 @@ impl Parser {
             false
         };
 
+        if !self.check(&TokenKind::Resource) {
+            reject_resource_backing(&attrs)?;
+        }
+
         // Check for contextual keyword "test" (identifier followed by string or block)
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "test"
@@ -1229,12 +1257,15 @@ impl Parser {
     fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
-            let arg = match self.peek_kind().clone() {
-                TokenKind::StringLit(raw) => {
+            // `as_ident_name`, so a contextual keyword can be a key:
+            // `#[cm(..., type="extern-ref")]`.
+            let key = self.peek_kind().as_ident_name().map(str::to_string);
+            let arg = match (key, self.peek_kind().clone()) {
+                (_, TokenKind::StringLit(raw)) => {
                     self.advance();
                     AttrArg::Str(raw)
                 }
-                TokenKind::Ident(value) => {
+                (Some(value), _) => {
                     self.advance();
                     // Check if this identifier is followed by '=' making it a key=value pair
                     if self.check(&TokenKind::Eq) {
@@ -1279,11 +1310,11 @@ impl Parser {
                         AttrArg::Ident(value)
                     }
                 }
-                TokenKind::NumberLit(value) => {
+                (None, TokenKind::NumberLit(value)) => {
                     self.advance();
                     AttrArg::Number(value)
                 }
-                _ => break,
+                (None, _) => break,
             };
             args.push(arg);
             if self.check(&TokenKind::Comma) {
@@ -1348,6 +1379,18 @@ impl Parser {
         // Parse optional generic type parameters: `resource Future<T> { ... }`
         let type_params = self.parse_generic_params()?;
 
+        let parent = if self.check(&TokenKind::Extends) {
+            self.advance();
+            let parent = self.parse_type()?;
+            if self.check(&TokenKind::Comma) {
+                let span = self.peek().span;
+                return Err(self.error_at_span(span, "a resource extends a single parent"));
+            }
+            Some(parent)
+        } else {
+            None
+        };
+
         // Either `resource Name;` (opaque) or `resource Name { ... }` (with methods)
         let (methods, end_span) = if self.check(&TokenKind::LBrace) {
             self.advance(); // consume '{'
@@ -1370,6 +1413,7 @@ impl Parser {
             name,
             visibility,
             type_params,
+            parent,
             attrs,
             methods,
             span: start_span.merge(&end_span),
@@ -1683,6 +1727,7 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
@@ -3775,9 +3820,12 @@ impl Parser {
         // parses it as a turbofish-attached identifier or rejects a duplicate
         // turbofish. `Name::<A>::<B>` falls into the same backtrack: the second
         // `<` is not a method identifier.
+        // The segment may be a contextual keyword — `Type::<T>::from(x)` is the
+        // one every `From` impl is called through — so admit whatever
+        // `consume_ident` below will accept, not `Ident` alone.
         if spec_ok
             && self.check(&TokenKind::ColonColon)
-            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+            && self.peek_nth(1).kind.as_ident_name().is_some()
         {
             self.advance(); // consume ::
             let (method, method_span) = self.consume_ident_with_span()?;
@@ -3869,8 +3917,7 @@ impl Parser {
         });
         let mut qualified_name = format!("{name}::{first_seg_name}");
         let mut end_span = first_seg_span;
-        while self.check(&TokenKind::ColonColon)
-            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+        while self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind.as_ident_name().is_some()
         {
             self.advance(); // consume ::
             let seg_span = self.peek().span;
@@ -5135,6 +5182,7 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
+            reject_resource_backing(&attrs)?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let visibility = if self.check(&TokenKind::Pub) {
@@ -5226,6 +5274,7 @@ impl Parser {
     }
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -5262,6 +5311,7 @@ impl Parser {
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
+            reject_resource_backing(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
@@ -5337,6 +5387,7 @@ impl Parser {
     }
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
+        reject_resource_backing(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -6189,6 +6240,104 @@ fn span_of_open_brace(origin: crate::token::Position) -> Span {
     )
 }
 
+<<<<<<< HEAD
+||||||| 3e70fcc5f
+/// Rebase a position produced by lexing a fragment on its own onto the file the
+/// fragment came from.
+///
+/// The fragment starts at line 1, column 1, offset 0, so only its first line
+/// needs the column shift — every later line already begins at column 1 where
+/// the file's does.
+fn rebase_position(
+    position: crate::token::Position,
+    origin: crate::token::Position,
+) -> crate::token::Position {
+    crate::token::Position {
+        offset: origin.offset + position.offset,
+        line: origin.line + position.line - 1,
+        column: if position.line == 1 {
+            origin.column + position.column - 1
+        } else {
+            position.column
+        },
+    }
+}
+
+/// Rebase a span the same way [`rebase_position`] rebases a point.
+fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
+    let shift_column = |line: usize, column: usize| {
+        if line == 1 {
+            origin.column + column - 1
+        } else {
+            column
+        }
+    };
+    Span::with_end(
+        origin.offset + span.start,
+        origin.offset + span.end,
+        origin.line + span.line - 1,
+        shift_column(span.line, span.column),
+        origin.line + span.end_line - 1,
+        shift_column(span.end_line, span.end_column),
+    )
+}
+
+=======
+/// Rebase a position produced by lexing a fragment on its own onto the file the
+/// fragment came from.
+///
+/// The fragment starts at line 1, column 1, offset 0, so only its first line
+/// needs the column shift — every later line already begins at column 1 where
+/// the file's does.
+fn rebase_position(
+    position: crate::token::Position,
+    origin: crate::token::Position,
+) -> crate::token::Position {
+    crate::token::Position {
+        offset: origin.offset + position.offset,
+        line: origin.line + position.line - 1,
+        column: if position.line == 1 {
+            origin.column + position.column - 1
+        } else {
+            position.column
+        },
+    }
+}
+
+/// Rebase a span the same way [`rebase_position`] rebases a point.
+fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
+    let shift_column = |line: usize, column: usize| {
+        if line == 1 {
+            origin.column + column - 1
+        } else {
+            column
+        }
+    };
+    Span::with_end(
+        origin.offset + span.start,
+        origin.offset + span.end,
+        origin.line + span.line - 1,
+        shift_column(span.line, span.column),
+        origin.line + span.end_line - 1,
+        shift_column(span.end_line, span.end_column),
+    )
+}
+
+/// The backing is a property of the handle type, so it has one home: the
+/// `resource` declaration. Anything else carrying it is rejected.
+fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
+    match attrs.iter().find(|a| a.cm_resource_backing().is_some()) {
+        Some(attr) => Err(ParseError {
+            message: "#[cm(..., type=...)] declares a resource's handle backing; \
+                it belongs on a `resource` declaration"
+                .to_string(),
+            span: attr.span,
+        }),
+        None => Ok(()),
+    }
+}
+
+>>>>>>> origin/main
 /// Populate `Attribute::cm_boundary` from the attribute name:
 /// `#[canonical("namespace", "name")]` gives `Canonical`,
 /// `#[cm("ns:pkg/iface[@v][#fn]")]` gives `Import`, and a `#[cm(…)]` that does
@@ -6211,15 +6360,33 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         }));
     }
     if name == "cm" {
-        let [arg] = args else {
-            return Err(format!(
-                "#[cm] expects exactly 1 string argument, got {}",
-                args.len()
-            ));
+        let [path, fields @ ..] = args else {
+            return Err("#[cm] expects a string argument".to_string());
         };
-        let AttrArg::Str(s) = arg else {
+        let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
+        let mut seen_type = false;
+        for field in fields {
+            let AttrArg::KeyValue(key, value) = field else {
+                return Err(
+                    "#[cm] takes a path string followed by `key = \"value\"` fields".to_string(),
+                );
+            };
+            if key != "type" {
+                return Err(format!(
+                    "unknown #[cm] field `{key}`; the only field is `type`"
+                ));
+            }
+            if std::mem::replace(&mut seen_type, true) {
+                return Err("#[cm] takes one `type` field".to_string());
+            }
+            if CmResourceBacking::parse(value).is_none() {
+                return Err(format!(
+                    "unknown #[cm] type `{value}`; expected \"extern-ref\" or \"i32\""
+                ));
+            }
+        }
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
             None => CmBoundary::Name(s.clone()),
@@ -6767,6 +6934,148 @@ mod tests {
     }
 
     #[test]
+    fn resource_declares_a_parent() {
+        let source = r#"
+            #[cm("web:dom/node", type="extern-ref")]
+            pub resource Node extends EventTarget {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        let Some(Type::Named(parent)) = &decl.parent else {
+            panic!("expected a named parent, got {:?}", decl.parent);
+        };
+        assert_eq!(parent.name, "EventTarget");
+    }
+
+    #[test]
+    fn resource_without_extends_has_no_parent() {
+        let module = parse("pub resource Node {}").unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert!(decl.parent.is_none());
+    }
+
+    #[test]
+    fn resource_takes_a_single_parent() {
+        let err = parse("resource Node extends A, B {}").unwrap_err();
+        assert!(
+            err.message.contains("single") || err.message.contains("one parent"),
+            "expected a single-parent error, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_carries_a_resource_backing() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref")]
+            pub resource Element {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        let attr = &decl.attrs[0];
+        assert_eq!(
+            attr.cm_resource_backing(),
+            Some(CmResourceBacking::ExternRef)
+        );
+        let cm = attr.as_cm_import().expect("cm boundary import");
+        assert_eq!(cm.interface, "element");
+    }
+
+    #[test]
+    fn cm_attribute_backing_defaults_to_none() {
+        let source = r#"
+            #[cm("wasi:http/types@0.3.0#request")]
+            pub resource Request {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert_eq!(decl.attrs[0].cm_resource_backing(), None);
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_backing() {
+        let source = r#"
+            #[cm("web:dom/element", type="handle")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("extern-ref") && err.message.contains("i32"),
+            "expected the allowed values in the message, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_backing_is_rejected_on_every_other_site() {
+        for source in [
+            "struct S { #[cm(\"a:b/c\", type=\"i32\")] f: i32 }",
+            "enum E { #[cm(\"a:b/c\", type=\"i32\")] Case }",
+            "variant V { #[cm(\"a:b/c\", type=\"i32\")] Case(i32) }",
+            "resource R { #[cm(\"a:b/c\", type=\"i32\")] fn m(&self); }",
+            "flags F { #[cm(\"a:b/c\", type=\"i32\")] A }",
+            "#[cm(\"a:b/c\", type=\"i32\")] test \"t\" { assert true; }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(
+                err.message.contains("`resource` declaration"),
+                "expected a placement error for {source}, got: {}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn cm_attribute_rejects_a_repeated_type_field() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref", type="i32")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("one `type` field"),
+            "a second value must not be silently dropped, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_rejects_an_unknown_field() {
+        let source = r#"
+            #[cm("web:dom/element", backing="extern-ref")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("backing"),
+            "expected the unknown field named, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_backing_belongs_on_a_resource() {
+        let source = r#"
+            #[cm("web:dom/element", type="extern-ref")]
+            pub struct Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("`resource` declaration"),
+            "expected a placement error, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
     fn test_canonical_attribute_populates_cm_boundary() {
         let source = r#"
             #[canonical("wasi", "stream-new")]
@@ -6833,8 +7142,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message
-                .contains("#[cm] expects exactly 1 string argument"),
+            err.message.contains("#[cm] expects a string argument"),
             "unexpected error: {}",
             err.message
         );
@@ -6852,8 +7160,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            err.message
-                .contains("#[cm] expects exactly 1 string argument"),
+            err.message.contains("followed by `key = \"value\"` fields"),
             "unexpected error: {}",
             err.message
         );

@@ -340,10 +340,14 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
             value: Box::new(elem),
         });
     }
-    seq.push(WirInstr::LocalGet {
+    // The local is declared nullable — a non-null ref local cannot be declared
+    // without an initializer — but it is assigned before this read, and the
+    // `ArrayNewFixed` this replaces was non-null. A consumer expecting a
+    // non-null field (`List { repr, … }`) would otherwise reject the split.
+    seq.push(WirInstr::RefAsNonNull(Box::new(WirInstr::LocalGet {
         name: arr_local,
         result_ty: raw_ref_type,
-    });
+    })));
 
     *instr = WirInstr::Seq(seq);
 }

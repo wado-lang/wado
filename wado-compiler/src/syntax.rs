@@ -158,6 +158,7 @@ keyword_registry! {
     "trait" => Trait : StorageType,
     "type" => Type : StorageType,
     "resource" => Resource : StorageType,
+    "extends" => Extends : StorageModifier,
     "world" => World : StorageType,
     "effect" => Effect : StorageType,
     "interface" => Interface : StorageType,

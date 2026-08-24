@@ -342,7 +342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     branch_types
                         .iter()
                         .copied()
-                        .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
                         .or_else(|| {
                             branch_types
                                 .iter()
@@ -463,11 +463,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 TypeTable::U8
             }
+            // `Option` of the bottom type: a value of every `Option<T>` and of
+            // no other type. `Unknown` here would instead defer every check it
+            // meets, which is how a `null` used to reach a non-nullable slot.
             Literal::Null => self
                 .tysys
                 .type_table
                 .borrow_mut()
-                .make_option(TypeTable::UNKNOWN),
+                .make_option(TypeTable::NEVER),
             Literal::Unit => TypeTable::UNIT,
             Literal::LocationFile => {
                 // #file - returns the current module source as a string
@@ -703,7 +706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and functions (issue #1486).
         if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
             && fallback != self.current_module_source
-            && let Some(result) = self.resolve_ident_in_fallback_module(&ident.name, &fallback)
+            && let Some(result) = self.resolve_ident_in_fallback_module(ident, &fallback)
         {
             return result;
         }
@@ -720,17 +723,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// default-expression resolution. Supports globals and function refs.
     fn resolve_ident_in_fallback_module(
         &mut self,
-        name: &str,
+        ident: &ast::IdentExpr,
         fallback: &ModuleSource,
     ) -> Option<TypeId> {
         // Reify resolves the fallback-module global / `FuncRef` its own
         // way; project the type only. This default-expr path is never an
         // assignment target, so no place is recorded.
-        let (owner, name) = self.declaring_module_of_ident(name, fallback);
+        let (owner, name) = self.declaring_module_of_ident(&ident.name, fallback);
         if let Some((ty, _)) = self.tysys.signatures.global(&owner, &name) {
             return Some(ty);
         }
-        let sig = self.tysys.signatures.function_sig(&owner, &name)?.clone();
+        let sig = self.free_function_sig_at(ident.id)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
@@ -746,7 +749,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         fallback: &ModuleSource,
     ) -> (ModuleSource, String) {
         if self.tysys.signatures.global(fallback, name).is_some()
-            || self.tysys.signatures.function_sig(fallback, name).is_some()
+            || self
+                .decl_in_module(fallback, name)
+                .is_some_and(|def| self.tysys.signatures.function_sig(def).is_some())
         {
             return (fallback.clone(), name.to_string());
         }
@@ -966,8 +971,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
-        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(&ident.name)
-        else {
+        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident) else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream
             // stays sane.
@@ -1084,24 +1088,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// key space.
     fn lookup_func_sig_for_ref(
         &self,
-        name: &str,
+        ident: &ast::IdentExpr,
     ) -> Option<(super::sem::decls::FunctionSig, ModuleSource, String)> {
-        if let Some(sig) = self
-            .tysys
-            .signatures
-            .function_sig(&self.current_module_source, name)
-        {
-            return Some((
-                sig.clone(),
-                self.current_module_source.clone(),
-                name.to_string(),
-            ));
-        }
-        let symbol = self.symbol_named(&self.current_module_source, name)?;
-        let src = symbol.module_source().clone();
-        let original = symbol.name.clone();
-        let sig = self.tysys.signatures.function_sig(&src, &original)?.clone();
-        Some((sig, src, original))
+        let def = self.free_function_at(ident.id)?;
+        let sig = self.tysys.signatures.function_sig(def)?.clone();
+        let defs = self.tysys.resolutions.defs();
+        Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
     }
 
     /// Derive type arguments for a generic function reference from an expected
@@ -1939,50 +1931,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`: the
-                    // normalized chain's result is `agree(then_block_result,
-                    // else_type)` collapsed to `Unit` on mismatch (the
-                    // per-level `unwrap_or(UNIT)` recursion reduces to exactly
-                    // this — equal for single- and multi-element chains). Then
-                    // the same agreement against the else block as before.
+                    // AST mirror of `block_result_type(chain_block)`, and the
+                    // same shape as the `Condition::Expr` arm below: the chain's
+                    // result is what the then block and the else block agree on.
                     let else_type = if_expr
                         .else_block
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-                    let chain_type = crate::tir::agree_branch_types(
-                        self.ast_block_result_type(&if_expr.then_block),
-                        else_type,
-                    )
-                    .unwrap_or(TypeTable::UNIT);
-                    if chain_type == else_type
-                        || chain_type == TypeTable::NEVER
-                        || else_type == TypeTable::NEVER
-                    {
-                        if chain_type == TypeTable::NEVER {
-                            else_type
-                        } else {
-                            chain_type
+                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    match (
+                        self.agreed_branch_type(&[then_type, else_type]),
+                        &if_expr.else_block,
+                    ) {
+                        (Some(agreed), _) => agreed,
+                        (None, None) => TypeTable::UNIT,
+                        (None, Some(else_block)) => {
+                            let (then_name, else_name) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .type_names_for_mismatch(then_type, else_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: then_name,
+                                found: else_name,
+                                span: else_block.span,
+                            });
+                            then_type
                         }
-                    } else if if_expr.else_block.is_none() {
-                        TypeTable::UNIT
-                    } else {
-                        let (chain_name, else_name) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(chain_type, else_type);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected: chain_name,
-                            found: else_name,
-                            span: if_expr.else_block.as_ref().unwrap().span,
-                        });
-                        chain_type
                     }
                 };
 
                 // An `if let` whose branches are all bare `null` leaves the
                 // type unresolved; report it rather than ICEing in codegen.
-                self.report_uninferable_result(type_id, if_expr.span, "if expression");
+                // When one branch resolved, the other's `null` tail is checked
+                // against it — the sibling's type is what agreement adopted.
+                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+                    if let Some(eb) = &if_expr.else_block {
+                        blocks.push(eb);
+                    }
+                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+                }
 
                 // Same arm-agreement rule as the `Condition::Expr` arm below:
                 // `expected_type = Some(X)` pins `type_id` unconditionally, so
@@ -2054,52 +2043,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
                     //
-                    // We also let `Option<UNKNOWN>` (typically a bare `null` literal whose
-                    // inner type could not be inferred) defer to the sibling branch's
-                    // resolved type. The unresolved branch's tail is patched below.
-                    let tt = self.tysys.type_table.borrow();
-                    let then_unknown = tt.contains_unknown(then_type);
-                    let else_unknown = tt.contains_unknown(else_type);
-                    drop(tt);
-                    if then_type == else_type {
-                        then_type
-                    } else if then_type == TypeTable::NEVER {
-                        else_type
-                    } else if else_type == TypeTable::NEVER {
-                        then_type
-                    } else if then_unknown && !else_unknown {
-                        else_type
-                    } else if else_unknown && !then_unknown {
-                        then_type
-                    } else if if_expr.else_block.is_none() {
-                        if then_type != TypeTable::UNIT {
-                            let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: "()".to_string(),
-                                found: type_name,
-                                span: if_expr.then_block.span,
-                            });
+                    // An indefinite branch defers to its sibling's resolved
+                    // type; its tail is patched below.
+                    match (
+                        self.agreed_branch_type(&[then_type, else_type]),
+                        &if_expr.else_block,
+                    ) {
+                        (Some(agreed), _) => agreed,
+                        (None, None) => {
+                            if then_type != TypeTable::UNIT {
+                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                                let _ = self.emit(TypeError::TypeMismatch {
+                                    expected: "()".to_string(),
+                                    found: type_name,
+                                    span: if_expr.then_block.span,
+                                });
+                            }
+                            TypeTable::UNIT
                         }
-                        TypeTable::UNIT
-                    } else {
-                        let (then_name, else_name) = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .type_names_for_mismatch(then_type, else_type);
-                        let _ = self.emit(TypeError::TypeMismatch {
-                            expected: then_name,
-                            found: else_name,
-                            span: if_expr.else_block.as_ref().unwrap().span,
-                        });
-                        then_type
+                        (None, Some(else_block)) => {
+                            let (then_name, else_name) = self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .type_names_for_mismatch(then_type, else_type);
+                            let _ = self.emit(TypeError::TypeMismatch {
+                                expected: then_name,
+                                found: else_name,
+                                span: else_block.span,
+                            });
+                            then_type
+                        }
                     }
                 };
 
                 // Report any unresolved `null` tail in either branch against
                 // the determined result type — AST mirror of the old
                 // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed UNKNOWN (both branches a bare `null`)
+                // When the type stayed indefinite (both branches a bare `null`)
                 // `report_uninferable_result` already fired and the null pass
                 // is skipped.
                 if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
@@ -2172,18 +2153,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports a `CannotInferType` error when a branch construct's result
-    /// type could not be inferred — it still contains UNKNOWN because every
-    /// branch produced an un-typeable value (e.g. a bare `null`). Returns
-    /// `true` when an error was reported, so the caller can skip the
-    /// `null`-patching pass (which requires a resolved target type).
+    /// Reports a `CannotInferType` error when every branch of a construct
+    /// produced an indefinite type, leaving the result one too. Returns `true`
+    /// when an error was reported, so the caller can skip the `null`-patching
+    /// pass (which requires a resolved target type).
     fn report_uninferable_result(
         &mut self,
         result_type: TypeId,
         span: Span,
         construct: &str,
     ) -> bool {
-        if !self.tysys.type_table.borrow().contains_unknown(result_type) {
+        if !self.tysys.type_table.borrow().is_indefinite(result_type) {
             return false;
         }
         let _ = self.emit(TypeError::CannotInferType {
@@ -2311,6 +2291,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The type a set of branches agrees on, `None` when they disagree — the
+    /// caller reports that in its own terms. The one place branch agreement is
+    /// decided: `if`, `if let` and `match` all route here.
+    pub(super) fn agreed_branch_type(&self, branches: &[TypeId]) -> Option<TypeId> {
+        let mut agreed: Option<TypeId> = None;
+        for &branch in branches {
+            agreed = Some(match agreed {
+                None => branch,
+                Some(acc) => self.agree_two_branches(acc, branch)?,
+            });
+        }
+        agreed
+    }
+
+    fn agree_two_branches(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        if a == b {
+            return Some(a);
+        }
+        if a == TypeTable::NEVER {
+            return Some(b);
+        }
+        if b == TypeTable::NEVER {
+            return Some(a);
+        }
+        let (a_unknown, b_unknown) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.is_indefinite(a), tt.is_indefinite(b))
+        };
+        if a_unknown && !b_unknown {
+            return Some(b);
+        }
+        if b_unknown && !a_unknown {
+            return Some(a);
+        }
+        self.tysys.type_table.borrow().resource_join(a, b)
+    }
+
     pub(super) fn resolve_match_expr(
         &mut self,
         match_expr: &ast::MatchExpr,
@@ -2341,7 +2358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
                         t != TypeTable::NEVER
                             && !self.type_has_infer_hole(t)
-                            && !self.tysys.type_table.borrow().contains_unknown(t)
+                            && !self.tysys.type_table.borrow().is_indefinite(t)
                     })
                 });
             if let Some(target) = target {
@@ -2361,16 +2378,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
             //
-            // Also skip arms whose type still contains UNKNOWN — typically a bare
-            // `null` literal whose `Option<...>` inner could not be inferred from
-            // the arm body alone. A sibling arm with a fully-resolved type
-            // (e.g. `Option::Some(s)` where `s: String`) wins; we then patch the
-            // unresolved `null` arm bodies below.
+            // Also skip arms whose type is indefinite: a sibling arm with a
+            // fully-resolved type (e.g. `Option::Some(s)` where `s: String`)
+            // wins, and we patch the unresolved arm bodies below.
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
                 .map(|(t, _)| *t)
-                .find(|&t| t != TypeTable::NEVER && !tt.contains_unknown(t))
+                .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
                 .or_else(|| {
                     arm_bodies
                         .iter()
@@ -2385,6 +2400,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .unwrap_or(TypeTable::UNIT)
                 })
         });
+
+        // Whichever order the arms are written in: the first-arm pick above
+        // would make a parent-typed later arm a mismatch.
+        let type_id = if expected_type.is_some() {
+            type_id
+        } else {
+            arm_bodies.iter().fold(type_id, |acc, (arm_type, _)| {
+                self.agreed_branch_type(&[acc, *arm_type]).unwrap_or(acc)
+            })
+        };
 
         // Report any `null`-bodied arm whose `Option<???>` inner could not be
         // inferred against a resolved non-`Option` result — AST mirror of the
@@ -3122,14 +3147,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
-        // [1, 2, 3] as List<i32>, [1, 2, 3] as SeqVec<i32>
+        // `[1, 2, 3] as List<i32>`, `[1, 2, 3] as SeqVec<i32>`
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced.type_id;
         }
 
-        // Special case: struct literal cast to a type implementing KeyValueLiteral
-        // { a: 1, b: 2 } as TreeMap<String, i32>
+        // `{ a: 1, b: 2 } as TreeMap<String, i32>`
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
             return coerced.type_id;
         }
@@ -4109,27 +4132,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         // Gather each base's field list once, reused below. A `TreeMap` is a
-        // struct too, so an implemented `KeyValueLiteral` marks it as a map
-        // rather than a composable struct.
+        // struct too, so a `From<Array<[K, V]>>` impl marks it as a map rather
+        // than a composable struct.
         let spread_base_types: Vec<TypeId> = struct_lit
             .spreads
             .iter()
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
-        let kv_literal = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::KeyValueLiteral);
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
             .iter()
             .map(|&t| {
-                let is_map = kv_literal.is_some_and(|trait_| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        t,
-                        trait_,
-                    )
-                });
+                let is_map = self.is_key_value_literal_target(t);
                 let fields = if is_map {
                     None
                 } else {
@@ -4142,12 +4155,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let has_spread = !struct_lit.spreads.is_empty();
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
         let all_map = base_info.iter().all(|(m, _)| *m);
-        let expected_is_map = expected_type.is_some_and(|t| {
-            kv_literal.is_some_and(|trait_| {
-                self.tysys
-                    .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), t, trait_)
-            })
-        });
+        let expected_is_map = expected_type.is_some_and(|t| self.is_key_value_literal_target(t));
         // A pure key-value merge with a map-typed target is the only valid
         // non-composition spread.
         let is_kv_merge = has_spread && all_map && expected_is_map;
@@ -5001,7 +5009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument are header facts, so the impls are reached by the target's
         // canonical key rather than by scanning every module for one whose
         // written target name matches.
-        let declares_from = |key: &(ModuleSource, crate::ast::AstId)| -> bool {
+        let declares_from = |key: &crate::defs::DefId| -> bool {
             self.tysys
                 .trait_env
                 .impl_headers
@@ -5023,10 +5031,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .all_impl_keys(&self.impl_target(target_name));
         // The current module wins a tie.
+        let defs = self.tysys.resolutions.defs();
         keys.iter()
-            .find(|key| key.0 == self.current_module_source && declares_from(key))
+            .find(|key| *defs.module(**key) == self.current_module_source && declares_from(key))
             .or_else(|| keys.iter().find(|key| declares_from(key)))
-            .map(|(module, _)| module.clone())
+            .map(|key| defs.module(*key).clone())
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| self.current_module_source.clone())
     }

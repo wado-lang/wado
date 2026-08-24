@@ -1,0 +1,31 @@
+// `Type::<Args>::from(x)` parses: `from` is a contextual keyword, and the
+// segment after a turbofish admits the same names `Type::from(x)` does.
+use { println, Stdout } from "core:cli";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl From<i32> for Wrapper<i32> {
+    fn from(value: i32) -> Wrapper<i32> {
+        return Wrapper { value };
+    }
+}
+
+fn collect<T>(elements: Array<T>) -> List<T> {
+    return List::<T>::from(elements);
+}
+
+export fn run() with Stdout {
+    let w = Wrapper::<i32>::from(7);
+    assert w.value == 7;
+
+    let xs = collect::<i32>([1, 2, 3] as Array<i32>);
+    assert xs.len() == 3;
+    assert xs[2] == 3;
+
+    println("turbofish from: ok");
+}
+
+__DATA__
+{"stdout": "turbofish from: ok\n"}

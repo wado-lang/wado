@@ -7,6 +7,14 @@ published library (e.g. `wado-lang:marl`) extensible: the library performs a
 guest-defined effect (`Highlight`), and the consumer supplies the
 implementation from outside the library's OCI artifact.
 
+This note is the **guest↔guest** direction: neither end is a host, so neither
+can call the other's exports. The host↔guest direction is
+[Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+
+The engine rules below and the endpoint (first-class function values) carry
+across; the host-pump rejection does not — it is about a published artifact's
+portability, which a browser glue we generate for our own bindings does not owe.
+
 Companion WEPs:
 
 - [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)

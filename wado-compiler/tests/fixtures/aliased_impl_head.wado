@@ -1,0 +1,19 @@
+// An impl block writes its target under the alias its own module imported, so
+// the header's head is neither the declaration's name nor a call site's.
+
+use { Far as Near } from "./sub/aliased_impl_head_a.wado";
+
+struct Local {
+    v: i32,
+}
+
+impl From<Local> for Near {
+    fn from(value: Local) -> Near {
+        return Near { v: value.v * 10 };
+    }
+}
+
+test "a conversion impl written under an alias answers its target" {
+    let n = Near::from(Local { v: 3 });
+    assert n.v == 30;
+}

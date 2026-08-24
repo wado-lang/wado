@@ -1,5 +1,5 @@
-// KeyValueLiteral: custom type implementing KeyValueLiteral trait
-// Verifies that struct literal coercion is not hardcoded to TreeMap
+// A user-defined key-value target: struct-literal coercion is not hardcoded to
+// TreeMap.
 use { println, Stdout } from "core:cli";
 
 struct LinearMap<V> {
@@ -17,21 +17,14 @@ impl LinearMap<V> {
     }
 }
 
-impl KeyValueLiteralBuilder for LinearMap<V> {
-    type Value = V;
-    type Output = LinearMap<V>;
-
-    fn new_literal(capacity: i32) -> LinearMap<V> {
-        return LinearMap::<V>::new();
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> LinearMap<V> {
-        return *self;
+impl From<Array<[String, V]>> for LinearMap<V> {
+    fn from(entries: Array<[String, V]>) -> LinearMap<V> {
+        let mut map = LinearMap::<V>::new();
+        for let [key, value] of entries {
+            map.keys.push(key);
+            map.values.push(value);
+        }
+        return map;
     }
 }
 
@@ -47,8 +40,8 @@ export fn run() with Stdout {
     assert m.values[1] == 20;
     assert m.values[2] == 30;
 
-    println("custom KeyValueLiteral: ok");
+    println("custom key-value literal: ok");
 }
 
 __DATA__
-{"stdout": "custom KeyValueLiteral: ok\n"}
+{"stdout": "custom key-value literal: ok\n"}

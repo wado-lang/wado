@@ -15,6 +15,7 @@ use {
     IndexAssign,
     IntoIterator,
     FromIterator,
+    From,
     Display,
     DisplayAlt,
     Inspect,
@@ -557,22 +558,11 @@ impl FromIterator for List<T> {
     }
 }
 
-// SequenceLiteralBuilder for [e0, e1, ...] -> List<T>
-// The blanket impl in core:prelude automatically provides SequenceLiteral for List<T>.
-impl SequenceLiteralBuilder for List<T> {
-    type Element = T;
-    type Output = List<T>;
-
-    fn new_literal(capacity: i32) -> List<T> {
-        return List::with_capacity(capacity);
-    }
-
-    fn push_literal(&mut self, value: T) with stores[value] {
-        self.push(value);
-    }
-
-    fn build(&self) -> List<T> {
-        return *self;
+// `[e0, e1, …]` as a `List<T>`: the literal is the backing array already, so
+// the list is its spine over it (WEP 2026-08-24).
+impl From<Array<T>> for List<T> {
+    fn from(elements: Array<T>) -> List<T> {
+        return List { repr: elements, used: builtin::array_len(&elements) };
     }
 }
 

@@ -1,0 +1,13 @@
+// The caller declares a `tag` of its own, so a default resolved from the
+// walking module's scope reaches the wrong one.
+
+use { labelled } from "./sub/cross_module_same_name_default_fn_a.wado";
+
+fn tag() -> i32 {
+    return 2;
+}
+
+test "a parameter default names the callee module's function" {
+    assert labelled() == 1;
+    assert tag() == 2;
+}

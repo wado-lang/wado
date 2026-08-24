@@ -1,4 +1,4 @@
-// KeyValueLiteral: explicit cast to custom type
+// Key-value literal: explicit cast to a custom type
 use { println, Stdout } from "core:cli";
 
 struct PairList<V> {
@@ -16,21 +16,14 @@ impl PairList<V> {
     }
 }
 
-impl KeyValueLiteralBuilder for PairList<V> {
-    type Value = V;
-    type Output = PairList<V>;
-
-    fn new_literal(capacity: i32) -> PairList<V> {
-        return PairList::<V>::new();
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> PairList<V> {
-        return *self;
+impl From<Array<[String, V]>> for PairList<V> {
+    fn from(entries: Array<[String, V]>) -> PairList<V> {
+        let mut out = PairList::<V>::new();
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 
@@ -44,8 +37,8 @@ export fn run() with Stdout {
     assert m.values[0] == "Alice";
     assert m.values[1] == "Tokyo";
 
-    println("cast KeyValueLiteral: ok");
+    println("cast key-value literal: ok");
 }
 
 __DATA__
-{"stdout": "cast KeyValueLiteral: ok\n"}
+{"stdout": "cast key-value literal: ok\n"}

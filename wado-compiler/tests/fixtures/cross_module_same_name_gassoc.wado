@@ -1,0 +1,16 @@
+// A's `Node<T>` binds `Out` to slot 0 from an impl written outside A; B's
+// `Node<K, V>` binds it to slot 1 from an impl in its own module. A
+// build-order pick between the two spellings swaps the answers.
+
+use { Unwrap } from "./sub/cross_module_same_name_gassoc_trait.wado";
+use { Node as NodeB } from "./sub/cross_module_same_name_gassoc_b.wado";
+use { Node as NodeA } from "./sub/cross_module_same_name_gassoc_a.wado";
+use {} from "./sub/cross_module_same_name_gassoc_impl.wado";
+
+test "a generic impl's associated type belongs to the declaration its header names" {
+    let a = NodeA { v: 7 };
+    assert a.unwrap_it() == 7;
+
+    let b = NodeB { k: "key", v: 9 };
+    assert b.unwrap_it() == 9;
+}

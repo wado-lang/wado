@@ -1,0 +1,14 @@
+// `[..a, b]` splices one tuple into another; a sequence literal building a
+// collection has no such member, and reaching the element walk with one used to
+// panic the elaborator rather than say so.
+export fn run() {
+    let t = [1, 2, 3];
+    let spliced = [..t, 4];
+    assert spliced.2 == 3;
+
+    let xs: List<i32> = [1, 2, 3];
+    let ys: List<i32> = [..xs, 4];
+}
+
+__DATA__
+{"compile_error": "cannot carry one"}

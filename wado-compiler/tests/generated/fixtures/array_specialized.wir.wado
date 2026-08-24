@@ -39,31 +39,31 @@ struct tuple//[bool, i32, core:prelude/string.wado/String] {  // TypeId(7)
     mut 2: ref "core:prelude/string.wado//String",
 }
 
-array Array<u64> (mut u64);  // TypeId(8)
+array Array<i32> (mut i32);  // TypeId(8)
 
-array Array<u32> (mut u32);  // TypeId(9)
+array Array<u64> (mut u64);  // TypeId(9)
 
-array Array<u16> (mut u16);  // TypeId(10)
+array Array<bool> (mut bool);  // TypeId(10)
 
-array Array<[bool,i32,core:prelude/string.wado/String]> (mut ref "tuple//[bool, i32, core:prelude/string.wado/String]");  // TypeId(11)
+array Array<char> (mut char);  // TypeId(11)
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(12)
+array Array<f32> (mut f32);  // TypeId(12)
 
-array Array<i8> (mut i8);  // TypeId(13)
+array Array<f64> (mut f64);  // TypeId(13)
 
-array Array<i64> (mut i64);  // TypeId(14)
+array Array<i16> (mut i16);  // TypeId(14)
 
-array Array<i16> (mut i16);  // TypeId(15)
+array Array<i64> (mut i64);  // TypeId(15)
 
-array Array<f64> (mut f64);  // TypeId(16)
+array Array<i8> (mut i8);  // TypeId(16)
 
-array Array<f32> (mut f32);  // TypeId(17)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(17)
 
-array Array<char> (mut char);  // TypeId(18)
+array Array<[bool,i32,core:prelude/string.wado/String]> (mut ref "tuple//[bool, i32, core:prelude/string.wado/String]");  // TypeId(18)
 
-array Array<bool> (mut bool);  // TypeId(19)
+array Array<u16> (mut u16);  // TypeId(19)
 
-array Array<i32> (mut i32);  // TypeId(20)
+array Array<u32> (mut u32);  // TypeId(20)
 
 struct core:prelude/slice.wado//SliceValueIter<u64> {  // TypeId(21)
     mut repr: ref Array<u64>,
@@ -464,7 +464,7 @@ global global:core:prelude/fpfmt.wado::__const_obj_16: ref null "core:prelude/ty
 global global:core:prelude/fpfmt.wado::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:core:prelude/fpfmt.wado::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:core:prelude/fpfmt.wado::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:core:prelude/fpfmt.wado::__const_obj_20: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:core:prelude/fpfmt.wado::__const_obj_20: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:core:prelude/fpfmt.wado::__const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:core:prelude/fpfmt.wado::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:core:prelude/fpfmt.wado::__const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32), used: 20 };
@@ -474,38 +474,40 @@ global global:core:prelude/primitive.wado::__const_obj_136: ref null "core:prelu
 
 fn "array_specialized.wado/array_specialized_bool"() with Stdout {
     let arr: ref "core:prelude//List<bool>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<bool>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<bool>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let elements: ref Array<bool>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
+    let rx_23: i32;
+    let tx_24: i32;
     let content: ref "core:prelude/string.wado//String";
-    arr = struct.new "core:prelude//List<bool>" { repr: builtin::array_new<bool>(0), used: 0 };
+    elements = array.new_fixed<bool>();
+    arr = struct.new "core:prelude//List<bool>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<bool>::push"(arr, 1);
     "core:prelude/list.wado/core:prelude/list.wado/List<bool>::push"(arr, 0);
     "core:prelude/list.wado/core:prelude/list.wado/List<bool>::push"(arr, 1);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<bool>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<bool>" { repr: arr.repr, index: 0, end: arr.used };
     b0: block {
         l1: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: bool;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<bool>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: bool;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<bool>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
                 __inline_core_prelude_format_wado_Formatter__pad_spec0_0: block {
-                    content = (if __match_6_mv_1 -> ref "core:prelude/string.wado//String" {
+                    content = (if __match_5_mv_1 -> ref "core:prelude/string.wado//String" {
                         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
                     } else {
                         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
                     });
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, content);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, content);
                     break __inline_core_prelude_format_wado_Formatter__pad_spec0_0;
                 };
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b0;
@@ -517,29 +519,31 @@ fn "array_specialized.wado/array_specialized_bool"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_char"() with Stdout {
     let arr: ref "core:prelude//List<char>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<char>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<char>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let elements: ref Array<char>;
     let handle: i32;
     let packed: i64;
-    let rx_22: i32;
-    let tx_23: i32;
-    arr = struct.new "core:prelude//List<char>" { repr: builtin::array_new<char>(0), used: 0 };
+    let rx_19: i32;
+    let tx_20: i32;
+    elements = array.new_fixed<char>();
+    arr = struct.new "core:prelude//List<char>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(arr, 65);
     "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(arr, 66);
     "core:prelude/list.wado/core:prelude/list.wado/List<char>::push"(arr, 67);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<char>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<char>" { repr: arr.repr, index: 0, end: arr.used };
     b4: block {
         l5: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: char;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<char>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_4_4, __match_6_mv_1);
-                rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
-                "core:cli/write_to_stream"(tx_23, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: char;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<char>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(__local_3, __match_5_mv_1);
+                rx_19 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_20 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_19);
+                "core:cli/write_to_stream"(tx_20, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b4;
@@ -551,31 +555,33 @@ fn "array_specialized.wado/array_specialized_char"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_f32"() with Stdout {
     let arr: ref "core:prelude//List<f32>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<f32>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<f32>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<f32>;
     let handle: i32;
     let packed: i64;
-    let rx_24: i32;
-    let tx_25: i32;
-    arr = struct.new "core:prelude//List<f32>" { repr: builtin::array_new<f32>(0), used: 0 };
+    let rx_21: i32;
+    let tx_22: i32;
+    elements = array.new_fixed<f32>();
+    arr = struct.new "core:prelude//List<f32>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<f32>::push"(arr, 1.5_f32);
     "core:prelude/list.wado/core:prelude/list.wado/List<f32>::push"(arr, 2.5_f32);
     "core:prelude/list.wado/core:prelude/list.wado/List<f32>::push"(arr, 3.5_f32);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<f32>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<f32>" { repr: arr.repr, index: 0, end: arr.used };
     b7: block {
         l8: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: f32;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<f32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/f32::fmt_into$spec0"(__match_6_mv_1, __local_5);
-                rx_24 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_25 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
-                "core:cli/write_to_stream"(tx_25, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: f32;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<f32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/f32::fmt_into$spec0"(__match_5_mv_1, __local_4_4);
+                rx_21 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_22 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_21);
+                "core:cli/write_to_stream"(tx_22, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b7;
@@ -587,31 +593,33 @@ fn "array_specialized.wado/array_specialized_f32"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_f64"() with Stdout {
     let arr: ref "core:prelude//List<f64>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<f64>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<f64>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<f64>;
     let handle: i32;
     let packed: i64;
-    let rx_24: i32;
-    let tx_25: i32;
-    arr = struct.new "core:prelude//List<f64>" { repr: builtin::array_new<f64>(0), used: 0 };
+    let rx_21: i32;
+    let tx_22: i32;
+    elements = array.new_fixed<f64>();
+    arr = struct.new "core:prelude//List<f64>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<f64>::push"(arr, 1.5);
     "core:prelude/list.wado/core:prelude/list.wado/List<f64>::push"(arr, 2.5);
     "core:prelude/list.wado/core:prelude/list.wado/List<f64>::push"(arr, 3.5);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<f64>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<f64>" { repr: arr.repr, index: 0, end: arr.used };
     b10: block {
         l11: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: f64;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<f64>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/f64::fmt_into$spec0"(__match_6_mv_1, __local_5);
-                rx_24 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_25 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
-                "core:cli/write_to_stream"(tx_25, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: f64;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<f64>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/f64::fmt_into$spec0"(__match_5_mv_1, __local_4_4);
+                rx_21 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_22 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_21);
+                "core:cli/write_to_stream"(tx_22, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b10;
@@ -623,31 +631,33 @@ fn "array_specialized.wado/array_specialized_f64"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_i16"() with Stdout {
     let arr: ref "core:prelude//List<i16>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i16>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i16>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<i16>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<i16>" { repr: builtin::array_new<i16>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<i16>();
+    arr = struct.new "core:prelude//List<i16>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<i16>::push"(arr, 1000);
     "core:prelude/list.wado/core:prelude/list.wado/List<i16>::push"(arr, -2000);
     "core:prelude/list.wado/core:prelude/list.wado/List<i16>::push"(arr, 3000);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i16>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i16>" { repr: arr.repr, index: 0, end: arr.used };
     b13: block {
         l14: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: i16;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i16>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: i16;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i16>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b13;
@@ -659,31 +669,33 @@ fn "array_specialized.wado/array_specialized_i16"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_i32"() with Stdout {
     let arr: ref "core:prelude//List<i32>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<i32>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<i32>();
+    arr = struct.new "core:prelude//List<i32>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(arr, 100000);
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(arr, -200000);
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(arr, 300000);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: arr.repr, index: 0, end: arr.used };
     b16: block {
         l17: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: i32;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: i32;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b16;
@@ -695,31 +707,33 @@ fn "array_specialized.wado/array_specialized_i32"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_i64"() with Stdout {
     let arr: ref "core:prelude//List<i64>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i64>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i64>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<i64>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<i64>" { repr: builtin::array_new<i64>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<i64>();
+    arr = struct.new "core:prelude//List<i64>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<i64>::push"(arr, 10000000000_i64);
     "core:prelude/list.wado/core:prelude/list.wado/List<i64>::push"(arr, -20000000000_i64);
     "core:prelude/list.wado/core:prelude/list.wado/List<i64>::push"(arr, 30000000000_i64);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: arr.repr, index: 0, end: arr.used };
     b19: block {
         l20: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: i64;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i64>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/i64::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: i64;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i64>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/i64::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b19;
@@ -731,31 +745,33 @@ fn "array_specialized.wado/array_specialized_i64"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_i8"() with Stdout {
     let arr: ref "core:prelude//List<i8>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<i8>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<i8>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<i8>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<i8>" { repr: builtin::array_new<i8>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<i8>();
+    arr = struct.new "core:prelude//List<i8>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<i8>::push"(arr, 1);
     "core:prelude/list.wado/core:prelude/list.wado/List<i8>::push"(arr, -2);
     "core:prelude/list.wado/core:prelude/list.wado/List<i8>::push"(arr, 3);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<i8>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<i8>" { repr: arr.repr, index: 0, end: arr.used };
     b22: block {
         l23: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: i8;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i8>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: i8;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i8>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b22;
@@ -767,28 +783,30 @@ fn "array_specialized.wado/array_specialized_i8"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_string"() with Stdout {
     let arr: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>";
     let x: ref "core:prelude/string.wado//String";
-    let __match_4: ref null "core:prelude/string.wado//String";
+    let __match_3: ref null "core:prelude/string.wado//String";
+    let elements: ref "Array<core:prelude/string.wado/String>";
     let handle: i32;
     let packed: i64;
-    let rx_18: i32;
-    let tx_19: i32;
-    arr = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
+    let rx_15: i32;
+    let tx_16: i32;
+    elements = array.new_fixed<ref "core:prelude/string.wado//String">();
+    arr = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(arr, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(arr, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 });
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(arr, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(33), used: 1 });
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: arr.repr, index: 0, end: arr.used };
     b25: block {
         l26: loop {
-            __match_4 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if ref.is_null(__match_4) == 0 {
-                x = ref.as_non_null(__match_4);
+            __match_3 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if ref.is_null(__match_3) == 0 {
+                x = ref.as_non_null(__match_3);
                 block {
-                    rx_18 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                    tx_19 = builtin::i32_wrap_i64(packed >> 32_i64);
-                    handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
-                    "core:cli/write_to_stream"(tx_19, x, 1);
+                    rx_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                    tx_16 = builtin::i32_wrap_i64(packed >> 32_i64);
+                    handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
+                    "core:cli/write_to_stream"(tx_16, x, 1);
                     "wasi/future-drop-readable:transmission-cli"(handle);
                 };
             } else {
@@ -801,64 +819,66 @@ fn "array_specialized.wado/array_specialized_string"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_tuple"() with Stdout {
     let arr: ref "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<[bool,i32,core:prelude/string.wado/String]>";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<[bool,i32,core:prelude/string.wado/String]>";
     let x: ref "tuple//[bool, i32, core:prelude/string.wado/String]";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
-    let __match_6: ref null "tuple//[bool, i32, core:prelude/string.wado/String]";
-    let f_17: ref "core:prelude/format.wado//Formatter";
-    let new_used_25: i32;
-    let start_26: i32;
-    let f_36: ref "core:prelude/format.wado//Formatter";
-    let new_used_44: i32;
-    let start_45: i32;
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let __match_5: ref null "tuple//[bool, i32, core:prelude/string.wado/String]";
+    let elements: ref "Array<[bool,i32,core:prelude/string.wado/String]>";
+    let f_14: ref "core:prelude/format.wado//Formatter";
+    let new_used_22: i32;
+    let start_23: i32;
+    let f_33: ref "core:prelude/format.wado//Formatter";
+    let new_used_41: i32;
+    let start_42: i32;
     let handle: i32;
     let packed: i64;
-    let rx_59: i32;
-    let tx_60: i32;
-    arr = struct.new "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>" { repr: builtin::array_new<ref "tuple//[bool, i32, core:prelude/string.wado/String]">(0), used: 0 };
+    let rx_56: i32;
+    let tx_57: i32;
+    elements = array.new_fixed<ref "tuple//[bool, i32, core:prelude/string.wado/String]">();
+    arr = struct.new "core:prelude//List<[bool,i32,core:prelude/string.wado/String]>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(arr, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 1, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 } });
     "core:prelude/list.wado/core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(arr, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 0, 1: 2, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 119, 111), used: 3 } });
     "core:prelude/list.wado/core:prelude/list.wado/List<[bool,i32,core:prelude/string.wado/String]>::push"(arr, struct.new "tuple//[bool, i32, core:prelude/string.wado/String]" { 0: 1, 1: 3, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("three"), used: 5 } });
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<[bool,i32,core:prelude/string.wado/String]>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<[bool,i32,core:prelude/string.wado/String]>" { repr: arr.repr, index: 0, end: arr.used };
     b28: block {
         l29: loop {
-            __match_6 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[bool,i32,core:prelude/string.wado/String]>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if ref.is_null(__match_6) == 0 {
-                x = ref.as_non_null(__match_6);
+            __match_5 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[bool,i32,core:prelude/string.wado/String]>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if ref.is_null(__match_5) == 0 {
+                x = ref.as_non_null(__match_5);
                 block {
-                    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
-                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                    f_17 = __local_5;
-                    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_17, (if x.0 -> ref "core:prelude/string.wado//String" {
+                    __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
+                    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                    f_14 = __local_4_4;
+                    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_14, (if x.0 -> ref "core:prelude/string.wado//String" {
                         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
                     } else {
                         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
                     }));
-                    new_used_25 = __local_4_4.used + 1;
-                    if @unlikely(new_used_25 > builtin::array_len(__local_4_4.repr)) {
+                    new_used_22 = __local_3.used + 1;
+                    if @unlikely(new_used_22 > builtin::array_len(__local_3.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4_4, new_used_25);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_22);
                     }
-                    start_26 = __local_4_4.used;
-                    __local_4_4.used = new_used_25;
-                    builtin::array_set_u8(__local_4_4.repr, start_26, 32);
-                    __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                    f_36 = __local_5;
-                    "core:prelude/primitive.wado/i32::fmt_decimal"(x.1, f_36);
-                    new_used_44 = __local_4_4.used + 1;
-                    if @unlikely(new_used_44 > builtin::array_len(__local_4_4.repr)) {
+                    start_23 = __local_3.used;
+                    __local_3.used = new_used_22;
+                    builtin::array_set_u8(__local_3.repr, start_23, 32);
+                    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                    f_33 = __local_4_4;
+                    "core:prelude/primitive.wado/i32::fmt_decimal"(x.1, f_33);
+                    new_used_41 = __local_3.used + 1;
+                    if @unlikely(new_used_41 > builtin::array_len(__local_3.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4_4, new_used_44);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_41);
                     }
-                    start_45 = __local_4_4.used;
-                    __local_4_4.used = new_used_44;
-                    builtin::array_set_u8(__local_4_4.repr, start_45, 32);
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_4_4, x.2);
-                    rx_59 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                    tx_60 = builtin::i32_wrap_i64(packed >> 32_i64);
-                    handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_59);
-                    "core:cli/write_to_stream"(tx_60, __local_4_4, 1);
+                    start_42 = __local_3.used;
+                    __local_3.used = new_used_41;
+                    builtin::array_set_u8(__local_3.repr, start_42, 32);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, x.2);
+                    rx_56 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                    tx_57 = builtin::i32_wrap_i64(packed >> 32_i64);
+                    handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_56);
+                    "core:cli/write_to_stream"(tx_57, __local_3, 1);
                     "wasi/future-drop-readable:transmission-cli"(handle);
                 };
             } else {
@@ -871,31 +891,33 @@ fn "array_specialized.wado/array_specialized_tuple"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_u16"() with Stdout {
     let arr: ref "core:prelude//List<u16>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<u16>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<u16>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<u16>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<u16>" { repr: builtin::array_new<u16>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<u16>();
+    arr = struct.new "core:prelude//List<u16>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<u16>::push"(arr, 1000);
     "core:prelude/list.wado/core:prelude/list.wado/List<u16>::push"(arr, 2000);
     "core:prelude/list.wado/core:prelude/list.wado/List<u16>::push"(arr, 3000);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<u16>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<u16>" { repr: arr.repr, index: 0, end: arr.used };
     b34: block {
         l35: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: u16;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u16>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: u16;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u16>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b34;
@@ -907,31 +929,33 @@ fn "array_specialized.wado/array_specialized_u16"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_u32"() with Stdout {
     let arr: ref "core:prelude//List<u32>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<u32>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<u32>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<u32>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<u32>" { repr: builtin::array_new<u32>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<u32>();
+    arr = struct.new "core:prelude//List<u32>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::push"(arr, 100000);
     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::push"(arr, 200000);
     "core:prelude/list.wado/core:prelude/list.wado/List<u32>::push"(arr, 300000);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<u32>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<u32>" { repr: arr.repr, index: 0, end: arr.used };
     b37: block {
         l38: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: u32;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u32>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/u32::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: u32;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u32>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/u32::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b37;
@@ -943,31 +967,33 @@ fn "array_specialized.wado/array_specialized_u32"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_u64"() with Stdout {
     let arr: ref "core:prelude//List<u64>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<u64>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<u64>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<u64>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<u64>" { repr: builtin::array_new<u64>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<u64>();
+    arr = struct.new "core:prelude//List<u64>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<u64>::push"(arr, 10000000000_i64);
     "core:prelude/list.wado/core:prelude/list.wado/List<u64>::push"(arr, 20000000000_i64);
     "core:prelude/list.wado/core:prelude/list.wado/List<u64>::push"(arr, 30000000000_i64);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<u64>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<u64>" { repr: arr.repr, index: 0, end: arr.used };
     b40: block {
         l41: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: u64;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u64>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: u64;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u64>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/u64::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b40;
@@ -979,31 +1005,33 @@ fn "array_specialized.wado/array_specialized_u64"() with Stdout {
 
 fn "array_specialized.wado/array_specialized_u8"() with Stdout {
     let arr: ref "core:prelude//List<u8>";
-    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<u8>";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/format.wado//Formatter";
+    let __iter_1: ref "core:prelude/slice.wado//SliceValueIter<u8>";
+    let __local_3: ref "core:prelude/string.wado//String";
+    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<u8>;
     let handle: i32;
     let packed: i64;
-    let rx_26: i32;
-    let tx_27: i32;
-    arr = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    let rx_23: i32;
+    let tx_24: i32;
+    elements = array.new_fixed<u8>();
+    arr = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(arr, 1);
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(arr, 2);
     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(arr, 3);
-    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: arr.repr, index: 0, end: arr.used };
+    __iter_1 = struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: arr.repr, index: 0, end: arr.used };
     b43: block {
         l44: loop {
-            let __match_6_mv_0: i32;
-            let __match_6_mv_1: u8;
-            multivalue_bind [__match_6_mv_0, __match_6_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_2);
-            if __match_6_mv_0 == 0 {
-                __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-                __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4_4 };
-                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_6_mv_1, __local_5);
-                rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-                tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-                "core:cli/write_to_stream"(tx_27, __local_4_4, 1);
+            let __match_5_mv_0: i32;
+            let __match_5_mv_1: u8;
+            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(__iter_1);
+            if __match_5_mv_0 == 0 {
+                __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
+                "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(__match_5_mv_1, __local_4_4);
+                rx_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+                tx_24 = builtin::i32_wrap_i64(packed >> 32_i64);
+                handle = "array_specialized.wado/__cm_binding__Stdout_write_via_stream"(rx_23);
+                "core:cli/write_to_stream"(tx_24, __local_3, 1);
                 "wasi/future-drop-readable:transmission-cli"(handle);
             } else {
                 break b43;

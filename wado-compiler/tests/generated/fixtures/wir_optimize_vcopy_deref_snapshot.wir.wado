@@ -106,25 +106,27 @@ global global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_1: ref null "c
 global global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 110, 97, 112, 46, 108, 101, 110, 61), used: 9 };
 
 fn "wir_optimize_vcopy_deref_snapshot.wado/run"() with Stdout {
-    let arr_1: ref "core:prelude//List<i32>";
-    let __local_3: ref "core:prelude/string.wado//String";
-    let __local_4_4: ref "core:prelude/format.wado//Formatter";
+    let arr_0: ref "core:prelude//List<i32>";
+    let __local_2: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/format.wado//Formatter";
+    let elements: ref Array<i32>;
     let snapshot: ref "core:prelude//List<i32>";
     let handle: i32;
-    let f_26: ref "core:prelude/format.wado//Formatter";
-    let f_32: ref "core:prelude/format.wado//Formatter";
+    let f_17: ref "core:prelude/format.wado//Formatter";
+    let f_23: ref "core:prelude/format.wado//Formatter";
     let packed: i64;
-    let rx_37: i32;
-    let tx_38: i32;
+    let rx_28: i32;
+    let tx_29: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wir_optimize_vcopy_deref_snapshot.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:wir_optimize_vcopy_deref_snapshot.wado::__modules_initialized = 1;
     };
-    arr_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    snapshot = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<i32>; __array_clone_src_7 = arr_1.repr; let __array_clone_len_7: i32; __array_clone_len_7 = 3; let __array_clone_dst_7: ref Array<i32>; __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7); builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: 3 };
-    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(arr_1, 100);
+    elements = array.new_fixed<i32>(1, 2, 3);
+    arr_0 = struct.new "core:prelude//List<i32>" { repr: elements, used: 3 };
+    snapshot = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_src_7: ref Array<i32>; __array_clone_src_7 = arr_0.repr; let __array_clone_len_7: i32; __array_clone_len_7 = 3; let __array_clone_dst_7: ref Array<i32>; __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7); builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7); __array_clone_dst_7), used: 3 };
+    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::push"(arr_0, 100);
     let __array_clone_src_7: ref Array<i32>;
     __array_clone_src_7 = snapshot.repr;
     let __array_clone_len_7: i32;
@@ -133,19 +135,19 @@ fn "wir_optimize_vcopy_deref_snapshot.wado/run"() with Stdout {
     __array_clone_dst_7 = builtin::array_new<i32>(__array_clone_len_7);
     builtin::array_copy<i32>(__array_clone_dst_7, 0, __array_clone_src_7, 0, __array_clone_len_7);
     drop(__array_clone_dst_7);
-    __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_2);
-    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
-    f_26 = __local_4_4;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(3, f_26);
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_3, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_1);
-    __local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 };
-    f_32 = __local_4_4;
-    "core:prelude/primitive.wado/i32::fmt_decimal"(arr_1.used, f_32);
-    rx_37 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_38 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wir_optimize_vcopy_deref_snapshot.wado/__cm_binding__Stdout_write_via_stream"(rx_37);
-    "core:cli/write_to_stream"(tx_38, __local_3, 1);
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_2, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_2);
+    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
+    f_17 = __local_3;
+    "core:prelude/primitive.wado/i32::fmt_decimal"(3, f_17);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_2, global:wir_optimize_vcopy_deref_snapshot.wado::__const_obj_1);
+    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
+    f_23 = __local_3;
+    "core:prelude/primitive.wado/i32::fmt_decimal"(arr_0.used, f_23);
+    rx_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_29 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "wir_optimize_vcopy_deref_snapshot.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
+    "core:cli/write_to_stream"(tx_29, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

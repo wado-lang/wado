@@ -442,6 +442,32 @@ impl<'a> Interpreter<'a> {
         self
     }
 
+    /// Bind a block's leading `let`s into the frame, so the tail reads them as
+    /// the constants they are. A global initializer arrives this way once its
+    /// constructor is inlined (`elements = […]; List { repr: elements, … }`).
+    ///
+    /// Recording the aliasing analysis first is what lets [`Self::bind_local`]
+    /// keep an unaliased `elements = […]` rather than demote it.
+    pub fn bind_block_lets(&mut self, body: &crate::nir_arena::Body, block: BlockId) {
+        use crate::nir_arena::StmtKind;
+        let stmts = body.blocks[block].stmts.clone();
+        let Some((_, lets)) = stmts.split_last() else {
+            return;
+        };
+        self.record_aggregate_locals(body);
+        for stmt in lets {
+            let StmtKind::Let {
+                local_index, value, ..
+            } = &body.stmts[*stmt].kind
+            else {
+                return;
+            };
+            let (local_index, value) = (*local_index, *value);
+            let lattice = self.operand_to_lattice(body, value);
+            self.bind_local(local_index, lattice);
+        }
+    }
+
     /// Override the per-pass CTFE step budget (default
     /// [`DEFAULT_STEP_BUDGET`]).
     pub fn set_step_budget(&mut self, budget: u32) -> &mut Self {
