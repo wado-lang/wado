@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787583825600,
+  "lastUpdate": 1787610714897,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -50789,6 +50789,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/35934917651c2b01ed6ad7b62e2e68507c4ebaa1"
         },
         "date": 1787583824896,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1974,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6490,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 16783,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 254904,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3d2d3cdc7ab71629ee09755102d4aaaa1b93ef5f",
+          "message": "Merge pull request #1892 from wado-lang/claude/elaborator-architecture-refactor-3aa0q8\n\nrefactor(elaborator): identify every declaration by `DefId`",
+          "timestamp": "2026-08-25T07:20:04+09:00",
+          "tree_id": "eb0a06bc262e3e7095d7e3f613ddac7f9a06caea",
+          "url": "https://github.com/wado-lang/wado/commit/3d2d3cdc7ab71629ee09755102d4aaaa1b93ef5f"
+        },
+        "date": 1787610714401,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
