@@ -16,7 +16,7 @@
 //!
 //! A file that cannot be read reports a diagnostic count of `-1`.
 
-use { collect_paths, read_file } from "./corpus.wado";
+use { corpus_root, collect_paths, read_file } from "./corpus.wado";
 use { parse, highlight_mapping, HighlightVisitor, highlight_walk } from "../grammar/Wado.g4"
     with {
         generator: {
@@ -31,25 +31,23 @@ use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("error: no preopened directories available");
-        return;
-    }
-    let root = dirs[0].0;
+    let root = match corpus_root() {
+        Some(dir) => dir,
+        None => {
+            return;
+        },
+    };
     let paths = collect_paths(&root, &args());
 
-    let vocabulary = HighlightVisitor::new(highlight_mapping()).capture_names;
+    let mapping = highlight_mapping();
     let mut header = "V";
-    for let name of &vocabulary {
+    for let name of &HighlightVisitor::new(mapping).capture_names {
         header.push_str(&`\t${*name}`);
     }
     println(header);
 
-    let mut total = 0;
     let mut unparsable = 0;
     for let path of &paths {
-        total += 1;
         let src = match read_file(&root, path) {
             Some(text) => text,
             None => {
@@ -61,7 +59,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         if result.diagnostics.len() != 0 {
             unparsable += 1;
         }
-        let mut visitor = HighlightVisitor::new(highlight_mapping());
+        let mut visitor = HighlightVisitor::new(mapping);
         highlight_walk(&mut visitor, &result.tokens, &result.cst);
         visitor.hl_cover_unvisited(&result.tokens);
 
@@ -70,5 +68,5 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             println(`${capture.start}\t${capture.end}\t${capture.capture_id}`);
         }
     }
-    eprintln(`summary: ${total} files, ${unparsable} with diagnostics`);
+    eprintln(`summary: ${paths.len()} files, ${unparsable} with diagnostics`);
 }

@@ -3543,12 +3543,11 @@ pub enum RestClause {
     Forward,
 }
 
-/// A rest clause as written, carrying the span of its contextual keyword so
-/// the highlighter can find the `trap` / `forward` word.
+/// A rest clause as written, positioned so the highlighter can reach it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RestClauseDecl {
     pub kind: RestClause,
-    /// Span of the `trap` / `forward` word, not of the leading `..`.
+    /// The `trap` / `forward` word, not the leading `..`.
     pub keyword_span: Span,
 }
 

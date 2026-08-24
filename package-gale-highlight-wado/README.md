@@ -27,24 +27,20 @@ Public API:
 The output is a bare fragment: bring your own CSS and page shell. Classes use
 the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 
-| Class              | Token                                       |
-| ------------------ | ------------------------------------------- |
+| Class              | Token                                        |
+| ------------------ | -------------------------------------------- |
 | `comment`          | line / block / `__DATA__` / format specifier |
-| `string`           | strings, template text, `` ` ``             |
-| `number`           | int / float literals                        |
-| `keyword`          | `fn`, `let`, `if`, …                        |
-| `operator`         | `matches`, `+`, `==`, `->`, …               |
-| `type`             | type references and type parameters         |
+| `string`           | strings, template text, `` ` ``              |
+| `number`           | int / float literals                         |
+| `keyword`          | `fn`, `let`, `if`, …                         |
+| `operator`         | `matches`, `+`, `==`, `->`, …                |
+| `type`             | type references and type parameters          |
 | `property`         | `.field`, `.method()`, struct literal fields |
-| `variable`         | identifiers in an interpolation             |
-| `constant builtin` | `true` / `false` / `null` / `self`          |
+| `variable`         | identifiers in an interpolation              |
+| `constant builtin` | `true` / `false` / `null` / `self`           |
 
 A plain identifier stays uncoloured: telling a function from a variable takes
 name resolution, which no context-free grammar has.
-
-The vocabulary is held to `wado-compiler`'s canonical syntax registries by
-`mise run check-highlight-vocab`: every keyword the compiler defines carries
-the capture its `KeywordCategory` implies, and nothing else is captured as one.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled
@@ -79,18 +75,17 @@ example/
 
 ## Held to the compiler
 
-Two checks keep this package from drifting away from `wado-compiler`, which
-owns Wado's syntax:
+`wado-compiler` owns Wado's syntax; three checks keep this package on it:
 
 - `mise run check-grammar` — the grammar must accept exactly what the
   compiler's parser accepts, over the stdlib + fixture corpus.
 - `mise run check-highlight` — the two must _colour_ that corpus the same.
-  Comment / string / number / keyword / constant / operator are decidable
-  without name resolution, so any disagreement there fails. Identifier kinds
-  are not: the compiler resolves `function` from `variable` and a
-  context-free grammar cannot, so those are reported as a capability gap and
-  never gated. `mise run check-highlight-vocab` is the cheap first half —
-  vocabulary only, no corpus.
+  Every class but the identifier kinds is decidable without name resolution
+  and fails on disagreement; those are reported as a capability gap instead.
+- `mise run check-highlight-vocab` — the vocabulary half of that check, over
+  the registries rather than a corpus, so it runs in milliseconds: every
+  keyword carries the capture its `KeywordCategory` implies, and nothing else
+  is captured as one.
 
 ## The gale-highlight framework
 

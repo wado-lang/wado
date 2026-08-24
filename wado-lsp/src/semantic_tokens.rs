@@ -215,18 +215,15 @@ fn classify_into(
     }
 }
 
-/// Split a template literal, which reaches the classifier as a single token.
+/// Split a template literal, which reaches the classifier as a single token —
+/// so without this `${count + 1}` is string, left to the editor's syntactic
+/// highlighter.
 ///
-/// Everything outside an interpolation is string — the backticks, the text
-/// chunks, `${` and `}`; the expression itself is code and classifies like any
-/// other; a `:spec` tail is metadata and mutes as a comment. Without this the
-/// whole literal is one `string` token and `${count + 1}` goes uncoloured,
-/// left to whatever syntactic highlighter the editor layers underneath.
-///
-/// The inner tokens come from the compiler's own
-/// [`wado_compiler::lexer::lex_interpolation`], the same call the parser makes
-/// to build the AST, so their spans already sit on the file — and the symbol
-/// map, keyed by byte start, classifies them without any extra work.
+/// Everything outside an interpolation is string, a `:spec` tail mutes as a
+/// comment, and the expression classifies like any other code:
+/// [`wado_compiler::lexer::lex_interpolation`] is the call the parser makes to
+/// build the AST, so the spans already sit on the file and the symbol map,
+/// keyed by byte start, resolves them for free.
 fn expand_template(
     token: &Token,
     parts: &[TemplateTokenPart],
@@ -234,17 +231,7 @@ fn expand_template(
     sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
     out: &mut Vec<ClassifiedToken>,
 ) {
-    let mut cursor = Position {
-        offset: token.span.start,
-        line: token.span.line,
-        column: token.span.column,
-    };
-    let end = Position {
-        offset: token.span.end,
-        line: token.span.end_line,
-        column: token.span.end_column,
-    };
-
+    let (mut cursor, end) = token.span.bounds();
     for part in parts {
         let (Some((expr_start, expr_end)), TemplateTokenPart::Interpolation { expr, origin, .. }) =
             (part.expr_bounds(), part)
@@ -252,9 +239,9 @@ fn expand_template(
             continue;
         };
         push_run(out, cursor, expr_start, token_type::STRING);
-        // A template nested in this interpolation expands the same way.
         let inner = lex_interpolation(expr, *origin);
         for i in 0..inner.tokens.len() {
+            // A template nested in this one expands the same way.
             classify_into(&inner.tokens, i, ast_spans, sem_classes, out);
         }
         // `${ /* why */ x }` — the lexer keeps comments out of the token
@@ -267,9 +254,9 @@ fn expand_template(
             });
         }
         cursor = expr_end;
-        // `:>8.2` is formatting metadata, not code. Left to the token stream
-        // the `>` would colour as an operator, which is what the `TextMate`
-        // grammar — regex-only, so it cannot parse a specifier — still does.
+        // Left to the token stream the `>` in `${x:>8}` would colour as an
+        // operator, which is what the `TextMate` grammar — regex-only, so it
+        // cannot parse a specifier — still does.
         if let Some((spec_start, spec_end)) = part.format_bounds() {
             push_run(out, spec_start, spec_end, token_type::COMMENT);
             cursor = spec_end;
@@ -280,13 +267,13 @@ fn expand_template(
 
 /// Emit a run of one class, unless it is empty — an interpolation can sit
 /// flush against the one before it (`${a}${b}`), and against the backtick.
-fn push_run(out: &mut Vec<ClassifiedToken>, from: Position, to: Position, token_type: u32) {
+fn push_run(out: &mut Vec<ClassifiedToken>, from: Position, to: Position, class: u32) {
     if from.offset >= to.offset {
         return;
     }
     out.push(ClassifiedToken {
         span: from.span_to(to),
-        token_type,
+        token_type: class,
         modifiers: 0,
     });
 }

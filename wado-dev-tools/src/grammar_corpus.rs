@@ -64,10 +64,7 @@ pub fn run(mut parser: lexopt::Parser) {
     }
 
     if let Some(out) = emit_corpus {
-        let corpus = collect_corpus();
-        fs::write(&out, corpus.join("\n") + "\n")
-            .unwrap_or_else(|e| panic!("writing '{out}': {e}"));
-        eprintln!("corpus: {} files", corpus.len());
+        emit_corpus_to(&out);
         return;
     }
 
@@ -97,6 +94,13 @@ pub fn run(mut parser: lexopt::Parser) {
 
 fn value(parser: &mut lexopt::Parser) -> String {
     parser.value().unwrap().to_string_lossy().into_owned()
+}
+
+/// Write the corpus paths for the Wado-side tool to read back, one per line.
+pub fn emit_corpus_to(out: &str) {
+    let corpus = collect_corpus();
+    fs::write(out, corpus.join("\n") + "\n").unwrap_or_else(|e| panic!("writing '{out}': {e}"));
+    eprintln!("corpus: {} files", corpus.len());
 }
 
 /// Every `.wado` file under [`CORPUS_ROOTS`], sorted, so both sides walk the

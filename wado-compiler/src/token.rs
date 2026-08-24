@@ -272,6 +272,24 @@ impl Token {
 }
 
 impl Span {
+    /// The positions this span runs between — the inverse of
+    /// [`Position::span_to`].
+    #[must_use]
+    pub fn bounds(&self) -> (Position, Position) {
+        (
+            Position {
+                offset: self.start,
+                line: self.line,
+                column: self.column,
+            },
+            Position {
+                offset: self.end,
+                line: self.end_line,
+                column: self.end_column,
+            },
+        )
+    }
+
     /// Create a span assuming single-line ASCII content.
     /// `end_column` defaults to `column + (end - start)`, which is correct for
     /// single-line tokens whose byte length equals their column width.

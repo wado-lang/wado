@@ -5,7 +5,17 @@
 //! repository.
 
 use { eprintln, Stderr } from "core:cli";
-use { Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+/// The directory every path opens relative to, reporting the failure itself.
+pub fn corpus_root() -> Option<Descriptor> with (Stderr, Preopens) {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("error: no preopened directories available");
+        return null;
+    }
+    return Option::Some(dirs[0].0);
+}
 
 /// The `.wado` paths to process: every `--paths-from <file>` list plus any
 /// bare `.wado` argument. `--paths-from` reads one path per line — the only

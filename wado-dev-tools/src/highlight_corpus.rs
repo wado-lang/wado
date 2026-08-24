@@ -1,26 +1,17 @@
 //! `highlight-corpus`: hold the Gale highlighter to the compiler's own
 //! classification over the stdlib + fixture corpus.
 //!
-//! The sibling of [`crate::grammar_corpus`], which compares parse verdicts;
-//! this compares what each side *colours*. Same split: the compiler's
-//! classifier is Rust and in-process, the Gale-generated one is Wasm and needs
-//! `wado run`, so `scripts/check-highlight.sh` drives both and this module
-//! joins the results.
+//! The sibling of [`crate::grammar_corpus`], which compares parse verdicts on
+//! the same corpus and through the same split — the compiler in-process, Gale
+//! under `wado run`, `scripts/check-highlight.sh` driving both.
 //!
-//! The two vocabularies differ, so both are projected onto [`Class`] first.
-//! That projection is where the comparison earns its keep — and where it stays
-//! honest about what a context-free grammar can know:
-//!
-//! - `Comment` / `String` / `Number` / `Keyword` / `Constant` / `Operator` are
-//!   decidable without name resolution, so both sides must agree exactly.
-//!   These are gated.
-//! - `Ident` is not. The compiler splits it into a dozen resolved kinds
-//!   (function, parameter, struct, …); Gale can only see syntax. Divergence
-//!   here is reported as a capability gap, never gated.
-//!
-//! Files the Gale parser reports diagnostics for are excluded and counted:
-//! their partial CST colours arbitrarily, and `check-grammar` already owns
-//! that failure.
+//! Both vocabularies project onto [`Class`], and the projection is where the
+//! comparison stays honest about what a context-free grammar can know: every
+//! class but `Ident` is decidable without name resolution and is gated, while
+//! `Ident` covers the dozen resolved kinds Gale cannot tell apart and is only
+//! reported. Files Gale reports diagnostics for are skipped and counted —
+//! their partial CST colours arbitrarily, and `check-grammar` owns that
+//! failure.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -92,9 +83,6 @@ fn class_of_capture(capture: &str) -> Class {
         "keyword" => Class::Keyword,
         "constant.builtin" => Class::Constant,
         "operator" => Class::Operator,
-        // Everything the grammar can say about an identifier collapses here:
-        // the compiler resolves a dozen kinds and no context-free grammar can
-        // follow, so the two are never compared for equality.
         "variable" | "type" | "property" => Class::Ident,
         other => panic!(
             "the highlight query emits capture '{other}', which this comparison has no class for"
@@ -108,9 +96,8 @@ struct Piece {
     start: usize,
     end: usize,
     class: Class,
-    /// What the side that produced it called this span, before the projection
-    /// onto [`Class`] flattened it: the LSP legend name for a compiler token,
-    /// and the class name for a Gale capture, which carries nothing finer.
+    /// What its own side called the span before [`Class`] flattened it: an LSP
+    /// legend name, or — Gale having nothing finer — the class name.
     kind: &'static str,
 }
 
@@ -186,10 +173,7 @@ pub fn run(mut parser: lexopt::Parser) {
     }
 
     if let Some(out) = emit_corpus {
-        let corpus = crate::grammar_corpus::collect_corpus();
-        fs::write(&out, corpus.join("\n") + "\n")
-            .unwrap_or_else(|e| panic!("writing '{out}': {e}"));
-        eprintln!("corpus: {} files", corpus.len());
+        crate::grammar_corpus::emit_corpus_to(&out);
         return;
     }
 
@@ -315,82 +299,80 @@ fn text_of(source: &str, piece: &Piece) -> String {
     }
 }
 
-/// Join one file's two classifications.
+/// Join one file's two classifications, returning the disagreements and a
+/// count of the splits that are not one.
 ///
-/// A Gale span strictly inside a compiler span is a refinement, not a
-/// divergence: the compiler lexes a template literal as one `String` token,
-/// while the grammar splits it into backticks, text chunks, and the code
-/// inside `${…}`. Those are counted, not reported.
+/// A Gale span inside a compiler span of the *same* class is a refinement: the
+/// compiler paints a template's leading `` `text${ `` in one run, the grammar
+/// in three. Of a different class it is a disagreement, and one the container
+/// would otherwise swallow — that is how a mis-captured format specifier hides.
 fn diverge(path: &str, source: &str, mine: &[Piece], theirs: &[Piece]) -> (Vec<Divergence>, usize) {
+    assert!(
+        mine.windows(2).all(|pair| pair[0].end <= pair[1].start),
+        "each compiler span must end no later than the next begins: {path}"
+    );
+    let record = |piece: &Piece, relation, compiler, gale| Divergence {
+        path: path.to_string(),
+        line: line_of(source, piece.start),
+        relation,
+        compiler,
+        gale,
+        kind: piece.kind,
+        text: text_of(source, piece),
+    };
+
     let by_start: IndexMap<usize, &Piece> = theirs.iter().map(|p| (p.start, p)).collect();
     let mut out = Vec::new();
     let mut refinements = 0usize;
 
     for piece in mine {
-        let relation = match by_start.get(&piece.start) {
-            None => Relation::Uncovered,
-            Some(other) if other.end != piece.end => Relation::BoundaryDiffers,
-            Some(other) if other.class != piece.class => Relation::ClassDiffers,
-            Some(_) => continue,
+        let Some(other) = by_start.get(&piece.start) else {
+            out.push(record(piece, Relation::Uncovered, Some(piece.class), None));
+            continue;
         };
-        // The grammar splitting one compiler span into several of the same
-        // class is a refinement, not a disagreement: the compiler paints a
-        // template's leading `` `text${ `` in one run, the grammar in three.
-        if relation == Relation::BoundaryDiffers
-            && by_start[&piece.start].end < piece.end
-            && by_start[&piece.start].class == piece.class
-        {
+        if other.class == piece.class && other.end == piece.end {
+            continue;
+        }
+        if other.class == piece.class && other.end < piece.end {
             refinements += 1;
             continue;
         }
-        out.push(Divergence {
-            path: path.to_string(),
-            line: line_of(source, piece.start),
+        let relation = if other.end == piece.end {
+            Relation::ClassDiffers
+        } else {
+            Relation::BoundaryDiffers
+        };
+        out.push(record(
+            piece,
             relation,
-            compiler: Some(piece.class),
-            gale: by_start.get(&piece.start).map(|p| p.class),
-            kind: piece.kind,
-            text: text_of(source, piece),
-        });
+            Some(piece.class),
+            Some(other.class),
+        ));
     }
 
-    let mine_by_start: IndexMap<usize, &Piece> = mine.iter().map(|p| (p.start, p)).collect();
     for piece in theirs {
-        if mine_by_start.contains_key(&piece.start) {
+        // Sorted and disjoint, so the only span that can start at or contain
+        // this one is the last starting no later than it.
+        let after = mine.partition_point(|m| m.start <= piece.start);
+        let Some(counterpart) = after.checked_sub(1).map(|at| mine[at]) else {
+            out.push(record(piece, Relation::Unexpected, None, Some(piece.class)));
             continue;
+        };
+        if counterpart.start == piece.start {
+            continue; // the loop above already judged this pair
         }
-        // Inside a compiler span the grammar splits further — the same
-        // refinement as above, seen from the other side, and on the same terms:
-        // a container of a *different* class is a disagreement the container
-        // would otherwise swallow, which is exactly how a mis-captured format
-        // specifier hides. The compiler's spans are sorted and disjoint, so the
-        // only candidate container is the last one starting before this piece.
-        let before = mine.partition_point(|m| m.start < piece.start);
-        if before > 0 && piece.end <= mine[before - 1].end {
-            if mine[before - 1].class == piece.class {
-                refinements += 1;
-                continue;
-            }
-            out.push(Divergence {
-                path: path.to_string(),
-                line: line_of(source, piece.start),
-                relation: Relation::ClassDiffers,
-                compiler: Some(mine[before - 1].class),
-                gale: Some(piece.class),
-                kind: piece.kind,
-                text: text_of(source, piece),
-            });
-            continue;
+        if piece.end > counterpart.end {
+            out.push(record(piece, Relation::Unexpected, None, Some(piece.class)));
+        } else if counterpart.class == piece.class {
+            refinements += 1;
+        } else {
+            out.push(record(
+                piece,
+                Relation::ClassDiffers,
+                Some(counterpart.class),
+                Some(piece.class),
+            ));
         }
-        out.push(Divergence {
-            path: path.to_string(),
-            line: line_of(source, piece.start),
-            relation: Relation::Unexpected,
-            compiler: None,
-            gale: Some(piece.class),
-            kind: piece.kind,
-            text: text_of(source, piece),
-        });
     }
     (out, refinements)
 }
@@ -443,7 +425,7 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         gated.len()
     );
     for (count, example) in &gated {
-        eprintln!("  {}", render_pattern(count, example));
+        eprintln!("  {}", render_pattern(*count, example));
     }
     // A check verdict, not a programming error: no backtrace.
     std::process::exit(1);
@@ -499,7 +481,7 @@ fn class_name(class: Option<Class>) -> &'static str {
     }
 }
 
-fn render_pattern(count: &usize, example: &Divergence) -> String {
+fn render_pattern(count: usize, example: &Divergence) -> String {
     format!(
         "{count}x {}: compiler={} gale={} e.g. {}:{} {:?}",
         example.relation.name(),
