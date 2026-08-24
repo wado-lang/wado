@@ -109,6 +109,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
 mod tests {
     use super::*;
     use crate::wir::{WirLocals, WirType};
+    use std::assert_matches;
 
     fn lget(name: &str) -> WirInstr {
         WirInstr::LocalGet {
@@ -138,7 +139,7 @@ mod tests {
             &mut body,
             &Nullability::new(&WirLocals::default())
         ));
-        assert!(matches!(body[0], WirInstr::Nop));
+        assert_matches!(body[0], WirInstr::Nop);
     }
 
     /// A read outside the store's own RHS keeps it.
@@ -149,13 +150,13 @@ mod tests {
             &mut body,
             &Nullability::new(&WirLocals::default())
         ));
-        assert!(
-            matches!(&body[0], WirInstr::LocalSet { name, .. } if name == "x"),
+        assert_matches!(
+            &body[0], WirInstr::LocalSet { name, .. } if name == "x",
             "x is read by the sink copy and must survive: {:?}",
             body[0]
         );
         // The sink itself is write-only and goes.
-        assert!(matches!(body[1], WirInstr::Nop));
+        assert_matches!(body[1], WirInstr::Nop);
     }
 
     /// A write-only local buried in a value-position statement list (an
@@ -186,8 +187,9 @@ mod tests {
         let WirInstr::If { then_body, .. } = value.as_ref() else {
             panic!("expected if-expression value");
         };
-        assert!(
-            matches!(then_body[0], WirInstr::Nop),
+        assert_matches!(
+            then_body[0],
+            WirInstr::Nop,
             "write-only w inside the arm must elide: {:?}",
             then_body[0]
         );

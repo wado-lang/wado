@@ -1,6 +1,7 @@
 //! Tests for the LSP-friendly `semantics` entry point.
 
 use crate::common::InMemoryHost;
+use std::assert_matches;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::{Semantics, semantics};
 use wado_compiler::symbol::SymbolKind;
@@ -55,7 +56,7 @@ export fn run() {
         .symbols
         .lookup_in_module(&entry, "Point")
         .expect("Point symbol should be defined in entry module");
-    assert!(matches!(point_symbol.kind, SymbolKind::Struct(_)));
+    assert_matches!(point_symbol.kind, SymbolKind::Struct(_));
 
     let key = point_symbol.defined_at;
 
@@ -182,11 +183,9 @@ export fn run() with Stdout {
         .expect("`println` call site must record a use→def edge to the stdlib decl");
     // The defining symbol lives in a stdlib module — either `core:cli`
     // (where the user imports from) or a re-exported origin.
-    assert!(
-        matches!(
-            sem.module_of_id(def_id),
-            Some(ModuleSource::Core { .. } | ModuleSource::Wasi { .. })
-        ),
+    assert_matches!(
+        sem.module_of_id(def_id),
+        Some(ModuleSource::Core { .. } | ModuleSource::Wasi { .. }),
         "println def should live in stdlib, got {:?}",
         sem.module_of_id(def_id),
     );

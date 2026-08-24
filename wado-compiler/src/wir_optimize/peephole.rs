@@ -840,7 +840,7 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
         } => Some(16),
         WirInstr::I32Const(v) => {
             if *v >= 0 {
-                Some(32 - (*v as u32).leading_zeros())
+                Some((*v as u32).bit_width())
             } else {
                 None
             }
@@ -895,7 +895,7 @@ fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
     }
     let u = v as u32;
     let bits = u.count_ones();
-    if bits == u32::BITS - u.leading_zeros() {
+    if bits == u.bit_width() {
         Some(bits)
     } else {
         None
@@ -1319,6 +1319,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 mod tests {
     use super::*;
     use crate::wir::WirLocals;
+    use std::assert_matches;
     use std::rc::Rc;
 
     fn tid(index: u32) -> WirTypeId {
@@ -1358,7 +1359,7 @@ mod tests {
         ));
         match &instr {
             WirInstr::Block { body, .. } => {
-                assert!(matches!(body.as_slice(), [WirInstr::I32Const(7)]));
+                assert_matches!(body.as_slice(), [WirInstr::I32Const(7)]);
             }
             other => panic!("expected folded Block, got {other:?}"),
         }
@@ -1396,8 +1397,9 @@ mod tests {
         let WirInstr::I32Add(_, rhs) = value.as_ref() else {
             panic!("expected I32Add, got {value:?}");
         };
-        assert!(
-            matches!(rhs.as_ref(), WirInstr::I32LtS(..)),
+        assert_matches!(
+            rhs.as_ref(),
+            WirInstr::I32LtS(..),
             "hint wrapper must be dropped from the folded operand: {rhs:?}"
         );
     }
@@ -1427,7 +1429,7 @@ mod tests {
             addr: Box::new(WirInstr::I32Const(0)),
         }));
         try_fold_sign_extension(&mut instr);
-        assert!(matches!(instr, WirInstr::I32Load16S { .. }));
+        assert_matches!(instr, WirInstr::I32Load16S { .. });
     }
 
     #[test]
@@ -1438,7 +1440,7 @@ mod tests {
             addr: Box::new(WirInstr::I32Const(0)),
         }));
         try_fold_sign_extension(&mut instr);
-        assert!(matches!(instr, WirInstr::I32Load8S { .. }));
+        assert_matches!(instr, WirInstr::I32Load8S { .. });
     }
 
     #[test]
@@ -1449,7 +1451,7 @@ mod tests {
         )));
         try_fold_sign_extension(&mut instr);
         match instr {
-            WirInstr::I32Extend8S(inner) => assert!(matches!(*inner, WirInstr::LocalGet { .. })),
+            WirInstr::I32Extend8S(inner) => assert_matches!(*inner, WirInstr::LocalGet { .. }),
             other => panic!("expected I32Extend8S(LocalGet), got {other:?}"),
         }
     }
@@ -1467,7 +1469,7 @@ mod tests {
             Box::new(WirInstr::I32Const(0xFF)),
         )));
         try_fold_sign_extension(&mut instr);
-        assert!(matches!(instr, WirInstr::I32Load8S { .. }));
+        assert_matches!(instr, WirInstr::I32Load8S { .. });
     }
 
     #[test]
@@ -1479,7 +1481,7 @@ mod tests {
         ))));
         try_fold_sign_extension(&mut instr);
         match instr {
-            WirInstr::I32Extend8S(inner) => assert!(matches!(*inner, WirInstr::I32Extend16S(_))),
+            WirInstr::I32Extend8S(inner) => assert_matches!(*inner, WirInstr::I32Extend16S(_)),
             other => panic!("expected unchanged I32Extend8S(I32Extend16S), got {other:?}"),
         }
     }
@@ -1494,7 +1496,7 @@ mod tests {
         }));
         try_fold_sign_extension(&mut instr);
         match instr {
-            WirInstr::I32Extend8S(inner) => assert!(matches!(*inner, WirInstr::I32Load16S { .. })),
+            WirInstr::I32Extend8S(inner) => assert_matches!(*inner, WirInstr::I32Load16S { .. }),
             other => panic!("expected unchanged I32Extend8S(I32Load16S), got {other:?}"),
         }
     }
@@ -1507,7 +1509,7 @@ mod tests {
             Box::new(WirInstr::I32Const(0x0F)),
         )));
         try_fold_sign_extension(&mut instr);
-        assert!(matches!(*as_extend_inner(&instr), WirInstr::I32And(..)));
+        assert_matches!(*as_extend_inner(&instr), WirInstr::I32And(..));
     }
 
     fn as_extend_inner(instr: &WirInstr) -> &WirInstr {
@@ -1526,7 +1528,7 @@ mod tests {
             expr: Box::new(local_get("p", ref_ty(7, false))),
         };
         try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
-        assert!(matches!(instr, WirInstr::LocalGet { .. }));
+        assert_matches!(instr, WirInstr::LocalGet { .. });
     }
 
     #[test]
@@ -1538,7 +1540,7 @@ mod tests {
             expr: Box::new(local_get("p", ref_ty(7, true))),
         };
         try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
-        assert!(matches!(instr, WirInstr::RefAsNonNull(_)));
+        assert_matches!(instr, WirInstr::RefAsNonNull(_));
     }
 
     #[test]
@@ -1549,7 +1551,7 @@ mod tests {
             expr: Box::new(local_get("p", ref_ty(9, false))),
         };
         try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
-        assert!(matches!(instr, WirInstr::RefCast { .. }));
+        assert_matches!(instr, WirInstr::RefCast { .. });
     }
 
     #[test]
@@ -1560,7 +1562,7 @@ mod tests {
             expr: Box::new(local_get("p", ref_ty(7, false))),
         };
         try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
-        assert!(matches!(instr, WirInstr::I32Const(1)));
+        assert_matches!(instr, WirInstr::I32Const(1));
     }
 
     #[test]
@@ -1572,7 +1574,7 @@ mod tests {
             expr: Box::new(local_get("p", ref_ty(7, true))),
         };
         try_simplify_ref_op(&mut instr, &Nullability::new(&WirLocals::default()));
-        assert!(matches!(instr, WirInstr::RefTest { .. }));
+        assert_matches!(instr, WirInstr::RefTest { .. });
     }
 
     #[test]
@@ -1594,15 +1596,15 @@ mod tests {
             },
         ];
         fuse_local_tee(&mut body);
-        assert!(matches!(body[0], WirInstr::Nop));
+        assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected return");
         };
         let WirInstr::I32Mul(lhs, rhs) = v.as_ref() else {
             panic!("expected mul");
         };
-        assert!(matches!(lhs.as_ref(), WirInstr::LocalTee { .. }));
-        assert!(matches!(rhs.as_ref(), WirInstr::LocalGet { .. }));
+        assert_matches!(lhs.as_ref(), WirInstr::LocalTee { .. });
+        assert_matches!(rhs.as_ref(), WirInstr::LocalGet { .. });
     }
 
     #[test]
@@ -1626,7 +1628,7 @@ mod tests {
             },
         ];
         fuse_local_tee(&mut body);
-        assert!(matches!(body[0], WirInstr::Nop));
+        assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[1] else {
             panic!("expected return");
         };
@@ -1637,7 +1639,7 @@ mod tests {
         let WirInstr::LocalTee { value, .. } = lhs.as_ref() else {
             panic!("expected leftmost local.tee");
         };
-        assert!(matches!(value.as_ref(), WirInstr::I32Add(..)));
+        assert_matches!(value.as_ref(), WirInstr::I32Add(..));
     }
 
     #[test]
@@ -1656,7 +1658,7 @@ mod tests {
             },
         ];
         fuse_local_tee(&mut body);
-        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
+        assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
     #[test]
@@ -1673,7 +1675,7 @@ mod tests {
             },
         ];
         fuse_local_tee(&mut body);
-        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
+        assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
     #[test]
@@ -1690,7 +1692,7 @@ mod tests {
             },
         ];
         assert!(!fuse_local_tee(&mut body));
-        assert!(matches!(body[0], WirInstr::LocalSet { .. }));
+        assert_matches!(body[0], WirInstr::LocalSet { .. });
     }
 
     #[test]
@@ -1708,11 +1710,11 @@ mod tests {
             },
         ];
         assert!(fuse_local_tee(&mut body));
-        assert!(matches!(body[0], WirInstr::Nop));
+        assert_matches!(body[0], WirInstr::Nop);
         let WirInstr::Return { value: Some(v) } = &body[3] else {
             panic!("expected return");
         };
-        assert!(matches!(v.as_ref(), WirInstr::LocalTee { .. }));
+        assert_matches!(v.as_ref(), WirInstr::LocalTee { .. });
     }
 
     #[test]
@@ -1738,7 +1740,7 @@ mod tests {
             else_body: None,
         };
         assert!(try_fold_branchless_increment(&mut instr));
-        assert!(matches!(instr, WirInstr::LocalSet { .. }));
+        assert_matches!(instr, WirInstr::LocalSet { .. });
     }
 
     #[test]
@@ -1748,7 +1750,7 @@ mod tests {
             Box::new(WirInstr::I64Const(4)),
         );
         assert!(try_fold_comparison(&mut lt));
-        assert!(matches!(lt, WirInstr::I32Const(1)));
+        assert_matches!(lt, WirInstr::I32Const(1));
 
         // Unsigned view: -1 is u64::MAX, so `-1 <u 4` is false.
         let mut ltu = WirInstr::I64LtU(
@@ -1756,15 +1758,15 @@ mod tests {
             Box::new(WirInstr::I64Const(4)),
         );
         assert!(try_fold_comparison(&mut ltu));
-        assert!(matches!(ltu, WirInstr::I32Const(0)));
+        assert_matches!(ltu, WirInstr::I32Const(0));
 
         let mut eqz32 = WirInstr::I32Eqz(Box::new(WirInstr::I32Const(0)));
         assert!(try_fold_comparison(&mut eqz32));
-        assert!(matches!(eqz32, WirInstr::I32Const(1)));
+        assert_matches!(eqz32, WirInstr::I32Const(1));
 
         let mut eqz64 = WirInstr::I64Eqz(Box::new(WirInstr::I64Const(5)));
         assert!(try_fold_comparison(&mut eqz64));
-        assert!(matches!(eqz64, WirInstr::I32Const(0)));
+        assert_matches!(eqz64, WirInstr::I32Const(0));
     }
 
     #[test]
@@ -1789,7 +1791,7 @@ mod tests {
         let WirInstr::Block { body: folded, .. } = inner.as_ref() else {
             panic!("expected folded Block, got {inner:?}");
         };
-        assert!(matches!(folded.as_slice(), [WirInstr::I32Const(1)]));
+        assert_matches!(folded.as_slice(), [WirInstr::I32Const(1)]);
     }
 
     /// The shape `emit_binary_wir` gives `b >= 32 && b != 34`.
@@ -1824,8 +1826,8 @@ mod tests {
         else {
             panic!("expected Select, got {instr:?}");
         };
-        assert!(matches!(if_true.as_ref(), WirInstr::I32Ne(..)));
-        assert!(matches!(if_false.as_ref(), WirInstr::I32Const(0)));
+        assert_matches!(if_true.as_ref(), WirInstr::I32Ne(..));
+        assert_matches!(if_false.as_ref(), WirInstr::I32Const(0));
     }
 
     #[test]
@@ -1904,8 +1906,8 @@ mod tests {
         let WirInstr::Select { if_true, .. } = select.as_ref() else {
             panic!("expected Select");
         };
-        assert!(
-            matches!(if_true.as_ref(), WirInstr::LocalGet { name, .. } if name == "alias"),
+        assert_matches!(
+            if_true.as_ref(), WirInstr::LocalGet { name, .. } if name == "alias",
             "use before the copy executes must not be rewritten: {if_true:?}"
         );
     }

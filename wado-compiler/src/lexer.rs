@@ -1325,6 +1325,7 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     /// Lex a clean (no recovered errors) source and return the token stream.
     /// Asserts that no lex errors were recorded, since these tests cover the
@@ -1359,13 +1360,13 @@ mod tests {
     fn test_simple_tokens() {
         let tokens = tokens("fn main() { }");
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
-        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "main"));
-        assert!(matches!(tokens[2].kind, TokenKind::LParen));
-        assert!(matches!(tokens[3].kind, TokenKind::RParen));
-        assert!(matches!(tokens[4].kind, TokenKind::LBrace));
-        assert!(matches!(tokens[5].kind, TokenKind::RBrace));
-        assert!(matches!(tokens[6].kind, TokenKind::Eof));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
+        assert_matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "main");
+        assert_matches!(tokens[2].kind, TokenKind::LParen);
+        assert_matches!(tokens[3].kind, TokenKind::RParen);
+        assert_matches!(tokens[4].kind, TokenKind::LBrace);
+        assert_matches!(tokens[5].kind, TokenKind::RBrace);
+        assert_matches!(tokens[6].kind, TokenKind::Eof);
     }
 
     #[test]
@@ -1373,65 +1374,65 @@ mod tests {
         // Test the new ESM-like import syntax
         let tokens = tokens(r#"use {println} from "core:cli";"#);
 
-        assert!(matches!(tokens[0].kind, TokenKind::Use));
-        assert!(matches!(tokens[1].kind, TokenKind::LBrace));
-        assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println"));
-        assert!(matches!(tokens[3].kind, TokenKind::RBrace));
-        assert!(matches!(tokens[4].kind, TokenKind::From));
-        assert!(matches!(&tokens[5].kind, TokenKind::StringLit(raw) if raw == "core:cli"));
-        assert!(matches!(tokens[6].kind, TokenKind::Semicolon));
+        assert_matches!(tokens[0].kind, TokenKind::Use);
+        assert_matches!(tokens[1].kind, TokenKind::LBrace);
+        assert_matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "println");
+        assert_matches!(tokens[3].kind, TokenKind::RBrace);
+        assert_matches!(tokens[4].kind, TokenKind::From);
+        assert_matches!(&tokens[5].kind, TokenKind::StringLit(raw) if raw == "core:cli");
+        assert_matches!(tokens[6].kind, TokenKind::Semicolon);
     }
 
     #[test]
     fn test_string_literal() {
         let tokens = tokens(r#""Hello, world!""#);
 
-        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!"));
+        assert_matches!(&tokens[0].kind, TokenKind::StringLit(raw) if raw == "Hello, world!");
     }
 
     #[test]
     fn test_byte_string_literal() {
         // `b"..."` is a byte string; raw content is kept (escapes uninterpreted).
         let bs = tokens(r#"b"a\x00b""#);
-        assert!(
-            matches!(&bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b"),
+        assert_matches!(
+            &bs[0].kind, TokenKind::ByteStringLit(raw) if raw == r"a\x00b",
             "got {:?}",
             bs[0].kind
         );
 
         // A bare `b` not followed by `"` is still an identifier.
         let ident = tokens("b + 1");
-        assert!(matches!(&ident[0].kind, TokenKind::Ident(s) if s == "b"));
+        assert_matches!(&ident[0].kind, TokenKind::Ident(s) if s == "b");
 
         // An identifier ending in `b` is not mistaken for a byte string.
         let suffixed = tokens(r#"ab"x""#);
-        assert!(matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "ab"));
-        assert!(matches!(&suffixed[1].kind, TokenKind::StringLit(raw) if raw == "x"));
+        assert_matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "ab");
+        assert_matches!(&suffixed[1].kind, TokenKind::StringLit(raw) if raw == "x");
     }
 
     #[test]
     fn test_byte_literal() {
         let a = tokens("b'A'");
-        assert!(
-            matches!(&a[0].kind, TokenKind::ByteCharLit(raw) if raw == "A"),
+        assert_matches!(
+            &a[0].kind, TokenKind::ByteCharLit(raw) if raw == "A",
             "got {:?}",
             a[0].kind
         );
 
         let esc = tokens(r"b'\xff'");
-        assert!(
-            matches!(&esc[0].kind, TokenKind::ByteCharLit(raw) if raw == r"\xff"),
+        assert_matches!(
+            &esc[0].kind, TokenKind::ByteCharLit(raw) if raw == r"\xff",
             "got {:?}",
             esc[0].kind
         );
 
         let suffixed = tokens("crab'A'");
-        assert!(matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "crab"));
-        assert!(matches!(&suffixed[1].kind, TokenKind::CharLit(raw) if raw == "A"));
+        assert_matches!(&suffixed[0].kind, TokenKind::Ident(s) if s == "crab");
+        assert_matches!(&suffixed[1].kind, TokenKind::CharLit(raw) if raw == "A");
 
         let spaced = tokens("foo b'A'");
-        assert!(matches!(&spaced[0].kind, TokenKind::Ident(s) if s == "foo"));
-        assert!(matches!(&spaced[1].kind, TokenKind::ByteCharLit(raw) if raw == "A"));
+        assert_matches!(&spaced[0].kind, TokenKind::Ident(s) if s == "foo");
+        assert_matches!(&spaced[1].kind, TokenKind::ByteCharLit(raw) if raw == "A");
     }
 
     #[test]
@@ -1440,7 +1441,7 @@ mod tests {
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
         let tokens = &r.tokens;
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
 
         // Comments should be collected, not discarded
         let comments = &r.comments;
@@ -1455,7 +1456,7 @@ mod tests {
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
         let tokens = &r.tokens;
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
 
         let comments = &r.comments;
         assert_eq!(comments.len(), 1);
@@ -1469,7 +1470,7 @@ mod tests {
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
         let tokens = &r.tokens;
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
 
         let comments = &r.comments;
         assert_eq!(comments.len(), 1);
@@ -1484,7 +1485,7 @@ mod tests {
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
         let tokens = &r.tokens;
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
 
         let comments = &r.comments;
         assert_eq!(comments.len(), 3);
@@ -1502,7 +1503,7 @@ mod tests {
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
 
         // Find the function tokens
-        assert!(matches!(r.tokens[0].kind, TokenKind::Fn));
+        assert_matches!(r.tokens[0].kind, TokenKind::Fn);
 
         let comments = &r.comments;
         assert_eq!(comments.len(), 1);
@@ -1521,8 +1522,8 @@ hello world";
         let tokens = &r.tokens;
 
         // Should have parsed the function tokens and EOF
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
-        assert!(matches!(tokens.last().unwrap().kind, TokenKind::Eof));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
+        assert_matches!(tokens.last().unwrap().kind, TokenKind::Eof);
 
         // Should have captured the data section
         assert_eq!(r.data_section.as_deref(), Some("hello world"));
@@ -1637,8 +1638,8 @@ test data";
         let tokens = tokens(source);
 
         // Shebang should be completely skipped
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
-        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "main"));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
+        assert_matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "main");
     }
 
     #[test]
@@ -1646,7 +1647,7 @@ test data";
         let source = "#!/usr/bin/wado --some-flag\nfn test() { }";
         let tokens = tokens(source);
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
     }
 
     #[test]
@@ -1655,7 +1656,7 @@ test data";
         let source = "fn main() { }";
         let tokens = tokens(source);
 
-        assert!(matches!(tokens[0].kind, TokenKind::Fn));
+        assert_matches!(tokens[0].kind, TokenKind::Fn);
     }
 
     #[test]
@@ -1665,7 +1666,7 @@ test data";
         let tokens = tokens(source);
 
         // Should parse # as Hash token, not skip as shebang
-        assert!(matches!(tokens[0].kind, TokenKind::Hash));
+        assert_matches!(tokens[0].kind, TokenKind::Hash);
     }
 
     /// A malformed escape must not consume the delimiter that follows it: the
@@ -1674,9 +1675,9 @@ test data";
     #[test]
     fn test_template_malformed_unicode_escape_keeps_delimiter() {
         let short = tokens(r"`\u12`");
-        assert!(
-            matches!(&short[0].kind, TokenKind::TemplateStringLit(parts)
-                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())]),
+        assert_matches!(
+            &short[0].kind, TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u12".to_string())],
             "got {:?}",
             short[0].kind
         );
@@ -1684,22 +1685,22 @@ test data";
         // `\u{…}` scans hex digits only, so an unclosed brace stops at the
         // backtick instead of running to EOF.
         let unclosed = tokens(r"`\u{12` + 1");
-        assert!(
-            matches!(&unclosed[0].kind, TokenKind::TemplateStringLit(parts)
-                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())]),
+        assert_matches!(
+            &unclosed[0].kind, TokenKind::TemplateStringLit(parts)
+                if parts.as_slice() == [TemplateTokenPart::Literal(r"\u{12".to_string())],
             "got {:?}",
             unclosed[0].kind
         );
-        assert!(matches!(unclosed[1].kind, TokenKind::Plus));
+        assert_matches!(unclosed[1].kind, TokenKind::Plus);
 
         // A plain string behaves the same way.
         let plain = tokens(r#""\u{12" + 1"#);
-        assert!(
-            matches!(&plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12"),
+        assert_matches!(
+            &plain[0].kind, TokenKind::StringLit(raw) if raw == r"\u{12",
             "got {:?}",
             plain[0].kind
         );
-        assert!(matches!(plain[1].kind, TokenKind::Plus));
+        assert_matches!(plain[1].kind, TokenKind::Plus);
     }
 
     /// The expression source and format specifier the interpolation scanner
@@ -1804,12 +1805,12 @@ test data";
     #[test]
     fn test_template_escapes_preserved_raw() {
         let t = tokens(r"`a\`b\{c\$d\u{1F600}eAf`");
-        assert!(
-            matches!(&t[0].kind, TokenKind::TemplateStringLit(parts)
+        assert_matches!(
+            &t[0].kind, TokenKind::TemplateStringLit(parts)
             if parts.as_slice()
                 == [TemplateTokenPart::Literal(
                     r"a\`b\{c\$d\u{1F600}eAf".to_string()
-                )]),
+                )],
             "got {:?}",
             t[0].kind
         );
@@ -1822,9 +1823,9 @@ test data";
         let tokens = tokens(source);
 
         // Should parse #, !, [ as tokens, not skip as shebang
-        assert!(matches!(tokens[0].kind, TokenKind::Hash));
-        assert!(matches!(tokens[1].kind, TokenKind::Not));
-        assert!(matches!(tokens[2].kind, TokenKind::LBracket));
+        assert_matches!(tokens[0].kind, TokenKind::Hash);
+        assert_matches!(tokens[1].kind, TokenKind::Not);
+        assert_matches!(tokens[2].kind, TokenKind::LBracket);
     }
 
     #[test]
@@ -1852,46 +1853,46 @@ test data";
     #[test]
     fn test_dot_dot_token() {
         let tokens = tokens("..x");
-        assert!(matches!(tokens[0].kind, TokenKind::DotDot));
-        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
+        assert_matches!(tokens[0].kind, TokenKind::DotDot);
+        assert_matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x");
     }
 
     #[test]
     fn test_dot_dot_dot_token() {
         let tokens = tokens("...x");
-        assert!(matches!(tokens[0].kind, TokenKind::DotDotDot));
-        assert!(matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x"));
+        assert_matches!(tokens[0].kind, TokenKind::DotDotDot);
+        assert_matches!(&tokens[1].kind, TokenKind::Ident(s) if s == "x");
     }
 
     #[test]
     fn test_dot_dot_lt_token() {
         let tokens = tokens("0..<10");
-        assert!(matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "0"));
-        assert!(matches!(tokens[1].kind, TokenKind::DotDotLt));
-        assert!(matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10"));
+        assert_matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "0");
+        assert_matches!(tokens[1].kind, TokenKind::DotDotLt);
+        assert_matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10");
     }
 
     #[test]
     fn test_dot_dot_eq_token() {
         let tokens = tokens("1..=10");
-        assert!(matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "1"));
-        assert!(matches!(tokens[1].kind, TokenKind::DotDotEq));
-        assert!(matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10"));
+        assert_matches!(&tokens[0].kind, TokenKind::NumberLit(s) if s == "1");
+        assert_matches!(tokens[1].kind, TokenKind::DotDotEq);
+        assert_matches!(&tokens[2].kind, TokenKind::NumberLit(s) if s == "10");
     }
 
     #[test]
     fn test_dot_dot_lt_with_chars() {
         let tokens = tokens("'a'..='z'");
-        assert!(matches!(&tokens[0].kind, TokenKind::CharLit(s) if s == "a"));
-        assert!(matches!(tokens[1].kind, TokenKind::DotDotEq));
-        assert!(matches!(&tokens[2].kind, TokenKind::CharLit(s) if s == "z"));
+        assert_matches!(&tokens[0].kind, TokenKind::CharLit(s) if s == "a");
+        assert_matches!(tokens[1].kind, TokenKind::DotDotEq);
+        assert_matches!(&tokens[2].kind, TokenKind::CharLit(s) if s == "z");
     }
 
     #[test]
     fn test_single_dot_followed_by_ident() {
         let tokens = tokens("a.b");
-        assert!(matches!(&tokens[0].kind, TokenKind::Ident(s) if s == "a"));
-        assert!(matches!(tokens[1].kind, TokenKind::Dot));
-        assert!(matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "b"));
+        assert_matches!(&tokens[0].kind, TokenKind::Ident(s) if s == "a");
+        assert_matches!(tokens[1].kind, TokenKind::Dot);
+        assert_matches!(&tokens[2].kind, TokenKind::Ident(s) if s == "b");
     }
 }

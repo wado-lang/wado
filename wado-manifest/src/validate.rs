@@ -305,6 +305,7 @@ fn validate_version_specifier(dep_name: &str, version: &str) -> Result<(), Manif
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     #[test]
     fn valid_names() {
@@ -341,8 +342,9 @@ version = "0.1.0"
 regex = { package = "docs:regex", version = "^0.1.0" }
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
-        assert!(
-            matches!(err, ManifestError::NoDefaultRegistry { .. }),
+        assert_matches!(
+            err,
+            ManifestError::NoDefaultRegistry { .. },
             "expected NoDefaultRegistry, got {err:?}"
         );
     }
@@ -387,7 +389,7 @@ name = "my app"
 version = "0.1.0"
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::InvalidName { .. }));
+        assert_matches!(err, ManifestError::InvalidName { .. });
     }
 
     #[test]
@@ -398,7 +400,7 @@ name = "app"
 version = "not-a-version"
 "#;
         let err = toml.parse::<crate::Manifest>().unwrap_err();
-        assert!(matches!(err, ManifestError::InvalidVersion { .. }));
+        assert_matches!(err, ManifestError::InvalidVersion { .. });
     }
 
     #[test]

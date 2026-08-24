@@ -4702,6 +4702,7 @@ impl CmPrimitiveType {
 mod tests {
     use super::*;
     use crate::token::Span;
+    use std::assert_matches;
 
     fn make_span() -> Span {
         Span::new(0, 0, 1, 1)
@@ -5023,14 +5024,14 @@ mod tests {
             .newtypes
             .insert(("pkg:b/b@1".into(), "Id".into()), named("i32"));
 
-        assert!(matches!(
+        assert_matches!(
             registry.local_newtype_base(Some("pkg:a/a@1"), "Id"),
             Some(("pkg:a/a@1", Type::Named(n))) if n.name == "f64"
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             registry.local_newtype_base(Some("pkg:b/b@1"), "Id"),
             Some(("pkg:b/b@1", Type::Named(n))) if n.name == "i32"
-        ));
+        );
         // A source-less reference to an ambiguous name resolves to nothing
         // rather than picking one arbitrarily.
         assert!(registry.local_newtype_base(None, "Id").is_none());
@@ -5122,16 +5123,16 @@ mod tests {
             .insert(("pkg:app/app@1".into(), "Celsius".into()), named("Temp"));
 
         let celsius = named_in(&mut registry, "Celsius", "pkg:app/app@1");
-        assert!(matches!(
+        assert_matches!(
             registry.resolve_type_preserving_local_newtypes(&celsius),
             Type::Named(n) if n.name == "Celsius"
-        ));
+        );
 
         let temp = named_in(&mut registry, "Temp", "wasi:clocks/types@0.3.0");
-        assert!(matches!(
+        assert_matches!(
             registry.resolve_type_preserving_local_newtypes(&temp),
             Type::Named(n) if n.name == "u64"
-        ));
+        );
     }
 
     #[test]

@@ -402,6 +402,7 @@ pub fn resolve_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
     use std::fs;
 
     #[test]
@@ -460,7 +461,7 @@ command = "src/main.wado"
         fs::write(tmp.path().join("wado.toml"), "invalid [[[toml").unwrap();
 
         let err = discover(tmp.path()).unwrap_err();
-        assert!(matches!(err, DiscoveryError::Parse(_)));
+        assert_matches!(err, DiscoveryError::Parse(_));
     }
 
     #[test]
@@ -825,9 +826,9 @@ authors = ["Alice"]
             "[package]\nname = \"helper\"\nlib = \"src/lib.wado\"\n",
         );
         let err = discover(&outside).unwrap_err();
-        assert!(
-            matches!(&err, DiscoveryError::Parse(e)
-                if matches!(e, wado_manifest::ManifestError::MissingField { field, .. } if field == "version")),
+        assert_matches!(
+            &err, DiscoveryError::Parse(e)
+                if matches!(e, wado_manifest::ManifestError::MissingField { field, .. } if field == "version"),
             "{err:?}"
         );
     }

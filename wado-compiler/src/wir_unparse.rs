@@ -166,7 +166,7 @@ impl<'a> WirUnparser<'a> {
         } else {
             // Fallback: strip "array<...>" wrapper from the display name.
             let tid = type_id.to_string();
-            if let Some(inner) = tid.strip_prefix("array<").and_then(|s| s.strip_suffix('>')) {
+            if let Some(inner) = tid.strip_circumfix("array<", ">") {
                 inner.to_string()
             } else {
                 tid

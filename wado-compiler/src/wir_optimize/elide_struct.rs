@@ -129,7 +129,7 @@ impl WirMutVisitor for FlattenSeqAssignments {
 }
 
 /// Outcome of scanning a using statement in evaluation order for the box's use.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BoxUseWalk {
     /// The use is reached with only pure, unconditional ops before it.
     Found,
@@ -455,6 +455,7 @@ impl WirMutVisitor for BoxLocalRetyper<'_> {
 mod adjacent_box_tests {
     use super::*;
     use crate::wir::{WirFuncId, WirType, WirTypeId};
+    use std::assert_matches;
     use std::rc::Rc;
 
     const NAME: &str = "b";
@@ -493,14 +494,14 @@ mod adjacent_box_tests {
     #[test]
     fn found_use_after_pure_arg() {
         let instr = call(vec![lget("other"), use_box()]);
-        assert!(matches!(walk(&instr), BoxUseWalk::Found));
+        assert_matches!(walk(&instr), BoxUseWalk::Found);
     }
 
     /// `sum + *b` — the use is the right operand of a pure add. Found.
     #[test]
     fn found_use_in_arithmetic() {
         let instr = WirInstr::I32Add(Box::new(lget("sum")), Box::new(use_box()));
-        assert!(matches!(walk(&instr), BoxUseWalk::Found));
+        assert_matches!(walk(&instr), BoxUseWalk::Found);
     }
 
     /// `f(g(), *b)` — a call is evaluated before the use, and it could mutate
@@ -508,7 +509,7 @@ mod adjacent_box_tests {
     #[test]
     fn blocked_by_call_before_use() {
         let instr = call(vec![call(vec![]), use_box()]);
-        assert!(matches!(walk(&instr), BoxUseWalk::Blocked));
+        assert_matches!(walk(&instr), BoxUseWalk::Blocked);
     }
 
     /// `*b` nested inside an `If` — the use is conditionally evaluated, so
@@ -521,7 +522,7 @@ mod adjacent_box_tests {
             then_body: vec![use_box()],
             else_body: Some(vec![WirInstr::I32Const(0)]),
         };
-        assert!(matches!(walk(&instr), BoxUseWalk::Blocked));
+        assert_matches!(walk(&instr), BoxUseWalk::Blocked);
     }
 
     /// A heap write before the use blocks: the write could change what the
@@ -536,7 +537,7 @@ mod adjacent_box_tests {
         };
         // `(struct.set …, *b)` modelled as a two-arg call so both are siblings.
         let instr = call(vec![write, use_box()]);
-        assert!(matches!(walk(&instr), BoxUseWalk::Blocked));
+        assert_matches!(walk(&instr), BoxUseWalk::Blocked);
     }
 
     /// A statement with no box use and no side effect is Pure — the scan may
@@ -545,7 +546,7 @@ mod adjacent_box_tests {
     #[test]
     fn pure_when_no_use() {
         let instr = WirInstr::I32Add(Box::new(lget("x")), Box::new(WirInstr::I32Const(1)));
-        assert!(matches!(walk(&instr), BoxUseWalk::Pure));
+        assert_matches!(walk(&instr), BoxUseWalk::Pure);
     }
 
     /// A heap read (non-target `StructGet`) before the use is fine — reads
@@ -560,7 +561,7 @@ mod adjacent_box_tests {
             result_ty: WirType::I32,
         };
         let instr = call(vec![other_read, use_box()]);
-        assert!(matches!(walk(&instr), BoxUseWalk::Found));
+        assert_matches!(walk(&instr), BoxUseWalk::Found);
     }
 
     /// The moved initializer must be free of calls and writes: a heap read is
@@ -599,6 +600,6 @@ mod adjacent_box_tests {
         let WirInstr::Call { args, .. } = &instr else {
             panic!("expected call");
         };
-        assert!(matches!(args[1], WirInstr::I32Const(42)));
+        assert_matches!(args[1], WirInstr::I32Const(42));
     }
 }
