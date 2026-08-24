@@ -8476,6 +8476,31 @@ line 2
         assert!(impl_block.methods.is_empty());
     }
 
+    /// `AstSpans::contextual` keys on this span's byte start, so a shift stops
+    /// the highlighter colouring the word without failing a `kind` assertion.
+    #[test]
+    fn rest_clause_keyword_span_covers_the_word() {
+        for (source, kind, word) in [
+            ("impl Foo for Bar { ..trap }", RestClause::Trap, "trap"),
+            (
+                "impl Foo for Bar { ..forward }",
+                RestClause::Forward,
+                "forward",
+            ),
+        ] {
+            let module = parse(source).unwrap();
+            let Item::Impl(impl_block) = &module.items[0] else {
+                panic!("expected impl block");
+            };
+            let rest = impl_block.rest.expect("a rest clause");
+            assert_eq!(rest.kind, kind);
+            assert_eq!(
+                &source[rest.keyword_span.start..rest.keyword_span.end],
+                word
+            );
+        }
+    }
+
     #[test]
     fn parse_impl_block_bare_rest_rejected() {
         let source = r"
