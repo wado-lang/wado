@@ -1,0 +1,16 @@
+// Module B declares a `Node` of the same name and implements `Unwrap` for it
+// in its own module, binding `Out` to its *second* slot. A registration
+// mis-routed here by name would overwrite that with a first-slot answer.
+use { Unwrap } from "./cross_module_same_name_gassoc_trait.wado";
+
+pub struct Node<K, V> {
+    pub k: K,
+    pub v: V,
+}
+
+impl<K, V> Unwrap for Node<K, V> {
+    type Out = V;
+    fn unwrap_it(&self) -> Self::Out {
+        return self.v;
+    }
+}

@@ -3453,8 +3453,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if impl_block.trait_type.is_none() || impl_block.associated_types.is_empty() {
                     continue;
                 }
-                // Determine the struct name (base name without type args)
-                let struct_name = super::trait_env::get_type_name_static(&impl_block.ty);
                 // The header's own reference site says which trait declares
                 // these bindings; a block naming a trait that reaches no
                 // declaration registers nothing.
@@ -3510,16 +3508,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => continue,
                     };
 
-                    // The impl need not live in the type's module, so fall
-                    // back to every loaded module before giving up.
-                    let base_decl = {
-                        let tt = type_table.borrow();
-                        tt.decl_by_name(&struct_name, module_source).or_else(|| {
-                            modules
-                                .keys()
-                                .find_map(|ms| tt.decl_by_name(&struct_name, ms))
-                        })
-                    };
+                    // The target is named at the header's own site, which the
+                    // module that wrote it answered for — the same way
+                    // `trait_key` above is read. Looking it up by the written
+                    // name instead reached whichever module declares that
+                    // spelling first, a build-order pick rather than an answer.
+                    //
+                    // Rendered back to the declaring node because this key is
+                    // still `AstId`-shaped: its readers arrive through
+                    // `decl_of_type`, which also answers for monomorphized
+                    // instances and `BuiltinArray`, neither of which carries a
+                    // `DefId`.
+                    let base_decl = crate::resolve::head_site(&impl_block.ty)
+                        .and_then(|site| resolutions.declared(site))
+                        .map(|def| resolutions.defs().ast_id(def));
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,

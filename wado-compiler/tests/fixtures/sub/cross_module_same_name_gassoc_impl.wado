@@ -1,0 +1,11 @@
+// The impl for A's `Node`, written outside A. Its target is named at the
+// header's own site; a scan by the written name reaches B's `Node` too.
+use { Unwrap } from "./cross_module_same_name_gassoc_trait.wado";
+use { Node } from "./cross_module_same_name_gassoc_a.wado";
+
+impl<T> Unwrap for Node<T> {
+    type Out = T;
+    fn unwrap_it(&self) -> Self::Out {
+        return self.v;
+    }
+}
