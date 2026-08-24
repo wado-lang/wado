@@ -1801,12 +1801,11 @@ impl MethodOwner {
 
 #[derive(Debug, Clone)]
 pub(super) struct MethodInfo {
-    /// The declaring node of the method this lookup selected, taken from its
-    /// [`crate::elaborator::sig::MethodSig`]. The use→def edge for a call is
-    /// recorded from here, so it names the impl dispatch actually chose.
-    /// `None` where no declaration backs the signature: the tuple builtins,
-    /// an auto-derived `Eq` / `Ord`, and the error-recovery placeholder.
-    pub(super) method_ast_id: Option<ast::AstId>,
+    /// The method this lookup selected. A call's use→def edge is recorded from
+    /// here, so it names the impl dispatch chose. `None` where no declaration
+    /// backs the signature: tuple builtins, auto-derived `Eq` / `Ord`, the
+    /// error-recovery placeholder.
+    pub(super) method_def: Option<crate::defs::DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)
@@ -2587,6 +2586,9 @@ pub(super) struct IndexValueTraitInfo {
 /// Info about an operator trait implementation
 #[derive(Clone)]
 pub(super) struct ArithmeticTraitInfo {
+    /// The `impl` block that matched. The module a dispatch is recorded
+    /// against is read off it, so no rendering is compared to find one.
+    pub(super) impl_def: crate::defs::DefId,
     /// The Output associated type
     pub(super) output_type: TypeId,
     /// Self kind for the method (&self)
@@ -2611,6 +2613,10 @@ pub(super) struct ResolvedTraitMethod {
     pub(super) trait_name: crate::name::FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
+    /// The `impl` block dispatch matched. `None` where none is named: an
+    /// auto-derived `Eq` / `Ord`, and a method reached through a type
+    /// parameter's bound, whose block monomorphization picks.
+    pub(super) impl_def: Option<crate::defs::DefId>,
     /// Written name of the type whose impl matched — the impl-index key. For
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.

@@ -528,6 +528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         trait_name: eq_trait_name,
                         method_name: "eq".to_string(),
+                        impl_def: None,
                         impl_name: name.clone(),
                         impl_type_id: None,
                         self_kind: info.self_kind,
@@ -569,6 +570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         trait_name: ord_trait_name,
                         method_name: "cmp".to_string(),
+                        impl_def: None,
                         impl_name: name.clone(),
                         impl_type_id: None,
                         self_kind: info.self_kind,
@@ -680,6 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
+                        impl_def: Some(trait_info.impl_def),
                         impl_name,
                         impl_type_id: Some(impl_type_id),
                         self_kind: trait_info.self_kind,
@@ -722,6 +725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         trait_name: found_trait,
                         method_name: method_name.to_string(),
+                        impl_def: None,
                         impl_name: name.clone(),
                         impl_type_id: None,
                         self_kind: info.self_kind,
@@ -787,6 +791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = ResolvedTraitMethod {
                     trait_name: found_trait,
                     method_name: shift_method.to_string(),
+                    impl_def: None,
                     impl_name: name.clone(),
                     impl_type_id: None,
                     self_kind: info.self_kind,
@@ -870,6 +875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         trait_name: trait_info.trait_name,
                         method_name: method_name.to_string(),
+                        impl_def: Some(trait_info.impl_def),
                         impl_name,
                         impl_type_id: Some(impl_type_id),
                         self_kind: trait_info.self_kind,
@@ -1161,6 +1167,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = ResolvedTraitMethod {
                     trait_name: found_trait,
                     method_name: method_name.to_string(),
+                    impl_def: None,
                     impl_name: name.clone(),
                     impl_type_id: None,
                     self_kind: info.self_kind,
@@ -1960,20 +1967,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         method_info.is_type_param_receiver = resolved.is_type_param_receiver;
 
-        // Resolve the impl's module from the receiver's *actual* type, not its
-        // bare name: same-named structs in different modules each have their own
-        // operator impls (e.g. auto-derived `Eq`/`Ord`), and a by-name lookup
-        // would route every call to whichever registered first. `impl_name` is
-        // the newtype-chain link the impl was found on, so key off that link —
-        // peeling to the base instead would send an impl written on the newtype
-        // to the base's module. Fall back to the by-name lookup when the
-        // receiver carries no declaring module.
-        let module_source = self
-            .impl_target_decl_key(receiver.type_id, &resolved.impl_name)
-            .map_or_else(
-                || self.declaring_module_of(&resolved.impl_name),
-                |def| self.tysys.resolutions.defs().module(def).clone(),
-            );
+        // Only a *concrete* block's function lives in the block's module: a
+        // generic block's instance is materialised in the receiver type's,
+        // the convention `TraitEnv::concrete_impl_module_for` encodes.
+        //
+        // Everything else answers from the receiver's newtype chain, keyed on
+        // the link the lookup was made on — peeling to the base would send an
+        // impl written on the newtype to the base's module.
+        let defs = self.tysys.resolutions.defs();
+        let concrete_impl = resolved.impl_def.filter(|def| {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(def)
+                .is_some_and(super::trait_env::ImplHeader::is_concrete)
+        });
+        let module_source = match concrete_impl {
+            Some(def) => defs.module(def).clone(),
+            None => self
+                .impl_target_decl_key(receiver.type_id, &resolved.impl_name)
+                .map_or_else(
+                    || self.declaring_module_of(&resolved.impl_name),
+                    |def| defs.module(def).clone(),
+                ),
+        };
         let function_ref = FunctionRef {
             module_source,
             name: mangled_method_name,

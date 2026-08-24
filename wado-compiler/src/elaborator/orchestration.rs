@@ -1726,15 +1726,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .resource_method_ids
                         .insert(key.clone(), *method_id);
                 }
-                for (ast_id, sig) in &sem.decls.impl_sigs {
-                    signatures.impl_sigs.insert(*ast_id, sig.clone());
+                for (def, sig) in &sem.decls.impl_sigs {
+                    signatures.impl_sigs.insert(*def, sig.clone());
                 }
                 for (ast_id, sig) in &sem.decls.trait_sigs {
                     signatures.trait_sigs.insert(*ast_id, sig.clone());
                 }
-                signatures
-                    .function_sigs
-                    .insert(module_source.clone(), Rc::clone(&sem.decls.function_sigs));
+                signatures.function_sigs.extend(
+                    sem.decls
+                        .function_sigs
+                        .iter()
+                        .map(|(def, sig)| (*def, Rc::clone(sig))),
+                );
                 signatures.globals.insert(
                     module_source.clone(),
                     sem.decls.current_module_globals.clone(),
@@ -3756,8 +3759,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if impl_block.trait_type.is_none() || impl_block.associated_types.is_empty() {
                     continue;
                 }
-                // Determine the struct name (base name without type args)
-                let struct_name = super::trait_env::get_type_name_static(&impl_block.ty);
                 // The header's own reference site says which trait declares
                 // these bindings; a block naming a trait that reaches no
                 // declaration registers nothing.
@@ -3813,16 +3814,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         _ => continue,
                     };
 
-                    // The impl need not live in the type's module, so fall
-                    // back to every loaded module before giving up.
-                    let base_decl = {
-                        let tt = type_table.borrow();
-                        tt.decl_by_name(&struct_name, module_source).or_else(|| {
-                            modules
-                                .keys()
-                                .find_map(|ms| tt.decl_by_name(&struct_name, ms))
-                        })
-                    };
+                    // The target is named at the header's own site, like
+                    // `trait_key` above. Rendered back to the declaring node
+                    // because the key stays `AstId`-shaped: its readers arrive
+                    // through `decl_of_type`, which also answers for
+                    // monomorphized instances and `BuiltinArray`.
+                    let base_decl = crate::resolve::head_site(&impl_block.ty)
+                        .and_then(|site| resolutions.declared(site))
+                        .map(|def| resolutions.defs().ast_id(def));
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,

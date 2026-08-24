@@ -545,7 +545,7 @@ pub(crate) struct StaticMethodDispatch {
     /// it after impl lookup and mangling.
     pub(crate) function_ref: crate::tir::FunctionRef,
     /// Per-argument `is_mut` flag derived from the resolved parameter
-    /// signature (`lookup_static_method_param_is_mut`). Reify zips this
+    /// signature (`lookup_static_method_param_is_mut_keyed`). Reify zips this
     /// with the reified argument exprs to build [`crate::tir::CallArg`]s
     /// with the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
