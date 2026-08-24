@@ -360,12 +360,14 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
         match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => args.iter().enumerate().any(|(pos, arg)| {
                 match operand_borrows_local(body, arg.expr, idx, gate) {
-                    None => false,
-                    Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
                     // An element read hands back the element and writes
                     // nothing through the spine, exactly as the subscript node
                     // it lowers from did; the element handle's own uses decide.
-                    Some(BorrowShape::Derived(_)) if gate.reads_element(*func_id) => false,
+                    // The spine may be the local itself — a `[…]` literal binds
+                    // a raw `Array<T>` (WEP 2026-08-24) — or a field of it.
+                    Some(_) if gate.reads_element(*func_id) => false,
+                    None => false,
+                    Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
                     Some(BorrowShape::Derived(arg_ty)) => {
                         !gate.instruction_passes_through(*func_id, pos, arg_ty)
                             && (gate.callee_ref_param_leaks(*func_id, pos)

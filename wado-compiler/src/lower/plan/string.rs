@@ -179,7 +179,7 @@ impl StringCollector {
                     self.collect_expr(&field.value);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
                     self.collect_expr(elem);
                 }

@@ -3770,9 +3770,12 @@ impl Parser {
         // parses it as a turbofish-attached identifier or rejects a duplicate
         // turbofish. `Name::<A>::<B>` falls into the same backtrack: the second
         // `<` is not a method identifier.
+        // The segment may be a contextual keyword — `Type::<T>::from(x)` is the
+        // one every `From` impl is called through — so admit whatever
+        // `consume_ident` below will accept, not `Ident` alone.
         if spec_ok
             && self.check(&TokenKind::ColonColon)
-            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+            && self.peek_nth(1).kind.as_ident_name().is_some()
         {
             self.advance(); // consume ::
             let (method, method_span) = self.consume_ident_with_span()?;
@@ -3864,8 +3867,7 @@ impl Parser {
         });
         let mut qualified_name = format!("{name}::{first_seg_name}");
         let mut end_span = first_seg_span;
-        while self.check(&TokenKind::ColonColon)
-            && matches!(self.peek_nth(1).kind, TokenKind::Ident(_))
+        while self.check(&TokenKind::ColonColon) && self.peek_nth(1).kind.as_ident_name().is_some()
         {
             self.advance(); // consume ::
             let seg_span = self.peek().span;

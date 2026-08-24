@@ -2924,22 +2924,24 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(iter) {
     let result: ref "core:prelude//List<u8>";
+    let elements: ref Array<u8>;
     let byte: u8;
-    let _licm_used_13: i32;
-    let _licm_repr_14: ref Array<u8>;
-    let __hfs_index_15: i32;
-    result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
-    _licm_used_13 = iter.used;
-    _licm_repr_14 = iter.repr;
-    __hfs_index_15 = iter.index;
+    let _licm_used_10: i32;
+    let _licm_repr_11: ref Array<u8>;
+    let __hfs_index_12: i32;
+    elements = array.new_fixed<u8>();
+    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
+    _licm_used_10 = iter.used;
+    _licm_repr_11 = iter.repr;
+    __hfs_index_12 = iter.index;
     b363: block {
         l364: loop {
-            if __hfs_index_15 >= _licm_used_13 {
-                iter.index = __hfs_index_15;
+            if __hfs_index_12 >= _licm_used_10 {
+                iter.index = __hfs_index_12;
                 break b363;
             }
-            byte = builtin::array_get_value<u8>(_licm_repr_14, __hfs_index_15);
-            __hfs_index_15 = __hfs_index_15 + 1;
+            byte = builtin::array_get_value<u8>(_licm_repr_11, __hfs_index_12);
+            __hfs_index_12 = __hfs_index_12 + 1;
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, byte);
             continue l364;
         };
@@ -2949,14 +2951,16 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter) {
     let result: ref "core:prelude//List<u8>";
-    result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    let elements: ref Array<u8>;
+    elements = array.new_fixed<u8>();
+    result = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     b366: block {
         l367: loop {
-            let __match_4_mv_0: i32;
-            let __match_4_mv_1: u8;
-            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
-            if __match_4_mv_0 == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_4_mv_1);
+            let __match_3_mv_0: i32;
+            let __match_3_mv_1: u8;
+            multivalue_bind [__match_3_mv_0, __match_3_mv_1] = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(iter);
+            if __match_3_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(result, __match_3_mv_1);
             } else {
                 break b366;
             }

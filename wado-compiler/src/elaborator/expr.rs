@@ -4033,27 +4033,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         // Gather each base's field list once, reused below. A `TreeMap` is a
-        // struct too, so an implemented `KeyValueLiteral` marks it as a map
-        // rather than a composable struct.
+        // struct too, so a `From<Array<[K, V]>>` impl marks it as a map rather
+        // than a composable struct.
         let spread_base_types: Vec<TypeId> = struct_lit
             .spreads
             .iter()
             .map(|spread| self.resolve_expr(&spread.expr, ctx, None))
             .collect();
-        let kv_literal = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::KeyValueLiteral);
         let base_info: Vec<BaseSpreadInfo> = spread_base_types
-            .iter()
-            .map(|&t| {
-                let is_map = kv_literal.is_some_and(|trait_| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        t,
-                        trait_,
-                    )
-                });
+            .clone()
+            .into_iter()
+            .map(|t| {
+                let is_map = self.is_key_value_literal_target(t);
                 let fields = if is_map {
                     None
                 } else {
@@ -4066,12 +4057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let has_spread = !struct_lit.spreads.is_empty();
         let compose_union = has_spread && base_info.iter().all(|(m, f)| !m && f.is_some());
         let all_map = base_info.iter().all(|(m, _)| *m);
-        let expected_is_map = expected_type.is_some_and(|t| {
-            kv_literal.is_some_and(|trait_| {
-                self.tysys
-                    .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), t, trait_)
-            })
-        });
+        let expected_is_map = expected_type.is_some_and(|t| self.is_key_value_literal_target(t));
         // A pure key-value merge with a map-typed target is the only valid
         // non-composition spread.
         let is_kv_merge = has_spread && all_map && expected_is_map;

@@ -588,11 +588,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     {
                         (coerced.type_id, target_type)
                     } else {
-                        // Target type does not implement KeyValueLiteral
+                        // The target builds from no `Array<[K, V]>` at all.
                         let type_name = self.tysys.type_table.borrow().type_name(target_type);
                         let _ = self.emit(TypeError::MissingTraitImpl {
                             type_name,
-                            trait_name: "KeyValueLiteral".to_string(),
+                            trait_name:
+                                "From<Array<[K, V]>>, so it cannot be built from an object literal"
+                                    .to_string(),
                             span: struct_lit.span,
                         });
                         let value_type = self.resolve_expr(ast_value, ctx, None);

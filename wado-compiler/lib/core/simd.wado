@@ -334,50 +334,57 @@ impl Shr for i8x16 {
     }
 }
 
-pub struct I8x16Builder {
-    vec: v128,
-    index: i32,
+// A lane the literal does not write stays zero. `array_len` is a constant at
+// every literal site, so the guard folds away (WEP 2026-08-24).
+fn lane_i32(lanes: &Array<i32>, index: i32) -> i32 {
+    if index < builtin::array_len(lanes) {
+        return builtin::array_get_value(lanes, index);
+    }
+    return 0;
 }
 
-impl SequenceLiteralBuilder for I8x16Builder {
-    type Element = i32;
-    type Output = i8x16;
-
-    fn new_literal(capacity: i32) -> I8x16Builder {
-        return I8x16Builder { vec: builtin::i8x16_splat(0), index: 0 };
+fn lane_i64(lanes: &Array<i64>, index: i32) -> i64 {
+    if index < builtin::array_len(lanes) {
+        return builtin::array_get_value(lanes, index);
     }
-
-    fn push_literal(&mut self, value: i32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i8x16_replace_lane(0, self.vec, value),
-            1 => builtin::i8x16_replace_lane(1, self.vec, value),
-            2 => builtin::i8x16_replace_lane(2, self.vec, value),
-            3 => builtin::i8x16_replace_lane(3, self.vec, value),
-            4 => builtin::i8x16_replace_lane(4, self.vec, value),
-            5 => builtin::i8x16_replace_lane(5, self.vec, value),
-            6 => builtin::i8x16_replace_lane(6, self.vec, value),
-            7 => builtin::i8x16_replace_lane(7, self.vec, value),
-            8 => builtin::i8x16_replace_lane(8, self.vec, value),
-            9 => builtin::i8x16_replace_lane(9, self.vec, value),
-            10 => builtin::i8x16_replace_lane(10, self.vec, value),
-            11 => builtin::i8x16_replace_lane(11, self.vec, value),
-            12 => builtin::i8x16_replace_lane(12, self.vec, value),
-            13 => builtin::i8x16_replace_lane(13, self.vec, value),
-            14 => builtin::i8x16_replace_lane(14, self.vec, value),
-            _ => builtin::i8x16_replace_lane(15, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> i8x16 {
-        return self.vec as i8x16;
-    }
+    return 0;
 }
 
-impl SequenceLiteral for i8x16 {
-    type Element = i32;
-    type Builder = I8x16Builder;
+fn lane_f32(lanes: &Array<f32>, index: i32) -> f32 {
+    if index < builtin::array_len(lanes) {
+        return builtin::array_get_value(lanes, index);
+    }
+    return 0.0;
+}
+
+fn lane_f64(lanes: &Array<f64>, index: i32) -> f64 {
+    if index < builtin::array_len(lanes) {
+        return builtin::array_get_value(lanes, index);
+    }
+    return 0.0;
+}
+
+impl From<Array<i32>> for i8x16 {
+    fn from(lanes: Array<i32>) -> i8x16 {
+        let mut v = builtin::i8x16_splat(0);
+        v = builtin::i8x16_replace_lane(0, v, lane_i32(&lanes, 0));
+        v = builtin::i8x16_replace_lane(1, v, lane_i32(&lanes, 1));
+        v = builtin::i8x16_replace_lane(2, v, lane_i32(&lanes, 2));
+        v = builtin::i8x16_replace_lane(3, v, lane_i32(&lanes, 3));
+        v = builtin::i8x16_replace_lane(4, v, lane_i32(&lanes, 4));
+        v = builtin::i8x16_replace_lane(5, v, lane_i32(&lanes, 5));
+        v = builtin::i8x16_replace_lane(6, v, lane_i32(&lanes, 6));
+        v = builtin::i8x16_replace_lane(7, v, lane_i32(&lanes, 7));
+        v = builtin::i8x16_replace_lane(8, v, lane_i32(&lanes, 8));
+        v = builtin::i8x16_replace_lane(9, v, lane_i32(&lanes, 9));
+        v = builtin::i8x16_replace_lane(10, v, lane_i32(&lanes, 10));
+        v = builtin::i8x16_replace_lane(11, v, lane_i32(&lanes, 11));
+        v = builtin::i8x16_replace_lane(12, v, lane_i32(&lanes, 12));
+        v = builtin::i8x16_replace_lane(13, v, lane_i32(&lanes, 13));
+        v = builtin::i8x16_replace_lane(14, v, lane_i32(&lanes, 14));
+        v = builtin::i8x16_replace_lane(15, v, lane_i32(&lanes, 15));
+        return v as i8x16;
+    }
 }
 
 impl i16x8 {
@@ -632,42 +639,19 @@ impl Shr for i16x8 {
     }
 }
 
-pub struct I16x8Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for I16x8Builder {
-    type Element = i32;
-    type Output = i16x8;
-
-    fn new_literal(capacity: i32) -> I16x8Builder {
-        return I16x8Builder { vec: builtin::i16x8_splat(0), index: 0 };
+impl From<Array<i32>> for i16x8 {
+    fn from(lanes: Array<i32>) -> i16x8 {
+        let mut v = builtin::i16x8_splat(0);
+        v = builtin::i16x8_replace_lane(0, v, lane_i32(&lanes, 0));
+        v = builtin::i16x8_replace_lane(1, v, lane_i32(&lanes, 1));
+        v = builtin::i16x8_replace_lane(2, v, lane_i32(&lanes, 2));
+        v = builtin::i16x8_replace_lane(3, v, lane_i32(&lanes, 3));
+        v = builtin::i16x8_replace_lane(4, v, lane_i32(&lanes, 4));
+        v = builtin::i16x8_replace_lane(5, v, lane_i32(&lanes, 5));
+        v = builtin::i16x8_replace_lane(6, v, lane_i32(&lanes, 6));
+        v = builtin::i16x8_replace_lane(7, v, lane_i32(&lanes, 7));
+        return v as i16x8;
     }
-
-    fn push_literal(&mut self, value: i32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i16x8_replace_lane(0, self.vec, value),
-            1 => builtin::i16x8_replace_lane(1, self.vec, value),
-            2 => builtin::i16x8_replace_lane(2, self.vec, value),
-            3 => builtin::i16x8_replace_lane(3, self.vec, value),
-            4 => builtin::i16x8_replace_lane(4, self.vec, value),
-            5 => builtin::i16x8_replace_lane(5, self.vec, value),
-            6 => builtin::i16x8_replace_lane(6, self.vec, value),
-            _ => builtin::i16x8_replace_lane(7, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> i16x8 {
-        return self.vec as i16x8;
-    }
-}
-
-impl SequenceLiteral for i16x8 {
-    type Element = i32;
-    type Builder = I16x8Builder;
 }
 
 impl i32x4 {
@@ -905,38 +889,15 @@ impl Shr for i32x4 {
     }
 }
 
-pub struct I32x4Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for I32x4Builder {
-    type Element = i32;
-    type Output = i32x4;
-
-    fn new_literal(capacity: i32) -> I32x4Builder {
-        return I32x4Builder { vec: builtin::i32x4_splat(0), index: 0 };
+impl From<Array<i32>> for i32x4 {
+    fn from(lanes: Array<i32>) -> i32x4 {
+        let mut v = builtin::i32x4_splat(0);
+        v = builtin::i32x4_replace_lane(0, v, lane_i32(&lanes, 0));
+        v = builtin::i32x4_replace_lane(1, v, lane_i32(&lanes, 1));
+        v = builtin::i32x4_replace_lane(2, v, lane_i32(&lanes, 2));
+        v = builtin::i32x4_replace_lane(3, v, lane_i32(&lanes, 3));
+        return v as i32x4;
     }
-
-    fn push_literal(&mut self, value: i32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i32x4_replace_lane(0, self.vec, value),
-            1 => builtin::i32x4_replace_lane(1, self.vec, value),
-            2 => builtin::i32x4_replace_lane(2, self.vec, value),
-            _ => builtin::i32x4_replace_lane(3, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> i32x4 {
-        return self.vec as i32x4;
-    }
-}
-
-impl SequenceLiteral for i32x4 {
-    type Element = i32;
-    type Builder = I32x4Builder;
 }
 
 impl i64x2 {
@@ -1108,36 +1069,13 @@ impl Shr for i64x2 {
     }
 }
 
-pub struct I64x2Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for I64x2Builder {
-    type Element = i64;
-    type Output = i64x2;
-
-    fn new_literal(capacity: i32) -> I64x2Builder {
-        return I64x2Builder { vec: builtin::i64x2_splat(0), index: 0 };
+impl From<Array<i64>> for i64x2 {
+    fn from(lanes: Array<i64>) -> i64x2 {
+        let mut v = builtin::i64x2_splat(0);
+        v = builtin::i64x2_replace_lane(0, v, lane_i64(&lanes, 0));
+        v = builtin::i64x2_replace_lane(1, v, lane_i64(&lanes, 1));
+        return v as i64x2;
     }
-
-    fn push_literal(&mut self, value: i64) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i64x2_replace_lane(0, self.vec, value),
-            _ => builtin::i64x2_replace_lane(1, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> i64x2 {
-        return self.vec as i64x2;
-    }
-}
-
-impl SequenceLiteral for i64x2 {
-    type Element = i64;
-    type Builder = I64x2Builder;
 }
 
 impl u8x16 {
@@ -1343,50 +1281,27 @@ impl Shr for u8x16 {
     }
 }
 
-pub struct U8x16Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for U8x16Builder {
-    type Element = i32;
-    type Output = u8x16;
-
-    fn new_literal(capacity: i32) -> U8x16Builder {
-        return U8x16Builder { vec: builtin::i8x16_splat(0), index: 0 };
+impl From<Array<i32>> for u8x16 {
+    fn from(lanes: Array<i32>) -> u8x16 {
+        let mut v = builtin::i8x16_splat(0);
+        v = builtin::i8x16_replace_lane(0, v, lane_i32(&lanes, 0));
+        v = builtin::i8x16_replace_lane(1, v, lane_i32(&lanes, 1));
+        v = builtin::i8x16_replace_lane(2, v, lane_i32(&lanes, 2));
+        v = builtin::i8x16_replace_lane(3, v, lane_i32(&lanes, 3));
+        v = builtin::i8x16_replace_lane(4, v, lane_i32(&lanes, 4));
+        v = builtin::i8x16_replace_lane(5, v, lane_i32(&lanes, 5));
+        v = builtin::i8x16_replace_lane(6, v, lane_i32(&lanes, 6));
+        v = builtin::i8x16_replace_lane(7, v, lane_i32(&lanes, 7));
+        v = builtin::i8x16_replace_lane(8, v, lane_i32(&lanes, 8));
+        v = builtin::i8x16_replace_lane(9, v, lane_i32(&lanes, 9));
+        v = builtin::i8x16_replace_lane(10, v, lane_i32(&lanes, 10));
+        v = builtin::i8x16_replace_lane(11, v, lane_i32(&lanes, 11));
+        v = builtin::i8x16_replace_lane(12, v, lane_i32(&lanes, 12));
+        v = builtin::i8x16_replace_lane(13, v, lane_i32(&lanes, 13));
+        v = builtin::i8x16_replace_lane(14, v, lane_i32(&lanes, 14));
+        v = builtin::i8x16_replace_lane(15, v, lane_i32(&lanes, 15));
+        return v as u8x16;
     }
-
-    fn push_literal(&mut self, value: i32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i8x16_replace_lane(0, self.vec, value),
-            1 => builtin::i8x16_replace_lane(1, self.vec, value),
-            2 => builtin::i8x16_replace_lane(2, self.vec, value),
-            3 => builtin::i8x16_replace_lane(3, self.vec, value),
-            4 => builtin::i8x16_replace_lane(4, self.vec, value),
-            5 => builtin::i8x16_replace_lane(5, self.vec, value),
-            6 => builtin::i8x16_replace_lane(6, self.vec, value),
-            7 => builtin::i8x16_replace_lane(7, self.vec, value),
-            8 => builtin::i8x16_replace_lane(8, self.vec, value),
-            9 => builtin::i8x16_replace_lane(9, self.vec, value),
-            10 => builtin::i8x16_replace_lane(10, self.vec, value),
-            11 => builtin::i8x16_replace_lane(11, self.vec, value),
-            12 => builtin::i8x16_replace_lane(12, self.vec, value),
-            13 => builtin::i8x16_replace_lane(13, self.vec, value),
-            14 => builtin::i8x16_replace_lane(14, self.vec, value),
-            _ => builtin::i8x16_replace_lane(15, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> u8x16 {
-        return self.vec as u8x16;
-    }
-}
-
-impl SequenceLiteral for u8x16 {
-    type Element = i32;
-    type Builder = U8x16Builder;
 }
 
 impl u16x8 {
@@ -1540,42 +1455,19 @@ impl Shr for u16x8 {
     }
 }
 
-pub struct U16x8Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for U16x8Builder {
-    type Element = i32;
-    type Output = u16x8;
-
-    fn new_literal(capacity: i32) -> U16x8Builder {
-        return U16x8Builder { vec: builtin::i16x8_splat(0), index: 0 };
+impl From<Array<i32>> for u16x8 {
+    fn from(lanes: Array<i32>) -> u16x8 {
+        let mut v = builtin::i16x8_splat(0);
+        v = builtin::i16x8_replace_lane(0, v, lane_i32(&lanes, 0));
+        v = builtin::i16x8_replace_lane(1, v, lane_i32(&lanes, 1));
+        v = builtin::i16x8_replace_lane(2, v, lane_i32(&lanes, 2));
+        v = builtin::i16x8_replace_lane(3, v, lane_i32(&lanes, 3));
+        v = builtin::i16x8_replace_lane(4, v, lane_i32(&lanes, 4));
+        v = builtin::i16x8_replace_lane(5, v, lane_i32(&lanes, 5));
+        v = builtin::i16x8_replace_lane(6, v, lane_i32(&lanes, 6));
+        v = builtin::i16x8_replace_lane(7, v, lane_i32(&lanes, 7));
+        return v as u16x8;
     }
-
-    fn push_literal(&mut self, value: i32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i16x8_replace_lane(0, self.vec, value),
-            1 => builtin::i16x8_replace_lane(1, self.vec, value),
-            2 => builtin::i16x8_replace_lane(2, self.vec, value),
-            3 => builtin::i16x8_replace_lane(3, self.vec, value),
-            4 => builtin::i16x8_replace_lane(4, self.vec, value),
-            5 => builtin::i16x8_replace_lane(5, self.vec, value),
-            6 => builtin::i16x8_replace_lane(6, self.vec, value),
-            _ => builtin::i16x8_replace_lane(7, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> u16x8 {
-        return self.vec as u16x8;
-    }
-}
-
-impl SequenceLiteral for u16x8 {
-    type Element = i32;
-    type Builder = U16x8Builder;
 }
 
 impl u32x4 {
@@ -1709,38 +1601,15 @@ impl Shr for u32x4 {
     }
 }
 
-pub struct U32x4Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for U32x4Builder {
-    type Element = i32;
-    type Output = u32x4;
-
-    fn new_literal(capacity: i32) -> U32x4Builder {
-        return U32x4Builder { vec: builtin::i32x4_splat(0), index: 0 };
+impl From<Array<i32>> for u32x4 {
+    fn from(lanes: Array<i32>) -> u32x4 {
+        let mut v = builtin::i32x4_splat(0);
+        v = builtin::i32x4_replace_lane(0, v, lane_i32(&lanes, 0));
+        v = builtin::i32x4_replace_lane(1, v, lane_i32(&lanes, 1));
+        v = builtin::i32x4_replace_lane(2, v, lane_i32(&lanes, 2));
+        v = builtin::i32x4_replace_lane(3, v, lane_i32(&lanes, 3));
+        return v as u32x4;
     }
-
-    fn push_literal(&mut self, value: i32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i32x4_replace_lane(0, self.vec, value),
-            1 => builtin::i32x4_replace_lane(1, self.vec, value),
-            2 => builtin::i32x4_replace_lane(2, self.vec, value),
-            _ => builtin::i32x4_replace_lane(3, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> u32x4 {
-        return self.vec as u32x4;
-    }
-}
-
-impl SequenceLiteral for u32x4 {
-    type Element = i32;
-    type Builder = U32x4Builder;
 }
 
 impl u64x2 {
@@ -1848,36 +1717,13 @@ impl Shr for u64x2 {
     }
 }
 
-pub struct U64x2Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for U64x2Builder {
-    type Element = i64;
-    type Output = u64x2;
-
-    fn new_literal(capacity: i32) -> U64x2Builder {
-        return U64x2Builder { vec: builtin::i64x2_splat(0), index: 0 };
+impl From<Array<i64>> for u64x2 {
+    fn from(lanes: Array<i64>) -> u64x2 {
+        let mut v = builtin::i64x2_splat(0);
+        v = builtin::i64x2_replace_lane(0, v, lane_i64(&lanes, 0));
+        v = builtin::i64x2_replace_lane(1, v, lane_i64(&lanes, 1));
+        return v as u64x2;
     }
-
-    fn push_literal(&mut self, value: i64) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::i64x2_replace_lane(0, self.vec, value),
-            _ => builtin::i64x2_replace_lane(1, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> u64x2 {
-        return self.vec as u64x2;
-    }
-}
-
-impl SequenceLiteral for u64x2 {
-    type Element = i64;
-    type Builder = U64x2Builder;
 }
 
 impl f32x4 {
@@ -2031,38 +1877,15 @@ impl Neg for f32x4 {
     }
 }
 
-pub struct F32x4Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for F32x4Builder {
-    type Element = f32;
-    type Output = f32x4;
-
-    fn new_literal(capacity: i32) -> F32x4Builder {
-        return F32x4Builder { vec: builtin::f32x4_splat(0.0), index: 0 };
+impl From<Array<f32>> for f32x4 {
+    fn from(lanes: Array<f32>) -> f32x4 {
+        let mut v = builtin::f32x4_splat(0.0);
+        v = builtin::f32x4_replace_lane(0, v, lane_f32(&lanes, 0));
+        v = builtin::f32x4_replace_lane(1, v, lane_f32(&lanes, 1));
+        v = builtin::f32x4_replace_lane(2, v, lane_f32(&lanes, 2));
+        v = builtin::f32x4_replace_lane(3, v, lane_f32(&lanes, 3));
+        return v as f32x4;
     }
-
-    fn push_literal(&mut self, value: f32) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::f32x4_replace_lane(0, self.vec, value),
-            1 => builtin::f32x4_replace_lane(1, self.vec, value),
-            2 => builtin::f32x4_replace_lane(2, self.vec, value),
-            _ => builtin::f32x4_replace_lane(3, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> f32x4 {
-        return self.vec as f32x4;
-    }
-}
-
-impl SequenceLiteral for f32x4 {
-    type Element = f32;
-    type Builder = F32x4Builder;
 }
 
 impl f64x2 {
@@ -2214,34 +2037,11 @@ impl Neg for f64x2 {
     }
 }
 
-pub struct F64x2Builder {
-    vec: v128,
-    index: i32,
-}
-
-impl SequenceLiteralBuilder for F64x2Builder {
-    type Element = f64;
-    type Output = f64x2;
-
-    fn new_literal(capacity: i32) -> F64x2Builder {
-        return F64x2Builder { vec: builtin::f64x2_splat(0.0), index: 0 };
+impl From<Array<f64>> for f64x2 {
+    fn from(lanes: Array<f64>) -> f64x2 {
+        let mut v = builtin::f64x2_splat(0.0);
+        v = builtin::f64x2_replace_lane(0, v, lane_f64(&lanes, 0));
+        v = builtin::f64x2_replace_lane(1, v, lane_f64(&lanes, 1));
+        return v as f64x2;
     }
-
-    fn push_literal(&mut self, value: f64) {
-        let i = self.index;
-        self.vec = match i {
-            0 => builtin::f64x2_replace_lane(0, self.vec, value),
-            _ => builtin::f64x2_replace_lane(1, self.vec, value),
-        };
-        self.index = i + 1;
-    }
-
-    fn build(&self) -> f64x2 {
-        return self.vec as f64x2;
-    }
-}
-
-impl SequenceLiteral for f64x2 {
-    type Element = f64;
-    type Builder = F64x2Builder;
 }

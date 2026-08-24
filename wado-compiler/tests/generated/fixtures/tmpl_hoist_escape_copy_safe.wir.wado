@@ -34,9 +34,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(7)
+array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(7)
 
-array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(8)
+array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(8)
 
 struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(9)
     mut root: ref "core:prelude/types.wado//Option<i32>",
@@ -232,13 +232,13 @@ global global:core:prelude/format.wado::__const_obj_17: ref null "core:prelude/s
 global global:core:collections::__const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:core:collections::__const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:core:collections::__const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:core:collections::__const_obj_21: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:core:collections::__const_obj_21: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:core:collections::__const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:core:collections::__const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
 global global:core:collections::__const_obj_25: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 101, 121, 32, 110, 111, 116, 32, 102, 111, 117, 110, 100, 58, 32), used: 15 };
 global global:core:collections::__const_obj_26: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:collections::__const_obj_27: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
-global global:core:collections::__const_obj_38: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 335 };
+global global:core:collections::__const_obj_38: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 336 };
 global global:core:collections::__const_obj_40: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 114, 101, 102), used: 15 };
 
 fn "tmpl_hoist_escape_copy_safe.wado/run"() with Stdout {
@@ -255,18 +255,20 @@ fn "tmpl_hoist_escape_copy_safe.wado/run"() with Stdout {
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __local_14: ref "core:prelude/string.wado//String";
     let __local_15: ref "core:prelude/format.wado//Formatter";
-    let start_34: i32;
+    let elements_16: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let elements_17: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>";
+    let start_28: i32;
     let handle: i32;
     let packed: i64;
-    let rx_54: i32;
-    let tx_55: i32;
+    let rx_48: i32;
+    let tx_49: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:tmpl_hoist_escape_copy_safe.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:tmpl_hoist_escape_copy_safe.wado::__modules_initialized = 1;
     };
-    map = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }, entries: struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(0), used: 0 }, size: 0, deleted_count: 0 };
+    map = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,i32>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_16 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_16, used: 0 }), entries: ref.as_non_null(elements_17 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: elements_17, used: 0 }), size: 0, deleted_count: 0 };
     i = 0;
     b0: block {
         l1: loop {
@@ -276,9 +278,9 @@ fn "tmpl_hoist_escape_copy_safe.wado/run"() with Stdout {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_8, 1);
             }
-            start_34 = __local_8.used;
+            start_28 = __local_8.used;
             __local_8.used = 1;
-            builtin::array_set_u8(__local_8.repr, start_34, 107);
+            builtin::array_set_u8(__local_8.repr, start_28, 107);
             __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
             "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(i, __local_9);
             "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, __local_8, i);
@@ -304,10 +306,10 @@ fn "tmpl_hoist_escape_copy_safe.wado/run"() with Stdout {
         "core:rt/panic"(__local_14 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(150); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:tmpl_hoist_escape_copy_safe.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:tmpl_hoist_escape_copy_safe.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 58); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:tmpl_hoist_escape_copy_safe.wado::__const_obj_3, __local_15); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:tmpl_hoist_escape_copy_safe.wado::__const_obj_2); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 109); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 112); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 58); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 32); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Inspect::inspect"(map, __local_15); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:tmpl_hoist_escape_copy_safe.wado::__const_obj_1); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1_6 }, __local_15); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_14, 10); __local_14);
         unreachable;
     }
-    rx_54 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_55 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "tmpl_hoist_escape_copy_safe.wado/__cm_binding__Stdout_write_via_stream"(rx_54);
-    "core:cli/write_to_stream"(tx_55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 }, 1);
+    rx_48 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_49 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "tmpl_hoist_escape_copy_safe.wado/__cm_binding__Stdout_write_via_stream"(rx_48);
+    "core:cli/write_to_stream"(tx_49, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

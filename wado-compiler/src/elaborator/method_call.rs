@@ -3206,6 +3206,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
     }
 
+    /// Whether `rendered` names `param` as a whole segment — the spelling-level
+    /// stand-in for "this type mentions the impl's type parameter".
+    fn mentions_type_param(rendered: &str, param: &str) -> bool {
+        rendered
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .any(|seg| seg == param)
+    }
+
     pub(super) fn locate_static_method_impl(
         &self,
         struct_name: &str,
@@ -3237,6 +3245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         let matches_arg_type = |trait_type: &ast::Type,
+                                impl_ty: &ast::Type,
                                 impl_module: &ModuleSource,
                                 type_params: &[ast::GenericParam]|
          -> bool {
@@ -3284,6 +3293,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let mut rendered = String::new();
                 crate::unparse::unparse_type_into(arg, &mut rendered);
+                // A source type generic in the impl's own parameters
+                // (`impl From<Array<T>> for List<T>`) is spelled with those
+                // parameters, so no instantiation ever equals it verbatim. The
+                // head is what separates it from a sibling impl, and the
+                // mangled name carries the impl's spelling either way.
+                let declared = self.tysys.build_declared_type_params(impl_ty, type_params);
+                if declared
+                    .iter()
+                    .any(|name| Self::mentions_type_param(&rendered, name))
+                {
+                    return true;
+                }
                 let full: String = match rendered.split_once('<') {
                     Some((_, args)) => format!("{head}<{args}"),
                     None => head,
@@ -3303,7 +3324,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
          -> Option<(crate::name::FqTraitName, AstId)> {
             let trait_type = header.trait_type.as_ref()?;
             if super::trait_env::get_type_name_static(&header.ty) != struct_name
-                || !matches_arg_type(trait_type, impl_module, &header.type_params)
+                || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
             {
                 return None;
             }

@@ -19,20 +19,13 @@ impl SeqVec<T> {
     }
 }
 
-impl SequenceLiteralBuilder for SeqVec<T> {
-    type Element = T;
-    type Output = SeqVec<T>;
-
-    fn new_literal(capacity: i32) -> SeqVec<T> {
-        return SeqVec::<T>::new();
-    }
-
-    fn push_literal(&mut self, value: Self::Element) {
-        self.items.push(value);
-    }
-
-    fn build(&self) -> SeqVec<T> {
-        return *self;
+impl From<Array<T>> for SeqVec<T> {
+    fn from(elements: Array<T>) -> SeqVec<T> {
+        let mut out = SeqVec::<T>::new();
+        for let element of elements {
+            out.items.push(element);
+        }
+        return out;
     }
 }
 

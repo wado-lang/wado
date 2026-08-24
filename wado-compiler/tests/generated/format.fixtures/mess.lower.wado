@@ -788,11 +788,6 @@ struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub pred: fn mut(u8) -> bool,
 }
 
-struct "ArrayLiteralBuilder<u8>" {
-    repr: Array<u8>,
-    used: i32,
-}
-
 struct "SliceRefIter<u8>" {
     repr: &Array<u8>,
     index: i32,
@@ -931,22 +926,6 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<u8>,i32>" {
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceRefIter<u8>,&Array<u8>>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/array.wado/ArrayLiteralBuilder<u8>,i32>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/array.wado/ArrayLiteralBuilder<u8>,Array<u8>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -3489,14 +3468,7 @@ fn __test_0() {
             });
         }
     }
-    let primes: List<i32> = __seq_lit: {
-        let mut __b: List<i32> = "core::prelude/list.wado::core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(4);
-        __b."core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(2);
-        __b."core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(3);
-        __b."core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(5);
-        __b."core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(7);
-        break __seq_lit: __b."core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
-    } as List<i32>;
+    let primes: List<i32> = "core::prelude/list.wado::core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from"([2, 3, 5, 7]) as List<i32>;
     __assert_1: {
         let __v1: i32 = primes."core:prelude/list.wado/List<i32>::len"();
         let __cond: bool = (__v1 == 4);
@@ -3566,14 +3538,7 @@ fn __test_0() {
             });
         }
     }
-    let decoded: Result<String, String> = "core::prelude/string.wado::core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"(__seq_lit: {
-        let mut __b: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(4);
-        __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(87);
-        __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(97);
-        __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100);
-        __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(111);
-        break __seq_lit: __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
-    } as List<u8>);
+    let decoded: Result<String, String> = "core::prelude/string.wado::core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"("core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([87, 97, 100, 111]) as List<u8>);
     __assert_4: {
         let __cond: bool = match decoded {
             Ok(s) => s."core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(&String { repr: packed"Wado", used: 4 }),
@@ -7176,11 +7141,7 @@ pub fn char::len_utf8(self: Box<char>) -> i32 {
 pub fn char::encode_utf8(self: Box<char>) -> List<u8> {
     let cp: i32 = self.value as i32;
     if (cp < 128) {
-        return __seq_lit: {
-            let mut __b: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(1);
-            __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(cp as u8);
-            break __seq_lit: __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
-        } as List<u8> as List<u8>;
+        return "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([cp as u8]) as List<u8> as List<u8>;
     }
     if (cp < 2048) {
         let mut buf: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>::with_capacity"(2);
@@ -16743,16 +16704,8 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::build"(self: &List<u64>) -> List<u64> {
-    return *self;
-}
-
-fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(self: &mut List<u64>, value: u64) with stores[value] {
-    self."core:prelude/list.wado/List<u64>::push"(value);
-}
-
-fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u64> {
-    return "core::prelude/list.wado::core:prelude/list.wado/List<u64>::with_capacity"(capacity);
+fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<u64>) -> List<u64> {
+    return List<u64> { repr: elements, used: core::builtin::array_len::<u64>(&elements) };
 }
 
 pub fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self: &mut List<String>, value: String) with stores[value] {
@@ -17305,7 +17258,7 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/list.wado", used: 22 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 317 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 318 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"index out of bounds", used: 19 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -17384,16 +17337,8 @@ fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/
     }
 }
 
-fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::build"(self: &List<u8>) -> List<u8> {
-    return *self;
-}
-
-fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(self: &mut List<u8>, value: u8) with stores[value] {
-    self."core:prelude/list.wado/List<u8>::push"(value);
-}
-
-fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
-    return "core::prelude/list.wado::core:prelude/list.wado/List<u8>::with_capacity"(capacity);
+fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<u8>) -> List<u8> {
+    return List<u8> { repr: elements, used: core::builtin::array_len::<u8>(&elements) };
 }
 
 pub fn "core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"(bytes: List<u8>) -> Result<String, String> {
@@ -17416,16 +17361,8 @@ pub fn "core:prelude/list.wado/List<i32>::len"(self: &List<i32>) -> i32 {
     return self.used;
 }
 
-fn "core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::build"(self: &List<i32>) -> List<i32> {
-    return *self;
-}
-
-fn "core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(self: &mut List<i32>, value: i32) with stores[value] {
-    self."core:prelude/list.wado/List<i32>::push"(value);
-}
-
-fn "core:prelude/list.wado/List<i32>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<i32> {
-    return "core::prelude/list.wado::core:prelude/list.wado/List<i32>::with_capacity"(capacity);
+fn "core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<i32>) -> List<i32> {
+    return List<i32> { repr: elements, used: core::builtin::array_len::<i32>(&elements) };
 }
 
 fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
@@ -17442,7 +17379,7 @@ fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/st
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/list.wado", used: 22 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
-                Box<i32> { value: 317 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
+                Box<i32> { value: 318 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"index out of bounds", used: 19 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -17498,20 +17435,6 @@ fn "core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>::int
 
 fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
     return core::builtin::array_get_value::<[String, String]>(self, index);
-}
-
-pub fn "core:prelude/list.wado/List<i32>::with_capacity"(capacity: i32) -> List<i32> {
-    return List<i32> { repr: core::builtin::array_new::<i32>(capacity), used: 0 };
-}
-
-pub fn "core:prelude/list.wado/List<i32>::push"(self: &mut List<i32>, value: i32) with stores[value] {
-    let used: i32 = self.used;
-    if (used >= self.repr."Array<i32>::len"()) {
-        core::builtin::cold_path();
-        self."core:prelude/list.wado/List<i32>::grow"();
-    }
-    self.repr."Array<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(used, value);
-    self.used = (used + 1);
 }
 
 fn "core/prelude/array.wado/write_seq_inspect<i32>"(repr: &Array<i32>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
@@ -17815,44 +17738,11 @@ pub fn "Array<core:prelude/string.wado/String>::len"(self: &Array<String>) -> i3
     return core::builtin::array_len::<String>(self);
 }
 
-pub fn "core:prelude/list.wado/List<u64>::with_capacity"(capacity: i32) -> List<u64> {
-    return List<u64> { repr: core::builtin::array_new::<u64>(capacity), used: 0 };
-}
-
-pub fn "core:prelude/list.wado/List<u64>::push"(self: &mut List<u64>, value: u64) with stores[value] {
-    let used: i32 = self.used;
-    if (used >= self.repr."Array<u64>::len"()) {
-        core::builtin::cold_path();
-        self."core:prelude/list.wado/List<u64>::grow"();
-    }
-    self.repr."Array<u64>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(used, value);
-    self.used = (used + 1);
-}
-
-fn "Array<u64>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<u64>, index: i32, value: u64) with stores[value] {
-    core::builtin::array_set::<u64>(self, index, value);
-}
-
-pub fn "core:prelude/list.wado/List<u64>::grow"(self: &mut List<u64>) {
-    let capacity: i32 = self.repr."Array<u64>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
-    let mut new_repr: Array<u64> = core::builtin::array_new::<u64>(new_capacity);
-    core::builtin::array_copy::<u64>(&mut new_repr, 0, &self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-pub fn "Array<u64>::len"(self: &Array<u64>) -> i32 {
-    return core::builtin::array_len::<u64>(self);
-}
-
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter: &mut SliceValueIter<u8>) -> List<u8> {
-    let mut result: List<u8> = __seq_lit: {
-        let mut __b: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."core:prelude/list.wado/List<u8>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
-    };
+    let mut result: List<u8> = "core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([]);
     loop {
-        let __match_4: Option<u8> = iter."core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"();
-        match __match_4 {
+        let __match_3: Option<u8> = iter."core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"();
+        match __match_3 {
             Some(item) => {
                 result."core:prelude/list.wado/List<u8>::push"(item);
             },
@@ -17870,22 +17760,6 @@ fn "core:prelude/slice.wado/SliceValueIter<u8>::internal_new"(repr: &Array<u8>, 
 
 fn "Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<i32>, index: i32) -> i32 {
     return core::builtin::array_get_value::<i32>(self, index);
-}
-
-fn "Array<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<i32>, index: i32, value: i32) with stores[value] {
-    core::builtin::array_set::<i32>(self, index, value);
-}
-
-pub fn "core:prelude/list.wado/List<i32>::grow"(self: &mut List<i32>) {
-    let capacity: i32 = self.repr."Array<i32>::len"();
-    let new_capacity: i32 = core::rt::i32_max((capacity * 2), 4);
-    let mut new_repr: Array<i32> = core::builtin::array_new::<i32>(new_capacity);
-    core::builtin::array_copy::<i32>(&mut new_repr, 0, &self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-pub fn "Array<i32>::len"(self: &Array<i32>) -> i32 {
-    return core::builtin::array_len::<i32>(self);
 }
 
 fn "core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"(self: &mut SliceValueIter<u8>) -> Option<u8> {
@@ -18355,20 +18229,6 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>$fn mut(u8)->bool"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> fn mut(u8) -> bool {
     return match index {
         1 => v.pred,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/array.wado/ArrayLiteralBuilder<u8>$Array<u8>"(v: &ArrayLiteralBuilder<u8>, index: i32) -> Array<u8> {
-    return match index {
-        0 => v.repr,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/array.wado/ArrayLiteralBuilder<u8>$i32"(v: &ArrayLiteralBuilder<u8>, index: i32) -> i32 {
-    return match index {
-        1 => v.used,
         _ => core::builtin::unreachable(),
     };
 }
@@ -22170,61 +22030,8 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<i32>>"(self: Box<core
 }
 
 pub fn __initialize_module() {
-    core::prelude/fpfmt.wado::POW10 = __seq_lit: {
-        let mut __b: List<u64> = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(20);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(100000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(1000000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000000000000);
-        break __seq_lit: __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
-    };
-    core::prelude/fpfmt.wado::POW10_FINE = __seq_lit: {
-        let mut __b: List<u64> = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::new_literal"(27);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(9223372036854775808);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(11529215046068469760);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(14411518807585587200);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(18014398509481984000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(11258999068426240000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(14073748835532800000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(17592186044416000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10995116277760000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(13743895347200000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(17179869184000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10737418240000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(13421772800000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(16777216000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10485760000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(13107200000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(16384000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10240000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(12800000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(16000000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(10000000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(12500000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(15625000000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(9765625000000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(12207031250000000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(15258789062500000000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(9536743164062500000);
-        __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::push_literal"(11920928955078125000);
-        break __seq_lit: __b."core:prelude/list.wado/List<u64>^core:prelude/traits.wado/SequenceLiteralBuilder::build"();
-    };
+    core::prelude/fpfmt.wado::POW10 = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000, 1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000]);
+    core::prelude/fpfmt.wado::POW10_FINE = "core::prelude/list.wado::core:prelude/list.wado/List<u64>^core:prelude/traits.wado/From<Array<T>>::from"([9223372036854775808, 11529215046068469760, 14411518807585587200, 18014398509481984000, 11258999068426240000, 14073748835532800000, 17592186044416000000, 10995116277760000000, 13743895347200000000, 17179869184000000000, 10737418240000000000, 13421772800000000000, 16777216000000000000, 10485760000000000000, 13107200000000000000, 16384000000000000000, 10240000000000000000, 12800000000000000000, 16000000000000000000, 10000000000000000000, 12500000000000000000, 15625000000000000000, 9765625000000000000, 12207031250000000000, 15258789062500000000, 9536743164062500000, 11920928955078125000]);
 }
 
 fn "mess_dirty.wado/__Closure_0::__call"(self: &__Closure_0, c: char) -> char {
@@ -22276,8 +22083,8 @@ fn __initialize_modules() {
     mess_dirty.wado::__modules_initialized = true;
 }
 
-fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
-    return List<u64> { repr: core::builtin::array_clone_prefix::<u64>(&v.repr, v.used), used: v.used };
+fn "$value_copy$Array<i32>"(v: Array<i32>) -> Array<i32> {
+    return core::builtin::array_clone::<i32>(&v);
 }
 
 fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>]"(v: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>]) -> [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] {
@@ -22358,6 +22165,10 @@ fn "$value_copy$[core:prelude/traits.wado/FlagsBit<u32>,core:prelude/traits.wado
 
 fn "$value_copy$core:prelude/traits.wado/FlagsBit<u32>"(v: FlagsBit<u32>) -> FlagsBit<u32> {
     return v;
+}
+
+fn "$value_copy$Array<u64>"(v: Array<u64>) -> Array<u64> {
+    return core::builtin::array_clone::<u64>(&v);
 }
 
 fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v: List<String>) -> List<String> {
@@ -22658,9 +22469,9 @@ fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/
     return SliceValueIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
 }
 
-fn array_new();
-
 fn array_len();
+
+fn array_new();
 
 fn array_get_value();
 
@@ -22668,7 +22479,7 @@ fn array_set();
 
 fn array_copy();
 
-fn array_clone_prefix();
-
 fn array_clone();
+
+fn array_clone_prefix();
 

@@ -244,7 +244,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                     self.mark(c);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 for e in elements {
                     let c = self.carries(e);
                     self.mark(c);

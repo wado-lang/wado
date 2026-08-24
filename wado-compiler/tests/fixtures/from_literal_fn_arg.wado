@@ -1,4 +1,4 @@
-// KeyValueLiteral: coercion in function argument position with custom type
+// Key-value literal coercion in function argument position, custom type
 use { println, Stdout } from "core:cli";
 
 struct SimpleMap<V> {
@@ -25,21 +25,14 @@ impl SimpleMap<V> {
     }
 }
 
-impl KeyValueLiteralBuilder for SimpleMap<V> {
-    type Value = V;
-    type Output = SimpleMap<V>;
-
-    fn new_literal(capacity: i32) -> SimpleMap<V> {
-        return SimpleMap::<V>::new();
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> SimpleMap<V> {
-        return *self;
+impl From<Array<[String, V]>> for SimpleMap<V> {
+    fn from(entries: Array<[String, V]>) -> SimpleMap<V> {
+        let mut out = SimpleMap::<V>::new();
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 
@@ -62,8 +55,8 @@ export fn run() with Stdout {
     let s = sum_values({ x: 10, y: 20 });
     assert s == 30;
 
-    println("fn arg KeyValueLiteral: ok");
+    println("fn arg key-value literal: ok");
 }
 
 __DATA__
-{"stdout": "fn arg KeyValueLiteral: ok\n"}
+{"stdout": "fn arg key-value literal: ok\n"}

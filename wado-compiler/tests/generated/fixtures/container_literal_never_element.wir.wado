@@ -87,25 +87,25 @@ global mut global:container_literal_never_element.wado::__modules_initialized: b
 global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "container_literal_never_element.wado/run"() with Stdout {
-    let __local_2: ref "core:prelude/string.wado//String";
-    let __local_3: ref "core:prelude/format.wado//Formatter";
+    let __local_0: ref "core:prelude/string.wado//String";
+    let __local_1: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
-    let rx_24: i32;
-    let tx_25: i32;
+    let rx_16: i32;
+    let tx_17: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:container_literal_never_element.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:container_literal_never_element.wado::__modules_initialized = 1;
     };
-    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(2, __local_3);
-    rx_24 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_25 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "container_literal_never_element.wado/__cm_binding__Stdout_write_via_stream"(rx_24);
-    "core:cli/write_to_stream"(tx_25, __local_2, 1);
+    __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(2, __local_1);
+    rx_16 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_17 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "container_literal_never_element.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
+    "core:cli/write_to_stream"(tx_17, __local_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

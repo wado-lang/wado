@@ -1570,7 +1570,7 @@ impl Analyzer<'_> {
                     self.walk_expr(&f.value, live, record);
                 }
             }
-            TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 if record {
                     let children: Vec<&TirExpr> = elements.iter().collect();
                     self.collect_place_moves(&children, live);

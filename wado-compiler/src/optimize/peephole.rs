@@ -1,7 +1,7 @@
 //! Unified peephole engine pass (WEP 2026-06-05): every position-flexible local
 //! rewrite rule interleaved over one engine session per function rather than a
 //! session apiece, invoked twice per fixed-point iteration so `string_push` can
-//! still see a `push_str` before `inline` and `array_literal` its window after.
+//! still see a `push_str` before `inline`.
 //! Only the env-free half of constant folding runs here.
 
 use cranelift_entity::EntityRef;
@@ -10,7 +10,6 @@ use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
-use super::array_literal::{Collapser, resolve_array_new_ids, resolve_array_push_ids};
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
 use super::elide_box_local::build_elide_box_local;
@@ -38,9 +37,6 @@ pub(super) fn run_peephole(
     // immutable borrow of `project`, so their calls are born resolved.
     let (cold_path_id, unreachable_id) = super::match_to_switch::intern_cold_markers(project);
     // Whole-package contexts, resolved once before the mutable body walk.
-    let push_ids = resolve_array_push_ids(project);
-    let array_new_ids = resolve_array_new_ids(project);
-    let array_rule = Collapser::new(&push_ids, &array_new_ids);
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
     let push_rule = push_ctx.map(ShortPushStrRule::new);
@@ -137,8 +133,7 @@ pub(super) fn run_peephole(
             rules.push(slot_temp_sroa_rule);
         }
         rules.extend([
-            &array_rule as &dyn Rule,
-            &elide_rule,
+            &elide_rule as &dyn Rule,
             &const_fold_rule,
             &branch_prune_rule,
             &tuple_projection_rule,

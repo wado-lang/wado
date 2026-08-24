@@ -117,33 +117,35 @@ global global:core:prelude/primitive.wado::__const_obj_1: ref null "core:prelude
 fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
     let pairs: ref "core:prelude//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let total: i32;
-    let __iter_3: ref "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
+    let __iter_2: ref "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let a: ref "hfs_letdestructure_loop_local.wado//Acc";
     let n: i32;
-    let __local_6: ref "core:prelude/string.wado//String";
-    let __local_7: ref "core:prelude/format.wado//Formatter";
-    let __match_8: ref null "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let __match_7: ref null "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
+    let elements: ref "Array<[hfs_letdestructure_loop_local.wado/Acc,i32]>";
     let handle: i32;
     let packed: i64;
-    let rx_28: i32;
-    let tx_29: i32;
+    let rx_25: i32;
+    let tx_26: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:hfs_letdestructure_loop_local.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:hfs_letdestructure_loop_local.wado::__modules_initialized = 1;
     };
-    pairs = struct.new "core:prelude//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: builtin::array_new<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">(0), used: 0 };
+    elements = array.new_fixed<ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]">();
+    pairs = struct.new "core:prelude//List<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: elements, used: 0 };
     "core:prelude/list.wado/core:prelude/list.wado/List<[hfs_letdestructure_loop_local.wado/Acc,i32]>::push"(pairs, struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: 0 }, 1: 1 });
     "core:prelude/list.wado/core:prelude/list.wado/List<[hfs_letdestructure_loop_local.wado/Acc,i32]>::push"(pairs, struct.new "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]" { 0: struct.new "hfs_letdestructure_loop_local.wado//Acc" { sum: 0 }, 1: 10 });
     total = 0;
-    __iter_3 = struct.new "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: pairs.repr, index: 0, end: pairs.used };
+    __iter_2 = struct.new "core:prelude/slice.wado//SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>" { repr: pairs.repr, index: 0, end: pairs.used };
     b0: block {
         l1: loop {
-            __match_8 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next"(__iter_3);
-            if ref.is_null(__match_8) == 0 {
+            __match_7 = "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<[hfs_letdestructure_loop_local.wado/Acc,i32]>^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            if ref.is_null(__match_7) == 0 {
                 let __variant_payload_1: ref "tuple//[hfs_letdestructure_loop_local.wado/Acc, i32]";
-                __variant_payload_1 = ref.as_non_null(__match_8);
+                __variant_payload_1 = ref.as_non_null(__match_7);
                 a = __variant_payload_1.0;
                 n = __variant_payload_1.1;
                 a.sum = a.sum + n;
@@ -156,13 +158,13 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
             continue l1;
         };
     };
-    __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_6 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(total, __local_7);
-    rx_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_29 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "hfs_letdestructure_loop_local.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
-    "core:cli/write_to_stream"(tx_29, __local_6, 1);
+    __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$spec0"(total, __local_6);
+    rx_25 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_26 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "hfs_letdestructure_loop_local.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
+    "core:cli/write_to_stream"(tx_26, __local_5, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

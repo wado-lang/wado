@@ -4522,6 +4522,12 @@ pub enum TirExprKind {
     TupleLiteral {
         elements: Vec<TirExpr>,
     },
+    /// `Array<T>` of exactly `elements.len()` slots, the value a `[e0, e1, …]`
+    /// literal denotes. Emitted by literal coercion, which then hands it to the
+    /// target type's `From<Array<T>>` impl. Lowers to `NirExprKind::ArrayLiteral`.
+    ArrayLiteral {
+        elements: Vec<TirExpr>,
+    },
 
     /// Spread a tuple expression into an enclosing `TupleLiteral`.
     /// Created by the elaborator for `[..expr]` syntax. Expanded by monomorphization

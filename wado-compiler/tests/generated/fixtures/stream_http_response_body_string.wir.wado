@@ -324,18 +324,20 @@ global mut global:stream_http_response_body_string.wado::__modules_initialized: 
 
 fn "stream_http_response_body_string.wado/string_to_bytes"(s) {
     let bytes: ref "core:prelude//List<u8>";
-    let __iter_3: ref "core:prelude/string.wado//StrCharIter";
+    let __iter_2: ref "core:prelude/string.wado//StrCharIter";
+    let elements: ref Array<u8>;
     let __sroa_v_repr: ref Array<u8>;
-    bytes = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    elements = array.new_fixed<u8>();
+    bytes = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     __sroa_v_repr = s.repr;
-    __iter_3 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr, used: s.used, byte_index: 0 };
+    __iter_2 = struct.new "core:prelude/string.wado//StrCharIter" { repr: __sroa_v_repr, used: s.used, byte_index: 0 };
     b0: block {
         l1: loop {
-            let __match_5_mv_0: i32;
-            let __match_5_mv_1: char;
-            multivalue_bind [__match_5_mv_0, __match_5_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(__iter_3);
-            if __match_5_mv_0 == 0 {
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(bytes, __match_5_mv_1 & 255);
+            let __match_4_mv_0: i32;
+            let __match_4_mv_1: char;
+            multivalue_bind [__match_4_mv_0, __match_4_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(__iter_2);
+            if __match_4_mv_0 == 0 {
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::push"(bytes, __match_4_mv_1 & 255);
             } else {
                 break b0;
             }

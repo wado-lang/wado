@@ -122,7 +122,9 @@ fn "bug_mut_writeback_incomplete_run.wado/outer"(dst) {
 
 fn "bug_mut_writeback_incomplete_run.wado/stepped_over"() {
     let v: ref "core:prelude//List<u8>";
-    v = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    let elements: ref Array<u8>;
+    elements = array.new_fixed<u8>();
+    v = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     drop("bug_mut_writeback_incomplete_run.wado/outer"(v));
     return v.used;
 }
@@ -134,7 +136,9 @@ fn "bug_mut_writeback_incomplete_run.wado/two"(a, b) {
 
 fn "bug_mut_writeback_incomplete_run.wado/aliased"() {
     let v: ref "core:prelude//List<u8>";
-    v = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
+    let elements: ref Array<u8>;
+    elements = array.new_fixed<u8>();
+    v = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
     "bug_mut_writeback_incomplete_run.wado/two"(v, v);
     return v.used;
 }

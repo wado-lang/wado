@@ -30,9 +30,9 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
 
 array Array<core:collections/TreeMapEntry<i32,()>> (mut ref "core:collections//TreeMapEntry<i32,()>");  // TypeId(6)
 
-array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>");  // TypeId(7)
+array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(7)
 
-array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(8)
+array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>");  // TypeId(8)
 
 array Array<core:collections/TreeMapNode<i32>> (mut ref "core:collections//TreeMapNode<i32>");  // TypeId(9)
 
@@ -251,10 +251,10 @@ global global:ice_treeset_iter_by_ref.wado::__const_obj_11: ref null "core:prelu
 global global:core:collections::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32), used: 11 };
 global global:core:collections::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 105, 110, 100, 101, 120, 32, 60, 32, 115, 101, 108, 102, 46, 117, 115, 101, 100, 10), used: 30 };
 global global:core:collections::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 100, 101, 120, 32, 111, 117, 116, 32, 111, 102, 32, 98, 111, 117, 110, 100, 115), used: 19 };
-global global:core:collections::__const_obj_15: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 317 };
+global global:core:collections::__const_obj_15: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 318 };
 global global:core:collections::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111), used: 22 };
 global global:core:collections::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101), used: 17 };
-global global:core:collections::__const_obj_43: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 335 };
+global global:core:collections::__const_obj_43: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 336 };
 global global:core:collections::__const_obj_45: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 114, 101, 102), used: 15 };
 
 fn "ice_treeset_iter_by_ref.wado/run"() {
@@ -269,13 +269,17 @@ fn "ice_treeset_iter_by_ref.wado/run"() {
     let __match_14: ref null "core:prelude/string.wado//String";
     let __sroa_set_int_inner: ref "core:collections//TreeMap<i32,()>";
     let __sroa_set_str_inner: ref "core:collections//TreeMap<core:prelude/string.wado/String,()>";
+    let elements_30: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let elements_31: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
+    let elements_32: ref "Array<core:collections/TreeMapNode<i32>>";
+    let elements_33: ref "Array<core:collections/TreeMapEntry<i32,()>>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:ice_treeset_iter_by_ref.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:ice_treeset_iter_by_ref.wado::__modules_initialized = 1;
     };
-    __sroa_set_str_inner = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,()>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(0), used: 0 }, entries: struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(0), used: 0 }, size: 0, deleted_count: 0 };
+    __sroa_set_str_inner = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,()>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_30 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_30, used: 0 }), entries: ref.as_non_null(elements_31 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>" { repr: elements_31, used: 0 }), size: 0, deleted_count: 0 };
     drop(__inline_core_collections_TreeMap_core_prelude_string_wado_String______try_insert_4: block -> bool {
         if "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(__sroa_set_str_inner, global:ice_treeset_iter_by_ref.wado::__const_obj_11) >= 0 {
             break __inline_core_collections_TreeMap_core_prelude_string_wado_String______try_insert_4: 0;
@@ -302,7 +306,7 @@ fn "ice_treeset_iter_by_ref.wado/run"() {
         "core:rt/panic"(__local_10 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(136); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:ice_treeset_iter_by_ref.wado::__const_obj_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 114); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 117); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 110); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 97); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 116); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 32); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:ice_treeset_iter_by_ref.wado::__const_obj_4); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 58); __local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:ice_treeset_iter_by_ref.wado::__const_obj_8, __local_11); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:ice_treeset_iter_by_ref.wado::__const_obj_7); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_10, global:ice_treeset_iter_by_ref.wado::__const_obj_6); __local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_10); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: set_str_count }, __local_11); "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked"(__local_10, 10); __local_10);
         unreachable;
     }
-    __sroa_set_int_inner = struct.new "core:collections//TreeMap<i32,()>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: struct.new "core:prelude//List<core:collections/TreeMapNode<i32>>" { repr: builtin::array_new<ref "core:collections//TreeMapNode<i32>">(0), used: 0 }, entries: struct.new "core:prelude//List<core:collections/TreeMapEntry<i32,()>>" { repr: builtin::array_new<ref "core:collections//TreeMapEntry<i32,()>">(0), used: 0 }, size: 0, deleted_count: 0 };
+    __sroa_set_int_inner = struct.new "core:collections//TreeMap<i32,()>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_32 = array.new_fixed<ref "core:collections//TreeMapNode<i32>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<i32>>" { repr: elements_32, used: 0 }), entries: ref.as_non_null(elements_33 = array.new_fixed<ref "core:collections//TreeMapEntry<i32,()>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<i32,()>>" { repr: elements_33, used: 0 }), size: 0, deleted_count: 0 };
     drop(__inline_core_collections_TreeMap_i32______try_insert_9: block -> bool {
         if "core:collections/core:collections/TreeMap<i32,()>::find_index"(__sroa_set_int_inner, 42) >= 0 {
             break __inline_core_collections_TreeMap_i32______try_insert_9: 0;

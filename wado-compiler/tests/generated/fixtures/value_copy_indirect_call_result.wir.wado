@@ -125,7 +125,8 @@ global mut global:value_copy_indirect_call_result.wado::__modules_initialized: b
 global global:core:prelude/primitive.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "value_copy_indirect_call_result.wado/make"(n) {
-    return struct.new "value_copy_indirect_call_result.wado//R" { status: 200, body: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(n & 255, 2, 3), used: 3 } };
+    let elements: ref Array<u8>;
+    return struct.new "value_copy_indirect_call_result.wado//R" { status: 200, body: ref.as_non_null(elements = array.new_fixed<u8>(n & 255, 2, 3); struct.new "core:prelude//List<u8>" { repr: elements, used: builtin::array_len(elements) }) };
 }
 
 fn "value_copy_indirect_call_result.wado/sink"(v) {
@@ -144,6 +145,7 @@ fn "value_copy_indirect_call_result.wado/via_closure"(n) {
 
 fn "value_copy_indirect_call_result.wado/via_if"(n) {
     let r: ref "value_copy_indirect_call_result.wado//R";
+    let elements: ref Array<u8>;
     r = (if n > 0 -> ref "value_copy_indirect_call_result.wado//R" {
         block -> ref "value_copy_indirect_call_result.wado//R" {
             let __indirect_call_0: ref "canonical//CanonicalClosure_0";
@@ -151,7 +153,7 @@ fn "value_copy_indirect_call_result.wado/via_if"(n) {
             call_ref "functype/$canonical_closure_fn_0"(__indirect_call_0.func, __indirect_call_0.env, n);
         };
     } else {
-        struct.new "value_copy_indirect_call_result.wado//R" { status: 500, body: struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 } };
+        struct.new "value_copy_indirect_call_result.wado//R" { status: 500, body: ref.as_non_null(elements = array.new_fixed<u8>(); struct.new "core:prelude//List<u8>" { repr: elements, used: 0 }) };
     });
     return "value_copy_indirect_call_result.wado/sink"(r.body);
 }

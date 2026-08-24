@@ -1,0 +1,38 @@
+// A JSON-shaped literal builds a `core:value::Value` (WEP 2026-08-24): the
+// `[ … ]` form through `From<Array<Value>>`, the `{ … }` form through
+// `From<Array<[String, Value]>>`, and each leaf through its own `From`.
+// Implicit conversion reaches a literal position and nothing else.
+use { println, Stdout } from "core:cli";
+use { Value } from "core:value";
+use { to_string } from "core:json";
+
+export fn run() with Stdout {
+    let nums: Value = [1, 2, 3];
+    assert nums matches { List(items) && items.len() == 3 };
+
+    // Heterogeneous elements: each leaf converts at its own static type.
+    let mixed: Value = [1, "x", true, 2.5];
+    assert mixed matches { List(items) && items.len() == 4 };
+    assert mixed matches { List(items) && items[0] matches { Int(1) } };
+    assert mixed matches { List(items) && items[1] matches { String(s) && s == "x" } };
+
+    let obj: Value = { name: "Alice", age: 30 };
+    assert obj matches { Object(fields) && fields.len() == 2 };
+
+    let nested: Value = { name: "Alice", scores: [10, 20], meta: { active: true } };
+    assert to_string(&nested) matches {
+        Ok(s) && s == "{\"name\":\"Alice\",\"scores\":[10,20],\"meta\":{\"active\":true}}"
+    };
+
+    // A non-identifier key is a field name like any other.
+    let headers: Value = { "content-type": "text/plain" };
+    assert headers matches { Object(fields) && fields.len() == 1 };
+
+    let empty_list: Value = [];
+    assert empty_list matches { List(items) && items.len() == 0 };
+
+    println("value json literal: ok");
+}
+
+__DATA__
+{"stdout": "value json literal: ok\n"}

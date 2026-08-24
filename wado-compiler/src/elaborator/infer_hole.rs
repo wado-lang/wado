@@ -498,6 +498,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for kv in types.key_value_coercions.values_mut() {
             sub_key_value_coercion(tt, kv, subst);
         }
+        for call in types.literal_conversions.values_mut() {
+            sub_literal_from_call(tt, call, subst);
+        }
         for overlays in types.tuple_overlays.values_mut() {
             for overlay in overlays.iter_mut().flatten() {
                 Self::sweep_element_overlay(tt, overlay, subst);
@@ -547,6 +550,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for kv in overlay.key_value_coercions.values_mut() {
             sub_key_value_coercion(tt, kv, subst);
+        }
+        for call in overlay.literal_conversions.values_mut() {
+            sub_literal_from_call(tt, call, subst);
         }
     }
 }
@@ -673,12 +679,20 @@ fn sub_sequence_coercion(
     sc: &mut super::sem::types::SequenceCoercionFacts,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
-    sc.builder_type = sub(tt, sc.builder_type, subst);
     sc.element_type = sub(tt, sc.element_type, subst);
-    sc.output_type = sub(tt, sc.output_type, subst);
     sc.newtype_cast_to = sc.newtype_cast_to.map(|t| sub(tt, t, subst));
-    sub_vec(tt, &mut sc.type_arg_ids, subst);
-    sc.remangle(tt);
+    sub_literal_from_call(tt, &mut sc.call, subst);
+}
+
+fn sub_literal_from_call(
+    tt: &mut TypeTable,
+    call: &mut super::sem::types::LiteralFromCall,
+    subst: &IndexMap<InferVarId, TypeId>,
+) {
+    call.from_type = sub(tt, call.from_type, subst);
+    call.output_type = sub(tt, call.output_type, subst);
+    sub_vec(tt, &mut call.type_arg_ids, subst);
+    call.remangle(tt);
 }
 
 fn sub_key_value_coercion(
@@ -686,9 +700,13 @@ fn sub_key_value_coercion(
     kv: &mut super::sem::types::KeyValueCoercionFacts,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
-    kv.builder_type = sub(tt, kv.builder_type, subst);
+    kv.key_type = sub(tt, kv.key_type, subst);
     kv.value_type = sub(tt, kv.value_type, subst);
-    kv.target_type = sub(tt, kv.target_type, subst);
-    sub_vec(tt, &mut kv.type_arg_ids, subst);
-    kv.remangle(tt);
+    kv.pair_type = sub(tt, kv.pair_type, subst);
+    kv.newtype_cast_to = kv.newtype_cast_to.map(|t| sub(tt, t, subst));
+    sub_literal_from_call(tt, &mut kv.call, subst);
+    if let Some(spread) = kv.spread.as_mut() {
+        sub_vec(tt, &mut spread.type_arg_ids, subst);
+        spread.remangle(tt);
+    }
 }

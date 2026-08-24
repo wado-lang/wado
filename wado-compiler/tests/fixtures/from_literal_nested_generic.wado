@@ -13,21 +13,14 @@ impl NestedMap<K, V> {
     }
 }
 
-impl KeyValueLiteralBuilder for NestedMap<List<String>, V> {
-    type Value = V;
-    type Output = NestedMap<List<String>, V>;
-
-    fn new_literal(capacity: i32) -> NestedMap<List<String>, V> {
-        return NestedMap::<List<String>, V>::new();
-    }
-
-    fn insert_literal(&mut self, key: String, value: Self::Value) {
-        self.keys.push(key);
-        self.values.push(value);
-    }
-
-    fn build(&self) -> NestedMap<List<String>, V> {
-        return *self;
+impl From<Array<[String, V]>> for NestedMap<List<String>, V> {
+    fn from(entries: Array<[String, V]>) -> NestedMap<List<String>, V> {
+        let mut out = NestedMap::<List<String>, V>::new();
+        for let [key, value] of entries {
+            out.keys.push(key);
+            out.values.push(value);
+        }
+        return out;
     }
 }
 

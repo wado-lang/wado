@@ -1,7 +1,7 @@
 // Identical immutable const globals are merged by
 // `wir_optimize::dedupe_const_globals`. Two functions each hoist the same
 // constant `[10, 20, 30, 40]` (via `const_object_globalization`), producing two
-// const globals with byte-identical inits; the dedup pass keeps one canonical
+// const `Array<i32>` globals with byte-identical inits; the dedup pass keeps one canonical
 // global, rewrites the other's reads to it, and drops it. Under value semantics
 // the merge is unobservable, and the output proves both reads still work.
 //
@@ -47,7 +47,7 @@ __DATA__
     "wir_expect:O2": [
         "global global:const_global_dedup.wado::__const_obj_",
         "array.new_fixed<i32>(10, 20, 30, 40)",
-        "= global:const_global_dedup.wado::__const_obj_"
+        "builtin::array_get_value<i32>(global:const_global_dedup.wado::__const_obj_"
     ],
     "wir_not_expect:O2": [
         "global mut global:const_global_dedup.wado::__const_obj_"

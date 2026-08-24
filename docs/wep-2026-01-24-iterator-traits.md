@@ -930,7 +930,7 @@ fn run() with Stdout {
 
 - [Associated Types](./wep-2026-01-20-associated-types.md) - Foundation for `type Item`
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) - Trait design
-- [Iterator-Based Literal Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md) - Coercion via `FromIterator`
+- [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md) - How a literal reaches a collection
 - [Closure Implementation](./wep-2026-01-16-closure-implementation.md) - Required for combinators
 
 ## References

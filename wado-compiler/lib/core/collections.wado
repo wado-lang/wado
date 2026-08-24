@@ -383,28 +383,23 @@ impl<K: Ord, V: RefMut> IndexRefMut<K> for TreeMap<K, V> {
     }
 }
 
-// KeyValueLiteralBuilder for { key: value, ... } -> TreeMap<String, V>
-// The blanket impl in core:prelude automatically provides KeyValueLiteral for TreeMap.
-impl KeyValueLiteralBuilder for TreeMap<String, V> {
-    type Value = V;
-    type Output = TreeMap<String, V>;
-
-    fn new_literal(capacity: i32) -> TreeMap<String, V> {
-        return TreeMap::new();
+// `{ key: value, … }` as a `TreeMap<String, V>` — an array of pairs in source
+// order, last write wins (WEP 2026-08-24).
+impl From<Array<[String, V]>> for TreeMap<String, V> {
+    fn from(entries: Array<[String, V]>) -> TreeMap<String, V> {
+        let mut map = TreeMap::<String, V>::new();
+        for let [key, value] of entries {
+            map.insert(key, value);
+        }
+        return map;
     }
+}
 
-    fn insert_literal(&mut self, key: String, value: Self::Value) with stores[value] {
-        self.insert(key, value);
-    }
-
-    fn insert_all(&mut self, base: TreeMap<String, V>) {
+impl LiteralSpread for TreeMap<String, V> {
+    fn spread_literal(&mut self, base: TreeMap<String, V>) {
         for let [k, v] of base.entries() {
             self.insert(*k, *v);
         }
-    }
-
-    fn build(&self) -> TreeMap<String, V> {
-        return *self;
     }
 }
 
@@ -675,22 +670,14 @@ impl<T: Ord> IntoIterator for TreeSet<T> {
     }
 }
 
-// SequenceLiteralBuilder for [e0, e1, ...] as TreeSet<T>
-// The blanket impl in core:prelude automatically provides SequenceLiteral for TreeSet<T>.
-impl<T: Ord> SequenceLiteralBuilder for TreeSet<T> {
-    type Element = T;
-    type Output = TreeSet<T>;
-
-    fn new_literal(capacity: i32) -> TreeSet<T> {
-        return TreeSet::new();
-    }
-
-    fn push_literal(&mut self, value: T) {
-        self.inner.insert(value, ());
-    }
-
-    fn build(&self) -> TreeSet<T> {
-        return *self;
+// `[e0, e1, …]` as a `TreeSet<T>`, last duplicate ignored (WEP 2026-08-24).
+impl<T: Ord> From<Array<T>> for TreeSet<T> {
+    fn from(elements: Array<T>) -> TreeSet<T> {
+        let mut set = TreeSet::<T>::new();
+        for let element of elements {
+            set.inner.insert(element, ());
+        }
+        return set;
     }
 }
 

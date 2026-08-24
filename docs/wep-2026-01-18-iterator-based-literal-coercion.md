@@ -1,5 +1,7 @@
 # WEP: Literal-to-Collection Coercion
 
+Status: Superseded by [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md)
+
 ## Context
 
 Wado allows object and sequence literals to be coerced to collection types in certain
