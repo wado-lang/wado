@@ -3665,12 +3665,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_defaults =
             self.lookup_static_method_param_defaults_keyed(&actual_struct_name, method_name, None);
 
-        // Propagate #[cm("...")] from resource static methods
-        // The selected method's own declaration knows its owner, so the
-        // resource is reached through it rather than through its spelling.
+        // Propagate #[cm("...")] from resource static methods. A method the
+        // *resource* declares names it as its own owner; one an `impl` block
+        // declares owns to the block, which names no resource, so the spelling
+        // answers there as it did before impl methods were identified.
+        let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
         let cm_owner = method_ref
             .method_id
-            .and_then(|method| self.tysys.resolutions.defs().parent(method))
+            .and_then(|method| defs.parent(method))
+            .filter(|owner| defs.kind(*owner) == crate::defs::DefKind::Resource)
             .or_else(|| self.decl_key_or_local(&actual_struct_name));
         let cm_name = self.lookup_resource_static_cm(cm_owner, method_name);
 

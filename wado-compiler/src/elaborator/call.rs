@@ -134,22 +134,25 @@ impl CalleeIdentKind<'_> {
         }
     }
 
+    /// The reference site of the callee itself, which the walk answered for in
+    /// the module that wrote it — the read that says which declaration a bare
+    /// `name(…)` means, whichever module the walk is standing in.
+    ///
+    /// `Rewritten` is synthesised from an already-resolved `Self::` / `T::`
+    /// prefix, so it names no node any walk saw.
+    fn callee_site(&self) -> Option<ast::AstId> {
+        match self {
+            Self::AsIs(ident) => Some(ident.id),
+            Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+        }
+    }
+
     /// The reference site of a qualified callee's receiver segment — the `Type` of
     /// `Type::method`, which the walk answered for in the module that wrote it.
     ///
     /// Two segments exactly: consumers pair this with the prefix they split off
     /// `effective_name`, and only here are the two the same segment. A namespace
     /// prefix, an unqualified call and `Rewritten` all answer `None`.
-    fn callee_site(&self) -> Option<ast::AstId> {
-        match self {
-            Self::AsIs(ident) => Some(ident.id),
-            // A rewritten `Self::m` spelling names no node the walk answered
-            // for; the qualified paths above it resolve through their own
-            // segments instead.
-            Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
-        }
-    }
-
     fn receiver_site(&self) -> Option<ast::AstId> {
         match self {
             Self::AsIs(ident) => match ident.segments.as_slice() {
@@ -1355,20 +1358,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (None, effective_name.to_string())
             }
         }
-        // Check for prelude functions (panic, unreachable). These are
-        // defined in core:rt and re-exported by core:prelude, and reach
-        // codegen by name rather than as an ordinary callee, so they answer
-        // ahead of the site below.
-        else if matches!(effective_name, "panic" | "unreachable") {
-            // Declarations of `core:rt`, named by the module rather than
-            // searched for: codegen keys them on that module, and their `!`
-            // return type is a signature fact like any other.
-            (
-                self.decl_in_module(&ModuleSource::rt(), effective_name)
-                    .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
-                effective_name.to_string(),
-            )
-        }
         // The call's own reference site, answered by the module that wrote it
         // (WEP 2026-08-12). This is what makes a parameter default name the
         // callee module's function: the default is written in the declaring
@@ -1384,6 +1373,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_decl(ident.id, callee);
             (
                 Some(CalleeRef::declared(self.tysys.resolutions.defs(), callee)),
+                effective_name.to_string(),
+            )
+        }
+        // `panic` / `unreachable` where no site answered — a synthesised call,
+        // whose node no walk saw. A module that declares either name of its own
+        // is answered by the site above, so this reaches only `core:rt`'s.
+        else if matches!(effective_name, "panic" | "unreachable") {
+            (
+                self.decl_in_module(&ModuleSource::rt(), effective_name)
+                    .map(|def| CalleeRef::declared(self.tysys.resolutions.defs(), def)),
                 effective_name.to_string(),
             )
         }

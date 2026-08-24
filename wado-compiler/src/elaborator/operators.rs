@@ -1977,7 +1977,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // instead would send an impl written on the newtype to the base's
         // module — and a by-name lookup is the last resort for a receiver
         // carrying no declaring module.
-        let module_source = match resolved.impl_def {
+        // Only a *concrete* block's function lives in the block's module: a
+        // generic block's post-substitution instance is materialised in the
+        // receiver type's module, the convention
+        // `TraitEnv::concrete_impl_module_for` encodes for monomorphization.
+        // Naming the block for one of those would send the call to a module
+        // that never defines it.
+        let concrete_impl = resolved.impl_def.filter(|def| {
+            self.tysys
+                .trait_env
+                .impl_headers
+                .get(def)
+                .is_some_and(|h| h.type_params.is_empty())
+        });
+        let module_source = match concrete_impl {
             Some(def) => self.tysys.resolutions.defs().module(def).clone(),
             None => self
                 .impl_target_decl_key(receiver.type_id, &resolved.impl_name)

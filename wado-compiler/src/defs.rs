@@ -718,6 +718,10 @@ mod tests {
 
     /// A local `impl` block is declared by the function that writes it, so its
     /// methods are identified like any other block's.
+    ///
+    /// Identity only: `TraitEnv::build` walks a module's own items, so nothing
+    /// a local block declares is dispatchable yet. Giving it one is what that
+    /// walk needs to reach `Stmt::Item`, not something this table withholds.
     #[test]
     fn a_function_local_impl_block_is_a_declaration_of_its_own() {
         let source = r#"

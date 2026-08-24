@@ -1430,7 +1430,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     sem.decls
                         .function_sigs
                         .iter()
-                        .map(|(def, sig)| (*def, sig.clone())),
+                        .map(|(def, sig)| (*def, Rc::clone(sig))),
                 );
                 signatures.globals.insert(
                     module_source.clone(),

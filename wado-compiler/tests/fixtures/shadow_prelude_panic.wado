@@ -1,0 +1,19 @@
+// `panic` and `unreachable` are prelude functions, and a module's own
+// declaration outranks the prelude — the call's reference site says so, and
+// dispatch takes that answer rather than reaching for `core:rt` by name.
+
+fn panic(msg: String) -> i32 {
+    return 7;
+}
+
+fn unreachable() -> i32 {
+    return 9;
+}
+
+test "a module's own panic outranks the prelude's" {
+    assert panic("x") == 7;
+}
+
+test "a module's own unreachable outranks the prelude's" {
+    assert unreachable() == 9;
+}

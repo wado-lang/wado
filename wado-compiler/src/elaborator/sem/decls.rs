@@ -60,7 +60,8 @@ pub(crate) struct ModuleDecls {
     /// Canonical signatures of this module's own free functions, frozen
     /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
     /// seeding share the map instead of deep-cloning every signature.
-    pub(crate) function_sigs: std::rc::Rc<IndexMap<crate::defs::DefId, FunctionSig>>,
+    pub(crate) function_sigs:
+        std::rc::Rc<IndexMap<crate::defs::DefId, std::rc::Rc<FunctionSig>>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
@@ -82,7 +83,7 @@ pub(crate) struct ModuleDecls {
     pub(crate) associated_constants:
         IndexMap<(crate::defs::DefId, String), (ModuleSource, TypeId, ast::Expr)>,
     /// Canonical signatures of this module's method declarations, keyed by
-    /// the method's globally-unique `AstId`.
+    /// the method's declaration.
     ///
     /// An `impl` method is resolved in the impl's frame — impl type params
     /// in their positional slots, the method's own after them, `Self` bound

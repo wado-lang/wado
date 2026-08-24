@@ -1799,7 +1799,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later in the file) to infer type arguments at the call site
         // during body resolution, without relying on a later
         // monomorphization-time fallback.
-        let mut function_sigs: IndexMap<crate::defs::DefId, sem::decls::FunctionSig> =
+        let mut function_sigs: IndexMap<crate::defs::DefId, Rc<sem::decls::FunctionSig>> =
             IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
@@ -1810,7 +1810,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .of_ast_id(func.id)
                     .expect("every free function is a declaration");
                 let sig = self.record_function_sig(func);
-                function_sigs.insert(def, sig);
+                function_sigs.insert(def, Rc::new(sig));
             }
         }
         for item in &module.items {
