@@ -379,15 +379,6 @@ struct SpanCollector {
     spans: AstSpans,
 }
 
-impl SpanCollector {
-    /// The `self` in `fn f(&mut self)` — a receiver, not an ordinary binding.
-    fn mark_self_receiver(&mut self, param: &ast::Param) {
-        if param.self_kind != ast::SelfKind::None {
-            self.spans.mark_contextual(param.name_span.start, CONSTANT);
-        }
-    }
-}
-
 impl AstVisitor for SpanCollector {
     fn visit_item(&mut self, item: &Item) {
         // The contextual keywords lex as identifiers, so the declaration's own
@@ -406,7 +397,6 @@ impl AstVisitor for SpanCollector {
     fn visit_function(&mut self, func: &ast::Function) {
         for param in &func.params {
             self.spans.mark_param(param.id);
-            self.mark_self_receiver(param);
         }
         ast::walk_function(self, func);
     }
@@ -425,18 +415,12 @@ impl AstVisitor for SpanCollector {
                 self.spans.mark_param(param.id);
             }
         }
-        // `resume`, `do`, and `task` are the other contextual keywords; `self`
-        // is `KeywordCategory::Constant`, not the parameter its uses resolve to.
+        // `resume` and `do`, two more contextual keywords.
         if let Expr::Resume(r) = expr {
             self.spans.mark_contextual(r.span.start, KEYWORD);
         }
         if let Expr::WithHandler(w) = expr {
             self.spans.mark_contextual(w.do_span.start, KEYWORD);
-        }
-        if let Expr::Ident(e) = expr
-            && e.name == "self"
-        {
-            self.spans.mark_contextual(e.span.start, CONSTANT);
         }
         ast::walk_expr(self, expr);
     }
@@ -496,11 +480,17 @@ fn classify_token(
         Some(category) => classify_keyword(category),
 
         None => match &token.kind {
-            // Identifiers. A contextual keyword outranks the symbol it would
-            // otherwise resolve to (`self` resolves to its parameter binding);
-            // everything else prefers the resolved symbol classification
-            // (precomputed in `sem_classes`, keyed by byte start) and falls
-            // back to the lexer/AST heuristics.
+            // `self` is the one contextual keyword the language reserves —
+            // `Wado.g4`'s `identifier` rule accepts every other one as a name,
+            // but not this — so it needs no AST position to be recognised, and
+            // the registry files it under `Constant`. Without this it colours
+            // as the parameter binding it resolves to.
+            TokenKind::Ident(name) if name == "self" => CONSTANT,
+
+            // Identifiers. A contextual keyword outranks whatever else would
+            // classify the name; everything else prefers the resolved symbol
+            // classification (precomputed in `sem_classes`, keyed by byte
+            // start) and falls back to the lexer/AST heuristics.
             TokenKind::Ident(_) => ast_spans
                 .contextual_at(token.span.start)
                 .or_else(|| {
@@ -513,6 +503,7 @@ fn classify_token(
             TokenKind::StringLit(_)
             | TokenKind::ByteStringLit(_)
             | TokenKind::TemplateStringLit(_)
+            | TokenKind::ByteCharLit(_)
             | TokenKind::CharLit(_) => (token_type::STRING, 0),
 
             // Operators (the highlightable subset; the registry's
@@ -1023,30 +1014,42 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "matches"), token_type::OPERATOR);
     }
 
-    /// `self` is `KeywordCategory::Constant`, so neither its receiver
-    /// declaration nor its uses may colour as the parameter they resolve to.
+    /// `self` is `KeywordCategory::Constant`, so no occurrence may colour as
+    /// the parameter it resolves to — the receiver, the uses, and the ones in
+    /// positions no AST node carries a span for, like a `stores[self]` clause.
     #[test]
-    fn self_receiver_and_uses_are_constants() {
+    fn every_self_is_a_constant() {
         let src = concat!(
             "struct S { n: i32 }\n",
             "impl S {\n",
-            "    fn get(&self) -> i32 { return self.n; }\n",
+            "    fn get(&self) -> i32 with stores[self] { return self.n; }\n",
             "}\n",
             "fn run() {}\n",
         );
         let sem = sem_of(src);
         let tokens = compute(src, Some(&sem));
         let line = src.split_inclusive('\n').nth(2).expect("line");
-        let decl = line.find("self").expect("receiver") as u32;
-        let use_site = line.rfind("self").expect("use") as u32;
-        assert_ne!(decl, use_site, "the two `self` spans must differ");
-        for col in [decl, use_site] {
+        let columns: Vec<u32> = line
+            .match_indices("self")
+            .map(|(at, _)| at as u32)
+            .collect();
+        assert_eq!(columns.len(), 3, "receiver, stores clause, and use site");
+        for col in columns {
             let token = tokens
                 .iter()
                 .find(|t| t.line == 2 && t.start_char == col)
                 .unwrap_or_else(|| panic!("no token at 2:{col}"));
             assert_eq!((token.token_type, token.modifiers), CONSTANT);
         }
+    }
+
+    /// `b'0'` lexes as its own token kind, which the literal arm did not
+    /// list — so it fell through to punctuation and went uncoloured.
+    #[test]
+    fn byte_char_literal_is_a_string() {
+        let src = "fn is_digit(b: u8) -> bool {\n    return b >= b'0';\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "b'0'"), token_type::STRING);
     }
 
     /// `task`, `trap`, and `forward` lex as identifiers, so without an AST

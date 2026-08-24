@@ -19,13 +19,13 @@
 (TEMPLATE_TEXT) @string
 (BACKTICK) @string
 (INTERP_OPEN) @string
-(interpolation "}" @string)
+(interpolationEnd "}" @string)
 (interpolation (IDENTIFIER) @variable)
 
 ; A specifier is not code: `${x:>8.2}` must not colour `>` as an operator.
 ; A rule-context override outranks the token's default, so listing the atoms
 ; that double as operators is enough to mute them.
-(interpolation ":" @comment)
+(formatSpec ":" @comment)
 (formatSpec (IDENTIFIER) @comment)
 (formatSpec (INTEGER) @comment)
 (formatSpec (FLOAT) @comment)
@@ -45,6 +45,16 @@
 
 ; `matches` lexes as a keyword but is a binary pattern-test operator.
 "matches" @operator
+
+; The contextual keywords the `identifier` rule also accepts as names. In that
+; position they are not keywords — the compiler lexes them as identifiers and
+; only recognises them by where they sit — so `let test = |…|` must not colour
+; `test`. (`self` is absent from `identifier`: the language reserves it.)
+(identifier "test" @variable)
+(identifier "do" @variable)
+(identifier "task" @variable)
+(identifier "trap" @variable)
+(identifier "forward" @variable)
 
 ; Operators, matching the compiler's `is_highlight_operator` set. `&` / `|`
 ; (references, unions, closure params) and `::` / `?` / `..` / `...` double as

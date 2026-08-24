@@ -259,6 +259,26 @@ fn compiler_pieces(source: &str) -> Vec<Piece> {
         .collect()
 }
 
+/// Move the Gale side onto byte offsets.
+///
+/// Its runtime scans a `List<char>`, so every span it reports is a codepoint
+/// index. The two agree on any ASCII file and drift from the first multi-byte
+/// character onward, which reads as wholesale disagreement rather than as an
+/// encoding mismatch — `if` lining up with the `->` ten characters later.
+fn to_byte_offsets(source: &str, pieces: &[Piece]) -> Vec<Piece> {
+    let mut byte_of_char: Vec<usize> = source.char_indices().map(|(at, _)| at).collect();
+    byte_of_char.push(source.len());
+    let at = |index: usize| byte_of_char.get(index).copied().unwrap_or(source.len());
+    pieces
+        .iter()
+        .map(|piece| Piece {
+            start: at(piece.start),
+            end: at(piece.end),
+            class: piece.class,
+        })
+        .collect()
+}
+
 /// 1-based line number of byte offset `at`.
 fn line_of(source: &str, at: usize) -> u32 {
     source.as_bytes()[..at.min(source.len())]
@@ -363,7 +383,8 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
         }
         let source = fs::read_to_string(path).unwrap_or_else(|e| panic!("reading '{path}': {e}"));
         compared += 1;
-        let (found, refined) = diverge(path, &source, &compiler_pieces(&source), &theirs.pieces);
+        let gale_pieces = to_byte_offsets(&source, &theirs.pieces);
+        let (found, refined) = diverge(path, &source, &compiler_pieces(&source), &gale_pieces);
         refinements += refined;
         divergences.extend(found);
     }

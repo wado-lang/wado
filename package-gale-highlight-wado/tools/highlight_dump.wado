@@ -5,9 +5,10 @@
 //!     wado run package-gale-highlight-wado/tools/highlight_dump.wado -- \
 //!         --paths-from list.txt
 //!
-//! Line-oriented and tab-separated. Byte spans are half-open, and only
-//! classified tokens appear — an absent span means the query captures nothing
-//! there, which is a verdict too.
+//! Line-oriented and tab-separated. Spans are half-open **codepoint** offsets
+//! — Gale's runtime scans a `List<char>` — and only classified tokens appear:
+//! an absent span means the query captures nothing there, which is a verdict
+//! too.
 //!
 //!     V <TAB> capture0 <TAB> capture1 ...   the capture table, emitted once
 //!     F <TAB> path <TAB> diagnostic-count   one per file, then its captures
