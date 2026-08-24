@@ -202,10 +202,14 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             while j < n && is_id_continue_char(chars[j]) {
                 j += 1;
             }
-            if rule_type matches { RuleType::Unknown } && !is_grammar_keyword(&chars, i) {
-                // ASCII-only, as ANTLR asks `Character.isUpperCase`: see
-                // TODO.md, blocked on ICU.
-                rule_type = if c.is_ascii_uppercase() { RuleType::Lexer } else { RuleType::Parser };
+            if rule_type matches { RuleType::Unknown } {
+                let mut word = String::with_capacity(j - i);
+                push_span(&mut word, &chars, i, j);
+                if !GRAMMAR_KEYWORDS.contains(&word) {
+                    // ASCII-only, as ANTLR asks `Character.isUpperCase`: see
+                    // TODO.md, blocked on ICU.
+                    rule_type = if c.is_ascii_uppercase() { RuleType::Lexer } else { RuleType::Parser };
+                }
             }
             push_span(&mut out, &chars, i, j);
             i = j;
@@ -215,17 +219,6 @@ pub fn strip_action_bodies(grammar: &String) -> String {
         i += 1;
     }
     return out;
-}
-
-/// `starts_with_word` already demands a non-identifier char after the
-/// match, so a hit means the identifier at `start` *is* the keyword.
-fn is_grammar_keyword(chars: &List<char>, start: i32) -> bool {
-    for let kw of &GRAMMAR_KEYWORDS {
-        if starts_with_word(chars, start, kw) {
-            return true;
-        }
-    }
-    return false;
 }
 
 fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
