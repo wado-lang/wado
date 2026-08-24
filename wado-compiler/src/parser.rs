@@ -5933,13 +5933,13 @@ impl Parser {
                 } => {
                     // The specifier sits one `:` past the expression source the
                     // lexer split off, so its position follows from the origin.
-                    let spec_origin = advance_position(advance_position(origin, &expr), ":");
+                    let spec_origin = origin.advance(&expr).advance(":");
                     // The expression source is parsed as-is (trimmed of
                     // surrounding whitespace). Trimming moves the origin with
                     // it, or every span inside a `${ x }` would sit one column
                     // early.
                     let trimmed = expr.trim_start();
-                    let expr_origin = advance_position(origin, &expr[..expr.len() - trimmed.len()]);
+                    let expr_origin = origin.advance(&expr[..expr.len() - trimmed.len()]);
                     let parsed =
                         self.parse_interpolation_expr(trimmed.trim_end(), origin, expr_origin)?;
                     let format_spec = match format {
@@ -5986,7 +5986,7 @@ impl Parser {
         let Err(error) = crate::format_spec::parse(spec) else {
             return Ok(());
         };
-        let at = advance_position(origin, &spec[..error.offset]);
+        let at = origin.advance(&spec[..error.offset]);
         Err(ParseError {
             message: format!("{error} in template string"),
             span: span_of(at, spec[error.offset..].chars().next()),
@@ -6016,31 +6016,14 @@ impl Parser {
             });
         }
 
-        let mut lex_result = crate::lexer::lex(expr_str);
-        for token in &mut lex_result.tokens {
-            token.span = rebase_span(token.span, origin);
-            // A template nested in this one — `${ cond ? `${x}` : … }` — had its
-            // parts scanned by the same fragment lexer, so the origin each
-            // interpolation recorded is relative to the fragment too and has to
-            // travel with the spans.
-            if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
-                for part in parts {
-                    if let crate::token::TemplateTokenPart::Interpolation {
-                        origin: nested, ..
-                    } = part
-                    {
-                        *nested = rebase_position(*nested, origin);
-                    }
-                }
-            }
-        }
+        let lex_result = crate::lexer::lex_interpolation(expr_str, origin);
         // Lex errors inside the interpolation surface alongside the outer
         // parser's diagnostics, at the offending byte rather than the whole
         // `{…}`.
         for e in &lex_result.errors {
             self.errors.push(ParseError {
                 message: format!("error parsing template interpolation: {e}"),
-                span: rebase_span(e.span, origin),
+                span: e.span,
             });
         }
 
@@ -6176,18 +6159,6 @@ impl Parser {
     }
 }
 
-/// Move `origin` past `text`, counting the lines and columns it covers.
-fn advance_position(origin: crate::token::Position, text: &str) -> crate::token::Position {
-    let lines = text.matches('\n').count();
-    crate::token::Position {
-        offset: origin.offset + text.len(),
-        line: origin.line + lines,
-        column: match text.rsplit_once('\n') {
-            Some((_, tail)) => 1 + tail.chars().count(),
-            None => origin.column + text.chars().count(),
-        },
-    }
-}
 
 /// The span of `ch` at `at`; zero-width when there is no character left to
 /// blame, so an error past the end of the text claims no byte.
@@ -6217,46 +6188,6 @@ fn span_of_open_brace(origin: crate::token::Position) -> Span {
         origin.column - 2,
         origin.line,
         origin.column,
-    )
-}
-
-/// Rebase a position produced by lexing a fragment on its own onto the file the
-/// fragment came from.
-///
-/// The fragment starts at line 1, column 1, offset 0, so only its first line
-/// needs the column shift — every later line already begins at column 1 where
-/// the file's does.
-fn rebase_position(
-    position: crate::token::Position,
-    origin: crate::token::Position,
-) -> crate::token::Position {
-    crate::token::Position {
-        offset: origin.offset + position.offset,
-        line: origin.line + position.line - 1,
-        column: if position.line == 1 {
-            origin.column + position.column - 1
-        } else {
-            position.column
-        },
-    }
-}
-
-/// Rebase a span the same way [`rebase_position`] rebases a point.
-fn rebase_span(span: Span, origin: crate::token::Position) -> Span {
-    let shift_column = |line: usize, column: usize| {
-        if line == 1 {
-            origin.column + column - 1
-        } else {
-            column
-        }
-    };
-    Span::with_end(
-        origin.offset + span.start,
-        origin.offset + span.end,
-        origin.line + span.line - 1,
-        shift_column(span.line, span.column),
-        origin.line + span.end_line - 1,
-        shift_column(span.end_line, span.end_column),
     )
 }
 

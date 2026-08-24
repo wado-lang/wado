@@ -9,7 +9,7 @@
 
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-use crate::token::{Span, TemplateTokenPart, Token, TokenKind};
+use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
 /// Check if a string is a valid Wado identifier.
 /// Valid identifiers match the pattern `/^[a-zA-Z_][a-zA-Z0-9_]*$/`
@@ -31,6 +31,72 @@ pub fn lex(source: &str) -> LexResult {
 /// parser when re-lexing the inside of a template-string interpolation.
 pub fn lex_with_line(source: &str, start_line: usize) -> LexResult {
     Lexer::with_line(source, start_line).run()
+}
+
+/// Lex an interpolation's expression source, positioned on the file it came
+/// from.
+///
+/// A `${…}` interior is scanned as a fragment, so every span it produces
+/// starts at zero. `origin` is where the fragment's first byte sits in the
+/// file; this shifts the whole result back onto it — including the origins a
+/// nested template recorded, which were relative to the fragment too.
+///
+/// The parser uses this to build the AST, and the highlighter to reach the
+/// tokens inside an interpolation, which the outer template hides behind a
+/// single [`TokenKind::TemplateStringLit`].
+#[must_use]
+pub fn lex_interpolation(source: &str, origin: Position) -> LexResult {
+    let mut result = lex(source);
+    for token in &mut result.tokens {
+        token.span = rebase_span(token.span, origin);
+        if let TokenKind::TemplateStringLit(parts) = &mut token.kind {
+            for part in parts {
+                if let TemplateTokenPart::Interpolation { origin: nested, .. } = part {
+                    *nested = rebase_position(*nested, origin);
+                }
+            }
+        }
+    }
+    for error in &mut result.errors {
+        error.span = rebase_span(error.span, origin);
+    }
+    result
+}
+
+/// Move a fragment-relative position onto the file `origin` sits in. Only the
+/// fragment's first line shares a line with `origin`, so only it shifts by the
+/// origin's column.
+#[must_use]
+pub fn rebase_position(position: Position, origin: Position) -> Position {
+    Position {
+        offset: origin.offset + position.offset,
+        line: origin.line + position.line - 1,
+        column: if position.line == 1 {
+            origin.column + position.column - 1
+        } else {
+            position.column
+        },
+    }
+}
+
+/// Rebase a span the same way [`rebase_position`] rebases a point.
+#[must_use]
+pub fn rebase_span(span: Span, origin: Position) -> Span {
+    let shift_column = |line: usize, column: usize| {
+        if line == 1 {
+            origin.column + column - 1
+        } else {
+            column
+        }
+    };
+    Span::with_end(
+        origin.offset + span.start,
+        origin.offset + span.end,
+        origin.line + span.line - 1,
+        shift_column(span.line, span.column),
+        origin.line + span.end_line - 1,
+        shift_column(span.end_line, span.end_column),
+    )
 }
 
 /// Bundle of tokens + recovered diagnostics + trivia returned by [`lex`].

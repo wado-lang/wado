@@ -100,8 +100,9 @@ fn value(parser: &mut lexopt::Parser) -> String {
 }
 
 /// Every `.wado` file under [`CORPUS_ROOTS`], sorted, so both sides walk the
-/// same list in the same order.
-fn collect_corpus() -> Vec<String> {
+/// same list in the same order. Shared with [`crate::highlight_corpus`], which
+/// compares what each side colours over the same files.
+pub fn collect_corpus() -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
     for root in CORPUS_ROOTS {
         let pattern = format!("{root}/**/*.wado");

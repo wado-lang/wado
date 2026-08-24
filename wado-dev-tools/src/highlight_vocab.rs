@@ -17,15 +17,26 @@
 //! 3. Every keyword-shaped literal captured by the query is a registry keyword.
 //!    A capture for a word the compiler does not know means the query invented
 //!    a keyword, or the registry is missing a contextual one.
+//! 4. The query captures `@operator` on exactly the operators the compiler
+//!    highlights as one — the spellings that double as punctuation (`&`, `|`,
+//!    `::`, `?`, `..`, `...`) stay uncoloured on both sides.
 
 use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 
-use wado_compiler::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory};
+use wado_compiler::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, OPERATORS};
 
 const GRAMMAR: &str = "../package-gale-highlight-wado/grammar/Wado.g4";
 const QUERY: &str = "../package-gale-highlight-wado/grammar/Wado.highlights.scm";
+
+/// Highlight operators `Wado.g4` cannot spell as a literal, with the spelling
+/// it uses instead. `'>' '>'` is what lets `List<Box<i32>>` close, so `>>`
+/// reaches the grammar as two tokens; the two lexers then disagree on the
+/// boundary, which is `highlight-corpus`'s business, not this check's. The
+/// alternative spelling is verified, so the exception cannot outlive its
+/// reason.
+const SPLIT_OPERATORS: &[(&str, &str)] = &[(">>", "'>' '>'")];
 
 /// One vocabulary disagreement, in the order they are reported.
 #[derive(Debug, PartialEq, Eq)]
@@ -42,6 +53,9 @@ pub enum Drift {
     },
     /// A keyword-shaped literal the query captures that no registry knows.
     UnknownKeyword { text: String, found: String },
+    /// An operator the compiler deliberately leaves uncoloured, captured
+    /// anyway.
+    PunctuationCaptured { text: String, found: String },
 }
 
 impl Drift {
@@ -61,6 +75,9 @@ impl Drift {
             Self::UnknownKeyword { text, found } => {
                 format!("{text}\tcaptured @{found}, but no keyword registry knows it")
             }
+            Self::PunctuationCaptured { text, found } => format!(
+                "{text}\tcaptured @{found}; the compiler highlights it as punctuation, not an operator"
+            ),
         }
     }
 }
@@ -128,27 +145,62 @@ fn is_word(text: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b == b'_' || b.is_ascii_digit())
 }
 
+/// The operators the compiler colours as operators, and those it leaves as
+/// punctuation. Derived by asking the lexer, so the split cannot drift from
+/// `is_highlight_operator`.
+fn operators_by_highlighting() -> (Vec<&'static str>, Vec<&'static str>) {
+    let mut highlighted = Vec::new();
+    let mut punctuation = Vec::new();
+    for (text, _) in OPERATORS {
+        if wado_compiler::lexer::lex(text).tokens[0]
+            .kind
+            .is_highlight_operator()
+        {
+            highlighted.push(*text);
+        } else {
+            punctuation.push(*text);
+        }
+    }
+    (highlighted, punctuation)
+}
+
 pub fn check() -> Vec<Drift> {
     let grammar = read(GRAMMAR);
     let captures = literal_captures(&read(QUERY));
     let keywords = registry_keywords();
+    let (highlighted, punctuation) = operators_by_highlighting();
 
     let mut drift = Vec::new();
-    for (text, category) in &keywords {
+    let mut expected: Vec<(&str, &str)> = keywords
+        .iter()
+        .map(|(text, category)| (*text, expected_capture(*category)))
+        .collect();
+    for text in &highlighted {
+        // The grammar spells a few operators out of literal form; the boundary
+        // that creates is `highlight-corpus`'s business.
+        match SPLIT_OPERATORS.iter().find(|(op, _)| op == text) {
+            Some((_, spelling)) => assert!(
+                grammar.contains(spelling),
+                "'{text}' is exempt because Wado.g4 spells it {spelling}, which it no longer does"
+            ),
+            None => expected.push((text, "operator")),
+        }
+    }
+
+    for (text, capture) in &expected {
         if !grammar.contains(&format!("'{text}'")) {
             drift.push(Drift::MissingFromGrammar {
                 text: (*text).to_string(),
             });
         }
-        let expected = expected_capture(*category);
         match captures.iter().find(|(t, _)| t == text) {
             None => drift.push(Drift::MissingFromQuery {
                 text: (*text).to_string(),
-                expected: expected.to_string(),
+                expected: (*capture).to_string(),
             }),
-            Some((_, found)) if found != expected => drift.push(Drift::WrongCapture {
+            Some((_, found)) if found != capture => drift.push(Drift::WrongCapture {
                 text: (*text).to_string(),
-                expected: expected.to_string(),
+                expected: (*capture).to_string(),
                 found: found.clone(),
             }),
             Some(_) => {}
@@ -156,7 +208,15 @@ pub fn check() -> Vec<Drift> {
     }
 
     for (text, found) in &captures {
-        if is_word(text) && !keywords.iter().any(|(k, _)| k == text) {
+        if expected.iter().any(|(t, _)| t == text) {
+            continue;
+        }
+        if punctuation.contains(&text.as_str()) {
+            drift.push(Drift::PunctuationCaptured {
+                text: text.clone(),
+                found: found.clone(),
+            });
+        } else if is_word(text) {
             drift.push(Drift::UnknownKeyword {
                 text: text.clone(),
                 found: found.clone(),

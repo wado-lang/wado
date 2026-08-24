@@ -21,12 +21,70 @@ pub enum TemplateTokenPart {
     },
 }
 
+impl TemplateTokenPart {
+    /// Where an interpolation's expression source starts and ends in the file.
+    /// `expr` is verbatim source anchored at `origin`, so the end follows from
+    /// the text. `None` for a literal chunk, which records no position.
+    #[must_use]
+    pub fn expr_bounds(&self) -> Option<(Position, Position)> {
+        match self {
+            Self::Literal(_) => None,
+            Self::Interpolation { expr, origin, .. } => Some((*origin, origin.advance(expr))),
+        }
+    }
+
+    /// Where an interpolation's `:spec` tail sits: from the `:` through the
+    /// last byte of the specifier. `None` when there is no specifier.
+    #[must_use]
+    pub fn format_bounds(&self) -> Option<(Position, Position)> {
+        let Self::Interpolation {
+            expr,
+            format: Some(spec),
+            origin,
+        } = self
+        else {
+            return None;
+        };
+        let colon = origin.advance(expr);
+        Some((colon, colon.advance(":").advance(spec)))
+    }
+}
+
 /// A byte offset paired with the 1-based line and column it falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub offset: usize,
     pub line: usize,
     pub column: usize,
+}
+
+impl Position {
+    /// Move past `text`, counting the lines and columns it covers.
+    #[must_use]
+    pub fn advance(self, text: &str) -> Self {
+        let lines = text.matches('\n').count();
+        Self {
+            offset: self.offset + text.len(),
+            line: self.line + lines,
+            column: match text.rsplit_once('\n') {
+                Some((_, tail)) => 1 + tail.chars().count(),
+                None => self.column + text.chars().count(),
+            },
+        }
+    }
+
+    /// The span running from here to `end`.
+    #[must_use]
+    pub fn span_to(self, end: Self) -> Span {
+        Span::with_end(
+            self.offset,
+            end.offset,
+            self.line,
+            self.column,
+            end.line,
+            end.column,
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

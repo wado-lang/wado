@@ -1,11 +1,11 @@
 use indexmap::{IndexMap, IndexSet};
 use wado_compiler::ast::{self, AstId, AstVisitor, Expr, Item, Type};
-use wado_compiler::lexer::lex;
+use wado_compiler::lexer::{lex, lex_interpolation};
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::symbol::{Symbol, SymbolKind};
 use wado_compiler::syntax::KeywordCategory;
-use wado_compiler::token::{Token, TokenKind};
+use wado_compiler::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
 use crate::text::{LineIndex, PositionEncoding};
 
@@ -86,6 +86,15 @@ const CONSTANT: (u32, u32) = (
 /// A keyword, real or contextual.
 const KEYWORD: (u32, u32) = (token_type::KEYWORD, 0);
 
+/// A classified token keyed by byte span — the classification before LSP's
+/// wire constraints narrow it. See [`classify_all`].
+#[derive(Debug, Clone, Copy)]
+pub struct ClassifiedToken {
+    pub span: Span,
+    pub token_type: u32,
+    pub modifiers: u32,
+}
+
 /// A semantic token with absolute position (before delta encoding).
 #[derive(Debug, Clone)]
 pub struct SemanticToken {
@@ -110,7 +119,35 @@ pub struct SemanticToken {
 /// (matching `Span::column - 1` from the lexer) and `length` as a codepoint
 /// count. [`delta_encode`] later converts both into the negotiated LSP
 /// position encoding.
+///
+/// Multi-line tokens are dropped: LSP semantic tokens MUST NOT span lines, so
+/// a block comment or a multi-line string is left to the editor's syntactic
+/// highlighter rather than half-encoded. That is a wire constraint, not a
+/// classification verdict — [`classify_all`] keeps them.
 pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
+    classify_all(source, sem)
+        .into_iter()
+        .filter(|token| token.span.line == token.span.end_line)
+        .map(|token| SemanticToken {
+            line: token.span.line.saturating_sub(1) as u32,
+            start_char: token.span.column.saturating_sub(1) as u32,
+            length: source
+                .get(token.span.start..token.span.end)
+                .map(|text| text.chars().count() as u32)
+                .unwrap_or(0),
+            token_type: token.token_type,
+            modifiers: token.modifiers,
+        })
+        .collect()
+}
+
+/// Classify every token in `source`, keyed by byte span and in source order.
+///
+/// The classification [`compute`] narrows to what the LSP wire accepts. Use
+/// this where the whole verdict matters — comparing the compiler's own
+/// highlighting against another implementation's, where a dropped multi-line
+/// token reads as a disagreement.
+pub fn classify_all(source: &str, sem: Option<&Semantics>) -> Vec<ClassifiedToken> {
     // Resilient: malformed input yields recovery tokens, which classify as plain.
     let lex_result = lex(source);
     let tokens = lex_result.tokens;
@@ -131,34 +168,108 @@ pub fn compute(source: &str, sem: Option<&Semantics>) -> Vec<SemanticToken> {
 
     let mut result = Vec::new();
     for i in 0..tokens.len() {
-        if let Some(st) = classify_token(source, &tokens, i, &ast_spans, sem_classes.as_ref()) {
-            result.push(st);
-        }
+        classify_into(&tokens, i, &ast_spans, sem_classes.as_ref(), &mut result);
     }
-
-    // LSP semantic tokens MUST NOT span lines, so a multi-line comment is left
-    // to the editor's syntactic highlighter rather than half-encoded.
     for comment in &comments {
-        if comment.span.line != comment.span.end_line {
-            continue;
-        }
-        let line = comment.span.line.saturating_sub(1) as u32;
-        let start_char = comment.span.column.saturating_sub(1) as u32;
-        let length = source
-            .get(comment.span.start..comment.span.end)
-            .map(|s| s.chars().count() as u32)
-            .unwrap_or(0);
-        result.push(SemanticToken {
-            line,
-            start_char,
-            length,
+        result.push(ClassifiedToken {
+            span: comment.span,
             token_type: token_type::COMMENT,
             modifiers: 0,
         });
     }
 
-    result.sort_by(|a, b| a.line.cmp(&b.line).then(a.start_char.cmp(&b.start_char)));
+    result.sort_by_key(|token| token.span.start);
     result
+}
+
+/// Classify one token into `out`. A template literal expands into several;
+/// everything else contributes at most one.
+fn classify_into(
+    tokens: &[Token],
+    index: usize,
+    ast_spans: &AstSpans,
+    sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
+    out: &mut Vec<ClassifiedToken>,
+) {
+    let token = &tokens[index];
+    if let TokenKind::TemplateStringLit(parts) = &token.kind {
+        expand_template(token, parts, ast_spans, sem_classes, out);
+        return;
+    }
+    if let Some((token_type, modifiers)) = classify_token(tokens, index, ast_spans, sem_classes) {
+        out.push(ClassifiedToken {
+            span: token.span,
+            token_type,
+            modifiers,
+        });
+    }
+}
+
+/// Split a template literal, which reaches the classifier as a single token.
+///
+/// Everything outside an interpolation is string — the backticks, the text
+/// chunks, `${` and `}`; the expression itself is code and classifies like any
+/// other; a `:spec` tail is metadata and mutes as a comment. Without this the
+/// whole literal is one `string` token and `${count + 1}` goes uncoloured,
+/// left to whatever syntactic highlighter the editor layers underneath.
+///
+/// The inner tokens come from the compiler's own
+/// [`wado_compiler::lexer::lex_interpolation`], the same call the parser makes
+/// to build the AST, so their spans already sit on the file — and the symbol
+/// map, keyed by byte start, classifies them without any extra work.
+fn expand_template(
+    token: &Token,
+    parts: &[TemplateTokenPart],
+    ast_spans: &AstSpans,
+    sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
+    out: &mut Vec<ClassifiedToken>,
+) {
+    let mut cursor = Position {
+        offset: token.span.start,
+        line: token.span.line,
+        column: token.span.column,
+    };
+    let end = Position {
+        offset: token.span.end,
+        line: token.span.end_line,
+        column: token.span.end_column,
+    };
+
+    for part in parts {
+        let (Some((expr_start, expr_end)), TemplateTokenPart::Interpolation { expr, origin, .. }) =
+            (part.expr_bounds(), part)
+        else {
+            continue;
+        };
+        push_run(out, cursor, expr_start, token_type::STRING);
+        // A template nested in this interpolation expands the same way.
+        let inner = lex_interpolation(expr, *origin).tokens;
+        for i in 0..inner.len() {
+            classify_into(&inner, i, ast_spans, sem_classes, out);
+        }
+        cursor = expr_end;
+        // `:>8.2` is formatting metadata, not code. Left to the token stream
+        // the `>` would colour as an operator, which is what the `TextMate`
+        // grammar — regex-only, so it cannot parse a specifier — still does.
+        if let Some((spec_start, spec_end)) = part.format_bounds() {
+            push_run(out, spec_start, spec_end, token_type::COMMENT);
+            cursor = spec_end;
+        }
+    }
+    push_run(out, cursor, end, token_type::STRING);
+}
+
+/// Emit a run of one class, unless it is empty — an interpolation can sit
+/// flush against the one before it (`${a}${b}`), and against the backtick.
+fn push_run(out: &mut Vec<ClassifiedToken>, from: Position, to: Position, token_type: u32) {
+    if from.offset >= to.offset {
+        return;
+    }
+    out.push(ClassifiedToken {
+        span: from.span_to(to),
+        token_type,
+        modifiers: 0,
+    });
 }
 
 /// Delta-encode semantic tokens for LSP response.
@@ -366,36 +477,19 @@ impl AstVisitor for SpanCollector {
 
 // --- Lexer token classification ---
 
+/// The class of one token, or `None` where nothing should be coloured.
 fn classify_token(
-    source: &str,
     tokens: &[Token],
     index: usize,
     ast_spans: &AstSpans,
     sem_classes: Option<&IndexMap<usize, (u32, u32)>>,
-) -> Option<SemanticToken> {
+) -> Option<(u32, u32)> {
     let token = &tokens[index];
-    if token.kind == TokenKind::Eof {
+    if token.kind == TokenKind::Eof || token.span.start == token.span.end {
         return None;
     }
 
-    // LSP semantic tokens MUST NOT span lines (see `compute` doc).
-    // Multi-line string / template literals are skipped; the editor's
-    // syntactic highlighter will still colour them.
-    if token.span.line != token.span.end_line {
-        return None;
-    }
-
-    let line = token.span.line.saturating_sub(1) as u32;
-    let start_char = token.span.column.saturating_sub(1) as u32;
-    let length = source
-        .get(token.span.start..token.span.end)
-        .map(|s| s.chars().count() as u32)
-        .unwrap_or(0);
-    if length == 0 {
-        return None;
-    }
-
-    let (token_type, modifiers) = match token.kind.keyword_category() {
+    let class = match token.kind.keyword_category() {
         // Keywords, coloured by their editorial category rather than by being
         // keyword *tokens*: `true` / `false` / `null` are constants and
         // `matches` is an operator.
@@ -429,14 +523,7 @@ fn classify_token(
             _ => return None,
         },
     };
-
-    Some(SemanticToken {
-        line,
-        start_char,
-        length,
-        token_type,
-        modifiers,
-    })
+    Some(class)
 }
 
 /// Build the `byte start → (token type, modifiers)` classification map for
@@ -899,6 +986,33 @@ mod tests {
         assert_eq!(class_of(&tokens, src, 1, "true"), CONSTANT);
         assert_eq!(class_of(&tokens, src, 2, "false"), CONSTANT);
         assert_eq!(class_of(&tokens, src, 3, "null"), CONSTANT);
+    }
+
+    /// A template literal is one lexer token, so without expansion everything
+    /// inside `${…}` is painted string and the code there goes uncoloured.
+    #[test]
+    fn template_interpolation_is_classified_as_code() {
+        let src = "fn run() {\n    let n = 1;\n    let _ = `v=${n + 2}!`;\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "n + 2"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, "+"), token_type::OPERATOR);
+        assert_eq!(kind_of(&tokens, src, 2, "2}"), token_type::NUMBER);
+        // The text around the interpolation, `${` included, stays string.
+        assert_eq!(kind_of(&tokens, src, 2, "`v=${"), token_type::STRING);
+        assert_eq!(kind_of(&tokens, src, 2, "}!`"), token_type::STRING);
+    }
+
+    /// The `:spec` tail is metadata, not code: `${x:>8}` must not colour `>`
+    /// as an operator, which the expansion would do if it stopped at the `}`.
+    #[test]
+    fn template_format_specifier_is_muted() {
+        let src = "fn run() {\n    let n = 1;\n    let _ = `${n:>8}`;\n}\n";
+        let sem = sem_of(src);
+        let tokens = compute(src, Some(&sem));
+        assert_eq!(kind_of(&tokens, src, 2, "n:>8"), token_type::VARIABLE);
+        assert_eq!(kind_of(&tokens, src, 2, ":>8"), token_type::COMMENT);
+        assert_eq!(kind_of(&tokens, src, 2, "}`"), token_type::STRING);
     }
 
     /// `matches` lexes as a keyword but is a binary pattern-test operator.

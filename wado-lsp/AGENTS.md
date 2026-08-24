@@ -20,7 +20,7 @@ Language service engine for the Wado compiler toolchain.
 | `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                           |
 | `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, `range_from_codepoints` (the one span→`Range` conversion), and the shared `LineIndex`                  |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`)          |
-| `src/semantic_tokens.rs`    | Semantic token computation. Classifies identifiers by resolved `SymbolKind` from the `Semantics` snapshot, falling back to lexer + AST heuristics. Re-encodes start/length at delta-encode time. |
+| `src/semantic_tokens.rs`    | Semantic token computation. `classify_all` is the verdict — every token, keyed by byte span; `compute` narrows it to what the LSP wire accepts. Identifiers classify by resolved `SymbolKind`, falling back to lexer + AST heuristics. |
 | `src/definition.rs`         | Go-to-definition via `Cursor::{def_key, def_span}` and a file-path matcher for `use`/`#include` paths                                                                                            |
 | `src/hover.rs`              | Hover info; `Cursor::def_symbol` selects the binding, locals render from the AST node, items via `wado_compiler::unparse`                                                                        |
 | `src/inlay_hints.rs`        | Inlay hints: inferred-type hints on `let` / closure / `for-of` bindings, plus parameter-name hints at call sites                                                                                 |
@@ -41,9 +41,13 @@ Every AST walk goes through `wado_compiler::ast::AstVisitor` and its `walk_*`
 functions — never a hand-written traversal, which silently skips whatever a
 later AST node adds.
 
-The contextual keywords (`test`, `do`, `resume`) lex as identifiers, so only
-`TestDecl::span` / `ResumeExpr::span` / `WithHandlerExpr::do_span` can classify
-them as keywords.
+The contextual keywords (`test`, `do`, `resume`, `task`, `trap`, `forward`,
+`self`) lex as identifiers, so only their declaring node's span can classify
+them: `TestDecl::span`, `ResumeExpr::span`, `WithHandlerExpr::do_span`,
+`TaskReturnStmt::span`, `RestClauseDecl::keyword_span`, and the `self`
+receiver's `Param::name_span`. `AstSpans` keeps them apart from the type spans
+because they outrank symbol resolution — `self` resolves to its parameter
+binding and would otherwise colour as a parameter.
 
 ### Engine
 

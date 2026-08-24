@@ -38,11 +38,12 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let root = dirs[0].0;
     let paths = collect_paths(&root, &args());
 
+    let vocabulary = HighlightVisitor::new(highlight_mapping()).capture_names;
     let mut header = "V";
-    for let name of &HighlightVisitor::new(highlight_mapping()).capture_names {
-        header += `\t${*name}`;
+    for let name of &vocabulary {
+        header.push_str(&`\t${*name}`);
     }
-    println(&header);
+    println(header);
 
     let mut total = 0;
     let mut unparsable = 0;
