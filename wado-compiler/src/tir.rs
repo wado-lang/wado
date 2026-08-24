@@ -1117,6 +1117,10 @@ impl TypeTable {
     /// Record `child extends parent`, already validated by the caller.
     pub fn set_resource_parent(&mut self, child: crate::defs::DefId, parent: crate::defs::DefId) {
         assert_ne!(child, parent, "a resource cannot extend itself");
+        assert!(
+            !self.is_resource_subtype(parent, child),
+            "a resource inheritance cycle would make every chain walk unbounded"
+        );
         self.resource_parents.insert(child, parent);
     }
 

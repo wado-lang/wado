@@ -18,6 +18,7 @@ mod cm_interface_export_decodes;
 mod cm_newtype_boundary;
 mod cm_provider_compose;
 mod cm_reexport_type;
+mod cm_resource_unbound;
 mod cm_world_func_import;
 mod codegen_flags;
 mod compile_errors;

@@ -178,6 +178,8 @@ impl TokenKind {
             Self::Of => Some("of"),
             // `from` appears in `use { x } from "mod"` but is also valid as a type/trait name
             Self::From => Some("from"),
+            // `extends` is a keyword only between a resource name and its parent
+            Self::Extends => Some("extends"),
             _ => None,
         }
     }

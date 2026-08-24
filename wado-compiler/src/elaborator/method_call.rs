@@ -2769,13 +2769,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The index holds only the declaring resource's own methods, so an
         // inherited one is reached by walking the chain. Instance methods
         // only: a static is not inherited, and answering for one here would
-        // newly type-check calls this lookup has always left alone.
+        // newly type-check calls this lookup has always left alone. A static
+        // the receiver declares itself shadows an inherited instance method of
+        // the same name, so the chain must not answer for it either.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && !self.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
             return sig.decl.param_types[sig.first_value_param()..].to_vec();
         }
         Vec::new()
+    }
+
+    /// Whether the resource `def` declares `method_name` as a static of its own.
+    fn declares_resource_static(&self, def: crate::defs::DefId, method_name: &str) -> bool {
+        self.tysys
+            .trait_env
+            .resource_static_method_index
+            .get(&crate::elaborator::trait_env::ImplTargetKey::Decl(def))
+            .is_some_and(|entries| entries.iter().any(|(name, ..)| name == method_name))
     }
 
     /// Resolve a static-method receiver `TypeId` to its `(struct_name,

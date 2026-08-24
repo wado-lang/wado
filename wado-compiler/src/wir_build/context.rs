@@ -181,6 +181,9 @@ pub struct WirContext<'a> {
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<crate::wir::TraitBoundViolation>,
+    /// Calls to a `#[cm(...)]` member no import backs, collected alongside
+    /// [`Self::trait_bound_violations`] and reported the same way.
+    pub cm_import_violations: Vec<crate::wir::CmImportViolation>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -322,6 +325,7 @@ impl<'a> WirContext<'a> {
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,
             trait_bound_violations: Vec::new(),
+            cm_import_violations: Vec::new(),
         }
     }
 
@@ -1030,6 +1034,7 @@ impl<'a> WirContext<'a> {
             max: None,
         };
         let trait_bound_violations = self.trait_bound_violations;
+        let cm_import_violations = self.cm_import_violations;
         let functions = self.functions;
         let globals = self.globals;
         let global_map = &self.global_map;
@@ -1139,6 +1144,7 @@ impl<'a> WirContext<'a> {
             import_plan: Vec::new(),
             defined_func_base: DEFINED_FUNC_BASE,
             trait_bound_violations,
+            cm_import_violations,
         }
     }
 }

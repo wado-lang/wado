@@ -31,6 +31,23 @@ use super::tysys::TypeSystem;
 
 /// One `resource Child extends Parent` clause, held until every resource has
 /// been collected: a parent may be declared after its child, or elsewhere.
+/// Whether a resource may take the extern-ref backing yet.
+///
+/// The extern-ref lowering is unbuilt, so a resource the compiler does lower
+/// would keep its own-handle surface while losing the drop and the move check
+/// the backing turns off — a leak and a double use. Until that lowering exists
+/// the backing is confined to the binding surface it was introduced for, Tide's
+/// `web:*` modules.
+///
+/// The test is the namespace the declaration itself spells: a written string,
+/// not a provenance, so it grants nothing a hand-written `#[cm("web:...")]`
+/// resource could not already reach. It is a gate against reaching the unbuilt
+/// lowering by accident, not a boundary. Non-`web` consumers are expected; each
+/// arrives here, and the whole gate goes once the lowering lands.
+fn extern_ref_backing_allowed(attr: &crate::ast::Attribute) -> bool {
+    attr.as_cm_import().is_some_and(|cm| cm.namespace == "web")
+}
+
 struct PendingExtends {
     child: crate::defs::DefId,
     child_name: String,
@@ -176,6 +193,7 @@ fn resolve_resource_extends<H: CompilerHost>(
         links.insert(clause.child, parent);
     }
 
+    let mut committed: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
     for clause in pending {
         let Some(&parent) = links.get(&clause.child) else {
             continue;
@@ -190,7 +208,23 @@ fn resolve_resource_extends<H: CompilerHost>(
         type_table
             .borrow_mut()
             .set_resource_parent(clause.child, parent);
-        reject_overrides(clause, parent, method_names, resolutions, &links, logger);
+        committed.insert(clause.child, parent);
+    }
+
+    // Against the committed relation, not `links`: a link a cycle rejected is
+    // still in there, and an ancestor reached only through one is inherited
+    // from nowhere.
+    for clause in pending {
+        if let Some(&parent) = committed.get(&clause.child) {
+            reject_overrides(
+                clause,
+                parent,
+                method_names,
+                resolutions,
+                &committed,
+                logger,
+            );
+        }
     }
 }
 
@@ -201,21 +235,14 @@ fn reject_overrides<H: CompilerHost>(
     parent: crate::defs::DefId,
     method_names: &ResourceMethodNames,
     resolutions: &crate::resolve::Resolutions,
-    links: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    committed: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
     logger: &Logger<'_, H>,
 ) {
     let own = method_names
         .get(&clause.child)
         .map_or(&[][..], Vec::as_slice);
-    // `links` still holds a rejected clause's link, so a cycle between
-    // ancestors is reachable here though it never reaches the relation.
-    let mut seen: Vec<crate::defs::DefId> = Vec::new();
     let mut ancestor = Some(parent);
     while let Some(current) = ancestor {
-        if seen.contains(&current) {
-            return;
-        }
-        seen.push(current);
         let inherited = method_names.get(&current).map_or(&[][..], Vec::as_slice);
         for (name, span) in own {
             if inherited.iter().any(|(other, _)| other == name) {
@@ -232,7 +259,7 @@ fn reject_overrides<H: CompilerHost>(
                 );
             }
         }
-        ancestor = links.get(&current).copied();
+        ancestor = committed.get(&current).copied();
     }
 }
 
@@ -526,16 +553,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 a.cm_resource_backing()
                                     == Some(crate::ast::CmResourceBacking::ExternRef)
                             }) {
-                                // The extern-ref lowering is unbuilt, so a
-                                // resource the compiler does lower would keep
-                                // its own-handle surface while losing the drop
-                                // and the move check the backing turns off —
-                                // a leak and a double use. Until Tide M3, the
-                                // backing is confined to the bindings it was
-                                // introduced for.
-                                let host_binding =
-                                    attr.as_cm_import().is_some_and(|cm| cm.namespace == "web");
-                                if host_binding {
+                                if extern_ref_backing_allowed(attr) {
                                     type_table.borrow_mut().mark_extern_ref_resource(def);
                                 } else {
                                     let _ = logger.error_in(

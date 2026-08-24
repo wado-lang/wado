@@ -65,6 +65,7 @@ Concretely:
 - `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `type = "extern-ref"`. Mismatched backings in an `extends` family is a hard error, not a warning.
 - A resource declared with `type = "extern-ref"` but without any `extends` relationship is allowed (a future-proof opt-in to the GC backing).
 - Until the lowering lands (Tide M3), the backing is accepted only under `web:*`. On a resource the compiler already lowers, it would keep the CM own-handle surface while turning off the drop and the move check the backing exempts — a leaked handle and a double use. Not inference: the backing is still declared, and this gate goes away with M3.
+  The gate tests the namespace the declaration itself spells, so it is a guard against reaching the unbuilt lowering by accident, not a boundary — a hand-written `#[cm("web:...")]` resource already reaches everything it admits. Consumers outside `web:*` are expected; each one arrives here, and the whole gate goes with M3.
 
 ### Why mandatory + structural over namespace inference
 
@@ -595,6 +596,7 @@ Not built:
 - `downcast`, and the `Eq` / `Inspect` / `Display` host imports.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - The stdlib-wide `type=` migration, and generic resources on either side of `extends`.
+- Calling a `#[cm(...)]` member a user module declares. The CM interface registry is built from the stdlib and from component dependencies, so nothing registers a binding declared anywhere else and the call reaches WIR build with no import — a panic until `wir_build` started collecting it as a `CmImportViolation` the driver reports (`wado-compiler/tests/integration/cm_resource_unbound.rs`). The declaration alone still type-checks, which is the shape `extends` is exercised in; bundling Tide's `web:*` modules (Tide M5) is what makes the calls lowerable.
 - A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. Bundling Tide's `web:*` modules (Tide M5) is what makes this reachable, and what must fix it — the two maps need seeding from the snapshot, as `all_resource_types` already is.
 
 ## See Also

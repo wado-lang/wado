@@ -654,3 +654,30 @@ fn the_backing_is_confined_to_the_bindings_it_lowers_for() {
         "expected the unbuilt-lowering error, got {d:?}"
     );
 }
+
+/// The chain answers for inherited instance methods only, so a static the
+/// child declares itself must not be checked against a parent method that
+/// merely shares its name.
+#[test]
+fn a_child_static_shadows_a_parent_instance_method_name() {
+    let source = "#[cm(\"web:dom/event-target\", type = \"extern-ref\")]\n\
+         resource EventTarget {\n    fn make(&self, tag: String) -> EventTarget;\n}\n\
+         #[cm(\"web:dom/node\", type = \"extern-ref\")]\n\
+         resource Node extends EventTarget {\n    fn make() -> Node;\n}\n\
+         fn build() -> Node { return Node::make(); }\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.is_empty(),
+        "the child's own static takes no arguments, got {d:?}"
+    );
+}
+
+/// `extends` is a keyword only between a resource name and its parent.
+#[test]
+fn extends_stays_usable_as_an_identifier() {
+    let source = "fn extends(x: i32) -> i32 { return x; }\n\
+         export fn run() {\n    let extends = extends(1);\n    assert extends == 1;\n}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "`extends` is contextual, got {d:?}");
+}

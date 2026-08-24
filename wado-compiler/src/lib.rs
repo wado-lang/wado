@@ -1600,6 +1600,30 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
+    // A `#[cm(...)]` member with no import behind it: the registry is built
+    // from the stdlib and from component dependencies, so a binding declared
+    // anywhere else has nothing to call. Reported here rather than trapping.
+    if !wir_package.cm_import_violations.is_empty() {
+        let mut seen = crate::hashmap::IndexSet::default();
+        for v in &wir_package.cm_import_violations {
+            if seen.insert((v.call_display.clone(), v.span)) {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::UnsupportedFeature,
+                    message: format!(
+                        "`{}` binds `{}`, which no bundled interface declares; a `#[cm(...)]` member is only callable from the stdlib and from component dependencies",
+                        v.call_display, v.cm_name
+                    ),
+                    span: Some(compiler_host::DiagnosticSpan::from_span(
+                        &v.span,
+                        Some(&entry_filename),
+                    )),
+                });
+            }
+        }
+        return Err(Bail);
+    }
+
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");

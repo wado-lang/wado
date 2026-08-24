@@ -1854,20 +1854,22 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Handle a `FunctionRef` that did not resolve to a generated function. A
-    /// `Type^Trait::method` name is an unsatisfied trait bound that escaped
-    /// earlier checks: record it and emit `Unreachable` so the build finishes
-    /// (the driver reports and bails). Any other name is an internal
-    /// inconsistency — `panic`.
+    /// Handle a `FunctionRef` that did not resolve to a generated function. Two
+    /// names are a program the front end admits and the back end cannot lower:
+    /// a `Type^Trait::method` whose bound is unsatisfied, and a `#[cm(...)]`
+    /// member no import backs. Record either and emit `Unreachable` so the
+    /// build finishes (the driver reports and bails). Any other name is an
+    /// internal inconsistency — `panic`.
     fn unresolved_trait_call_or_trap(
         &mut self,
         func: &crate::nir::FunctionRef,
         span: crate::token::Span,
         panic_msg: impl FnOnce() -> String,
     ) -> WirInstr {
-        if let Some(method) = func.method_info.as_ref()
-            && let Some(trait_name) = method.trait_name.as_ref()
-        {
+        let Some(method) = func.method_info.as_ref() else {
+            panic!("{}", panic_msg());
+        };
+        if let Some(trait_name) = method.trait_name.as_ref() {
             self.ctx
                 .trait_bound_violations
                 .push(crate::wir::TraitBoundViolation {
@@ -1875,10 +1877,23 @@ impl FunctionTranslator<'_, '_> {
                     trait_display: trait_name.to_display(),
                     span,
                 });
-            WirInstr::Unreachable
-        } else {
-            panic!("{}", panic_msg());
+            return WirInstr::Unreachable;
         }
+        if let Some(cm_name) = method.cm_name.as_ref() {
+            self.ctx
+                .cm_import_violations
+                .push(crate::wir::CmImportViolation {
+                    call_display: format!(
+                        "{}::{}",
+                        method.fq_struct_name().to_display(),
+                        method.method_name
+                    ),
+                    cm_name: cm_name.clone(),
+                    span,
+                });
+            return WirInstr::Unreachable;
+        }
+        panic!("{}", panic_msg());
     }
 
     /// Translate a TIR expression, wrapping a `never`-typed one in
